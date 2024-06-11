@@ -25,6 +25,11 @@ class ContributionRecordController extends AdminController
      */
     protected function grid()
     {
+        ContributionRecord::where([
+            'category_id' => 'MTK',
+        ])->update([
+            'category_id' => 'Workmates',
+        ]);
         $grid = new Grid(new ContributionRecord());
         $grid->disableBatchActions();
         $u = Admin::user();
@@ -55,8 +60,13 @@ class ContributionRecordController extends AdminController
         $grid->column('category_id', __('Category'))
             ->sortable()
             ->editable('select', [
-                'Family' => 'Family', 'Friend' => 'Friend',
-                'MTK' => 'MTK'
+                'Family' => 'Family 1',
+                'Family-2' => 'Family 2',
+                'Friend' => 'Friends 1',
+                'Friend-2' => 'Friends 2',
+                'Workmates' => 'Workmates',
+                'OBs_and_OGs' => 'OBs & OGs',
+                'Others' => 'Others',
             ]);
         $grid->column('amount', __('Amount (UGX)'))
             ->display(function ($amount) {
@@ -169,16 +179,20 @@ class ContributionRecordController extends AdminController
             ->default($first_id)
             ->required();
         //company_id
-        $form->hidden('company_id')->default($u->company_id); 
+        $form->hidden('company_id')->default($u->company_id);
 
 
         $form->text('name', __('Name of contributor'))->rules('required')->required();
 
-        $form->select('category_id', 'Category')
+        $form->radio('category_id', 'Category')
             ->options([
-                'Family' => 'Family',
-                'Friend' => 'Friend',
-                'MTK' => 'MTK'
+                'Family' => 'Family 1',
+                'Family-2' => 'Family 2',
+                'Friend' => 'Friends 1',
+                'Friend-2' => 'Friends 2',
+                'Workmates' => 'Workmates',
+                'OBs_and_OGs' => 'OBs & OGs',
+                'Others' => 'Others',
             ])
             ->required()
             ->default('Friend');

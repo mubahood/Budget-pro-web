@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\BudgetProgram;
+use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\DataExport;
 use App\Models\FinancialReport;
@@ -34,15 +35,27 @@ Route::get('thanks', function () {
 Route::get('data-exports-print', function () {
     $id = $_GET['id'];
     $d = DataExport::find($id);
+    if ($d == null) {
+        $d = DataExport::where('category_id', $id)->first();
+    }
+    if ($d == null) {
+        return die('Data export not found');
+    }
+    $company = Company::find($d->company_id);
+    if ($company == null) {
+        return die('Company not found');
+    }
+
     $conds = [
         'category_id' => $d->category_id,
     ];
-    if ($d->treasurer_id != null && $d->treasurer_id != 0) {
+
+    /*  if ($d->treasurer_id != null && $d->treasurer_id != 0) {
         $t = \App\Models\User::find($d->treasurer_id);
         if ($t != null) {
             $conds = ['treasurer_id' => $t->id];
         }
-    }
+    } */
     $recs
         = ContributionRecord::where($conds)
         ->orderBy('not_paid_amount', 'desc')->get();
@@ -66,7 +79,13 @@ Route::get('data-exports-print', function () {
     }
 
     //last day 10th may
-    $last_dat = Carbon::create(2024, 5, 12, 0, 0, 0);
+    $last_dat = null;
+    try {
+        $last_dat = Carbon::create($company->address);
+    } catch (\Exception $e) {
+        $last_dat = Carbon::now();
+    }
+
     $days_left = Carbon::now()->diffInDays($last_dat);
 
     if ($days_left < 0) {
@@ -78,8 +97,10 @@ Route::get('data-exports-print', function () {
         $days_word = 'day';
     }
 
-    echo '📌 *MUBARAKA\'s WEDDING CONTRIBUTIONS*';
-    echo '<br><br> 🗓️ : ' . $days_left . " $days_word left";
+    echo '📌 *' . $company->name . '\'s WEDDING CONTRIBUTIONS*';
+    if ($days_left != 0) {
+        echo '<br><br> 🗓️ : ' . $days_left . " $days_word left";
+    }
     echo '<br><br>_*-----SUMMARY-------*_<br>' . "";
 
     /*     echo '<br>*TOAL PLEDGED:* ' . number_format($pledged) . "<br>"; */
@@ -110,10 +131,7 @@ Route::get('data-exports-print', function () {
     }
 
     echo "<br><br>----------R.S.V.P:🙏-----------<br>";
-    echo '1. *Siama Saleh* - 0782349228 0706906707<br>';
-    echo '2. *Bwambale Muhidin* - 0762556385 0703903402 <br>';
-    echo '3. *Muhindo Mubaraka* - 0783204665 0706638494<br>';
-    echo '<br>*Jazakumullah Khairan* 🧎';
+    echo $company->facebook;
     die();
 });
 

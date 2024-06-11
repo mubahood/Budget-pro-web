@@ -98,18 +98,21 @@ class CompanyEditController extends AdminController
         $form = new Form(new Company());
 
         $form->text('name', __('Name'))->rules('required');
-        $form->text('email', __('Email'));
+        $form->text('email', __('Email'))->rules('required');
+        $form->datetime('address', __('Due Date'))->rules('required');
         $form->image('logo', __('Logo'));
-        $form->text('website', __('Website'));
-        $form->text('about', __('About'));
-        $form->text('address', __('Address'));
-        $form->text('phone_number', __('Phone number'));
-        $form->text('phone_number_2', __('Phone number 2'));
+        $form->text('phone_number', __('RSVP Phone number 1'))->rules('required');
+        $form->text('phone_number_2', __('RSVP Phone number 2'))->rules('required');
         $form->text('pobox', __('Pobox'));
+        $form->tags('twitter', __('Contribution Thanks Messages '))->help('Separate with comma');
+        $form->textarea('facebook', __('Bottom Message (On Contribution List'));
+        return $form; 
+
+
+        $form->text('website', __('Website'));
+        $form->text('about', __('About')); 
         $form->color('color', __('Color'));
         $form->text('slogan', __('Slogan'));
-        $form->text('facebook', __('Facebook'));
-        $form->text('twitter', __('Twitter'));
         $form->divider('Settings');
 
         $form->text('currency', __('Currency'))->default('USD')->rules('required');
