@@ -27,7 +27,7 @@ class DataExportController extends AdminController
     {
         $grid = new Grid(new DataExport());
         $u = Admin::user();
-        DataExport::check($u); 
+        DataExport::check($u);
 
         $grid->model()
             ->where('company_id', $u->company_id)
@@ -94,7 +94,7 @@ class DataExportController extends AdminController
         $form->hidden('company_id', __('Company id'))->default($u->company_id);
         $form->hidden('created_by_id', __('Created by id'))->default($u->id);
 
-/*         $form->select('treasurer_id', __('Treasurer'))->options(\App\Models\User::where('company_id', $u->company_id)->pluck('name', 'id')); */
+        /*         $form->select('treasurer_id', __('Treasurer'))->options(\App\Models\User::where('company_id', $u->company_id)->pluck('name', 'id')); */
         $form->select('category_id', __('Category'))
             ->options([
                 'Family' => 'Family 1',

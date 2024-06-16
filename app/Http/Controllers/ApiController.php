@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BudgetItem;
 use App\Models\Company;
 use App\Models\ContributionRecord;
+use App\Models\DataExport;
 use App\Models\StockSubCategory;
 use App\Models\User;
 use App\Models\Utils;
@@ -133,6 +134,7 @@ class ApiController extends BaseController
         if ($u == null) {
             Utils::error("Unauthonticated.");
         }
+        DataExport::check($u);
 
         $treasurer = null;
         //check if treasurer_id is not set and abort

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Encore\Admin\Auth\Database\Administrator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -36,11 +37,11 @@ class BudgetProgram extends Model
     //public static function prepare
     public static function prepare($data)
     {
-        $loggedUser = auth()->user();
-        if ($loggedUser == null) {
-            throw new \Exception('User not found');
+        $company = Company::find($data->company_id);
+        if ($company == null) {
+            throw new \Exception('Company not found');
         }
-        $data->company_id = $loggedUser->company_id;
+        //$data->company_id = $data->company_id;
         return $data;
     }
 

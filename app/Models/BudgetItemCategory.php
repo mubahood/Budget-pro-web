@@ -11,6 +11,52 @@ class BudgetItemCategory extends Model
     use HasFactory;
 
 
+    //boot
+    protected static function boot()
+    {
+        parent::boot();
+
+        //disable deleting
+        static::deleting(function ($model) {
+            //throw new \Exception('Deleting is not allowed');
+        });
+
+        static::creating(function ($model) {
+            //check if budget_program_id exists
+            $budget_program = BudgetProgram::find($model->budget_program_id);
+            if ($budget_program == null) {
+                throw new \Exception('Budget program not found . #' . $model->budget_program_id); 
+            }
+            $model->name = trim($model->name);
+            $withSameName  = BudgetItemCategory::where([
+                'name' => $model->name,
+                'budget_program_id' => $model->budget_program_id,
+            ])->first();
+
+            if ($withSameName) {
+                throw new \Exception('Name already exists for #' . $model->budget_program_id);
+            }
+            return $model;
+        });
+
+        static::updating(function ($model) {
+            //check if budget_program_id exists
+            $budget_program = BudgetProgram::find($model->budget_program_id);
+            if ($budget_program == null) {
+                throw new \Exception('Budget program not found');
+            }
+
+            $model->name = trim($model->name);
+            $withSameName  = BudgetItemCategory::where([
+                'name' => $model->name,
+                'budget_program_id' => $model->budget_program_id,
+            ])->where('id', '!=', $model->id)->first();
+            if ($withSameName) {
+                throw new \Exception('Name already exists');
+            }
+            return $model;
+        });
+    }
 
     //update self
     public function updateSelf()

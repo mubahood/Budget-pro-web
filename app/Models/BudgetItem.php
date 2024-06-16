@@ -44,7 +44,7 @@ class BudgetItem extends Model
                 'budget_item_category_id' => $model->budget_item_category_id,
             ])->where('id', '!=', $model->id)->first();
             if ($withSameName) {
-                throw new \Exception('Name already exists');
+                throw new \Exception('Item name already exists.');
             }
 
             $model = self::prepare($model);
@@ -104,7 +104,7 @@ class BudgetItem extends Model
         is_complete = '$is_complete' WHERE id = $data->id";
         DB::update($sql);
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
-        
+
         try {
             $cat->updateSelf();
         } catch (\Throwable $th) {
@@ -169,6 +169,7 @@ class BudgetItem extends Model
     //getter for budget_item_category_text
     public function getBudgetItemCategoryTextAttribute()
     {
+        return $this->budget_item_category_id;
         if ($this->category == null) {
             return 'N/A';
         }

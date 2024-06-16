@@ -34,20 +34,33 @@ Route::get('thanks', function () {
 });
 Route::get('data-exports-print', function () {
     $id = $_GET['id'];
-    $d = DataExport::find($id);
+    if (!isset($_GET['company_id'])) {
+        return die('Company not found');
+    }
+    if (!isset($_GET['id'])) {
+        return die('Data export not found');
+    }
+    $company = Company::find($_GET['company_id']);
+
+    $d = DataExport::where([
+        'company_id' => $company->id,
+        'category_id' => $id,
+    ])->first();
     if ($d == null) {
-        $d = DataExport::where('category_id', $id)->first();
+        return die('Data export not found');
     }
     if ($d == null) {
         return die('Data export not found');
     }
-    $company = Company::find($d->company_id);
+
+
     if ($company == null) {
         return die('Company not found');
     }
 
     $conds = [
         'category_id' => $d->category_id,
+        'company_id' => $d->company_id,
     ];
 
     /*  if ($d->treasurer_id != null && $d->treasurer_id != 0) {
