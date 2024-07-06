@@ -53,7 +53,11 @@ class ContributionRecordController extends AdminController
 
         $grid->column('budget_program_id', __('Budget program'))
             ->display(function ($budget_program_id) {
-                return \App\Models\BudgetProgram::find($budget_program_id)->name;
+                $pro = \App\Models\BudgetProgram::find($budget_program_id);
+                if ($pro == null) {
+                    return 'Unknown';
+                }
+                return $pro->name; 
             })->sortable()->hide();
 
         $grid->column('name', __('Name'))->sortable();
