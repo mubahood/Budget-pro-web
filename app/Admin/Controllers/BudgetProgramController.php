@@ -123,6 +123,9 @@ class BudgetProgramController extends AdminController
                 'Yes' => 'Yes',
                 'No' => 'No'
             ]);
+        $u = Admin::user();
+        //hide company_id
+        $form->hidden('company_id')->value($u->company_id); 
 
         /*
         $table->string('is_active')->nullable();
