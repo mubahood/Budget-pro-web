@@ -58,6 +58,18 @@ class BudgetItemCategoryController extends AdminController
             ->totalRow(function ($amount) {
                 return "<strong>" . number_format($amount) . "</strong>";
             })->sortable();
+
+        $grid->column('priority', __('Priority'))
+            ->editable('select', [
+                'High' => 'High',
+                'Medium' => 'Medium',
+                'Low' => 'Low',
+            ])->sortable()
+            ->filter([
+                'High' => 'High',
+                'Medium' => 'Medium',
+                'Low' => 'Low',
+            ])->sortable();
         $grid->column('percentage_done', __('Percentage Done'))
             ->display(function ($amount) {
                 return number_format($amount);
@@ -122,7 +134,16 @@ class BudgetItemCategoryController extends AdminController
             ->required();
         $form->hidden('company_id', __('Company id'))->default($u->company_id);
         $form->text('name', __('Name'))->rules('required');
-/*         $form->number('target_amount', __('Target amount'));
+        //priority radio
+        $form->radio('priority', __('Priority'))
+            ->options([
+                'High' => 'High',
+                'Medium' => 'Medium',
+                'Low' => 'Low',
+            ])
+            ->default('Medium')
+            ->rules('required');
+        /*         $form->number('target_amount', __('Target amount'));
         $form->number('invested_amount', __('Invested amount'));
         $form->number('balance', __('Balance'));
         $form->number('percentage_done', __('Percentage done'));
