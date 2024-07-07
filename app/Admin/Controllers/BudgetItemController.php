@@ -121,7 +121,7 @@ class BudgetItemController extends AdminController
                 'High' => 'High',
                 'Medium' => 'Medium',
                 'Low' => 'Low',
-            ])->sortable()
+            ])
             ->filter([
                 'High' => 'High',
                 'Medium' => 'Medium',
