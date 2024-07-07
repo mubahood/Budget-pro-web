@@ -111,10 +111,22 @@ class BudgetItemController extends AdminController
             ->switch([
                 'On' => 'Yes',
                 'Off' => 'No',
-            ])->hide(); 
+            ])->hide();
         $grid->column('details', __('Remarks'))
             ->sortable()
-            ->editable();
+            ->editable('textarea');
+
+        $grid->column('priority', __('Priority'))
+            ->editable('select', [
+                'High' => 'High',
+                'Medium' => 'Medium',
+                'Low' => 'Low',
+            ])->sortable()
+            ->filter([
+                'High' => 'High',
+                'Medium' => 'Medium',
+                'Low' => 'Low',
+            ])->sortable();
 
 
         return $grid;
@@ -193,6 +205,16 @@ class BudgetItemController extends AdminController
         $form->divider();
         $form->decimal('invested_amount', __('Invested amount'));
         $form->textarea('details', __('Remarks'));
+
+        //priority radio
+        $form->radio('priority', __('Priority'))
+            ->options([
+                'High' => 'High',
+                'Medium' => 'Medium',
+                'Low' => 'Low',
+            ])
+            ->default('Medium')
+            ->rules('required');
 
         $form->hidden('approved', __('Invested amount'));
         $form->hidden('is_complete', __('Is complete'));
