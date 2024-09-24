@@ -4,7 +4,7 @@ php artisan admin:make DataExportController --model=App\\Models\\DataExport
 //DataExport
 
 
-php artisan make:migration add_status_budget_items --table=budget_items
+php artisan make:migration add_make_username_nullable --table=admin_users
 
 
 php artisan migrate
