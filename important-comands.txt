@@ -1,4 +1,4 @@
-php artisan make:model DataExport -m
+php artisan make:model SaleRecord -m
 
 php artisan admin:make DataExportController --model=App\\Models\\DataExport
 //DataExport
