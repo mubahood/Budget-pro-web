@@ -327,7 +327,7 @@ class SaleRecord extends Model
             }
             
             // Step 3: Reload sale items to ensure we have fresh data
-            $this->load('saleRecordItems.stockItem');
+            $this->load('saleRecordItems');
             
             $processedItems = [];
             $totalAmount = 0;
@@ -336,7 +336,8 @@ class SaleRecord extends Model
             
             // Step 4: Process each sale item
             foreach ($this->saleRecordItems as $index => $item) {
-                $stockItem = $item->stockItem;
+                // Fetch stock item fresh from database to avoid cached/stale data
+                $stockItem = \App\Models\StockItem::find($item->stock_item_id);
                 
                 if (!$stockItem) {
                     $errors[] = "Item #" . ($index + 1) . ": Stock item not found or has been deleted.";
@@ -345,7 +346,7 @@ class SaleRecord extends Model
                 
                 // Validate stock availability
                 if ($stockItem->current_quantity < $item->quantity) {
-                    $errors[] = "{$stockItem->name}: Insufficient stock. Available: " . number_format($stockItem->current_quantity, 2) . ", Requested: " . number_format($item->quantity, 2);
+                    $errors[] = "{$stockItem->name}: Insufficient Stock. Available: " . number_format($stockItem->current_quantity, 2) . ", Requested: " . number_format($item->quantity, 2);
                     continue;
                 }
                 
