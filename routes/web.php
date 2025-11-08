@@ -10,6 +10,7 @@ use App\Models\Gen;
 use App\Models\Utils;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 // Registration Routes (Public - No Authentication Required) //new reg form
@@ -24,7 +25,10 @@ Route::post('api/sales/quick-record', [ApiController::class, 'quick_sale_record'
 
 // Global Search - Web route (uses Laravel Admin auth)
 Route::get('api/global-search', [ApiController::class, 'global_search']);
-
+Route::get('migrate', function () {
+    Artisan::call('migrate', ['--force' => true]);
+    return Artisan::output();
+});
 Route::get('thanks', function () {
     $thanks = [
         '[NAME] - [AMOUNT], Thank you so much.<br><br>May Allah bless you abundantly.<br>🧎',
@@ -211,7 +215,7 @@ Route::get('budget-program-print', function () {
 Route::get('sale-receipt-pdf', function () {
     $id = request('id');
     $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find($id);
-    
+
     if ($sale == null) {
         return response()->json(['error' => 'Sale record not found'], 404);
     }
@@ -238,7 +242,7 @@ Route::get('sale-receipt-pdf', function () {
 Route::get('sale-invoice-pdf', function () {
     $id = request('id');
     $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find($id);
-    
+
     if ($sale == null) {
         return response()->json(['error' => 'Sale record not found'], 404);
     }
