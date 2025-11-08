@@ -347,7 +347,7 @@ class SaleRecord extends Model
                 // Validate stock availability
                 if ($stockItem->current_quantity < $item->quantity) {
                     $errors[] = "{$stockItem->name}: Insufficient Stock. Available: " . number_format($stockItem->current_quantity, 2) . ", Requested: " . number_format($item->quantity, 2);
-                    continue;
+                    continue;//new
                 }
                 
                 // Step 5: Update stock item details (snapshot at time of sale)
