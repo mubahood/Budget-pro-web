@@ -1,0 +1,792 @@
+/**
+ * Budget Pro Web - Custom Admin Styles
+ * 
+ * Custom CSS enhancements for Laravel Admin
+ * including improved UI/UX, mobile responsiveness, and loading states
+ * 
+ * @version 1.0.0
+ * @date 2025-11-07
+ */
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.loading-spinner {
+    text-align: center;
+    color: #3c8dbc;
+}
+
+.loading-spinner i {
+    display: block;
+    margin-bottom: 15px;
+}
+
+.loading-spinner p {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Loading skeleton for tables */
+.table-loading tr {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============================================
+   FORM ENHANCEMENTS
+   ============================================ */
+
+/* Form validation states */
+.form-group.has-success .form-control {
+    border-color: #00a65a;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 6px rgba(0,166,90,.5);
+}
+
+.form-group.has-error .form-control {
+    border-color: #dd4b39;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 6px rgba(221,75,57,.5);
+}
+
+/* Character counter */
+.character-counter {
+    font-size: 12px;
+    text-align: right;
+    margin-top: 5px;
+}
+
+/* Submit button loading state */
+.btn[disabled] {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Required field indicator */
+label.required::after {
+    content: " *";
+    color: #dd4b39;
+}
+
+/* Form helper text */
+.help-block {
+    font-size: 12px;
+    color: #737373;
+    margin-top: 5px;
+}
+
+/* ============================================
+   TABLE ENHANCEMENTS
+   ============================================ */
+
+/* Responsive tables */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0.01%;
+}
+
+@media (max-width: 767px) {
+    .table-responsive {
+        width: 100%;
+        margin-bottom: 15px;
+        overflow-y: hidden;
+        border: 1px solid #ddd;
+    }
+    
+    .table-responsive > .table {
+        margin-bottom: 0;
+    }
+}
+
+/* Table hover effect */
+.table-hover tbody tr:hover {
+    background-color: #f5f5f5;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+/* Sortable column headers */
+th[data-sortable] {
+    cursor: pointer;
+    user-select: none;
+}
+
+th[data-sortable]:hover {
+    background-color: #e8e8e8;
+}
+
+/* Striped table rows */
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: #f9f9f9;
+}
+
+/* ============================================
+   SEARCH ENHANCEMENTS
+   ============================================ */
+
+/* Quick search */
+.grid-quick-search {
+    position: relative;
+}
+
+.grid-quick-search input {
+    padding-right: 35px;
+}
+
+.clear-search {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: #999;
+    padding: 5px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.clear-search:hover {
+    color: #dd4b39;
+}
+
+/* Search highlight */
+.search-highlight {
+    background-color: #fff3cd;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+/* ============================================
+   MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 767px) {
+    /* Mobile sidebar */
+    .main-sidebar {
+        padding-top: 50px;
+    }
+    
+    /* Mobile buttons */
+    .btn {
+        min-height: 44px;
+        padding: 10px 15px;
+    }
+    
+    .btn-group .btn {
+        min-width: 44px;
+    }
+    
+    /* Mobile form controls */
+    .form-control {
+        font-size: 16px; /* Prevents zoom on iOS */
+        min-height: 44px;
+    }
+    
+    /* Mobile table */
+    .table {
+        font-size: 13px;
+    }
+    
+    .table td {
+        padding: 8px 4px;
+    }
+    
+    /* Hide less important columns on mobile */
+    .table .mobile-hide {
+        display: none;
+    }
+    
+    /* Mobile box */
+    .box {
+        margin-bottom: 10px;
+    }
+    
+    .box-header {
+        padding: 10px;
+    }
+    
+    .box-body {
+        padding: 10px;
+    }
+    
+    /* Mobile breadcrumb */
+    .breadcrumb {
+        font-size: 12px;
+        padding: 8px 10px;
+    }
+    
+    /* Mobile pagination */
+    .pagination {
+        font-size: 13px;
+    }
+    
+    .pagination > li > a,
+    .pagination > li > span {
+        padding: 8px 12px;
+    }
+}
+
+/* Touch-friendly targets */
+@media (hover: none) and (pointer: coarse) {
+    a, button, input[type="submit"], input[type="button"] {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* ============================================
+   UI IMPROVEMENTS
+   ============================================ */
+
+/* Back to top button */
+.back-to-top {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    display: none;
+    z-index: 1000;
+    border-radius: 50% !important;
+    width: 50px;
+    height: 50px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+}
+
+.back-to-top:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
+.back-to-top i {
+    line-height: 50px;
+}
+
+/* Smooth transitions */
+.box,
+.btn,
+.form-control,
+.table-hover tbody tr {
+    transition: all 0.2s ease;
+}
+
+/* Box shadow enhancements */
+.box {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+}
+
+.box:hover {
+    box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+}
+
+/* Button improvements */
+.btn {
+    border-radius: 3px;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* Icon buttons */
+.btn-icon {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============================================
+   NOTIFICATIONS & ALERTS
+   ============================================ */
+
+/* Toast notifications */
+.toast-top-right {
+    top: 70px;
+    right: 12px;
+}
+
+.toast {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 4px;
+}
+
+/* Alert enhancements */
+.alert {
+    border-left: 4px solid;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.alert-success {
+    border-left-color: #00a65a;
+}
+
+.alert-info {
+    border-left-color: #00c0ef;
+}
+
+.alert-warning {
+    border-left-color: #f39c12;
+}
+
+.alert-danger {
+    border-left-color: #dd4b39;
+}
+
+/* ============================================
+   PERFORMANCE INDICATORS
+   ============================================ */
+
+/* Lazy loading image */
+img[data-src] {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+img[data-src].loaded {
+    opacity: 1;
+}
+
+/* Progress indicators */
+.progress-bar {
+    transition: width 0.6s ease;
+}
+
+/* ============================================
+   ACCESSIBILITY IMPROVEMENTS
+   ============================================ */
+
+/* Focus indicators */
+a:focus,
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid #3c8dbc;
+    outline-offset: 2px;
+}
+
+/* Skip to content link */
+.skip-to-content {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #3c8dbc;
+    color: white;
+    padding: 8px 16px;
+    text-decoration: none;
+    z-index: 100;
+}
+
+.skip-to-content:focus {
+    top: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .btn {
+        border: 2px solid currentColor;
+    }
+    
+    .form-control {
+        border: 2px solid #000;
+    }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+    .main-sidebar,
+    .main-header,
+    .back-to-top,
+    .btn-group,
+    .grid-row-actions,
+    .no-print {
+        display: none !important;
+    }
+    
+    .content-wrapper {
+        margin-left: 0 !important;
+    }
+    
+    .table {
+        font-size: 12px;
+    }
+    
+    .box {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+}
+
+/* ============================================
+   DARK MODE SUPPORT (Optional)
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+    .loading-overlay {
+        background: rgba(0, 0, 0, 0.95);
+    }
+    
+    .loading-spinner {
+        color: #fff;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* ============================================
+   CUSTOM SCROLLBAR
+   ============================================ */
+
+/* WebKit browsers */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #888 #f1f1f1;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.animate-in {
+    animation: fadeInUp 0.5s ease;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.user-select-none {
+    user-select: none;
+}
+
+.shadow-sm {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.shadow-md {
+    box-shadow: 0 3px 6px rgba(0,0,0,0.16);
+}
+
+.shadow-lg {
+    box-shadow: 0 10px 20px rgba(0,0,0,0.19);
+}
+
+.rounded {
+    border-radius: 4px;
+}
+
+.rounded-circle {
+    border-radius: 50%;
+}
+
+/* Spacing utilities */
+.m-0 { margin: 0 !important; }
+.mt-10 { margin-top: 10px !important; }
+.mb-10 { margin-bottom: 10px !important; }
+.p-10 { padding: 10px !important; }
+.pt-10 { padding-top: 10px !important; }
+.pb-10 { padding-bottom: 10px !important; }
+
+/* Display utilities */
+.d-flex { display: flex !important; }
+.d-inline-flex { display: inline-flex !important; }
+.d-none { display: none !important; }
+
+/* Flex utilities */
+.justify-content-between { justify-content: space-between !important; }
+.justify-content-center { justify-content: center !important; }
+.align-items-center { align-items: center !important; }
+.flex-wrap { flex-wrap: wrap !important; }
+
+/* Text utilities */
+.text-bold { font-weight: bold !important; }
+.text-muted { color: #777 !important; }
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
+
+/* ============================================
+   RESPONSIVE HELPERS
+   ============================================ */
+
+/* Show/hide based on screen size */
+@media (max-width: 767px) {
+    .hidden-xs { display: none !important; }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+    .hidden-sm { display: none !important; }
+}
+
+@media (min-width: 992px) and (max-width: 1199px) {
+    .hidden-md { display: none !important; }
+}
+
+@media (min-width: 1200px) {
+    .hidden-lg { display: none !important; }
+}
+
+/* Visible helpers */
+@media (max-width: 767px) {
+    .visible-xs { display: block !important; }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+    .visible-sm { display: block !important; }
+}
+
+@media (min-width: 992px) and (max-width: 1199px) {
+    .visible-md { display: block !important; }
+}
+
+@media (min-width: 1200px) {
+    .visible-lg { display: block !important; }
+}
+
+/* ============================================
+   BADGE STYLES - CONTEXTUAL COLORS
+   ============================================ */
+
+/* Global badge base styles */
+.badge {
+    display: inline-block;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    color: #fff;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 3px;
+}
+
+/* Primary - Blue */
+.badge-primary {
+    background-color: #3c8dbc !important;
+    color: #ffffff !important;
+}
+
+/* Success - Green */
+.badge-success {
+    background-color: #00a65a !important;
+    color: #ffffff !important;
+}
+
+/* Info - Light Blue */
+.badge-info {
+    background-color: #00c0ef !important;
+    color: #ffffff !important;
+}
+
+/* Warning - Yellow/Orange */
+.badge-warning {
+    background-color: #f39c12 !important;
+    color: #ffffff !important;
+}
+
+/* Danger - Red */
+.badge-danger {
+    background-color: #dd4b39 !important;
+    color: #ffffff !important;
+}
+
+/* Secondary - Gray */
+.badge-secondary {
+    background-color: #999999 !important;
+    color: #ffffff !important;
+}
+
+/* Light - Light Gray */
+.badge-light {
+    background-color: #f4f4f4 !important;
+    color: #333333 !important;
+}
+
+/* Dark - Dark Gray */
+.badge-dark {
+    background-color: #343a40 !important;
+    color: #ffffff !important;
+}
+
+/* Badge with icons */
+.badge i {
+    margin-right: 3px;
+}
+
+/* Badge hover effects */
+.badge:hover {
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+}
+
+/* Badge in table cells */
+td .badge {
+    margin: 2px;
+}
+
+/* Multiple badges */
+.badge + .badge {
+    margin-left: 5px;
+}
+
+/* ============================================
+   TEXT COLOR UTILITIES
+   ============================================ */
+
+/* Text colors to match badge colors */
+.text-primary {
+    color: #3c8dbc !important;
+}
+
+.text-success {
+    color: #00a65a !important;
+}
+
+.text-info {
+    color: #00c0ef !important;
+}
+
+.text-warning {
+    color: #f39c12 !important;
+}
+
+.text-danger {
+    color: #dd4b39 !important;
+}
+
+.text-secondary {
+    color: #999999 !important;
+}
+
+/* ============================================
+   BUTTON COLOR CONSISTENCY
+   ============================================ */
+
+/* Ensure buttons match badge colors */
+.btn-primary {
+    background-color: #3c8dbc !important;
+    border-color: #367fa9 !important;
+}
+
+.btn-success {
+    background-color: #00a65a !important;
+    border-color: #008d4c !important;
+}
+
+.btn-info {
+    background-color: #00c0ef !important;
+    border-color: #00acd6 !important;
+}
+
+.btn-warning {
+    background-color: #f39c12 !important;
+    border-color: #e08e0b !important;
+}
+
+.btn-danger {
+    background-color: #dd4b39 !important;
+    border-color: #d33724 !important;
+}
+

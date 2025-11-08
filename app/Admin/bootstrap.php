@@ -34,3 +34,12 @@ $u = Admin::user();
 if ($u != null) {
     Utils::generate_dummy($u);
 }
+
+// Include Global Search Command Palette
+Admin::html(view('admin.global-search')->render());
+
+// Include Keyboard Shortcuts System
+Admin::html(view('admin.keyboard-shortcuts')->render());
+
+// Include Quick Category Add Modal
+Admin::html(view('admin.quick-add-category')->render());

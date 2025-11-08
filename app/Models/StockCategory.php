@@ -4,11 +4,40 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\AuditLogger;
+use App\Scopes\CompanyScope;
 
 class StockCategory extends Model
 {
-
-    //fillables
+    use HasFactory, AuditLogger;
+    
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
+    
+    /**
+     * The relationships that should always be loaded.
+     */
+    protected $with = ['company'];
+    
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'buying_price' => 'decimal:2',
+        'selling_price' => 'decimal:2',
+        'expected_profit' => 'decimal:2',
+        'earned_profit' => 'decimal:2',
+        'current_quantity' => 'decimal:2',
+        'reorder_level' => 'decimal:2',
+    ];
+    
     protected $fillable = [
         'company_id',
         'name',
@@ -65,6 +94,68 @@ class StockCategory extends Model
     {
         return $this->name . " (" . $this->code . ")";
     }
+
+    /**
+     * Relationships
+     */
+    public function company()
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    public function stockSubCategories()
+    {
+        return $this->hasMany(StockSubCategory::class, 'parent_id');
+    }
+
+    public function stockItems()
+    {
+        return $this->hasMany(StockItem::class, 'stock_category_id');
+    }
+
+    public function stockRecords()
+    {
+        return $this->hasMany(StockRecord::class, 'stock_category_id');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    /**
+     * Query Scopes
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'Active');
+    }
+
+    public function scopeInactive($query)
+    {
+        return $query->where('status', 'Inactive');
+    }
+
+    public function scopeByStatus($query, $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    public function scopeLowStock($query)
+    {
+        return $query->where('current_quantity', '<', 'reorder_level');
+    }
+
+    public function scopeInStock($query)
+    {
+        return $query->where('current_quantity', '>', 0);
+    }
+
+    public function scopeOutOfStock($query)
+    {
+        return $query->where('current_quantity', '<=', 0);
+    }
+
     /* 
         "earned_profit" => 0
 */

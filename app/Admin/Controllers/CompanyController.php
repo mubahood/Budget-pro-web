@@ -28,6 +28,13 @@ class CompanyController extends AdminController
     protected function grid()
     {
         $grid = new Grid(new Company());
+        
+        // SAAS: Filter to show only user's own company unless super admin
+        $user = auth()->user();
+        if ($user->user_type !== 'admin') {
+            // Regular users can only see their own company
+            $grid->model()->where('id', $user->company_id);
+        }
 
         $grid->disableBatchActions();
         $grid->quickSearch('name', 'phone_number', 'phone_number_2', 'email');
@@ -110,42 +117,62 @@ class CompanyController extends AdminController
      */
     protected function form()
     {
-
-
-        // $comp = Company::find(1);
-        // $comp->name = $comp->name.' - '.rand(1,100);
-        // $comp->save();
-        // die("done");
-
-        //get admin_role_users records with where condition
-        $admin_role_users = DB::table('admin_role_users')->where([
-            'role_id' => 2,
-        ])->get();
-
-
-        $company_admins = [];
-
-        foreach ($admin_role_users as $key => $value) {
-            $user = User::find($value->user_id);
-            if ($user == null) {
-                continue;
-            }
-            $company_admins[$user->id] = $user->name . ' - ' . $user->id;
-        }
-
-
         $form = new Form(new Company());
+        
+        $user = auth()->user();
+        
+        // SAAS: Ensure users can only edit their own company
+        $form->saving(function (Form $form) use ($user) {
+            // Prevent changing company_id or owner for non-admins
+            if ($user->user_type !== 'admin') {
+                if ($form->model()->id && $form->model()->id != $user->company_id) {
+                    admin_error('Access Denied', 'You cannot edit other companies.');
+                    return back();
+                }
+            }
+        });
 
-        $form->select('owner_id', __('Company owner'))
-            ->options($company_admins)
-            ->rules('required');
+        // Only super admins can assign company owner
+        if ($user->user_type === 'admin') {
+            $admin_role_users = DB::table('admin_role_users')->where([
+                'role_id' => 2,
+            ])->get();
+            
+            $company_admins = [];
+            foreach ($admin_role_users as $key => $value) {
+                $u = User::find($value->user_id);
+                if ($u == null) {
+                    continue;
+                }
+                $company_admins[$u->id] = $u->name . ' - ' . $u->id;
+            }
+            
+            $form->select('owner_id', __('Company owner'))
+                ->options($company_admins)
+                ->rules('required');
+        } else {
+            // Regular users cannot change owner
+            $form->display('owner_id', __('Company Owner'))->with(function ($value) {
+                $owner = User::find($value);
+                return $owner ? $owner->name : 'N/A';
+            });
+        }
         $form->text('name', __('Company name'))->rules('required');
         $form->email('email', __('Email'));
         $form->image('logo', __('Logo'));
         $form->url('website', __('Website'));
         $form->textarea('about', __('About Company'));
-        $form->text('status', __('Status'));
-        $form->date('license_expire', __('License expire'))->default(date('Y-m-d'));
+        
+        // Only super admins can change status and license
+        if ($user->user_type === 'admin') {
+            $form->select('status', __('Status'))
+                ->options(['Active' => 'Active', 'Inactive' => 'Inactive'])
+                ->default('Active');
+            $form->date('license_expire', __('License expire'))->default(date('Y-m-d'));
+        } else {
+            $form->display('status', __('Status'));
+            $form->display('license_expire', __('License Expires'));
+        }
         $form->text('address', __('Address'));
         $form->text('phone_number', __('Phone number'));
         $form->text('phone_number_2', __('Phone number 2'));

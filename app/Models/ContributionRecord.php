@@ -5,10 +5,35 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Traits\AuditLogger;
+use App\Scopes\CompanyScope;
 
 class ContributionRecord extends Model
 {
-    use HasFactory;
+    use HasFactory, AuditLogger;
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
+
+    /**
+     * The relationships that should always be loaded.
+     */
+    protected $with = ['budgetProgram', 'treasurer'];
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'amount' => 'decimal:2',
+        'date' => 'date',
+    ];
 
     //boot
     protected static function boot()
@@ -140,5 +165,77 @@ class ContributionRecord extends Model
             return 'N/A';
         }
         return $changed_by->name;
+    }
+
+    /**
+     * Relationships
+     */
+    public function budgetProgram()
+    {
+        return $this->belongsTo(BudgetProgram::class, 'budget_program_id');
+    }
+
+    public function treasurer()
+    {
+        return $this->belongsTo(User::class, 'treasurer_id');
+    }
+
+    public function changedBy()
+    {
+        return $this->belongsTo(User::class, 'chaned_by_id');
+    }
+
+    public function financialPeriod()
+    {
+        return $this->belongsTo(FinancialPeriod::class, 'financial_period_id');
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    /**
+     * Query Scopes
+     */
+    public function scopeByProgram($query, $programId)
+    {
+        return $query->where('budget_program_id', $programId);
+    }
+
+    public function scopeByPeriod($query, $periodId)
+    {
+        return $query->where('financial_period_id', $periodId);
+    }
+
+    public function scopeFullyPaid($query)
+    {
+        return $query->where('fully_paid', 'Yes');
+    }
+
+    public function scopeNotFullyPaid($query)
+    {
+        return $query->where('fully_paid', 'No');
+    }
+
+    public function scopeByDateRange($query, $startDate, $endDate)
+    {
+        return $query->whereBetween('date', [$startDate, $endDate]);
+    }
+
+    public function scopeThisMonth($query)
+    {
+        return $query->whereMonth('date', now()->month)
+                    ->whereYear('date', now()->year);
+    }
+
+    public function scopeThisYear($query)
+    {
+        return $query->whereYear('date', now()->year);
+    }
+
+    public function scopeByTreasurer($query, $treasurerId)
+    {
+        return $query->where('treasurer_id', $treasurerId);
     }
 }

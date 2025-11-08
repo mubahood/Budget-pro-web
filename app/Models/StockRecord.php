@@ -4,10 +4,42 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Traits\AuditLogger;
+use App\Scopes\CompanyScope;
 
 class StockRecord extends Model
 {
-    use HasFactory;
+    use HasFactory, AuditLogger;
+    
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
+    
+    /**
+     * The relationships that should always be loaded.
+     */
+    protected $with = ['stockItem', 'createdBy'];
+    
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'date' => 'datetime',
+        'quantity' => 'decimal:2',
+        'selling_price' => 'decimal:2',
+        'buying_price' => 'decimal:2',
+        'total_sales' => 'decimal:2',
+        'profit' => 'decimal:2',
+    ];
+    
     /*         
             $table->foreignIdFor(Company::class);
             $table->foreignIdFor(StockItem::class);
@@ -37,6 +69,7 @@ class StockRecord extends Model
         'type',
         'quantity',
         'selling_price',
+        'buying_price',
         'total_sales',
         'profit',
         'date',
@@ -89,66 +122,210 @@ class StockRecord extends Model
                 $model->profit = 0;
             }
 
+            // Validate sufficient stock BEFORE attempting save (but DON'T update quantity yet)
             $current_quantity = $stock_item->current_quantity;
             if ($current_quantity < $quantity) {
-                throw new \Exception("Insufficient Stock.");
+                throw new \Exception("Insufficient Stock. Available: {$current_quantity}, Requested: {$quantity}");
             }
 
-            $new_quantity = $current_quantity - $quantity;
-            $stock_item->current_quantity = $new_quantity;
-            $stock_item->save();
+            // DON'T update stock quantities here - that happens in 'created' event
+            // This prevents transaction rollback issues
 
             return $model;
         });
 
         //created 
         static::created(function ($model) {
+            return DB::transaction(function () use ($model) {
+                $stock_item = StockItem::find($model->stock_item_id);
+                if ($stock_item == null) {
+                    throw new \Exception("Invalid Stock Item.");
+                }
 
-            $stock_item = StockItem::find($model->stock_item_id);
-            if ($stock_item == null) {
-                throw new \Exception("Invalid Stock Item.");
-            }
-            $stock_item->stockSubCategory->update_self();
-            $stock_item->stockSubCategory->stockCategory->update_self();
+                // UPDATE STOCK QUANTITIES - This runs AFTER the record is successfully saved
+                $quantity = abs($model->quantity);
+                
+                if ($model->type == 'Sale') {
+                    // Stock Out (removing inventory)
+                    $new_quantity = $stock_item->current_quantity - $quantity;
+                    $stock_item->current_quantity = $new_quantity;
+                    $stock_item->save();
+                    
+                    Log::info("Stock Out (Sale): Removed {$quantity} units from item #{$stock_item->id}. New quantity: {$new_quantity}");
+                } else {
+                    // For other types, log but don't modify quantity (can be extended later)
+                    Log::info("Stock Record Type '{$model->type}': No quantity adjustment for item #{$stock_item->id}");
+                }
 
-            $company = Company::find($model->company_id);
-            if ($company == null) {
-                throw new \Exception("Invalid Company.");
-            }
+                // Update aggregates
+                $stock_item->stockSubCategory->update_self();
+                $stock_item->stockSubCategory->stockCategory->update_self();
 
-            if ($model->type == 'Sale') {
-                $financial_category = FinancialCategory::where([
-                    ['company_id', '=', $company->id],
-                    ['name', '=', 'Sales']
-                ])->first();
-                if ($financial_category == null) {
-                    Company::prepare_account_categories($company->id);
+                // Create financial record for sales
+                $company = Company::find($model->company_id);
+                if ($company == null) {
+                    throw new \Exception("Invalid Company.");
+                }
+
+                if ($model->type == 'Sale') {
                     $financial_category = FinancialCategory::where([
                         ['company_id', '=', $company->id],
                         ['name', '=', 'Sales']
                     ])->first();
                     if ($financial_category == null) {
-                        throw new \Exception("Sales Account Category not found.");
+                        Company::prepare_account_categories($company->id);
+                        $financial_category = FinancialCategory::where([
+                            ['company_id', '=', $company->id],
+                            ['name', '=', 'Sales']
+                        ])->first();
+                        if ($financial_category == null) {
+                            throw new \Exception("Sales Account Category not found.");
+                        }
                     }
+                    $fin_rec = new FinancialRecord();
+                    $fin_rec->financial_category_id = $financial_category->id;
+                    $fin_rec->company_id = $company->id;
+                    $fin_rec->user_id = $model->created_by_id;
+                    $fin_rec->created_by_id = $model->created_by_id;
+                    $fin_rec->amount = $model->total_sales;
+                    $fin_rec->quantity = $model->quantity;
+                    $fin_rec->type = 'Income';
+                    $fin_rec->payment_method = 'Cash';
+                    $fin_rec->recipient = '';
+                    $fin_rec->receipt = '';
+                    $fin_rec->date = $model->date;
+                    $fin_rec->description = 'Sales of #' . $model->id;
+                    $fin_rec->financial_period_id = $model->financial_period_id;
+                    $fin_rec->save();
                 }
-                $fin_rec = new FinancialRecord();
-                $fin_rec->financial_category_id = $financial_category->id;
-                $fin_rec->company_id = $company->id;
-                $fin_rec->user_id = $model->created_by_id;
-                $fin_rec->created_by_id = $model->created_by_id;
-                $fin_rec->amount = $model->total_sales;
-                $fin_rec->quantity = $model->quantity;
-                $fin_rec->type = 'Income';
-                $fin_rec->payment_method = 'Cash';
-                $fin_rec->recipient = '';
-                $fin_rec->receipt = '';
-                $fin_rec->date = $model->date;
-                $fin_rec->description = 'Sales of #' . $model->id;
-                $fin_rec->financial_period_id = $model->financial_period_id;
-                $fin_rec->save();
-            }
-            //
+            });
         });
+
+        // Deleting - restore stock quantities when record is deleted
+        static::deleting(function ($model) {
+            return DB::transaction(function () use ($model) {
+                $stock_item = StockItem::find($model->stock_item_id);
+                if ($stock_item == null) {
+                    Log::warning("StockRecord #{$model->id} deletion: Stock item not found.");
+                    return true;
+                }
+
+                // Restore stock quantities
+                $quantity = abs($model->quantity);
+                
+                if ($model->type == 'Sale') {
+                    // Restore stock that was removed
+                    $new_quantity = $stock_item->current_quantity + $quantity;
+                    $stock_item->current_quantity = $new_quantity;
+                    $stock_item->save();
+                    
+                    Log::info("Stock Record Deleted: Restored {$quantity} units to item #{$stock_item->id}. New quantity: {$new_quantity}");
+                }
+
+                return true;
+            });
+        });
+
+        // Deleted - update aggregates after deletion
+        static::deleted(function ($model) {
+            $stock_item = StockItem::find($model->stock_item_id);
+            if ($stock_item != null) {
+                $stock_item->stockSubCategory->update_self();
+                $stock_item->stockSubCategory->stockCategory->update_self();
+            }
+        });
+    }
+
+    /**
+     * Relationships
+     */
+    public function stockItem()
+    {
+        return $this->belongsTo(StockItem::class, 'stock_item_id');
+    }
+
+    public function stockCategory()
+    {
+        return $this->belongsTo(StockCategory::class, 'stock_category_id');
+    }
+
+    public function stockSubCategory()
+    {
+        return $this->belongsTo(StockSubCategory::class, 'stock_sub_category_id');
+    }
+
+    public function financialPeriod()
+    {
+        return $this->belongsTo(FinancialPeriod::class, 'financial_period_id');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    public function saleRecord()
+    {
+        return $this->belongsTo(SaleRecord::class, 'sale_record_id');
+    }
+
+    /**
+     * Query Scopes
+     */
+    public function scopeByType($query, $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    public function scopeStockIn($query)
+    {
+        return $query->where('type', 'Stock In');
+    }
+
+    public function scopeStockOut($query)
+    {
+        return $query->whereIn('type', ['Sale', 'Stock Out']);
+    }
+
+    public function scopeSales($query)
+    {
+        return $query->where('type', 'Sale');
+    }
+
+    public function scopeByDateRange($query, $startDate, $endDate)
+    {
+        return $query->whereBetween('date', [$startDate, $endDate]);
+    }
+
+    public function scopeByPeriod($query, $periodId)
+    {
+        return $query->where('financial_period_id', $periodId);
+    }
+
+    public function scopeByCategory($query, $categoryId)
+    {
+        return $query->where('stock_category_id', $categoryId);
+    }
+
+    public function scopeBySubCategory($query, $subCategoryId)
+    {
+        return $query->where('stock_sub_category_id', $subCategoryId);
+    }
+
+    public function scopeThisMonth($query)
+    {
+        return $query->whereMonth('date', now()->month)
+                    ->whereYear('date', now()->year);
+    }
+
+    public function scopeThisYear($query)
+    {
+        return $query->whereYear('date', now()->year);
     }
 
     /* 

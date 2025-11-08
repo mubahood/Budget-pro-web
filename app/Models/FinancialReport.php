@@ -7,10 +7,39 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
+use App\Traits\AuditLogger;
+use App\Scopes\CompanyScope;
 
 class FinancialReport extends Model
 {
-    use HasFactory;
+    use HasFactory, AuditLogger;
+    
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
+    
+    /**
+     * The attributes that are mass assignable.
+     */
+    protected $fillable = [
+        'company_id',
+        'user_id',
+        'type',
+        'period_type',
+        'start_date',
+        'end_date',
+        'currency',
+        'file_generated',
+        'file',
+        'total_income',
+        'total_expense',
+        'profit',
+    ];
+    
     //boot
     protected static function boot()
     {
@@ -237,5 +266,13 @@ class FinancialReport extends Model
             $items[] = $item;
         }
         return $items;
+    }
+    
+    /**
+     * Relationship to User
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

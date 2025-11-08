@@ -1,0 +1,487 @@
+{
+  "info": {
+    "name": "Budget Pro Web API",
+    "description": "Complete API collection for Budget Pro Web Application with all endpoints, authentication, and examples.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "company_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.user && jsonData.data.user.token) {",
+                  "        pm.collectionVariables.set('token', jsonData.data.user.token);",
+                  "        pm.collectionVariables.set('company_id', jsonData.data.company.id);",
+                  "        console.log('Token saved:', jsonData.data.user.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\",\n  \"phone_number\": \"+256700000000\",\n  \"company_name\": \"Acme Corporation\",\n  \"currency\": \"UGX\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.user && jsonData.data.user.token) {",
+                  "        pm.collectionVariables.set('token', jsonData.data.user.token);",
+                  "        pm.collectionVariables.set('company_id', jsonData.data.company.id);",
+                  "        console.log('Token saved:', jsonData.data.user.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user",
+              "host": ["{{base_url}}"],
+              "path": ["user"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Get Manifest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/manifest",
+              "host": ["{{base_url}}"],
+              "path": ["manifest"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Budget Management",
+      "item": [
+        {
+          "name": "Create Budget Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"budget_program_id\": 1,\n  \"budget_item_category_id\": 1,\n  \"financial_period_id\": 1,\n  \"name\": \"Office Supplies\",\n  \"description\": \"Monthly office supplies budget\",\n  \"amount\": 500000,\n  \"quantity\": 1,\n  \"total\": 500000,\n  \"status\": \"Pending\",\n  \"date\": \"2025-11-07\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/budget-item-create",
+              "host": ["{{base_url}}"],
+              "path": ["budget-item-create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Budget Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1,\n  \"budget_program_id\": 1,\n  \"budget_item_category_id\": 1,\n  \"financial_period_id\": 1,\n  \"name\": \"Office Supplies (Updated)\",\n  \"description\": \"Updated monthly office supplies budget\",\n  \"amount\": 600000,\n  \"quantity\": 1,\n  \"total\": 600000,\n  \"status\": \"Approved\",\n  \"date\": \"2025-11-07\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/budget-item-create",
+              "host": ["{{base_url}}"],
+              "path": ["budget-item-create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Budget Programs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/BudgetProgram",
+              "host": ["{{base_url}}"],
+              "path": ["api", "BudgetProgram"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Budget Item Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/BudgetItemCategory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "BudgetItemCategory"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contribution Records",
+      "item": [
+        {
+          "name": "Create Contribution Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": 5,\n  \"treasurer_id\": 2,\n  \"financial_period_id\": 1,\n  \"amount\": 100000,\n  \"payment_method\": \"Cash\",\n  \"description\": \"Monthly contribution\",\n  \"date\": \"2025-11-07\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contribution-records-create",
+              "host": ["{{base_url}}"],
+              "path": ["contribution-records-create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Contribution Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1,\n  \"member_id\": 5,\n  \"treasurer_id\": 2,\n  \"financial_period_id\": 1,\n  \"amount\": 150000,\n  \"payment_method\": \"Mobile Money\",\n  \"description\": \"Updated monthly contribution\",\n  \"date\": \"2025-11-07\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contribution-records-create",
+              "host": ["{{base_url}}"],
+              "path": ["contribution-records-create"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Stock Management",
+      "item": [
+        {
+          "name": "Search Stock Items",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-items?q=laptop&company_id={{company_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-items"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "laptop"
+                },
+                {
+                  "key": "company_id",
+                  "value": "{{company_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Stock Sub-Categories",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-sub-categories?q=electronics&company_id={{company_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-sub-categories"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "electronics"
+                },
+                {
+                  "key": "company_id",
+                  "value": "{{company_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Stock Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/StockCategory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "StockCategory"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Stock Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/StockItem",
+              "host": ["{{base_url}}"],
+              "path": ["api", "StockItem"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Financial Management",
+      "item": [
+        {
+          "name": "List Financial Periods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/FinancialPeriod",
+              "host": ["{{base_url}}"],
+              "path": ["api", "FinancialPeriod"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Financial Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/FinancialCategory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "FinancialCategory"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Financial Period",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Q1 2025\",\n  \"start_date\": \"2025-01-01\",\n  \"end_date\": \"2025-03-31\",\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/FinancialPeriod",
+              "host": ["{{base_url}}"],
+              "path": ["api", "FinancialPeriod"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Generic CRUD",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/User",
+              "host": ["{{base_url}}"],
+              "path": ["api", "User"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create/Update Model",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": null,\n  \"name\": \"New Record\",\n  \"status\": \"Active\",\n  \"description\": \"Sample description\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{ModelName}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{ModelName}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "File Management",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/file-uploading",
+              "host": ["{{base_url}}"],
+              "path": ["file-uploading"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

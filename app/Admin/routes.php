@@ -31,6 +31,13 @@ Route::group([
     $router->resource('budget-item-categories', BudgetItemCategoryController::class);
     $router->resource('budget-items', BudgetItemController::class);
     $router->resource('data-exports', DataExportController::class);
+    $router->resource('purchase-orders', PurchaseOrderController::class);
+    $router->resource('inventory-forecasts', InventoryForecastController::class);
+    $router->get('inventory-forecasts-generate', 'InventoryForecastController@generate');
+    $router->post('inventory-forecasts-generate', 'InventoryForecastController@processGenerate');
+    $router->resource('auto-reorder-rules', AutoReorderRuleController::class);
+    $router->get('auto-reorder-rules/trigger', 'AutoReorderRuleController@trigger');
+    $router->resource('sale-records', SaleRecordController::class);
 
 
 });

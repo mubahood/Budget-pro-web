@@ -27,8 +27,6 @@ class DataExportController extends AdminController
     {
         $grid = new Grid(new DataExport());
         $u = Admin::user();
-        DataExport::check($u);
-
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('id', 'desc');
@@ -94,16 +92,12 @@ class DataExportController extends AdminController
         $form->hidden('company_id', __('Company id'))->default($u->company_id);
         $form->hidden('created_by_id', __('Created by id'))->default($u->id);
 
-        /*         $form->select('treasurer_id', __('Treasurer'))->options(\App\Models\User::where('company_id', $u->company_id)->pluck('name', 'id')); */
+        $form->select('treasurer_id', __('Treasurer'))->options(\App\Models\User::where('company_id', $u->company_id)->pluck('name', 'id'));
         $form->select('category_id', __('Category'))
             ->options([
-                'Family' => 'Family 1',
-                'Family-2' => 'Family 2',
-                'Friend' => 'Friends 1',
-                'Friend-2' => 'Friends 2',
-                'Workmates' => 'Workmates',
-                'OBs_and_OGs' => 'OBs & OGs',
-                'Others' => 'Others',
+                'Friend' => 'Friends',
+                'Family' => 'Family',
+                'MTK' => 'MTK',
             ])->required();
         /*         $form->text('parameter_1', __('Parameter 1'));
         $form->text('parameter_2', __('Parameter 2'));

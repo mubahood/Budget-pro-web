@@ -1,10 +1,10 @@
-php artisan make:model SaleRecord -m
+php artisan make:model DataExport -m
 
 php artisan admin:make DataExportController --model=App\\Models\\DataExport
 //DataExport
 
 
-php artisan make:migration add_make_username_nullable --table=admin_users
+php artisan make:migration add_title_fields_to_budget_programs --table=budget_programs
 
 
 php artisan migrate

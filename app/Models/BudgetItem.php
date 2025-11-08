@@ -5,10 +5,39 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Traits\AuditLogger;
+use App\Scopes\CompanyScope;
+use App\Jobs\SendBudgetItemNotification;
 
 class BudgetItem extends Model
 {
-    use HasFactory;
+    use HasFactory, AuditLogger;
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
+
+    /**
+     * The relationships that should always be loaded.
+     */
+    protected $with = ['budgetItemCategory', 'createdBy'];
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'amount' => 'decimal:2',
+        'paid' => 'decimal:2',
+        'balance' => 'decimal:2',
+        'date' => 'date',
+    ];
 
     //boot
     protected static function boot()
@@ -44,7 +73,7 @@ class BudgetItem extends Model
                 'budget_item_category_id' => $model->budget_item_category_id,
             ])->where('id', '!=', $model->id)->first();
             if ($withSameName) {
-                throw new \Exception('Item name already exists.');
+                throw new \Exception('Name already exists');
             }
 
             $model = self::prepare($model);
@@ -104,61 +133,22 @@ class BudgetItem extends Model
         is_complete = '$is_complete' WHERE id = $data->id";
         DB::update($sql);
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
-
+        
         try {
             $cat->updateSelf();
         } catch (\Throwable $th) {
             //throw $th;
         }
 
-        $budget_download_link = url('budget-program-print?id=' . $data->budget_program_id);
-        $unit_price = number_format($data->unit_price);
-        $quantity = number_format($data->quantity);
-        $invested_amount = number_format($data->invested_amount);
-        $balance = number_format($data->balance);
-        $mail_body = <<<EOD
-                    <p>Dear Admin,</p><br>
-                    <p>Budget item <b>{$data->name} - {$data->category->name}</b> has been updated.</p>
-                    <p><b>Quantity:</b> $unit_price</p>
-                    <p><b>Unit price:</b> {$quantity}</p>
-                    <p><b>Invested Amount:</b> {$invested_amount}</p>
-                    <p><b>Percentage Done:</b> {$percentage_done}%</p>
-                    <p><b>Balance:</b> {$balance}</p>
-                    <p><b>Details:</b> {$cat->details}</p>
-                    <p>Click <a href="{$budget_download_link}">here to DOWNLOAD UPDATED Budget</a> pdf.</p>
-                    <br><p>Thank you.</p>
-                EOD;
-        $users = User::where([
-            'company_id' => $data->company_id
-        ])->get();
-        $emails = [];
-        foreach ($users as $key => $user) {
-            if (filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
-                $emails[] = $user->email;
-            }
-            if (filter_var($user->username, FILTER_VALIDATE_EMAIL)) {
-                if (in_array($user->username, $emails)) {
-                    continue;
-                }
-                $emails[] = $user->username;
-            }
-        }
-        if (!in_array('mubahood360@gmail.com', $emails)) {
-            $emails[] = 'mubahood360@gmail.com';
-        }
-        $program = BudgetProgram::find($data->budget_program_id);
-        $title = $program->name . " -  Budget Updates.";
-
-        $data['email'] = $emails;
-        $date = date('Y-m-d');
-        $data['subject'] = $title;
-        $data['body'] = $mail_body;
-        $data['data'] = $data['body'];
-        $data['name'] = 'Admin';
-
+        // Dispatch email notification job (async)
         try {
-            Utils::mail_sender($data);
+            SendBudgetItemNotification::dispatch(
+                $data->id,
+                $data->company_id,
+                $data->budget_program_id
+            );
         } catch (\Throwable $th) {
+            Log::error("Failed to dispatch budget item notification: " . $th->getMessage());
         }
     }
 
@@ -166,10 +156,83 @@ class BudgetItem extends Model
     {
         return $this->belongsTo(BudgetItemCategory::class, 'budget_item_category_id');
     }
+
+    public function budgetItemCategory()
+    {
+        return $this->belongsTo(BudgetItemCategory::class, 'budget_item_category_id');
+    }
+
+    public function budgetProgram()
+    {
+        return $this->belongsTo(BudgetProgram::class, 'budget_program_id');
+    }
+
+    public function financialPeriod()
+    {
+        return $this->belongsTo(FinancialPeriod::class, 'financial_period_id');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    /**
+     * Query Scopes
+     */
+    public function scopeByProgram($query, $programId)
+    {
+        return $query->where('budget_program_id', $programId);
+    }
+
+    public function scopeByCategory($query, $categoryId)
+    {
+        return $query->where('budget_item_category_id', $categoryId);
+    }
+
+    public function scopeByPeriod($query, $periodId)
+    {
+        return $query->where('financial_period_id', $periodId);
+    }
+
+    public function scopePending($query)
+    {
+        return $query->where('status', 'Pending');
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', 'Approved');
+    }
+
+    public function scopeRejected($query)
+    {
+        return $query->where('status', 'Rejected');
+    }
+
+    public function scopeByStatus($query, $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    public function scopeOverBudget($query)
+    {
+        return $query->whereColumn('spent_amount', '>', 'target_amount');
+    }
+
+    public function scopeUnderBudget($query)
+    {
+        return $query->whereColumn('spent_amount', '<', 'target_amount');
+    }
+
     //getter for budget_item_category_text
     public function getBudgetItemCategoryTextAttribute()
     {
-        return $this->budget_item_category_id;
         if ($this->category == null) {
             return 'N/A';
         }

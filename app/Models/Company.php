@@ -4,10 +4,20 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\AuditLogger;
 
 class Company extends Model
 {
-    use HasFactory;
+    use HasFactory, AuditLogger;
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'license_expire' => 'date',
+    ];
 
     //boot
     protected static function boot()

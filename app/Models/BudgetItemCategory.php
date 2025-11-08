@@ -5,58 +5,36 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Traits\AuditLogger;
+use App\Scopes\CompanyScope;
 
 class BudgetItemCategory extends Model
 {
-    use HasFactory;
-
-
-    //boot
-    protected static function boot()
+    use HasFactory, AuditLogger;
+    
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
     {
-        parent::boot();
-
-        //disable deleting
-        static::deleting(function ($model) {
-            //throw new \Exception('Deleting is not allowed');
-        });
-
-        static::creating(function ($model) {
-            //check if budget_program_id exists
-            $budget_program = BudgetProgram::find($model->budget_program_id);
-            if ($budget_program == null) {
-                throw new \Exception('Budget program not found . #' . $model->budget_program_id); 
-            }
-            $model->name = trim($model->name);
-            $withSameName  = BudgetItemCategory::where([
-                'name' => $model->name,
-                'budget_program_id' => $model->budget_program_id,
-            ])->first();
-
-            if ($withSameName) {
-                throw new \Exception('Name already exists for #' . $model->budget_program_id);
-            }
-            return $model;
-        });
-
-        static::updating(function ($model) {
-            //check if budget_program_id exists
-            $budget_program = BudgetProgram::find($model->budget_program_id);
-            if ($budget_program == null) {
-                throw new \Exception('Budget program not found');
-            }
-
-            $model->name = trim($model->name);
-            $withSameName  = BudgetItemCategory::where([
-                'name' => $model->name,
-                'budget_program_id' => $model->budget_program_id,
-            ])->where('id', '!=', $model->id)->first();
-            if ($withSameName) {
-                throw new \Exception('Name already exists');
-            }
-            return $model;
-        });
+        static::addGlobalScope(new CompanyScope);
     }
+    
+    /**
+     * The attributes that are mass assignable.
+     */
+    protected $fillable = [
+        'budget_program_id',
+        'company_id',
+        'name',
+        'target_amount',
+        'invested_amount',
+        'balance',
+        'percentage_done',
+        'is_complete',
+    ];
+
+
 
     //update self
     public function updateSelf()
@@ -117,5 +95,23 @@ class BudgetItemCategory extends Model
     public function getNameTextAttribute($name_text)
     {
         return $this->name . ' (' . number_format($this->balance) . ')';
+    }
+    
+    /**
+     * Relationships
+     */
+    public function company()
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+    
+    public function budgetProgram()
+    {
+        return $this->belongsTo(BudgetProgram::class, 'budget_program_id');
+    }
+    
+    public function budgetItems()
+    {
+        return $this->hasMany(BudgetItem::class, 'budget_item_category_id');
     }
 }

@@ -1,7 +1,8 @@
 <?php
 
+use App\Admin\Controllers\AuthController;
+use App\Http\Controllers\ApiController;
 use App\Models\BudgetProgram;
-use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\DataExport;
 use App\Models\FinancialReport;
@@ -10,6 +11,19 @@ use App\Models\Utils;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Route;
+
+// Registration Routes (Public - No Authentication Required) //new reg form
+Route::get('auth/register', [AuthController::class, 'getRegister'])->name('admin.register');
+Route::post('auth/register', [AuthController::class, 'postRegister'])->name('admin.register.post');
+
+// Quick Add Product - Web route (uses Laravel Admin auth)
+Route::post('api/products/quick-add', [ApiController::class, 'product_quick_add']);
+
+// Quick Sale Recording - Web route
+Route::post('api/sales/quick-record', [ApiController::class, 'quick_sale_record']);
+
+// Global Search - Web route (uses Laravel Admin auth)
+Route::get('api/global-search', [ApiController::class, 'global_search']);
 
 Route::get('thanks', function () {
     $thanks = [
@@ -34,41 +48,16 @@ Route::get('thanks', function () {
 });
 Route::get('data-exports-print', function () {
     $id = $_GET['id'];
-    if (!isset($_GET['company_id'])) {
-        return die('Company not found');
-    }
-    if (!isset($_GET['id'])) {
-        return die('Data export not found');
-    }
-    $company = Company::find($_GET['company_id']);
-
-    $d = DataExport::where([
-        'company_id' => $company->id,
-        'category_id' => $id,
-    ])->first();
-    if ($d == null) {
-        return die('Data export not found');
-    }
-    if ($d == null) {
-        return die('Data export not found');
-    }
-
-
-    if ($company == null) {
-        return die('Company not found');
-    }
-
+    $d = DataExport::find($id);
     $conds = [
         'category_id' => $d->category_id,
-        'company_id' => $d->company_id,
     ];
-
-    /*  if ($d->treasurer_id != null && $d->treasurer_id != 0) {
+    if ($d->treasurer_id != null && $d->treasurer_id != 0) {
         $t = \App\Models\User::find($d->treasurer_id);
         if ($t != null) {
             $conds = ['treasurer_id' => $t->id];
         }
-    } */
+    }
     $recs
         = ContributionRecord::where($conds)
         ->orderBy('not_paid_amount', 'desc')->get();
@@ -92,13 +81,7 @@ Route::get('data-exports-print', function () {
     }
 
     //last day 10th may
-    $last_dat = null;
-    try {
-        $last_dat = Carbon::create($company->address);
-    } catch (\Exception $e) {
-        $last_dat = Carbon::now();
-    }
-
+    $last_dat = Carbon::create(2024, 5, 12, 0, 0, 0);
     $days_left = Carbon::now()->diffInDays($last_dat);
 
     if ($days_left < 0) {
@@ -110,10 +93,8 @@ Route::get('data-exports-print', function () {
         $days_word = 'day';
     }
 
-    echo '📌 *' . $company->name . '\'s WEDDING CONTRIBUTIONS*';
-    if ($days_left != 0) {
-        echo '<br><br> 🗓️ : ' . $days_left . " $days_word left";
-    }
+    echo '📌 *MUBARAKA\'s WEDDING CONTRIBUTIONS*';
+    echo '<br><br> 🗓️ : ' . $days_left . " $days_word left";
     echo '<br><br>_*-----SUMMARY-------*_<br>' . "";
 
     /*     echo '<br>*TOAL PLEDGED:* ' . number_format($pledged) . "<br>"; */
@@ -144,7 +125,10 @@ Route::get('data-exports-print', function () {
     }
 
     echo "<br><br>----------R.S.V.P:🙏-----------<br>";
-    echo $company->facebook;
+    echo '1. *Siama Saleh* - 0782349228 0706906707<br>';
+    echo '2. *Bwambale Muhidin* - 0762556385 0703903402 <br>';
+    echo '3. *Muhindo Mubaraka* - 0783204665 0706638494<br>';
+    echo '<br>*Jazakumullah Khairan* 🧎';
     die();
 });
 
@@ -224,6 +208,59 @@ Route::get('budget-program-print', function () {
     return view('reports.financial-report', ['data' => $rep]);
 });
 
+Route::get('sale-receipt-pdf', function () {
+    $id = request('id');
+    $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find($id);
+    
+    if ($sale == null) {
+        return response()->json(['error' => 'Sale record not found'], 404);
+    }
+
+    $pdf = App::make('dompdf.wrapper');
+    $company = $sale->company;
+
+    $pdf->loadHTML(view('reports.sale-receipt', [
+        'sale' => $sale,
+        'company' => $company
+    ]));
+
+    $pdf->render();
+    $output = $pdf->output();
+    $store_file_path = public_path('storage/files/receipt-' . $sale->id . '.pdf');
+    file_put_contents($store_file_path, $output);
+    $sale->receipt_pdf_url = 'files/receipt-' . $sale->id . '.pdf';
+    $sale->receipt_pdf_is_generated = 'Yes';
+    $sale->saveQuietly();
+
+    return $pdf->stream('receipt-' . $sale->receipt_number . '.pdf');
+});
+
+Route::get('sale-invoice-pdf', function () {
+    $id = request('id');
+    $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find($id);
+    
+    if ($sale == null) {
+        return response()->json(['error' => 'Sale record not found'], 404);
+    }
+
+    $pdf = App::make('dompdf.wrapper');
+    $company = $sale->company;
+
+    $pdf->loadHTML(view('reports.sale-invoice', [
+        'sale' => $sale,
+        'company' => $company
+    ]));
+
+    $pdf->render();
+    $output = $pdf->output();
+    $store_file_path = public_path('storage/files/invoice-' . $sale->id . '.pdf');
+    file_put_contents($store_file_path, $output);
+    $sale->invoice_pdf_url = 'files/invoice-' . $sale->id . '.pdf';
+    $sale->invoice_pdf_is_generated = 'Yes';
+    $sale->saveQuietly();
+
+    return $pdf->stream('invoice-' . $sale->invoice_number . '.pdf');
+});
 
 // Route get generate-models
 
