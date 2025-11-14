@@ -33,7 +33,7 @@ class StockRecordController extends AdminController
         $u = Admin::user();
         
         $grid->model()->where('company_id', $u->company_id)
-            ->orderBy('created_at', 'desc');
+            ->orderBy('id', 'desc');
 
         // Filters
         $grid->filter(function ($filter) use ($u) {

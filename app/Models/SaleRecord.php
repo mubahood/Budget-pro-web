@@ -24,8 +24,10 @@ class SaleRecord extends Model
     
     /**
      * The relationships that should always be loaded.
+     * Note: Commented out to prevent conflicts with grid optimization
+     * Relationships are loaded as needed in controllers
      */
-    protected $with = ['saleRecordItems', 'company', 'createdBy'];
+    // protected $with = ['saleRecordItems', 'company', 'createdBy'];
     
     /**
      * The attributes that should be cast.
@@ -169,21 +171,15 @@ class SaleRecord extends Model
         // Before deleting a sale record
         static::deleting(function ($saleRecord) {
             try {
-                // Restore stock quantities and delete stock records
+                // Delete stock records and sale items
+                // Stock quantities will be AUTOMATICALLY restored by StockRecord::deleting() event
                 if ($saleRecord->saleRecordItems) {
                     foreach ($saleRecord->saleRecordItems as $item) {
-                        // Restore stock quantity
-                        $stockItem = \App\Models\StockItem::find($item->stock_item_id);
-                        if ($stockItem) {
-                            $stockItem->current_quantity += $item->quantity;
-                            $stockItem->save();
-                        }
-                        
-                        // Delete associated stock record
+                        // Delete associated stock record (this will auto-restore stock quantity)
                         if ($item->stock_record_id) {
                             $stockRecord = \App\Models\StockRecord::find($item->stock_record_id);
                             if ($stockRecord) {
-                                $stockRecord->delete();
+                                $stockRecord->delete(); // StockRecord::deleting() will restore the quantity
                             }
                         }
                         
@@ -191,6 +187,11 @@ class SaleRecord extends Model
                         $item->delete();
                     }
                 }
+                
+                Log::info('SaleRecord deleting: Cleaned up items and stock records', [
+                    'sale_record_id' => $saleRecord->id,
+                    'receipt_number' => $saleRecord->receipt_number
+                ]);
                 
             } catch (\Exception $e) {
                 Log::error('SaleRecord deleting error: ' . $e->getMessage());
@@ -365,14 +366,11 @@ class SaleRecord extends Model
                 $item->profit = $item->subtotal - ($item->unit_cost * $item->quantity);
                 $item->save();
                 
-                // Step 7: Reduce stock quantity
+                // Step 7: Record old quantity for reporting (DO NOT MANUALLY REDUCE STOCK!)
+                // Stock quantity will be automatically reduced by StockRecord::created() event
                 $oldQuantity = $stockItem->current_quantity;
-                $stockItem->current_quantity -= $item->quantity;
-                // Skip quantity check for sale processing
-                $stockItem->skipQuantityCheck = true;
-                $stockItem->save();
                 
-                // Step 8: Create stock record for audit trail
+                // Step 8: Create stock record for audit trail (this will auto-reduce stock)
                 $stockRecord = new \App\Models\StockRecord();
                 $stockRecord->sale_record_id = $this->id;  // Link to this sale
                 $stockRecord->company_id = $this->company_id;

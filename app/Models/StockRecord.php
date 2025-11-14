@@ -149,6 +149,8 @@ class StockRecord extends Model
                     // Stock Out (removing inventory)
                     $new_quantity = $stock_item->current_quantity - $quantity;
                     $stock_item->current_quantity = $new_quantity;
+                    // Allow StockRecord to update quantity (bypass manual change check)
+                    $stock_item->skipQuantityCheck = true;
                     $stock_item->save();
                     
                     Log::info("Stock Out (Sale): Removed {$quantity} units from item #{$stock_item->id}. New quantity: {$new_quantity}");
@@ -217,6 +219,8 @@ class StockRecord extends Model
                     // Restore stock that was removed
                     $new_quantity = $stock_item->current_quantity + $quantity;
                     $stock_item->current_quantity = $new_quantity;
+                    // Allow StockRecord to update quantity (bypass manual change check)
+                    $stock_item->skipQuantityCheck = true;
                     $stock_item->save();
                     
                     Log::info("Stock Record Deleted: Restored {$quantity} units to item #{$stock_item->id}. New quantity: {$new_quantity}");

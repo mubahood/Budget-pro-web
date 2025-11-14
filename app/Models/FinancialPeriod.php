@@ -25,6 +25,18 @@ class FinancialPeriod extends Model
     protected $with = ['company'];
 
     /**
+     * The attributes that are mass assignable.
+     */
+    protected $fillable = [
+        'company_id',
+        'name',
+        'start_date',
+        'end_date',
+        'status',
+        'description',
+    ];
+
+    /**
      * The attributes that should be cast.
      */
     protected $casts = [

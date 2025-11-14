@@ -118,7 +118,7 @@ class StockItem extends Model
             if (isset($original['current_quantity']) && $model->current_quantity != $original['current_quantity']) {
                 // Check if this is coming from a stock record update (allowed)
                 if (!$model->skipQuantityCheck) {
-                    // throw new \Exception("Current quantity cannot be changed manually. Please use Stock Records to adjust inventory.");
+                    throw new \Exception("Current quantity cannot be changed manually. Please use Stock Records to adjust inventory.");
                 }
             }
             
