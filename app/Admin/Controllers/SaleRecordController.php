@@ -39,6 +39,7 @@ class SaleRecordController extends AdminController
             ->with(['saleRecordItems:id,sale_record_id,quantity', 'createdBy:id,name'])
             ->select([
                 'id',
+                'company_id', // Required for relationships
                 'receipt_number',
                 'invoice_number',
                 'sale_date',
@@ -170,11 +171,11 @@ class SaleRecordController extends AdminController
             ->sortable();
         
         $grid->column('amount_paid', __('Paid'))
-            ->editable('text')
             ->display(function ($amount_paid) {
-                return 'UGX ' . number_format((float)$amount_paid, 0);
+                // Ensure we're working with the actual value
+                $value = $amount_paid ?? 0;
+                return 'UGX ' . number_format((float)$value, 0);
             })
-            ->help('Click to edit amount paid')
             ->sortable();
         
         $grid->column('balance', __('Balance'))
