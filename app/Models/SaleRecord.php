@@ -131,36 +131,46 @@ class SaleRecord extends Model
         // Before updating a sale record
         static::updating(function ($saleRecord) {
             try {
-                // Check if payment status manually changed to "Paid"
-                $paymentStatusChangedToPaid = $saleRecord->isDirty('payment_status') && 
-                                             $saleRecord->payment_status == 'Paid' &&
-                                             !$saleRecord->isDirty('amount_paid'); // Only if amount_paid not also changed
-                
-                if ($paymentStatusChangedToPaid) {
-                    // Automatically set amount_paid = total_amount when marked as "Paid"
+                // CRITICAL FIX: If payment_status is being set to "Paid", auto-complete the payment
+                if ($saleRecord->isDirty('payment_status') && $saleRecord->payment_status == 'Paid') {
+                    // When marking as "Paid", automatically set amount_paid = total_amount and balance = 0
                     $saleRecord->amount_paid = $saleRecord->total_amount;
                     $saleRecord->balance = 0;
+                    
+                    Log::info('SaleRecord: Payment status set to Paid, auto-completing payment', [
+                        'id' => $saleRecord->id,
+                        'total_amount' => $saleRecord->total_amount,
+                        'amount_paid' => $saleRecord->amount_paid,
+                        'balance' => $saleRecord->balance
+                    ]);
+                    
                     return; // Skip further calculations
                 }
                 
-                // If amount_paid changed (or payment_status changed to something else), recalculate
-                if ($saleRecord->isDirty('amount_paid') || $saleRecord->isDirty('payment_status')) {
+                // If amount_paid changed, recalculate balance and payment_status
+                if ($saleRecord->isDirty('amount_paid')) {
                     $totalAmount = floatval($saleRecord->total_amount);
                     $amountPaid = floatval($saleRecord->amount_paid);
                     
                     // Calculate balance
                     $saleRecord->balance = $totalAmount - $amountPaid;
                     
-                    // Auto-update payment status based on the payment (unless manually set)
-                    if (!$saleRecord->isDirty('payment_status') || $saleRecord->payment_status != 'Paid') {
-                        if ($saleRecord->balance <= 0) {
-                            $saleRecord->payment_status = 'Paid';
-                        } elseif ($amountPaid > 0) {
-                            $saleRecord->payment_status = 'Partial';
-                        } else {
-                            $saleRecord->payment_status = 'Unpaid';
-                        }
+                    // Auto-update payment status based on the payment amount
+                    if ($saleRecord->balance <= 0) {
+                        $saleRecord->payment_status = 'Paid';
+                    } elseif ($amountPaid > 0) {
+                        $saleRecord->payment_status = 'Partial';
+                    } else {
+                        $saleRecord->payment_status = 'Unpaid';
                     }
+                    
+                    Log::info('SaleRecord: Amount paid changed, recalculating', [
+                        'id' => $saleRecord->id,
+                        'total_amount' => $totalAmount,
+                        'amount_paid' => $amountPaid,
+                        'balance' => $saleRecord->balance,
+                        'payment_status' => $saleRecord->payment_status
+                    ]);
                 }
                 
             } catch (\Exception $e) {
