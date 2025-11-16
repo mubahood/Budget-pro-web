@@ -335,7 +335,7 @@ class SaleRecordController extends AdminController
     protected function form()
     {
         $form = new Form(new SaleRecord());
-        $form->hidden('payment_status');
+        $form->hidden('payment_status')->default('Unpaid');
         
         // Eager load relationships for edit mode
         if ($id = request()->route()->parameter('sale_record')) {
