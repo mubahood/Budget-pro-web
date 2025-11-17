@@ -30,6 +30,7 @@ class SalesAnalyticsWidget extends Widget
             'category_breakdown' => $this->getCategoryBreakdown($companyId),
             'monthly_comparison' => $this->getMonthlyComparison($companyId),
             'daily_sales' => $this->getDailySales($companyId),
+            'financial_data' => $this->getFinancialData($companyId),
         ];
 
         return view($this->view, compact('data'));
@@ -271,38 +272,90 @@ class SalesAnalyticsWidget extends Widget
     }
 
     /**
-     * Get daily sales for the current month
+     * Get daily sales for the current month including today with profit calculation
      */
     private function getDailySales($companyId)
     {
         $daily = DB::select("
             SELECT 
-                DATE(created_at) as date,
-                COALESCE(SUM(total_sales), 0) as revenue,
-                COALESCE(COUNT(*), 0) as transactions
-            FROM stock_records
-            WHERE company_id = ?
-            AND type = 'Sale'
-            AND MONTH(created_at) = MONTH(CURDATE())
-            AND YEAR(created_at) = YEAR(CURDATE())
-            GROUP BY DATE(created_at)
+                DATE(sr.sale_date) as date,
+                COALESCE(SUM(sr.total_amount), 0) as revenue,
+                COALESCE(COUNT(DISTINCT sr.id), 0) as transactions,
+                COALESCE(SUM(sri.quantity * (sri.unit_price - si.buying_price)), 0) as profit
+            FROM sale_records sr
+            LEFT JOIN sale_record_items sri ON sr.id = sri.sale_record_id
+            LEFT JOIN stock_items si ON sri.stock_item_id = si.id
+            WHERE sr.company_id = ?
+            AND MONTH(sr.sale_date) = MONTH(CURDATE())
+            AND YEAR(sr.sale_date) = YEAR(CURDATE())
+            AND DATE(sr.sale_date) <= CURDATE()
+            GROUP BY DATE(sr.sale_date)
             ORDER BY date ASC
         ", [$companyId]);
 
         $labels = [];
         $revenue = [];
         $transactions = [];
+        $profit = [];
 
         foreach ($daily as $day) {
             $labels[] = Carbon::parse($day->date)->format('d M');
             $revenue[] = $day->revenue;
             $transactions[] = $day->transactions;
+            $profit[] = $day->profit;
         }
 
         return [
             'labels' => $labels,
             'revenue' => $revenue,
             'transactions' => $transactions,
+            'profit' => $profit,
+        ];
+    }
+
+    /**
+     * Get financial data (income and expense) for daily transactions from FinancialRecord
+     */
+    private function getFinancialData($companyId)
+    {
+        // Get income and expense data for current month (daily)
+        $financial = DB::select("
+            SELECT 
+                DATE(date) as day,
+                COALESCE(SUM(CASE WHEN type = 'Income' THEN amount ELSE 0 END), 0) as income,
+                COALESCE(SUM(CASE WHEN type = 'Expense' THEN amount ELSE 0 END), 0) as expense,
+                COALESCE(COUNT(CASE WHEN type = 'Income' THEN 1 END), 0) as income_count,
+                COALESCE(COUNT(CASE WHEN type = 'Expense' THEN 1 END), 0) as expense_count
+            FROM financial_records
+            WHERE company_id = ?
+            AND MONTH(date) = MONTH(CURDATE())
+            AND YEAR(date) = YEAR(CURDATE())
+            AND DATE(date) <= CURDATE()
+            GROUP BY DATE(date)
+            ORDER BY day ASC
+        ", [$companyId]);
+
+        $labels = [];
+        $income = [];
+        $expense = [];
+        $totalIncome = 0;
+        $totalExpense = 0;
+
+        foreach ($financial as $record) {
+            $labels[] = Carbon::parse($record->day)->format('d M');
+            $income[] = $record->income;
+            $expense[] = $record->expense;
+            $totalIncome += $record->income;
+            $totalExpense += $record->expense;
+        }
+
+        return [
+            'labels' => $labels,
+            'income' => $income,
+            'expense' => $expense,
+            'total_income' => $totalIncome,
+            'total_expense' => $totalExpense,
+            'balance' => $totalIncome - $totalExpense,
         ];
     }
 }
