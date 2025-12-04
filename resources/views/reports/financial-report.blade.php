@@ -9,33 +9,40 @@
     <title>Financial Report</title>
     @include('css.css')
     <style>
+        @page {
+            margin: 10mm;
+        }
+        
         * {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         body {
             color: #333;
-            line-height: 1.6;
+            line-height: 1.3;
+            font-size: 10px;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         
         .report-header {
-            border-bottom: 3px solid #2c3e50;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
         }
         
         .my-table {
             border-collapse: collapse;
             border: 1px solid #ddd;
-            border-radius: 8px;
             width: 100%;
-            margin: 20px 0;
+            margin: 8px 0;
+            font-size: 9px;
         }
 
         .my-table th,
         .my-table td {
             border: 1px solid #ddd;
-            padding: 12px 10px;
+            padding: 4px 6px;
             text-align: left;
         }
 
@@ -44,7 +51,8 @@
             color: white;
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 11px;
+            font-size: 9px;
+            padding: 5px 6px;
         }
 
         .my-table tr:nth-child(even) {
@@ -56,36 +64,37 @@
         }
 
         .my-card {
-            border: 2px solid #e0e0e0;
-            padding: 15px;
-            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            padding: 8px 10px;
+            border-radius: 4px;
             background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
 
         .my-card p {
-            margin: 5px 0;
+            margin: 2px 0;
+            font-size: 10px;
         }
 
         .my-card span {
-            margin-right: 5px;
+            margin-right: 3px;
         }
         
         .summary-section {
             background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 25px 0;
-            border-left: 4px solid #3498db;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border-left: 3px solid #3498db;
         }
         
         .section-title {
-            font-size: 18px;
+            font-size: 13px;
             font-weight: 700;
             color: #2c3e50;
-            margin: 30px 0 15px 0;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #3498db;
+            margin: 12px 0 6px 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #3498db;
         }
         
         .positive {
@@ -99,24 +108,43 @@
         }
         
         .report-footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 2px solid #ddd;
+            margin-top: 15px;
+            padding-top: 8px;
+            border-top: 1px solid #ddd;
             text-align: center;
-            font-size: 10px;
+            font-size: 8px;
             color: #7f8c8d;
         }
         
         .executive-summary {
             background: #ecf0f1;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
         }
         
         .executive-summary h3 {
             color: #2c3e50;
-            margin-top: 0;
+            margin: 0 0 6px 0;
+            font-size: 12px;
+        }
+        
+        h1, h2, h3, h4, h5 {
+            margin: 6px 0;
+            padding: 0;
+        }
+        
+        table {
+            margin: 0;
+            padding: 0;
+        }
+        
+        td, th {
+            line-height: 1.2;
+        }
+        
+        .compact-row td {
+            padding: 3px 6px;
         }
     </style>
 </head>
