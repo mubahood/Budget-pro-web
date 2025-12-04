@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\FinancialReportService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -57,37 +58,7 @@ class FinancialReport extends Model
             return $model;
         });
     }
-    //get_inventory_categories
-    public function get_inventory_categories()
-    {
-        $cats = [];
-        foreach (StockCategory::where('company_id', $this->company_id)->get() as $cat) {
-            $cat->total_sales = StockRecord::where('company_id', $this->company_id)
-                ->where('type', 'Sale')
-                ->where('stock_category_id', $cat->id)
-                ->whereBetween('created_at', [$this->start_date, $this->end_date])
-                ->sum('total_sales');
-            $cat->profit = StockRecord::where('company_id', $this->company_id)
-                ->where('stock_category_id', $cat->id)
-                ->whereBetween('created_at', [$this->start_date, $this->end_date])
-                ->sum('profit');
 
-            $total_buying_price = StockItem::where('company_id', $this->company_id)
-                ->where('stock_category_id', $cat->id)
-                ->whereBetween('created_at', [$this->start_date, $this->end_date])
-                ->sum('buying_price');
-            $total_quantity = StockItem::where('company_id', $this->company_id)
-                ->where('stock_category_id', $cat->id)
-                ->whereBetween('created_at', [$this->start_date, $this->end_date])
-                ->sum('original_quantity');
-            $total_inventory = $total_buying_price * $total_quantity;
-            $cat->total_inventory = $total_inventory;
-            $cat->total_buying_price = $total_buying_price;
-            $cat->total_quantity = $total_quantity;
-            $cats[] = $cat;
-        }
-        return $cats;
-    }
 
 
     //static prepare
@@ -122,6 +93,30 @@ class FinancialReport extends Model
                 $start_date = $now->copy()->startOfMonth();
                 $end_date = $now->copy()->endOfMonth();
                 break;
+            case 'Last Week':
+                $start_date = $now->copy()->subWeek()->startOfWeek();
+                $end_date = $now->copy()->subWeek()->endOfWeek();
+                break;
+            case 'Last Month':
+                $start_date = $now->copy()->subMonth()->startOfMonth();
+                $end_date = $now->copy()->subMonth()->endOfMonth();
+                break;
+            case 'Quarter':
+                $start_date = $now->copy()->startOfQuarter();
+                $end_date = $now->copy()->endOfQuarter();
+                break;
+            case 'Last Quarter':
+                $start_date = $now->copy()->subQuarter()->startOfQuarter();
+                $end_date = $now->copy()->subQuarter()->endOfQuarter();
+                break;
+            case 'Last 6 Months':
+                $start_date = $now->copy()->subMonths(6)->startOfMonth();
+                $end_date = $now->copy()->endOfMonth();
+                break;
+            case 'Last Year':
+                $start_date = $now->copy()->subYear()->startOfYear();
+                $end_date = $now->copy()->subYear()->endOfYear();
+                break;
             case 'Cycle':
                 $financial_period = Utils::getActiveFinancialPeriod($user->company_id);
                 if ($financial_period == null) {
@@ -148,42 +143,37 @@ class FinancialReport extends Model
         $model->company_id = $user->company_id;
         $model->currency = $company->currency;
         if ($model->type == 'Financial') {
-            //total total_income from financial records where category is income and date is between start_date and end_date
-            $model->total_income = FinancialRecord::where('company_id', $user->company_id)
-                ->where('type', 'Income')
-                ->whereBetween('created_at', [$start_date, $end_date])
-                ->sum('amount');
-            $model->total_expense = FinancialRecord::where('company_id', $user->company_id)
-                ->where('type', 'Expense')
-                ->whereBetween('created_at', [$start_date, $end_date])
-                ->sum('amount');
-            $model->profit = $model->total_income - $model->total_expense;
+            //total total_income from financial records using proper date field and service layer
+            $service = new FinancialReportService();
+            $financialData = $service->calculateFinancialData(
+                $user->company_id,
+                $start_date,
+                $end_date
+            );
+            
+            $model->total_income = $financialData['total_income'];
+            $model->total_expense = $financialData['total_expense'];
+            $model->profit = $financialData['profit'];
         } else if ($model->type == 'Inventory') {
-            //inventory_total_buying_price
-            $inventory_total_buying_price = StockCategory::where('company_id', $user->company_id)
-                ->whereBetween('created_at', [$start_date, $end_date])
-                ->sum('buying_price');
-            //inventory_total_selling_price
-            $inventory_total_selling_price = StockCategory::where('company_id', $user->company_id)
-                ->whereBetween('created_at', [$start_date, $end_date])
-                ->sum('selling_price');
-            //inventory_total_expected_profit
-            $inventory_total_expected_profit = StockCategory::where('company_id', $user->company_id)
-                ->whereBetween('created_at', [$start_date, $end_date])
-                ->sum('expected_profit');
-            //inventory_total_earned_profit
-            $inventory_total_earned_profit = StockCategory::where('company_id', $user->company_id)
-                ->whereBetween('created_at', [$start_date, $end_date])
-                ->sum('earned_profit');
-            $model->inventory_total_buying_price = $inventory_total_buying_price;
-            $model->inventory_total_selling_price = $inventory_total_selling_price;
-            $model->inventory_total_expected_profit = $inventory_total_expected_profit;
-            $model->inventory_total_earned_profit = $inventory_total_earned_profit;
+            //Use service layer for accurate inventory calculations with proper joins
+            $service = new FinancialReportService();
+            $inventoryData = $service->calculateInventoryData(
+                $user->company_id,
+                $start_date,
+                $end_date
+            );
+            
+            $model->inventory_total_buying_price = $inventoryData['inventory_total_buying_price'];
+            $model->inventory_total_selling_price = $inventoryData['inventory_total_selling_price'];
+            $model->inventory_total_expected_profit = $inventoryData['inventory_total_expected_profit'];
+            $model->inventory_total_earned_profit = $inventoryData['inventory_total_earned_profit'];
         }
-        $table_name = $model->getTable();
-        $sql = "UPDATE $table_name SET do_generate = 'No' WHERE id = $model->id";
-        DB::update($sql);
-
+        
+        // Only update do_generate if model already exists
+        if ($model->exists && $model->id) {
+            $table_name = $model->getTable();
+            DB::update("UPDATE $table_name SET do_generate = 'No' WHERE id = ?", [$model->id]);
+        }
 
         $pdf = App::make('dompdf.wrapper');
         $company = Company::find($user->company_id);
@@ -227,45 +217,45 @@ class FinancialReport extends Model
 
     public function finance_accounts()
     {
-
-        $cats = [];
-        foreach (FinancialCategory::where('company_id', $this->company_id)->get() as $cat) {
-
-            $cat->total_income = FinancialRecord::where('company_id', $this->company_id)
-                ->where('type', 'Income')
-                ->where('financial_category_id', $cat->id)
-                ->whereBetween('created_at', [$this->start_date, $this->end_date])
-                ->sum('amount');
-
-            $cat->total_expense = FinancialRecord::where('company_id', $this->company_id)
-                ->where('type', 'Expense')
-                ->where('financial_category_id', $cat->id)
-                ->whereBetween('created_at', [$this->start_date, $this->end_date])
-                ->sum('amount');
-            $cats[] = $cat;
-        }
-        return $cats;
+        $service = new FinancialReportService();
+        return $service->getFinanceAccounts(
+            $this->company_id,
+            $this->start_date,
+            $this->end_date
+        );
     }
 
-    //finance_records
+    //finance_records - Fixed to use date field instead of created_at
     public function finance_records()
     {
-        return FinancialRecord::where('company_id', $this->company_id)
-            ->whereBetween('created_at', [$this->start_date, $this->end_date])
-            ->get();
+        $service = new FinancialReportService();
+        return $service->getFinanceRecords(
+            $this->company_id,
+            $this->start_date,
+            $this->end_date
+        );
     }
 
+    //get_inventory_categories - NEW METHOD for accurate category summaries
+    public function get_inventory_categories()
+    {
+        $service = new FinancialReportService();
+        return $service->getInventoryCategories(
+            $this->company_id,
+            $this->start_date,
+            $this->end_date
+        );
+    }
 
-    //get_inventory_items
+    //get_inventory_items - Updated to use service layer
     public function get_inventory_items()
     {
-        $items = [];
-        foreach (StockItem::where('company_id', $this->company_id)
-            ->whereBetween('created_at', [$this->start_date, $this->end_date])
-            ->get() as $item) {
-            $items[] = $item;
-        }
-        return $items;
+        $service = new FinancialReportService();
+        return $service->getInventoryProducts(
+            $this->company_id,
+            $this->start_date,
+            $this->end_date
+        );
     }
     
     /**

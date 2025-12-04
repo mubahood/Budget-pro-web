@@ -228,20 +228,26 @@ class FinancialReportController extends AdminController
                         'No' => 'No',
                     ])->rules('required');
             })->rules('required');
-        //period_type
+        //period_type - Enhanced with more options
         $form->radio('period_type', __('Period type'))
             ->options([
                 'Today' => 'Today',
                 'Yesterday' => 'Yesterday',
                 'Week' => 'This week',
+                'Last Week' => 'Last week',
                 'Month' => 'This month',
-                'Cycle' => 'This financial year',
+                'Last Month' => 'Last month',
+                'Quarter' => 'This quarter',
+                'Last Quarter' => 'Last quarter',
+                'Last 6 Months' => 'Last 6 months',
                 'Year' => 'This year',
+                'Last Year' => 'Last year',
+                'Cycle' => 'This financial year',
                 'Custom' => 'Custom',
             ])
             ->when('Custom', function (Form $form) {
                 $form->dateRange('start_date', 'end_date', 'Start date - End date')->rules();
-            })->rules('required');
+            })->rules('required')->help('Select a predefined period or choose Custom for specific dates');
         //do_generate
         $form->radio('do_generate', __('Do generate'))
             ->options([
