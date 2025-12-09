@@ -2,14 +2,12 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Str;
-
 class ValidationService
 {
     /**
      * Sanitize input to prevent SQL injection and XSS attacks
      *
-     * @param mixed $input
+     * @param  mixed  $input
      * @return mixed
      */
     public static function sanitize($input)
@@ -18,7 +16,7 @@ class ValidationService
             return array_map([self::class, 'sanitize'], $input);
         }
 
-        if (!is_string($input)) {
+        if (! is_string($input)) {
             return $input;
         }
 
@@ -34,7 +32,7 @@ class ValidationService
     /**
      * Remove SQL injection patterns
      *
-     * @param string $input
+     * @param  string  $input
      * @return string
      */
     protected static function removeSqlInjectionPatterns($input)
@@ -65,7 +63,7 @@ class ValidationService
     /**
      * Remove XSS attack patterns
      *
-     * @param string $input
+     * @param  string  $input
      * @return string
      */
     protected static function removeXss($input)
@@ -88,7 +86,7 @@ class ValidationService
     /**
      * Validate email address
      *
-     * @param string $email
+     * @param  string  $email
      * @return bool
      */
     public static function isValidEmail($email)
@@ -99,14 +97,14 @@ class ValidationService
     /**
      * Validate phone number (basic validation)
      *
-     * @param string $phone
+     * @param  string  $phone
      * @return bool
      */
     public static function isValidPhone($phone)
     {
         // Remove common phone number characters
         $phone = preg_replace('/[\s\-\(\)\+]/', '', $phone);
-        
+
         // Check if it's a valid phone number (7-15 digits)
         return preg_match('/^[0-9]{7,15}$/', $phone);
     }
@@ -114,7 +112,7 @@ class ValidationService
     /**
      * Validate URL
      *
-     * @param string $url
+     * @param  string  $url
      * @return bool
      */
     public static function isValidUrl($url)
@@ -125,7 +123,7 @@ class ValidationService
     /**
      * Validate integer
      *
-     * @param mixed $value
+     * @param  mixed  $value
      * @return bool
      */
     public static function isValidInteger($value)
@@ -136,7 +134,7 @@ class ValidationService
     /**
      * Validate float/decimal
      *
-     * @param mixed $value
+     * @param  mixed  $value
      * @return bool
      */
     public static function isValidFloat($value)
@@ -147,112 +145,113 @@ class ValidationService
     /**
      * Validate date format
      *
-     * @param string $date
-     * @param string $format
+     * @param  string  $date
+     * @param  string  $format
      * @return bool
      */
     public static function isValidDate($date, $format = 'Y-m-d')
     {
         $d = \DateTime::createFromFormat($format, $date);
+
         return $d && $d->format($format) === $date;
     }
 
     /**
      * Validate required fields
      *
-     * @param array $data
-     * @param array $required
+     * @param  array  $data
+     * @param  array  $required
      * @return array Array of missing fields
      */
     public static function validateRequired($data, $required)
     {
         $missing = [];
-        
+
         foreach ($required as $field) {
-            if (!isset($data[$field]) || empty($data[$field])) {
+            if (! isset($data[$field]) || empty($data[$field])) {
                 $missing[] = $field;
             }
         }
-        
+
         return $missing;
     }
 
     /**
      * Validate string length
      *
-     * @param string $value
-     * @param int $min
-     * @param int $max
+     * @param  string  $value
+     * @param  int  $min
+     * @param  int  $max
      * @return bool
      */
     public static function validateLength($value, $min = 0, $max = null)
     {
         $length = strlen($value);
-        
+
         if ($length < $min) {
             return false;
         }
-        
+
         if ($max !== null && $length > $max) {
             return false;
         }
-        
+
         return true;
     }
 
     /**
      * Validate numeric range
      *
-     * @param mixed $value
-     * @param float $min
-     * @param float $max
+     * @param  mixed  $value
+     * @param  float  $min
+     * @param  float  $max
      * @return bool
      */
     public static function validateRange($value, $min = null, $max = null)
     {
-        if (!is_numeric($value)) {
+        if (! is_numeric($value)) {
             return false;
         }
-        
+
         if ($min !== null && $value < $min) {
             return false;
         }
-        
+
         if ($max !== null && $value > $max) {
             return false;
         }
-        
+
         return true;
     }
 
     /**
      * Sanitize filename to prevent directory traversal
      *
-     * @param string $filename
+     * @param  string  $filename
      * @return string
      */
     public static function sanitizeFilename($filename)
     {
         // Remove path separators
         $filename = str_replace(['../', '..\\', '/', '\\'], '', $filename);
-        
+
         // Remove special characters
         $filename = preg_replace('/[^a-zA-Z0-9._-]/', '', $filename);
-        
+
         return $filename;
     }
 
     /**
      * Validate file upload
      *
-     * @param \Illuminate\Http\UploadedFile $file
-     * @param array $allowedExtensions
-     * @param int $maxSize in bytes
+     * @param  \Illuminate\Http\UploadedFile  $file
+     * @param  array  $allowedExtensions
+     * @param  int  $maxSize  in bytes
      * @return array ['valid' => bool, 'error' => string|null]
      */
     public static function validateFileUpload($file, $allowedExtensions = [], $maxSize = 5242880)
     {
-        if (!$file->isValid()) {
+        if (! $file->isValid()) {
             return ['valid' => false, 'error' => 'Invalid file upload'];
         }
 
@@ -262,9 +261,9 @@ class ValidationService
         }
 
         // Check file extension
-        if (!empty($allowedExtensions)) {
+        if (! empty($allowedExtensions)) {
             $extension = strtolower($file->getClientOriginalExtension());
-            if (!in_array($extension, $allowedExtensions)) {
+            if (! in_array($extension, $allowedExtensions)) {
                 return ['valid' => false, 'error' => 'File type not allowed'];
             }
         }
@@ -275,8 +274,8 @@ class ValidationService
     /**
      * Validate password strength
      *
-     * @param string $password
-     * @param int $minLength
+     * @param  string  $password
+     * @param  int  $minLength
      * @return array ['valid' => bool, 'errors' => array]
      */
     public static function validatePasswordStrength($password, $minLength = 8)
@@ -287,58 +286,58 @@ class ValidationService
             $errors[] = "Password must be at least {$minLength} characters long";
         }
 
-        if (!preg_match('/[A-Z]/', $password)) {
-            $errors[] = "Password must contain at least one uppercase letter";
+        if (! preg_match('/[A-Z]/', $password)) {
+            $errors[] = 'Password must contain at least one uppercase letter';
         }
 
-        if (!preg_match('/[a-z]/', $password)) {
-            $errors[] = "Password must contain at least one lowercase letter";
+        if (! preg_match('/[a-z]/', $password)) {
+            $errors[] = 'Password must contain at least one lowercase letter';
         }
 
-        if (!preg_match('/[0-9]/', $password)) {
-            $errors[] = "Password must contain at least one number";
+        if (! preg_match('/[0-9]/', $password)) {
+            $errors[] = 'Password must contain at least one number';
         }
 
-        if (!preg_match('/[^A-Za-z0-9]/', $password)) {
-            $errors[] = "Password must contain at least one special character";
+        if (! preg_match('/[^A-Za-z0-9]/', $password)) {
+            $errors[] = 'Password must contain at least one special character';
         }
 
         return [
             'valid' => empty($errors),
-            'errors' => $errors
+            'errors' => $errors,
         ];
     }
 
     /**
      * Clean string for database storage
      *
-     * @param string $value
+     * @param  string  $value
      * @return string
      */
     public static function cleanForDatabase($value)
     {
         // Trim whitespace
         $value = trim($value);
-        
+
         // Remove null bytes
         $value = str_replace("\0", '', $value);
-        
+
         // Normalize line endings
         $value = str_replace(["\r\n", "\r"], "\n", $value);
-        
+
         return $value;
     }
 
     /**
      * Validate money amount
      *
-     * @param mixed $amount
+     * @param  mixed  $amount
      * @return bool
      */
     public static function isValidAmount($amount)
     {
         // Check if it's a valid number
-        if (!is_numeric($amount)) {
+        if (! is_numeric($amount)) {
             return false;
         }
 
@@ -361,7 +360,7 @@ class ValidationService
     /**
      * Validate SKU format
      *
-     * @param string $sku
+     * @param  string  $sku
      * @return bool
      */
     public static function isValidSKU($sku)
@@ -373,7 +372,7 @@ class ValidationService
     /**
      * Validate barcode format
      *
-     * @param string $barcode
+     * @param  string  $barcode
      * @return bool
      */
     public static function isValidBarcode($barcode)

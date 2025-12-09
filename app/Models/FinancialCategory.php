@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class FinancialCategory extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * The "booted" method of the model.
@@ -41,7 +41,7 @@ class FinancialCategory extends Model
             //check if company has a financial category with the same name
             $financial_category = FinancialCategory::where([
                 ['company_id', '=', $model->company_id],
-                ['name', '=', $model->name]
+                ['name', '=', $model->name],
             ])->first();
             if ($financial_category != null) {
                 return false;

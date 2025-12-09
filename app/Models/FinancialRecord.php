@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
+use App\Jobs\UpdateFinancialCategoryAggregates;
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
-use App\Jobs\UpdateFinancialCategoryAggregates;
 
 class FinancialRecord extends Model
 {
-    use HasFactory, AuditLogger;
- 
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -20,12 +20,12 @@ class FinancialRecord extends Model
     {
         static::addGlobalScope(new CompanyScope);
     }
-    
+
     /**
      * The relationships that should always be loaded.
      */
     protected $with = ['financial_category', 'createdBy'];
-    
+
     /**
      * The attributes that should be cast.
      */
@@ -36,7 +36,7 @@ class FinancialRecord extends Model
         'amount' => 'decimal:2',
         'quantity' => 'decimal:2',
     ];
-    
+
     protected $fillable = [
         'financial_category_id',
         'company_id',
@@ -62,12 +62,12 @@ class FinancialRecord extends Model
         static::creating(function ($model) {
             $user = User::find($model->created_by_id);
             if ($user == null) {
-                throw new \Exception("Invalid User");
+                throw new \Exception('Invalid User');
             }
             $financial_period = Utils::getActiveFinancialPeriod($user->company_id);
 
             if ($financial_period == null) {
-                throw new \Exception("Financial Period is not active. Please activate the financial period.");
+                throw new \Exception('Financial Period is not active. Please activate the financial period.');
             }
             $model->financial_period_id = $financial_period->id;
             $model->company_id = $user->company_id;
@@ -76,7 +76,7 @@ class FinancialRecord extends Model
         // Created - log after successful creation
         static::created(function ($model) {
             Log::info("Financial Record Created: #{$model->id}, Type: {$model->type}, Amount: {$model->amount}");
-            
+
             // Dispatch job to update financial category totals (async)
             if ($model->financial_category_id) {
                 UpdateFinancialCategoryAggregates::dispatch($model->financial_category_id);
@@ -88,12 +88,12 @@ class FinancialRecord extends Model
             // Validate financial period is still active
             $financial_period = FinancialPeriod::find($model->financial_period_id);
             if ($financial_period == null || $financial_period->status != 'Active') {
-                throw new \Exception("Cannot update record. Financial Period is not active.");
+                throw new \Exception('Cannot update record. Financial Period is not active.');
             }
 
             // Validate amount
             if ($model->amount <= 0) {
-                throw new \Exception("Invalid amount. Must be greater than 0.");
+                throw new \Exception('Invalid amount. Must be greater than 0.');
             }
 
             return true;
@@ -102,7 +102,7 @@ class FinancialRecord extends Model
         // Updated - log changes and update aggregates
         static::updated(function ($model) {
             Log::info("Financial Record Updated: #{$model->id}");
-            
+
             // Dispatch job to update financial category totals (async)
             if ($model->financial_category_id) {
                 UpdateFinancialCategoryAggregates::dispatch($model->financial_category_id);
@@ -117,7 +117,7 @@ class FinancialRecord extends Model
         // Deleted - update aggregates after deletion
         static::deleted(function ($model) {
             Log::info("Financial Record Deleted: #{$model->id}");
-            
+
             // Dispatch job to update financial category totals (async)
             if ($model->financial_category_id) {
                 UpdateFinancialCategoryAggregates::dispatch($model->financial_category_id);
@@ -128,13 +128,13 @@ class FinancialRecord extends Model
     //appends
     protected $appends = ['financial_category_text'];
 
-
     //getter for financial_category_text
     public function getFinancialCategoryTextAttribute()
     {
         if ($this->financial_category) {
             return $this->financial_category->name;
         }
+
         return 'N/A';
     }
 
@@ -205,7 +205,7 @@ class FinancialRecord extends Model
     public function scopeThisMonth($query)
     {
         return $query->whereMonth('date', now()->month)
-                    ->whereYear('date', now()->year);
+            ->whereYear('date', now()->year);
     }
 
     public function scopeThisYear($query)

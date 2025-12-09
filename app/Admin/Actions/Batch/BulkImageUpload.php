@@ -12,7 +12,7 @@ class BulkImageUpload extends BatchAction
 
     public function handle(Collection $collection, Request $request)
     {
-        if (!$request->hasFile('images')) {
+        if (! $request->hasFile('images')) {
             return $this->response()->error('No images selected!')->refresh();
         }
 
@@ -23,10 +23,10 @@ class BulkImageUpload extends BatchAction
         foreach ($collection as $model) {
             // Try to find matching image by SKU or name
             $matchingImage = null;
-            
+
             foreach ($images as $image) {
                 $filename = pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME);
-                
+
                 // Check if filename matches SKU or product name
                 if (
                     strtolower($filename) === strtolower($model->sku) ||
@@ -55,20 +55,21 @@ class BulkImageUpload extends BatchAction
         if ($successCount > 0) {
             $message = "Successfully uploaded {$successCount} image(s)!";
             if (count($errors) > 0) {
-                $message .= " " . count($errors) . " failed.";
+                $message .= ' '.count($errors).' failed.';
             }
+
             return $this->response()->success($message)->refresh();
         } else {
-            return $this->response()->error('No images were uploaded. ' . implode(', ', $errors))->refresh();
+            return $this->response()->error('No images were uploaded. '.implode(', ', $errors))->refresh();
         }
     }
 
     public function form()
     {
         $this->file('images[]', 'Select Images')
-             ->attribute(['multiple' => true, 'accept' => 'image/*'])
-             ->help('Tip: Name files as SKU.jpg or Product_Name.jpg for auto-matching');
-        
+            ->attribute(['multiple' => true, 'accept' => 'image/*'])
+            ->help('Tip: Name files as SKU.jpg or Product_Name.jpg for auto-matching');
+
         $this->html('<div class="alert alert-info">
             <strong><i class="fa fa-info-circle"></i> How it works:</strong>
             <ul style="margin: 10px 0 0 20px;">
@@ -82,7 +83,7 @@ class BulkImageUpload extends BatchAction
 
     public function html()
     {
-        return <<<HTML
+        return <<<'HTML'
         <a class="btn btn-sm btn-info bulk-image-upload">
             <i class="fa fa-camera"></i> Upload Images
         </a>

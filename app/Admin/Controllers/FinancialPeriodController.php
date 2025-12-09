@@ -70,7 +70,7 @@ class FinancialPeriodController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -118,7 +118,6 @@ class FinancialPeriodController extends AdminController
                 'Inactive' => 'Inactive',
             ])->rules('required');
         $form->textarea('description', __('Description'));
-
 
         return $form;
     }

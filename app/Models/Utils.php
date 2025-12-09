@@ -3,10 +3,7 @@
 namespace App\Models;
 
 use Carbon\Carbon;
-use Dflydev\DotAccessData\Util;
 use Encore\Admin\Facades\Admin;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -14,8 +11,6 @@ use SplFileObject;
 
 class Utils
 {
-
-
     public static function my_date_3($t)
     {
         $c = Carbon::parse($t);
@@ -24,8 +19,10 @@ class Utils
             return $t;
         }
         $c->setTimezone('Africa/Nairobi');
+
         return $c->format('D d-m-Y');
     }
+
     //money shortten to to K, M, B
     public static function money_short($money)
     {
@@ -33,14 +30,14 @@ class Utils
             return number_format($money);
         }
         if ($money < 1000000) {
-            return round($money / 1000, 2) . "K";
+            return round($money / 1000, 2).'K';
         }
         if ($money < 1000000000) {
-            return round($money / 1000000, 2) . "M";
+            return round($money / 1000000, 2).'M';
         }
-        return round($money / 1000000000, 2) . "B";
-    }
 
+        return round($money / 1000000000, 2).'B';
+    }
 
     public static function my_date($t)
     {
@@ -49,6 +46,7 @@ class Utils
             return $t;
         }
         $c->setTimezone('Africa/Nairobi');
+
         return $c->format('d M, Y');
     }
 
@@ -59,6 +57,7 @@ class Utils
         if ($t == null) {
             return $t;
         }
+
         return $c->format('d M, Y - h:m a');
     }
 
@@ -66,11 +65,11 @@ class Utils
     {
         $t = Carbon::parse($raw);
         if ($t == null) {
-            return  "-";
+            return '-';
         }
         $my_t = $t->toDateString();
 
-        return $my_t . " " . $t->toTimeString();
+        return $my_t.' '.$t->toTimeString();
     }
 
     public static function file_upload($file)
@@ -80,10 +79,11 @@ class Utils
         }
         //get file extension
         $file_extension = $file->getClientOriginalExtension();
-        $file_name = time() . "_" . rand(1000, 100000) . "." . $file_extension;
-        $public_path = public_path() . "/storage/images";
+        $file_name = time().'_'.rand(1000, 100000).'.'.$file_extension;
+        $public_path = public_path().'/storage/images';
         $file->move($public_path, $file_name);
-        $url = 'images/' . $file_name;
+        $url = 'images/'.$file_name;
+
         return $url;
     }
 
@@ -91,6 +91,7 @@ class Utils
     {
         $logged_in_user_id = $r->get('logged_in_user_id');
         $u = User::find($logged_in_user_id);
+
         return $u;
     }
 
@@ -104,7 +105,7 @@ class Utils
             'message' => $message,
             'data' => $data,
         ]);
-        die();
+        exit();
     }
 
     public static function error($message)
@@ -116,44 +117,44 @@ class Utils
             'message' => $message,
             'data' => null,
         ]);
-        die();
+        exit();
     }
 
-    static function getActiveFinancialPeriod($company_id)
+    public static function getActiveFinancialPeriod($company_id)
     {
         return FinancialPeriod::where('company_id', $company_id)
             ->where('status', 'Active')->first();
     }
 
-    static public function generateSKU($sub_category_id)
+    public static function generateSKU($sub_category_id)
     {
         //year-subcategory-id-serial
         $year = date('Y');
         $sub_category = StockSubCategory::find($sub_category_id);
         $serial = StockItem::where('stock_sub_category_id', $sub_category_id)->count() + 1;
-        $sku = $year . "-" . $sub_category->id . "-" . $serial;
+        $sku = $year.'-'.$sub_category->id.'-'.$serial;
+
         return $sku;
     }
 
-
-    static public function get_table_names()
+    public static function get_table_names()
     {
         $tables = DB::select('SHOW TABLES');
         $db_name = env('DB_DATABASE');
         $table_names = [];
-        $db_name = 'Tables_in_' . $db_name;
+        $db_name = 'Tables_in_'.$db_name;
         foreach ($tables as $key => $table) {
             $table_names[$table->$db_name] = $table->$db_name;
         }
+
         return $table_names;
     }
 
-
-    static public function generate_dummy($u)
+    public static function generate_dummy($u)
     {
         $user = $u;
         $company = $user->company;
-        //Utils::demo_categories($company); 
+        //Utils::demo_categories($company);
         //Utils::demo_sub_categories($company);
         //Utils::demo_stock_items($company);
         //Utils::demo_stock_records($company);
@@ -161,13 +162,13 @@ class Utils
         //Utils::demo_financial_record($company);
     }
 
-    static public function demo_financial_record($company)
+    public static function demo_financial_record($company)
     {
         //based on FinancialCategory
         $financial_categories = FinancialCategory::where('company_id', $company->id)->get();
 
-        // FinancialRecord based on following fields 
-        /*  
+        // FinancialRecord based on following fields
+        /*
 created_at
 updated_at
 financial_category_id
@@ -182,7 +183,7 @@ description
 receipt
 date
 financial_period_id
-created_by_id 
+created_by_id
     */
         foreach ($financial_categories as $key => $financial_category) {
             $financial_records = [
@@ -202,9 +203,10 @@ created_by_id
             }
         }
     }
-    static public function demo_stock_records($company)
+
+    public static function demo_stock_records($company)
     {
-        /*         
+        /*
             $table->foreignIdFor(Company::class);
             $table->foreignIdFor(StockItem::class);
             $table->foreignIdFor(StockCategory::class);
@@ -241,29 +243,30 @@ created_by_id
             }
         }
     }
-    static public function demo_stock_items($company)
+
+    public static function demo_stock_items($company)
     {
-        /*  
-id	
-created_at	
-updated_at	
-company_id	
-created_by_id	
-stock_category_id	
-stock_sub_category_id	
-financial_period_id	
-name	
-description	
-image	
-barcode	
-sku	
-generate_sku	
-update_sku	
-gallery	
-buying_price	
-selling_price	
-original_quantity	
-current_quantity 
+        /*
+id
+created_at
+updated_at
+company_id
+created_by_id
+stock_category_id
+stock_sub_category_id
+financial_period_id
+name
+description
+image
+barcode
+sku
+generate_sku
+update_sku
+gallery
+buying_price
+selling_price
+original_quantity
+current_quantity
 */
         $sub_categories = StockSubCategory::where('company_id', $company->id)->get();
         foreach ($sub_categories as $key => $sub_category) {
@@ -292,7 +295,8 @@ current_quantity
             }
         }
     }
-    static public function demo_sub_categories($company)
+
+    public static function demo_sub_categories($company)
     {
         $categories = StockCategory::where('company_id', $company
             ->id)->get();
@@ -318,7 +322,7 @@ current_quantity
         }
     }
 
-    static public function demo_categories($company)
+    public static function demo_categories($company)
     {
         $categories = [
             ['name' => 'Electronics', 'description' => 'Electronics', 'status' => 'active'],
@@ -338,15 +342,14 @@ current_quantity
         }
     }
 
-
     //public static function importRecs
     public static function importRecs()
     {
         return;
         $path = public_path('storage/files/budget.csv');
         //check if file exists
-        if (!file_exists($path)) {
-            dd("File not found");
+        if (! file_exists($path)) {
+            throw new \Exception('File not found');
         }
 
         set_time_limit(-1);
@@ -357,11 +360,12 @@ current_quantity
         $u = Admin::user();
         $cat = BudgetItemCategory::where('name', 'Hom Renovation')->first();
         if ($cat == null) {
-            die("Cat not found.");
+            exit('Cat not found.');
         }
         foreach ($csv as $line) {
             if ($isFirst) {
                 $isFirst = false;
+
                 continue;
             }
             $cat_name = $line[0];
@@ -371,18 +375,19 @@ current_quantity
             $name = trim($line[1]);
             $ex = BudgetItem::where([
                 'name' => $name,
-                'budget_item_category_id' => $cat->id
+                'budget_item_category_id' => $cat->id,
             ])->first();
             if ($ex != null) {
-                echo ("<br>Skipped $name because already exists.");
+                echo "<br>Skipped $name because already exists.";
+
                 continue;
             }
             $item = new BudgetItem();
             $item->name = $name;
-            $item->unit_price = ((int)($line[2]));
-            $item->quantity = ((int)$line[3]);
+            $item->unit_price = ((int) ($line[2]));
+            $item->quantity = ((int) $line[3]);
             $item->target_amount = $item->unit_price * $item->quantity;
-            $item->invested_amount = ((int)$line[5]);
+            $item->invested_amount = ((int) $line[5]);
             $item->approved = 'No';
             $item->budget_program_id = $cat->budget_program_id;
             $item->budget_item_category_id = $cat->id;
@@ -390,16 +395,15 @@ current_quantity
             $item->created_by_id = $u->id;
             $item->changed_by_id = $u->id;
             $item->save();
-            echo $item->id . ". saved " . $item->name . "<br>";
+            echo $item->id.'. saved '.$item->name.'<br>';
         }
         //die("done");
     }
 
-
     //mail sender
     public static function mail_sender($data)
     {
-        return; 
+        return;
         //check if .env APP_URL is contains localhost and return
         if (strpos(env('APP_URL'), 'localhost') !== false) {
             return;
@@ -415,7 +419,7 @@ current_quantity
                 'mails/mail-1',
                 [
                     'body' => $data['body'],
-                    'title' => $data['subject']
+                    'title' => $data['subject'],
                 ],
                 function ($m) use ($data) {
                     $m->to($data['email'], $data['name'])

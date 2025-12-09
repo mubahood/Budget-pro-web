@@ -1,9 +1,22 @@
 {
+    "name": "budgetpro/budget-pro",
+    "version": "2.0.0",
+    "description": "Budget Pro - Complete Inventory, Sales & Financial Management System",
+    "author": "Budget Pro Team",
+    "license": "Commercial",
+    "keywords": [
+        "inventory-management",
+        "financial-management",
+        "sales-management",
+        "laravel",
+        "saas"
+    ],
     "private": true,
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "demo-seed": "php artisan db:seed --class=CompleteDemoSeeder"
     },
     "devDependencies": {
         "axios": "^1.6.1",

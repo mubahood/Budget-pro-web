@@ -6,11 +6,11 @@ use App\Models\InventoryForecast;
 use App\Models\StockItem;
 use App\Services\InventoryForecastService;
 use Encore\Admin\Controllers\AdminController;
+use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
-use Encore\Admin\Show;
-use Encore\Admin\Facades\Admin;
 use Encore\Admin\Layout\Content;
+use Encore\Admin\Show;
 
 class InventoryForecastController extends AdminController
 {
@@ -32,7 +32,7 @@ class InventoryForecastController extends AdminController
 
         $grid->model()->orderBy('created_at', 'desc');
 
-        $grid->filter(function($filter) {
+        $grid->filter(function ($filter) {
             $filter->disableIdFilter();
             $filter->equal('stock_item_id', 'Stock Item')->select(StockItem::pluck('name', 'id'));
             $filter->equal('stock_status', 'Stock Status')->select([
@@ -56,36 +56,44 @@ class InventoryForecastController extends AdminController
             ]);
         });
 
-        $grid->column('stock_item_id', __('Product'))->display(function($itemId) {
+        $grid->column('stock_item_id', __('Product'))->display(function ($itemId) {
             $item = StockItem::find($itemId);
+
             return $item ? $item->name : 'N/A';
         })->sortable();
 
-        $grid->column('forecast_date', __('Forecast Date'))->display(function($date) {
+        $grid->column('forecast_date', __('Forecast Date'))->display(function ($date) {
             return date('Y-m-d', strtotime($date));
         })->sortable();
 
         $grid->column('current_stock', __('Current Stock'))->sortable();
         $grid->column('predicted_demand', __('Predicted Demand'))->sortable();
 
-        $grid->column('stock_status', __('Status'))->display(function($status) {
+        $grid->column('stock_status', __('Status'))->display(function ($status) {
             return $this->stock_status_badge;
         })->sortable();
 
-        $grid->column('trend', __('Trend'))->display(function($trend) {
+        $grid->column('trend', __('Trend'))->display(function ($trend) {
             return $this->trend_badge;
         });
 
         $grid->column('confidence_level', __('Confidence'))->progressBar()->sortable();
 
-        $grid->column('days_until_stockout', __('Days to Stockout'))->display(function($days) {
-            if ($days === null) return 'N/A';
-            if ($days <= 7) return "<span class='badge badge-danger'>{$days} days</span>";
-            if ($days <= 14) return "<span class='badge badge-warning'>{$days} days</span>";
+        $grid->column('days_until_stockout', __('Days to Stockout'))->display(function ($days) {
+            if ($days === null) {
+                return 'N/A';
+            }
+            if ($days <= 7) {
+                return "<span class='badge badge-danger'>{$days} days</span>";
+            }
+            if ($days <= 14) {
+                return "<span class='badge badge-warning'>{$days} days</span>";
+            }
+
             return "<span class='badge badge-success'>{$days} days</span>";
         });
 
-        $grid->column('action_required', __('Action'))->display(function($required) {
+        $grid->column('action_required', __('Action'))->display(function ($required) {
             return $required ? '<span class="badge badge-danger">Required</span>' : '<span class="badge badge-success">None</span>';
         })->sortable();
 
@@ -93,7 +101,7 @@ class InventoryForecastController extends AdminController
         $grid->disableActions();
 
         $grid->tools(function ($tools) {
-            $tools->append('<a href="' . admin_url('inventory-forecasts/generate') . '" class="btn btn-sm btn-primary"><i class="fa fa-refresh"></i> Generate Forecasts</a>');
+            $tools->append('<a href="'.admin_url('inventory-forecasts/generate').'" class="btn btn-sm btn-primary"><i class="fa fa-refresh"></i> Generate Forecasts</a>');
         });
 
         return $grid;
@@ -117,22 +125,22 @@ class InventoryForecastController extends AdminController
     {
         $user = Admin::user();
         $service = new InventoryForecastService();
-        
+
         try {
             $forecasts = $service->generateBatchForecasts($user->company_id);
-            
-            admin_toastr('Successfully generated ' . count($forecasts) . ' forecasts', 'success');
+
+            admin_toastr('Successfully generated '.count($forecasts).' forecasts', 'success');
         } catch (\Exception $e) {
-            admin_toastr('Error generating forecasts: ' . $e->getMessage(), 'error');
+            admin_toastr('Error generating forecasts: '.$e->getMessage(), 'error');
         }
-        
+
         return redirect(admin_url('inventory-forecasts'));
     }
 
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)

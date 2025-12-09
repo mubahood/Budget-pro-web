@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
 
 class HandoverRecord extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 }

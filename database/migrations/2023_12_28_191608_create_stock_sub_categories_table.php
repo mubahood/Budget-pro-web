@@ -16,7 +16,7 @@ return new class extends Migration
         Schema::create('stock_sub_categories', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->foreignIdFor(Company::class); 
+            $table->foreignIdFor(Company::class);
             $table->foreignIdFor(StockCategory::class);
 
             $table->text('name');

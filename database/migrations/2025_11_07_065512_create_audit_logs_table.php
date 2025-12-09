@@ -34,14 +34,14 @@ return new class extends Migration
 
             // Foreign key constraints
             $table->foreign('user_id')
-                  ->references('id')
-                  ->on('users')
-                  ->onDelete('set null');
-            
+                ->references('id')
+                ->on('users')
+                ->onDelete('set null');
+
             $table->foreign('company_id')
-                  ->references('id')
-                  ->on('companies')
-                  ->onDelete('cascade');
+                ->references('id')
+                ->on('companies')
+                ->onDelete('cascade');
         });
     }
 

@@ -2,16 +2,16 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class BudgetItemCategory extends Model
 {
-    use HasFactory, AuditLogger;
-    
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -19,7 +19,7 @@ class BudgetItemCategory extends Model
     {
         static::addGlobalScope(new CompanyScope);
     }
-    
+
     /**
      * The attributes that are mass assignable.
      */
@@ -33,8 +33,6 @@ class BudgetItemCategory extends Model
         'percentage_done',
         'is_complete',
     ];
-
-
 
     //update self
     public function updateSelf()
@@ -80,6 +78,7 @@ class BudgetItemCategory extends Model
         //save
         $this->percentage_done = $x;
         $this->save();
+
         return $x;
     }
 
@@ -88,15 +87,16 @@ class BudgetItemCategory extends Model
         $cats = BudgetItem::where('budget_item_category_id', $this->id)
             ->orderBy('target_amount', 'desc')
             ->get();
+
         return $cats;
     }
 
     //getter for name_text
     public function getNameTextAttribute($name_text)
     {
-        return $this->name . ' (' . number_format($this->balance) . ')';
+        return $this->name.' ('.number_format($this->balance).')';
     }
-    
+
     /**
      * Relationships
      */
@@ -104,12 +104,12 @@ class BudgetItemCategory extends Model
     {
         return $this->belongsTo(Company::class, 'company_id');
     }
-    
+
     public function budgetProgram()
     {
         return $this->belongsTo(BudgetProgram::class, 'budget_program_id');
     }
-    
+
     public function budgetItems()
     {
         return $this->hasMany(BudgetItem::class, 'budget_item_category_id');

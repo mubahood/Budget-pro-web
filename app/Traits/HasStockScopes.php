@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Trait HasStockScopes
- * 
+ *
  * Provides stock-specific query scopes for models.
  * Models using this trait should have stock-related columns.
  */
@@ -15,19 +15,17 @@ trait HasStockScopes
     /**
      * Scope a query to items with low stock (below reorder level).
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeLowStock(Builder $query)
     {
         return $query->whereColumn('current_quantity', '<', 'reorder_level')
-                    ->where('current_quantity', '>', 0);
+            ->where('current_quantity', '>', 0);
     }
 
     /**
      * Scope a query to items that are out of stock.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeOutOfStock(Builder $query)
@@ -38,7 +36,6 @@ trait HasStockScopes
     /**
      * Scope a query to items that are in stock.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeInStock(Builder $query)
@@ -49,7 +46,6 @@ trait HasStockScopes
     /**
      * Scope a query to items with sufficient stock (above reorder level).
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeSufficientStock(Builder $query)
@@ -60,8 +56,7 @@ trait HasStockScopes
     /**
      * Scope a query to filter by stock category.
      *
-     * @param Builder $query
-     * @param int $categoryId
+     * @param  int  $categoryId
      * @return Builder
      */
     public function scopeByCategory(Builder $query, $categoryId)
@@ -72,8 +67,7 @@ trait HasStockScopes
     /**
      * Scope a query to filter by stock sub-category.
      *
-     * @param Builder $query
-     * @param int $subCategoryId
+     * @param  int  $subCategoryId
      * @return Builder
      */
     public function scopeBySubCategory(Builder $query, $subCategoryId)
@@ -84,8 +78,7 @@ trait HasStockScopes
     /**
      * Scope a query to items with quantity greater than a value.
      *
-     * @param Builder $query
-     * @param int $quantity
+     * @param  int  $quantity
      * @return Builder
      */
     public function scopeQuantityGreaterThan(Builder $query, $quantity)
@@ -96,8 +89,7 @@ trait HasStockScopes
     /**
      * Scope a query to items with quantity less than a value.
      *
-     * @param Builder $query
-     * @param int $quantity
+     * @param  int  $quantity
      * @return Builder
      */
     public function scopeQuantityLessThan(Builder $query, $quantity)
@@ -108,9 +100,8 @@ trait HasStockScopes
     /**
      * Scope a query to items with quantity between two values.
      *
-     * @param Builder $query
-     * @param int $min
-     * @param int $max
+     * @param  int  $min
+     * @param  int  $max
      * @return Builder
      */
     public function scopeQuantityBetween(Builder $query, $min, $max)
@@ -121,8 +112,7 @@ trait HasStockScopes
     /**
      * Scope a query to stock records by transaction type.
      *
-     * @param Builder $query
-     * @param string $type
+     * @param  string  $type
      * @return Builder
      */
     public function scopeByType(Builder $query, $type)
@@ -133,7 +123,6 @@ trait HasStockScopes
     /**
      * Scope a query to stock-in records.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeStockIn(Builder $query)
@@ -144,7 +133,6 @@ trait HasStockScopes
     /**
      * Scope a query to stock-out records (Sales + Stock Out).
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeStockOut(Builder $query)
@@ -155,7 +143,6 @@ trait HasStockScopes
     /**
      * Scope a query to sales records only.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeSales(Builder $query)
@@ -166,8 +153,7 @@ trait HasStockScopes
     /**
      * Scope a query to items with profit greater than a value.
      *
-     * @param Builder $query
-     * @param float $amount
+     * @param  float  $amount
      * @return Builder
      */
     public function scopeProfitGreaterThan(Builder $query, $amount)
@@ -178,8 +164,7 @@ trait HasStockScopes
     /**
      * Scope a query to items with profit less than a value.
      *
-     * @param Builder $query
-     * @param float $amount
+     * @param  float  $amount
      * @return Builder
      */
     public function scopeProfitLessThan(Builder $query, $amount)
@@ -190,7 +175,6 @@ trait HasStockScopes
     /**
      * Scope a query to profitable items (profit > 0).
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeProfitable(Builder $query)
@@ -201,7 +185,6 @@ trait HasStockScopes
     /**
      * Scope a query to items with loss (profit < 0).
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeWithLoss(Builder $query)
@@ -212,8 +195,7 @@ trait HasStockScopes
     /**
      * Scope a query to filter by stock item.
      *
-     * @param Builder $query
-     * @param int $itemId
+     * @param  int  $itemId
      * @return Builder
      */
     public function scopeByStockItem(Builder $query, $itemId)

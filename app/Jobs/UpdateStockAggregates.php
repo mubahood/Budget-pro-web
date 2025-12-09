@@ -3,8 +3,6 @@
 namespace App\Jobs;
 
 use App\Models\StockItem;
-use App\Models\StockSubCategory;
-use App\Models\StockCategory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -33,9 +31,10 @@ class UpdateStockAggregates implements ShouldQueue
     {
         try {
             $stockItem = StockItem::find($this->stockItemId);
-            
-            if (!$stockItem) {
+
+            if (! $stockItem) {
                 Log::warning("StockItem #{$this->stockItemId} not found for aggregate update");
+
                 return;
             }
 
@@ -43,16 +42,16 @@ class UpdateStockAggregates implements ShouldQueue
             if ($stockItem->stockSubCategory) {
                 $stockItem->stockSubCategory->update_self();
                 Log::info("Updated StockSubCategory #{$stockItem->stock_sub_category_id} aggregates");
-                
+
                 // Update category aggregates
                 if ($stockItem->stockSubCategory->stockCategory) {
                     $stockItem->stockSubCategory->stockCategory->update_self();
                     Log::info("Updated StockCategory #{$stockItem->stock_category_id} aggregates");
                 }
             }
-            
+
         } catch (\Throwable $e) {
-            Log::error("Failed to update stock aggregates for item #{$this->stockItemId}: " . $e->getMessage());
+            Log::error("Failed to update stock aggregates for item #{$this->stockItemId}: ".$e->getMessage());
             throw $e; // Re-throw to trigger retry
         }
     }

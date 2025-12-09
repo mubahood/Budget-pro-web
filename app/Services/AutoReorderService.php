@@ -3,13 +3,12 @@
 namespace App\Services;
 
 use App\Models\AutoReorderRule;
-use App\Models\StockItem;
+use App\Models\Company;
+use App\Models\InventoryForecast;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
-use App\Models\InventoryForecast;
-use App\Models\Company;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class AutoReorderService
@@ -44,7 +43,7 @@ class AutoReorderService
                 $results['checked']++;
 
                 $triggered = $this->evaluateRule($rule);
-                
+
                 if ($triggered) {
                     $results['triggered']++;
                     $results['orders_created']++;
@@ -75,7 +74,7 @@ class AutoReorderService
         $currentStock = $stockItem->current_quantity ?? 0;
 
         // Check if reorder is needed
-        if (!$rule->shouldTriggerReorder($currentStock)) {
+        if (! $rule->shouldTriggerReorder($currentStock)) {
             return false;
         }
 
@@ -83,9 +82,9 @@ class AutoReorderService
         $forecast = null;
         if ($rule->use_forecasting) {
             $forecast = $this->getForecastForItem($rule->stock_item_id, $rule->company_id);
-            
+
             // Generate forecast if it doesn't exist or is outdated
-            if (!$forecast || $forecast->created_at->diffInDays(now()) > 7) {
+            if (! $forecast || $forecast->created_at->diffInDays(now()) > 7) {
                 $forecast = $this->forecastService->generateForecast(
                     $stockItem,
                     $rule->forecast_horizon_days,
@@ -117,15 +116,15 @@ class AutoReorderService
     protected function createAutoPurchaseOrder(AutoReorderRule $rule, $quantity)
     {
         $stockItem = $rule->stockItem;
-        $unitPrice = $rule->preferred_unit_price > 0 
-            ? $rule->preferred_unit_price 
+        $unitPrice = $rule->preferred_unit_price > 0
+            ? $rule->preferred_unit_price
             : ($stockItem->unit_cost ?? 0);
-        
+
         $totalAmount = $unitPrice * $quantity;
 
         // Determine approval status
         $autoApprove = $rule->shouldAutoApprove($totalAmount);
-        
+
         $purchaseOrder = DB::transaction(function () use ($rule, $stockItem, $quantity, $unitPrice, $totalAmount, $autoApprove) {
             // Create purchase order
             $po = PurchaseOrder::create([
@@ -176,7 +175,7 @@ class AutoReorderService
     {
         $prefix = 'AUTO-PO';
         $date = now()->format('Ymd');
-        
+
         $lastPO = PurchaseOrder::where('company_id', $companyId)
             ->where('po_number', 'LIKE', "{$prefix}-{$date}%")
             ->orderBy('po_number', 'desc')
@@ -209,7 +208,7 @@ class AutoReorderService
     protected function sendReorderNotification(AutoReorderRule $rule, PurchaseOrder $purchaseOrder)
     {
         $emails = $rule->notification_emails;
-        
+
         if (empty($emails)) {
             return;
         }
@@ -252,10 +251,10 @@ class AutoReorderService
     public function calculateEOQWithHistory(AutoReorderRule $rule, $daysOfHistory = 90)
     {
         $stockItem = $rule->stockItem;
-        
+
         // Get historical demand
         $historicalDemand = $this->getHistoricalDemand($rule->stock_item_id, $daysOfHistory);
-        
+
         if (empty($historicalDemand)) {
             return $rule->reorder_quantity;
         }
@@ -294,7 +293,7 @@ class AutoReorderService
      */
     public function shouldRunRule(AutoReorderRule $rule)
     {
-        if (!$rule->is_enabled) {
+        if (! $rule->is_enabled) {
             return false;
         }
 
@@ -302,7 +301,7 @@ class AutoReorderService
         $lastChecked = $rule->last_checked_at;
 
         // If never checked, run it
-        if (!$lastChecked) {
+        if (! $lastChecked) {
             return true;
         }
 
@@ -310,21 +309,22 @@ class AutoReorderService
         switch ($rule->check_frequency) {
             case 'hourly':
                 return $lastChecked->diffInHours($now) >= 1;
-                
+
             case 'daily':
                 // Check if it's past the scheduled time and hasn't run today
                 $scheduledTime = \Carbon\Carbon::parse($rule->check_time);
-                return !$lastChecked->isToday() || 
-                       ($now->format('H:i') >= $scheduledTime->format('H:i') && !$lastChecked->isToday());
-                
+
+                return ! $lastChecked->isToday() ||
+                       ($now->format('H:i') >= $scheduledTime->format('H:i') && ! $lastChecked->isToday());
+
             case 'weekly':
                 // Check if it's the right day and hasn't run this week
                 $dayOfWeek = strtolower($now->format('l'));
                 $checkDays = $rule->check_days ?? [];
-                
-                return in_array($dayOfWeek, $checkDays) && 
+
+                return in_array($dayOfWeek, $checkDays) &&
                        $lastChecked->diffInDays($now) >= 7;
-                
+
             default:
                 return false;
         }

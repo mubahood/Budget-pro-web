@@ -5,7 +5,6 @@ namespace App\Admin\Actions;
 use Encore\Admin\Actions\BatchAction;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class BatchClone extends BatchAction
 {
@@ -26,21 +25,21 @@ class BatchClone extends BatchAction
     {
         try {
             DB::beginTransaction();
-            
+
             $cloned = 0;
             foreach ($collection as $model) {
                 // Create a replica of the model
                 $newModel = $model->replicate();
-                
+
                 // Update the name to indicate it's a copy
                 if (isset($newModel->name)) {
-                    $newModel->name = $model->name . ' (Copy ' . now()->format('Y-m-d H:i') . ')';
+                    $newModel->name = $model->name.' (Copy '.now()->format('Y-m-d H:i').')';
                 }
-                
+
                 // Reset certain fields
                 $newModel->created_at = now();
                 $newModel->updated_at = now();
-                
+
                 // Reset calculated fields if they exist
                 if (method_exists($model, 'getFillable')) {
                     $fillable = $model->getFillable();
@@ -60,20 +59,21 @@ class BatchClone extends BatchAction
                         $newModel->earned_profit = 0;
                     }
                 }
-                
+
                 $newModel->save();
                 $cloned++;
             }
-            
+
             DB::commit();
-            
+
             return $this->response()
                 ->success("Successfully cloned {$cloned} {$this->entityName}(s).")
                 ->refresh();
-                
+
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->response()->error('Error cloning: ' . $e->getMessage());
+
+            return $this->response()->error('Error cloning: '.$e->getMessage());
         }
     }
 

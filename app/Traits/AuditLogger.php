@@ -3,9 +3,9 @@
 namespace App\Traits;
 
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Request;
 
 trait AuditLogger
 {
@@ -33,26 +33,23 @@ trait AuditLogger
     /**
      * Log an audit entry.
      *
-     * @param string $action
-     * @param array|null $oldValues
-     * @param array|null $newValues
      * @return void
      */
     protected function logAudit(string $action, ?array $oldValues, ?array $newValues)
     {
         try {
             // Skip logging if we're in a testing environment or console without user
-            if (!Auth::check() && !app()->runningInConsole()) {
+            if (! Auth::check() && ! app()->runningInConsole()) {
                 return;
             }
 
             // Get user ID - verify it exists in database
             $userId = Auth::id();
-            
+
             // Verify user exists to prevent foreign key constraint errors
             if ($userId) {
                 $userExists = DB::table('users')->where('id', $userId)->exists();
-                if (!$userExists) {
+                if (! $userExists) {
                     // User doesn't exist in database, set to null
                     $userId = null;
                     Log::warning("AuditLogger: User ID {$userId} not found in database. Setting to null.");
@@ -93,20 +90,16 @@ trait AuditLogger
             ]);
 
             // Log to file for debugging
-            Log::info("Audit Log: {$action} on " . get_class($this) . " #{$this->id} by user #{$userId}");
-            
+            Log::info("Audit Log: {$action} on ".get_class($this)." #{$this->id} by user #{$userId}");
+
         } catch (\Exception $e) {
             // Don't fail the main operation if audit logging fails
-            Log::error("AuditLogger failed: " . $e->getMessage());
+            Log::error('AuditLogger failed: '.$e->getMessage());
         }
     }
 
     /**
      * Filter out sensitive data from audit logs.
-     *
-     * @param array $data
-     * @param array $sensitiveFields
-     * @return array
      */
     protected function filterSensitiveData(array $data, array $sensitiveFields): array
     {
@@ -115,6 +108,7 @@ trait AuditLogger
                 $data[$field] = '[FILTERED]';
             }
         }
+
         return $data;
     }
 }

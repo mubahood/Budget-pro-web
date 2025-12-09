@@ -13,7 +13,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('stock_records', function (Blueprint $table) {
-            $table->foreignIdFor(FinancialPeriod::class); 
+            $table->foreignIdFor(FinancialPeriod::class);
         });
     }
 

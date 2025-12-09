@@ -16,10 +16,10 @@ return new class extends Migration
         Schema::create('contribution_records', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->foreignIdFor(BudgetProgram::class); 
-            $table->bigInteger('company_id')->nullable(); 
-            $table->bigInteger('treasurer_id')->nullable(); 
-            $table->bigInteger('chaned_by_id')->nullable(); 
+            $table->foreignIdFor(BudgetProgram::class);
+            $table->bigInteger('company_id')->nullable();
+            $table->bigInteger('treasurer_id')->nullable();
+            $table->bigInteger('chaned_by_id')->nullable();
             $table->text('name')->nullable();
             $table->bigInteger('amount')->nullable()->default(0);
             $table->bigInteger('paid_amount')->nullable()->default(0);

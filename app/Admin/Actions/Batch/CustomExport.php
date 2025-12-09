@@ -30,7 +30,7 @@ class CustomExport extends BatchAction
                 'created_at' => 'Date Added',
             ])
             ->default(['name', 'sku', 'buying_price', 'selling_price', 'current_quantity']);
-        
+
         $this->select('format', 'Export Format')
             ->options([
                 'csv' => '📄 CSV',
@@ -46,19 +46,19 @@ class CustomExport extends BatchAction
     {
         $fields = $request->get('fields', []);
         $format = $request->get('format', 'csv');
-        
+
         if (empty($fields)) {
             return $this->response()->error('⚠️ Please select at least one field to export!');
         }
-        
+
         // Build export data
         $data = [];
         $headers = [];
-        
+
         foreach ($fields as $field) {
             $headers[] = $this->getFieldLabel($field);
         }
-        
+
         foreach ($collection as $model) {
             $row = [];
             foreach ($fields as $field) {
@@ -66,10 +66,10 @@ class CustomExport extends BatchAction
             }
             $data[] = $row;
         }
-        
+
         // Generate file
-        $filename = 'custom_export_' . date('Y-m-d_H-i-s') . '.' . $format;
-        
+        $filename = 'custom_export_'.date('Y-m-d_H-i-s').'.'.$format;
+
         switch ($format) {
             case 'csv':
                 return $this->exportCSV($headers, $data, $filename);
@@ -83,7 +83,7 @@ class CustomExport extends BatchAction
                 return $this->exportCSV($headers, $data, $filename);
         }
     }
-    
+
     private function getFieldLabel($field)
     {
         $labels = [
@@ -102,10 +102,10 @@ class CustomExport extends BatchAction
             'measuring_unit' => 'Unit',
             'created_at' => 'Date Added',
         ];
-        
+
         return $labels[$field] ?? $field;
     }
-    
+
     private function getFieldValue($model, $field)
     {
         switch ($field) {
@@ -114,7 +114,7 @@ class CustomExport extends BatchAction
             case 'stock_value':
                 return $model->current_quantity * $model->buying_price;
             case 'profit_margin':
-                return $model->buying_price > 0 ? 
+                return $model->buying_price > 0 ?
                     round((($model->selling_price - $model->buying_price) / $model->buying_price) * 100, 2) : 0;
             case 'created_at':
                 return date('Y-m-d H:i:s', strtotime($model->created_at));
@@ -122,30 +122,30 @@ class CustomExport extends BatchAction
                 return $model->$field ?? '';
         }
     }
-    
+
     private function exportCSV($headers, $data, $filename)
     {
         $csv = fopen('php://temp', 'r+');
         fputcsv($csv, $headers);
-        
+
         foreach ($data as $row) {
             fputcsv($csv, $row);
         }
-        
+
         rewind($csv);
         $output = stream_get_contents($csv);
         fclose($csv);
-        
+
         return response($output, 200, [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
     }
-    
+
     private function exportJSON($headers, $data, $filename)
     {
         $result = [];
-        
+
         foreach ($data as $row) {
             $item = [];
             foreach ($headers as $index => $header) {
@@ -153,17 +153,17 @@ class CustomExport extends BatchAction
             }
             $result[] = $item;
         }
-        
+
         return response()->json($result)
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
     }
-    
+
     private function exportExcel($headers, $data, $filename)
     {
         // Simplified Excel export (would need PhpSpreadsheet library)
         return $this->exportCSV($headers, $data, str_replace('.xlsx', '.csv', $filename));
     }
-    
+
     private function exportPDF($headers, $data, $filename)
     {
         // Simplified PDF export (would need dompdf library)

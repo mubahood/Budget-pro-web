@@ -4,7 +4,6 @@ namespace App\Admin\Widgets;
 
 use App\Models\StockItem;
 use Encore\Admin\Facades\Admin;
-use Illuminate\Support\Facades\Request;
 use Encore\Admin\Widgets\Widget;
 
 class LowStockAlert extends Widget
@@ -13,7 +12,7 @@ class LowStockAlert extends Widget
 
     public function script()
     {
-        return <<<JS
+        return <<<'JS'
         // Refresh widget every 5 minutes
         setInterval(function() {
             $.get(window.location.href, function(data) {
@@ -27,7 +26,7 @@ JS;
     public function render()
     {
         $u = Admin::user();
-        if (!$u) {
+        if (! $u) {
             return '';
         }
 

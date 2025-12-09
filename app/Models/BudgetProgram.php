@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class BudgetProgram extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * The "booted" method of the model.
@@ -48,6 +48,7 @@ class BudgetProgram extends Model
                 throw new \Exception('Name already exists');
             }
             $model = self::prepare($model);
+
             return $model;
         });
 
@@ -57,6 +58,7 @@ class BudgetProgram extends Model
                 throw new \Exception('Name already exists');
             }
             $model = self::prepare($model);
+
             return $model;
         });
     }
@@ -69,6 +71,7 @@ class BudgetProgram extends Model
             throw new \Exception('User not found');
         }
         $data->company_id = $loggedUser->company_id;
+
         return $data;
     }
 
@@ -83,11 +86,13 @@ class BudgetProgram extends Model
     {
         return $this->hasMany(BudgetItemCategory::class);
     }
+
     public function get_categories()
     {
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->orderBy('target_amount', 'desc')
             ->get();
+
         return $cats;
     }
 
@@ -100,6 +105,7 @@ class BudgetProgram extends Model
         foreach ($cats as $cat) {
             $total += $cat->invested_amount;
         }
+
         return $total;
     }
 
@@ -112,6 +118,7 @@ class BudgetProgram extends Model
         foreach ($cats as $cat) {
             $total += $cat->target_amount;
         }
+
         return $total;
     }
 
@@ -124,16 +131,18 @@ class BudgetProgram extends Model
         foreach ($cats as $cat) {
             $total += $cat->balance;
         }
+
         return $total;
     }
-    /* 
+
+    /*
 
 
 total_expected
 total_in_pledge
 budget_total
 
-	
+
 */
     //update self
     public static function update_self()
@@ -146,6 +155,7 @@ budget_total
         if ($title == null || $title == '') {
             return $this->name;
         }
+
         return $title;
     }
 

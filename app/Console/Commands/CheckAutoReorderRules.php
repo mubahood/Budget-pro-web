@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Services\AutoReorderService;
 use App\Models\Company;
+use App\Services\AutoReorderService;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 class CheckAutoReorderRules extends Command
@@ -42,7 +42,7 @@ class CheckAutoReorderRules extends Command
     public function handle()
     {
         $this->info('Starting auto reorder check...');
-        
+
         $companyId = $this->option('company');
         $force = $this->option('force');
 
@@ -64,7 +64,7 @@ class CheckAutoReorderRules extends Command
                 foreach ($companies as $company) {
                     $this->info("Checking company: {$company->name}");
                     $results = $this->checkCompany($company->id, $force);
-                    
+
                     $totalResults['checked'] += $results['checked'];
                     $totalResults['triggered'] += $results['triggered'];
                     $totalResults['orders_created'] += $results['orders_created'];
@@ -75,13 +75,15 @@ class CheckAutoReorderRules extends Command
             }
 
             $this->info('Auto reorder check completed successfully!');
+
             return 0;
         } catch (\Exception $e) {
-            $this->error('Error checking auto reorder rules: ' . $e->getMessage());
+            $this->error('Error checking auto reorder rules: '.$e->getMessage());
             Log::error('Auto reorder command failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return 1;
         }
     }
@@ -114,7 +116,7 @@ class CheckAutoReorderRules extends Command
                     $results['checked']++;
 
                     $triggered = $this->reorderService->evaluateRule($rule);
-                    
+
                     if ($triggered) {
                         $results['triggered']++;
                         $results['orders_created']++;
@@ -144,18 +146,18 @@ class CheckAutoReorderRules extends Command
         $this->line("Rules Checked:      {$results['checked']}");
         $this->line("Rules Triggered:    {$results['triggered']}");
         $this->line("Orders Created:     {$results['orders_created']}");
-        
+
         if (count($results['errors']) > 0) {
-            $this->line("Errors:             " . count($results['errors']));
+            $this->line('Errors:             '.count($results['errors']));
             $this->line('');
             $this->error('Errors encountered:');
             foreach ($results['errors'] as $error) {
                 $this->error("  - {$error['rule_name']}: {$error['error']}");
             }
         } else {
-            $this->line("Errors:             0");
+            $this->line('Errors:             0');
         }
-        
+
         $this->line('═══════════════════════════════════');
         $this->line('');
     }

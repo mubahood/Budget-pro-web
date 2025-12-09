@@ -46,7 +46,6 @@ class AuthController extends BaseAuthController
     /**
      * Handle registration request.
      *
-     * @param Request $request
      * @return \Illuminate\Http\RedirectResponse
      */
     public function postRegister(Request $request)
@@ -102,7 +101,7 @@ class AuthController extends BaseAuthController
             $user = new User();
             $user->first_name = $request->first_name;
             $user->last_name = $request->last_name;
-            $user->name = trim($request->first_name . ' ' . $request->last_name);
+            $user->name = trim($request->first_name.' '.$request->last_name);
             $user->username = $request->email;
             $user->email = $request->email;
             $user->phone_number = $request->phone_number;
@@ -112,7 +111,7 @@ class AuthController extends BaseAuthController
             $user->avatar = null;
             $user->save();
 
-            if (!$user->id) {
+            if (! $user->id) {
                 throw new \Exception('Failed to create user account.');
             }
 
@@ -128,7 +127,7 @@ class AuthController extends BaseAuthController
             $company->license_expire = now()->addYear(); // 1 year trial
             $company->save();
 
-            if (!$company->id) {
+            if (! $company->id) {
                 throw new \Exception('Failed to create company.');
             }
 
@@ -154,23 +153,23 @@ class AuthController extends BaseAuthController
             // Step 7: Assign Company Owner Role (ID 2)
             // This is critical - company owners MUST have role_id = 2
             $companyOwnerRoleId = 2;
-            
+
             // Check if role ID 2 exists
             $companyOwnerRole = DB::table('admin_roles')->where('id', $companyOwnerRoleId)->first();
-            if (!$companyOwnerRole) {
+            if (! $companyOwnerRole) {
                 // Fallback: try to find by slug if ID 2 doesn't exist
                 $companyOwnerRole = DB::table('admin_roles')->where('slug', 'company-owner')->first();
                 if ($companyOwnerRole) {
                     $companyOwnerRoleId = $companyOwnerRole->id;
                 }
             }
-            
+
             // Assign the company owner role
             DB::table('admin_role_users')->insert([
                 'role_id' => $companyOwnerRoleId,
                 'user_id' => $user->id,
             ]);
-            
+
             Log::info('Company owner role assigned during registration', [
                 'user_id' => $user->id,
                 'role_id' => $companyOwnerRoleId,
@@ -192,7 +191,8 @@ class AuthController extends BaseAuthController
             Auth::guard('admin')->login($user, true);
 
             // Redirect to dashboard with success message
-            admin_toastr('Registration successful! Welcome to ' . config('admin.name'), 'success');
+            admin_toastr('Registration successful! Welcome to '.config('admin.name'), 'success');
+
             return redirect()->intended($this->redirectPath());
 
         } catch (\Exception $e) {
@@ -207,7 +207,7 @@ class AuthController extends BaseAuthController
 
             return redirect()->back()
                 ->withInput($request->except('password', 'password_confirmation'))
-                ->withErrors(['error' => 'Registration failed: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Registration failed: '.$e->getMessage()]);
         }
     }
 }

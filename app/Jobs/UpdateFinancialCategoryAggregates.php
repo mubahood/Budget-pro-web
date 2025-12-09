@@ -31,9 +31,10 @@ class UpdateFinancialCategoryAggregates implements ShouldQueue
     {
         try {
             $financialCategory = FinancialCategory::find($this->financialCategoryId);
-            
-            if (!$financialCategory) {
+
+            if (! $financialCategory) {
                 Log::warning("FinancialCategory #{$this->financialCategoryId} not found for aggregate update");
+
                 return;
             }
 
@@ -42,9 +43,9 @@ class UpdateFinancialCategoryAggregates implements ShouldQueue
                 $financialCategory->update_self();
                 Log::info("Updated FinancialCategory #{$this->financialCategoryId} aggregates");
             }
-            
+
         } catch (\Throwable $e) {
-            Log::error("Failed to update financial category aggregates for #{$this->financialCategoryId}: " . $e->getMessage());
+            Log::error("Failed to update financial category aggregates for #{$this->financialCategoryId}: ".$e->getMessage());
             throw $e; // Re-throw to trigger retry
         }
     }

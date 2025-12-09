@@ -13,7 +13,7 @@ class StockValueSummary extends Widget
     public function render()
     {
         $u = Admin::user();
-        if (!$u) {
+        if (! $u) {
             return '';
         }
 

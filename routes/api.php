@@ -5,8 +5,6 @@ use App\Models\StockItem;
 use App\Models\StockSubCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use function Laravel\Prompts\search;
-
 
 Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
 Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
@@ -18,12 +16,9 @@ Route::get('api/{model}', [ApiController::class, 'my_list']);
 Route::post('file-uploading', [ApiController::class, 'file_uploading']);
 Route::get('manifest', [ApiController::class, 'manifest']);
 
-
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
-
-
 
 //rout for stock-categories
 Route::get('/stock-items', function (Request $request) {
@@ -38,17 +33,17 @@ Route::get('/stock-items', function (Request $request) {
 
     $sub_categories =
         StockItem::where('company_id', $company_id)
-        ->where('name', 'like', "%$q%")
-        ->orderBy('name', 'asc')
-        ->limit(20)
-        ->get();
+            ->where('name', 'like', "%$q%")
+            ->orderBy('name', 'asc')
+            ->limit(20)
+            ->get();
 
     $data = [];
 
     foreach ($sub_categories as $sub_category) {
         $data[] = [
             'id' => $sub_category->id,
-            'text' => $sub_category->sku . " " . $sub_category->name_text,
+            'text' => $sub_category->sku.' '.$sub_category->name_text,
         ];
     }
 
@@ -56,9 +51,6 @@ Route::get('/stock-items', function (Request $request) {
         'data' => $data,
     ]);
 });
-
-
-
 
 //rout for stock-categories
 Route::get('/stock-sub-categories', function (Request $request) {
@@ -73,17 +65,17 @@ Route::get('/stock-sub-categories', function (Request $request) {
 
     $sub_categories =
         StockSubCategory::where('company_id', $company_id)
-        ->where('name', 'like', "%$q%")
-        ->orderBy('name', 'asc')
-        ->limit(20)
-        ->get();
+            ->where('name', 'like', "%$q%")
+            ->orderBy('name', 'asc')
+            ->limit(20)
+            ->get();
 
     $data = [];
 
     foreach ($sub_categories as $sub_category) {
         $data[] = [
             'id' => $sub_category->id,
-            'text' => $sub_category->name_text . " (" . $sub_category->measurement_unit . ")",
+            'text' => $sub_category->name_text.' ('.$sub_category->measurement_unit.')',
         ];
     }
 

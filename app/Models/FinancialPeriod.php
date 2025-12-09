@@ -2,14 +2,34 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
+/**
+ * Financial Period Model
+ *
+ * Represents an accounting period for financial transactions.
+ * Only one period can be active per company at a time.
+ *
+ * @property int $id
+ * @property int $company_id
+ * @property string $name
+ * @property \Illuminate\Support\Carbon $start_date
+ * @property \Illuminate\Support\Carbon $end_date
+ * @property string $status Active|Closed
+ * @property string|null $description
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ *
+ * @property-read Company $company
+ *
+ * @package App\Models
+ */
 class FinancialPeriod extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * The "booted" method of the model.
@@ -46,13 +66,18 @@ class FinancialPeriod extends Model
         'end_date' => 'date',
     ];
 
-    //boot
+    /**
+     * Boot method for model events.
+     * Ensures only one active financial period per company.
+     *
+     * @return void
+     */
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($model) {
-            //active financial period
+            // Validate no other active financial period exists
             $active_financial_period = FinancialPeriod::where([
                 'company_id' => $model->company_id,
                 'status' => 'Active',
@@ -61,7 +86,6 @@ class FinancialPeriod extends Model
                 throw new \Exception('There is an active financial period. Please close it first.');
             }
         });
-
 
         static::updating(function ($model) {
             //active financial period
@@ -146,14 +170,14 @@ class FinancialPeriod extends Model
     public function scopeByDateRange($query, $startDate, $endDate)
     {
         return $query->where('start_date', '>=', $startDate)
-                    ->where('end_date', '<=', $endDate);
+            ->where('end_date', '<=', $endDate);
     }
 
     public function scopeCurrent($query)
     {
         return $query->where('start_date', '<=', now())
-                    ->where('end_date', '>=', now())
-                    ->where('status', 'Active');
+            ->where('end_date', '>=', now())
+            ->where('status', 'Active');
     }
 
     public function scopeThisYear($query)

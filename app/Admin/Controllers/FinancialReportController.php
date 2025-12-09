@@ -24,64 +24,8 @@ class FinancialReportController extends AdminController
      */
     protected function grid()
     {
-        /*  $rep = FinancialReport::find(1);
-        $rep->do_generate = 'Yes';
-        $rep->file = time() . rand(10000, 100000);
-        $rep->save();
-
-         
-        $rep->period_type = 'Month';
-        dd($rep->profit);
-
-        echo $rep->start_date . '<br>' . $rep->end_date;
-        dd($rep->period_type); */
-
-        /* 
-             'Today' => 'Today',
-                'Yesterday' => 'Yesterday',
-                'Week' => 'This week',
-                'Month' => 'This month',
-                'Cycle' => 'This financial year',
-                'Year' => 'This year',
-                'Custom' => 'Custom',
-        */
-        /* 
-        dd($rep->file);
-
-        dd($rep);
-        FinancialReport::prepare($rep); */
-        /* 
-          "id" => 1
-    "created_at" => "2024-04-02 22:00:10"
-    "updated_at" => "2024-04-04 18:40:24"
-    "company_id" => 2
-    "user_id" => 3
-    "type" => "Inventory"
-    "period_type" => "Year"
-    "start_date" => "2024-12-31"
-    "end_date" => "2024-12-31"
-    "currency" => "USD"
-    "file_generated" => "No"
-    "file" => null
-    "total_income" => "0.00"
-    "total_expense" => "0.00"
-    "profit" => "0.00"
-    "include_finance_accounts" => "Yes"
-    "include_finance_records" => "Yes"
-    
-    "inventory_total_buying_price" => null
-    "inventory_total_selling_price" => null
-    "inventory_total_expected_profit" => null
-    "inventory_total_earned_profit" => null
-    
-    "inventory_include_categories" => "Yes"
-    "inventory_include_sub_categories" => "Yes"
-    "inventory_include_products" => "Yes"
-    "do_generate" => "No"
-        */
         $grid = new Grid(new FinancialReport());
         $grid->model()->orderBy('id', 'desc');
-
 
         $grid->column('created_at', __('Created'))
             ->display(function ($created_at) {
@@ -102,6 +46,7 @@ class FinancialReportController extends AdminController
             ->display(function ($file) {
                 if ($file) {
                     $url = url("/storage/$file");
+
                     return "<a href='$url' target='_blank'>Download</a>";
                 } else {
                     return '';
@@ -129,6 +74,7 @@ class FinancialReportController extends AdminController
         $grid->column('id', __('Id'))
             ->display(function ($id) {
                 $url = url("/financial-report?id=$id");
+
                 return "<a target='_blank' href='$url'>Generate PDF</a>";
             });
         $grid->column('do_generate', __('Do generate'))
@@ -139,13 +85,14 @@ class FinancialReportController extends AdminController
                     return "<span class='label label-danger'>No</span>";
                 }
             })->sortable();
+
         return $grid;
     }
 
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)

@@ -2,10 +2,10 @@
 
 namespace App\Admin\Widgets;
 
+use Carbon\Carbon;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Widgets\Widget;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class SalesAnalyticsWidget extends Widget
 {
@@ -21,7 +21,7 @@ class SalesAnalyticsWidget extends Widget
     {
         $u = Admin::user();
         $companyId = $u->company_id;
-        
+
         // Get analytics data
         $data = [
             'overview' => $this->getOverviewStats($companyId),
@@ -101,8 +101,8 @@ class SalesAnalyticsWidget extends Widget
         $lastMonthRevenue = $lastMonth[0]->revenue ?? 0;
 
         // Calculate growth percentage
-        $growth = $lastMonthRevenue > 0 
-            ? (($monthData->revenue - $lastMonthRevenue) / $lastMonthRevenue) * 100 
+        $growth = $lastMonthRevenue > 0
+            ? (($monthData->revenue - $lastMonthRevenue) / $lastMonthRevenue) * 100
             : 0;
 
         return [
@@ -111,8 +111,8 @@ class SalesAnalyticsWidget extends Widget
                 'units_sold' => $todayData->units_sold,
                 'revenue' => $todayData->revenue,
                 'profit' => $todayData->profit,
-                'avg_transaction' => $todayData->transactions > 0 
-                    ? $todayData->revenue / $todayData->transactions 
+                'avg_transaction' => $todayData->transactions > 0
+                    ? $todayData->revenue / $todayData->transactions
                     : 0,
             ],
             'week' => [
@@ -156,7 +156,7 @@ class SalesAnalyticsWidget extends Widget
         $transactions = [];
 
         foreach ($trends as $trend) {
-            $labels[] = Carbon::parse($trend->month . '-01')->format('M Y');
+            $labels[] = Carbon::parse($trend->month.'-01')->format('M Y');
             $revenue[] = $trend->revenue;
             $units[] = $trend->units;
             $transactions[] = $trend->transactions;
@@ -223,7 +223,7 @@ class SalesAnalyticsWidget extends Widget
 
         // Calculate percentages
         $totalSales = array_sum(array_column($categories, 'total_sales'));
-        
+
         $result = [];
         foreach ($categories as $cat) {
             $percentage = $totalSales > 0 ? ($cat->total_sales / $totalSales) * 100 : 0;
@@ -276,7 +276,7 @@ class SalesAnalyticsWidget extends Widget
      */
     private function getDailySales($companyId)
     {
-        $daily = DB::select("
+        $daily = DB::select('
             SELECT 
                 DATE(sr.sale_date) as date,
                 COALESCE(SUM(sr.total_amount), 0) as revenue,
@@ -291,7 +291,7 @@ class SalesAnalyticsWidget extends Widget
             AND DATE(sr.sale_date) <= CURDATE()
             GROUP BY DATE(sr.sale_date)
             ORDER BY date ASC
-        ", [$companyId]);
+        ', [$companyId]);
 
         $labels = [];
         $revenue = [];

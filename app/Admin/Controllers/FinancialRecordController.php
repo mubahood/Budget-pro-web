@@ -26,61 +26,62 @@ class FinancialRecordController extends AdminController
     {
         $grid = new Grid(new FinancialRecord());
         $u = \Encore\Admin\Facades\Admin::user();
-        
+
         $grid->model()->where('company_id', $u->company_id)
             ->orderBy('date', 'desc');
-            
+
         $grid->disableBatchActions();
 
         $grid->filter(function ($filter) use ($u) {
             $filter->disableIdFilter();
-            
+
             $filter->equal('financial_category_id', __('Financial Category'))
                 ->select(\App\Models\FinancialCategory::where('company_id', $u->company_id)
                     ->pluck('name', 'id'));
-                    
+
             $filter->equal('type', __('Transaction Type'))
                 ->select(['Income' => 'Income', 'Expense' => 'Expense']);
-                
+
             $filter->like('recipient', __('Recipient/Payer'));
-            
+
             $filter->equal('payment_method', __('Payment Method'))
                 ->select([
                     'Cash' => 'Cash',
                     'Mobile Money' => 'Mobile Money',
                     'Bank Transfer' => 'Bank Transfer',
                     'Check' => 'Check',
-                    'Other' => 'Other'
+                    'Other' => 'Other',
                 ]);
-                
+
             $filter->between('date', __('Date Range'))->date();
             $filter->between('amount', __('Amount Range'))->decimal();
-            
+
             $filter->equal('created_by_id', __('Recorded By'))
                 ->select(\App\Models\User::where('company_id', $u->company_id)
                     ->pluck('name', 'id'));
         });
-        
+
         $grid->quickSearch('recipient', 'description')->placeholder('Search recipient or description');
 
         $grid->column('id', __('ID'))->sortable();
-        
+
         $grid->column('date', __('Date'))
             ->display(function ($date) {
                 return date('d M Y', strtotime($date));
             })->sortable();
-            
+
         $grid->column('type', __('Type'))
             ->using(['Income' => 'Income', 'Expense' => 'Expense'])
             ->label([
                 'Income' => 'success',
-                'Expense' => 'danger'
+                'Expense' => 'danger',
             ])->sortable()
             ->filter(['Income' => 'Income', 'Expense' => 'Expense']);
-        
+
         $grid->column('financial_category_id', __('Category'))
             ->display(function ($financial_category_id) {
                 $cat = \App\Models\FinancialCategory::find($financial_category_id);
+
                 return $cat ? "<strong>{$cat->name}</strong>" : 'N/A';
             })->sortable();
 
@@ -92,12 +93,13 @@ class FinancialRecordController extends AdminController
         $grid->column('amount', __('Amount'))
             ->display(function ($amount) {
                 $color = $this->type == 'Income' ? 'success' : 'danger';
-                return "<span class='badge badge-{$color}'>UGX " . number_format($amount) . "</span>";
+
+                return "<span class='badge badge-{$color}'>UGX ".number_format($amount).'</span>';
             })->sortable()
             ->totalRow(function ($amount) {
-                return "<strong>UGX " . number_format($amount) . "</strong>";
+                return '<strong>UGX '.number_format($amount).'</strong>';
             });
-            
+
         $grid->column('quantity', __('Qty'))
             ->display(function ($quantity) {
                 return $quantity ? number_format($quantity) : '-';
@@ -109,12 +111,12 @@ class FinancialRecordController extends AdminController
                 'Mobile Money' => 'success',
                 'Bank Transfer' => 'info',
                 'Check' => 'warning',
-                'Other' => 'default'
+                'Other' => 'default',
             ])->sortable();
 
         $grid->column('description', __('Description'))
             ->display(function ($description) {
-                return $description ? substr($description, 0, 50) . '...' : 'N/A';
+                return $description ? substr($description, 0, 50).'...' : 'N/A';
             })->hide();
 
         $grid->column('receipt', __('Receipt'))
@@ -124,12 +126,14 @@ class FinancialRecordController extends AdminController
                         <i class='fa fa-file'></i> View
                     </a>";
                 }
+
                 return '-';
             })->hide();
 
         $grid->column('created_by_id', __('Recorded By'))
             ->display(function ($created_by_id) {
                 $user = \App\Models\User::find($created_by_id);
+
                 return $user ? $user->name : 'N/A';
             })->sortable()->hide();
 
@@ -144,7 +148,7 @@ class FinancialRecordController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -179,53 +183,53 @@ class FinancialRecordController extends AdminController
     protected function form()
     {
         $form = new Form(new FinancialRecord());
-        
+
         $u = \Encore\Admin\Facades\Admin::user();
-        
+
         $form->hidden('company_id')->default($u->company_id);
         $form->hidden('created_by_id')->default($u->id);
         $form->hidden('user_id')->default($u->id);
-        
+
         $form->divider('Transaction Information');
-        
+
         $form->select('financial_category_id', __('Financial Category'))
             ->options(\App\Models\FinancialCategory::where('company_id', $u->company_id)
                 ->pluck('name', 'id'))
             ->rules('required')
             ->required()
             ->help('Select the financial category for this transaction');
-        
+
         $form->radio('type', __('Transaction Type'))
             ->options([
                 'Income' => 'Income (Money In)',
-                'Expense' => 'Expense (Money Out)'
+                'Expense' => 'Expense (Money Out)',
             ])
             ->rules('required')
             ->required()
             ->default('Expense')
             ->help('Is this money coming in or going out?');
-        
+
         $form->date('date', __('Transaction Date'))
             ->default(date('Y-m-d'))
             ->rules('required|date')
             ->required()
             ->help('When did this transaction occur?');
-            
+
         $form->divider('Amount & Quantity');
-        
+
         $form->currency('amount', __('Amount (UGX)'))
             ->symbol('UGX')
             ->rules('required|numeric|min:0.01')
             ->required()
             ->help('Enter the transaction amount');
-        
+
         $form->decimal('quantity', __('Quantity (Optional)'))
             ->default(1)
             ->rules('nullable|numeric|min:0')
             ->help('If this is for multiple items, enter quantity');
-            
+
         $form->divider('Payment Details');
-        
+
         $form->select('payment_method', __('Payment Method'))
             ->options([
                 'Cash' => 'Cash',
@@ -234,30 +238,30 @@ class FinancialRecordController extends AdminController
                 'Check' => 'Check',
                 'Credit Card' => 'Credit Card',
                 'Debit Card' => 'Debit Card',
-                'Other' => 'Other'
+                'Other' => 'Other',
             ])
             ->rules('required')
             ->required()
             ->default('Cash')
             ->help('How was this payment made?');
-        
+
         $form->text('recipient', __('Recipient/Payer'))
             ->rules('nullable|max:255')
             ->help('Who received the money (expense) or who paid (income)?')
             ->placeholder('e.g., John Doe, ABC Suppliers Ltd');
-            
+
         $form->divider('Additional Information');
-        
+
         $form->textarea('description', __('Description/Notes'))
             ->rows(3)
             ->rules('nullable')
             ->help('Add any additional details about this transaction')
             ->placeholder('Purpose, invoice number, reference, etc.');
-        
+
         $form->file('receipt', __('Receipt/Invoice'))
             ->rules('nullable|file|max:5120')
             ->help('Upload receipt or invoice (max 5MB, PDF/Image)');
-        
+
         $form->select('financial_period_id', __('Financial Period'))
             ->options(\App\Models\FinancialPeriod::where('company_id', $u->company_id)
                 ->pluck('name', 'id'))

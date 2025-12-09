@@ -2,28 +2,33 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\Company;
-use App\Models\StockItem;
-use App\Models\StockCategory;
-use App\Models\StockSubCategory;
 use App\Models\FinancialPeriod;
 use App\Models\SaleRecord;
 use App\Models\SaleRecordItem;
+use App\Models\StockCategory;
+use App\Models\StockItem;
 use App\Models\StockRecord;
+use App\Models\StockSubCategory;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Tests\TestCase;
 
 class SaleRecordStockDeductionTest extends TestCase
 {
     use RefreshDatabase;
 
     protected $user;
+
     protected $company;
+
     protected $financialPeriod;
+
     protected $stockCategory;
+
     protected $stockSubCategory;
+
     protected $stockItem;
 
     protected function setUp(): void
@@ -126,7 +131,7 @@ class SaleRecordStockDeductionTest extends TestCase
         $this->stockItem->refresh();
 
         // CRITICAL TEST: Stock should be reduced by EXACTLY 6 units, not 12
-        $this->assertEquals(94, $this->stockItem->current_quantity, 
+        $this->assertEquals(94, $this->stockItem->current_quantity,
             "Stock was deducted incorrectly. Expected 94 (100-6), but got {$this->stockItem->current_quantity}");
 
         // Verify stock record was created
@@ -231,7 +236,7 @@ class SaleRecordStockDeductionTest extends TestCase
 
         // Stock should be restored to 100
         $this->assertEquals(100, $this->stockItem->fresh()->current_quantity,
-            "Stock was not properly restored after deletion");
+            'Stock was not properly restored after deletion');
     }
 
     /**

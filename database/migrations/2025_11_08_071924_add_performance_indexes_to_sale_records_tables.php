@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -17,7 +17,7 @@ return new class extends Migration
             // Index for category join and filtering by company and stock availability
             // $table->index(['company_id', 'current_quantity', 'stock_category_id'], 'idx_stock_items_dropdown');
         });
-        
+
         // Add raw index for name field (TEXT column requires length specification)
         // DB::statement('CREATE INDEX idx_stock_items_search ON stock_items (company_id, name(100))');
 
@@ -25,13 +25,13 @@ return new class extends Migration
         Schema::table('sale_records', function (Blueprint $table) {
             // Index for filtering by company and date
             $table->index(['company_id', 'sale_date'], 'idx_sale_records_date');
-            
+
             // Index for filtering by payment status
             $table->index(['company_id', 'payment_status'], 'idx_sale_records_payment');
-            
+
             // Index for filtering by status
             $table->index(['company_id', 'status'], 'idx_sale_records_status');
-            
+
             // Index for created_at ordering (already has DESC in query)
             $table->index(['company_id', 'created_at'], 'idx_sale_records_created');
         });
@@ -55,7 +55,7 @@ return new class extends Migration
         Schema::table('stock_items', function (Blueprint $table) {
             // $table->dropIndex('idx_stock_items_dropdown');
         });
-        
+
         DB::statement('DROP INDEX idx_stock_items_search ON stock_items');
 
         Schema::table('sale_records', function (Blueprint $table) {

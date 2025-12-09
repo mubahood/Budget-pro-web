@@ -14,13 +14,13 @@ class SaleRecordsMenuSeeder extends Seeder
     {
         // Find the highest order number to append new items
         $maxOrder = DB::table('admin_menu')->max('order') ?? 0;
-        
+
         // Check if "Sales" parent menu exists
         $salesParent = DB::table('admin_menu')
             ->where('title', 'Sales')
             ->first();
-        
-        if (!$salesParent) {
+
+        if (! $salesParent) {
             // Create parent menu
             $parentId = DB::table('admin_menu')->insertGetId([
                 'parent_id' => 0,
@@ -31,20 +31,20 @@ class SaleRecordsMenuSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            
+
             $maxOrder++;
             $this->command->info('Sales parent menu created!');
         } else {
             $parentId = $salesParent->id;
             $this->command->info('Sales parent menu already exists.');
         }
-        
+
         // Add Sale Records menu if it doesn't exist
         $saleRecordsExists = DB::table('admin_menu')
             ->where('uri', 'sale-records')
             ->exists();
-            
-        if (!$saleRecordsExists) {
+
+        if (! $saleRecordsExists) {
             DB::table('admin_menu')->insert([
                 'parent_id' => $parentId,
                 'order' => $maxOrder + 1,

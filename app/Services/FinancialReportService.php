@@ -3,15 +3,8 @@
 namespace App\Services;
 
 use App\Models\FinancialRecord;
-use App\Models\FinancialCategory;
-use App\Models\StockItem;
-use App\Models\StockRecord;
-use App\Models\StockCategory;
-use App\Models\SaleRecord;
-use App\Models\SaleRecordItem;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class FinancialReportService
 {
@@ -21,7 +14,7 @@ class FinancialReportService
     public function calculateFinancialData($companyId, $startDate, $endDate)
     {
         $cacheKey = "financial_data_{$companyId}_{$startDate}_{$endDate}";
-        
+
         return Cache::remember($cacheKey, 300, function () use ($companyId, $startDate, $endDate) {
             $data = DB::selectOne("
                 SELECT 
@@ -89,10 +82,10 @@ class FinancialReportService
     public function calculateInventoryData($companyId, $startDate, $endDate)
     {
         $cacheKey = "inventory_data_{$companyId}_{$startDate}_{$endDate}";
-        
+
         return Cache::remember($cacheKey, 300, function () use ($companyId, $startDate, $endDate) {
             // Get sales data from sale_records
-            $salesData = DB::selectOne("
+            $salesData = DB::selectOne('
                 SELECT 
                     COALESCE(SUM(sr.total_amount), 0) as total_sales,
                     COALESCE(SUM(sri.quantity * si.buying_price), 0) as total_cost,
@@ -104,10 +97,10 @@ class FinancialReportService
                 WHERE sr.company_id = ?
                 AND sr.sale_date >= ?
                 AND sr.sale_date <= ?
-            ", [$companyId, $startDate, $endDate]);
+            ', [$companyId, $startDate, $endDate]);
 
             // Get current inventory value
-            $inventoryValue = DB::selectOne("
+            $inventoryValue = DB::selectOne('
                 SELECT 
                     COALESCE(SUM(current_quantity * buying_price), 0) as total_value,
                     COALESCE(SUM(current_quantity * selling_price), 0) as expected_value,
@@ -116,7 +109,7 @@ class FinancialReportService
                 FROM stock_items
                 WHERE company_id = ?
                 AND current_quantity > 0
-            ", [$companyId]);
+            ', [$companyId]);
 
             return [
                 'inventory_total_buying_price' => (float) $inventoryValue->total_value,
@@ -135,7 +128,7 @@ class FinancialReportService
      */
     public function getInventoryCategories($companyId, $startDate, $endDate)
     {
-        return DB::select("
+        return DB::select('
             SELECT 
                 sc.id,
                 sc.name,
@@ -155,7 +148,7 @@ class FinancialReportService
             GROUP BY sc.id, sc.name
             HAVING total_sales > 0
             ORDER BY total_sales DESC
-        ", [$startDate, $endDate, $companyId]);
+        ', [$startDate, $endDate, $companyId]);
     }
 
     /**
@@ -163,7 +156,7 @@ class FinancialReportService
      */
     public function getInventoryProducts($companyId, $startDate, $endDate, $limit = 500)
     {
-        return DB::select("
+        return DB::select('
             SELECT 
                 si.id,
                 si.name,
@@ -188,7 +181,7 @@ class FinancialReportService
                      si.original_quantity, si.current_quantity, sc.name
             ORDER BY revenue DESC
             LIMIT ?
-        ", [$startDate, $endDate, $companyId, $limit]);
+        ', [$startDate, $endDate, $companyId, $limit]);
     }
 
     /**
@@ -196,7 +189,7 @@ class FinancialReportService
      */
     public function getTopProducts($companyId, $startDate, $endDate, $limit = 10)
     {
-        return DB::select("
+        return DB::select('
             SELECT 
                 si.id,
                 si.name,
@@ -216,7 +209,7 @@ class FinancialReportService
             HAVING revenue > 0
             ORDER BY revenue DESC
             LIMIT ?
-        ", [$companyId, $startDate, $endDate, $limit]);
+        ', [$companyId, $startDate, $endDate, $limit]);
     }
 
     /**

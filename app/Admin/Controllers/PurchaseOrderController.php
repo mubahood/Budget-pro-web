@@ -3,14 +3,10 @@
 namespace App\Admin\Controllers;
 
 use App\Models\PurchaseOrder;
-use App\Models\Company;
-use App\Models\User;
-use App\Models\FinancialPeriod;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
-use Encore\Admin\Facades\Admin;
 
 class PurchaseOrderController extends AdminController
 {
@@ -69,7 +65,7 @@ class PurchaseOrderController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)

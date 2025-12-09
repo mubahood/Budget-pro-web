@@ -33,13 +33,13 @@ class StockItemController extends AdminController
         $grid = new Grid(new StockItem());
 
         $u = Admin::user();
-        
+
         $grid->model()->where('company_id', $u->company_id)
             ->orderBy('created_at', 'desc');
 
         $grid->filter(function ($filter) use ($u) {
             $filter->disableIdFilter();
-            
+
             $filter->like('name', __('Product Name'));
             $filter->like('sku', __('SKU/Batch Number'));
             $filter->like('barcode', __('Barcode'));
@@ -62,31 +62,31 @@ class StockItemController extends AdminController
                 ->decimal();
             $filter->between('current_quantity', __('Stock Level Range'))
                 ->decimal();
-                
+
             $filter->equal('created_by_id', __('Created By'))
                 ->select(User::where('company_id', $u->company_id)
                     ->pluck('name', 'id'));
-                    
+
             $filter->between('created_at', __('Date Range'))
                 ->date();
         });
-        
+
         $grid->quickSearch('name', 'sku', 'barcode')->placeholder('Search name, SKU or barcode');
-        
+
         // Enable export with custom filename
         $grid->export(function ($export) {
-            $export->filename('Stock_Items_' . date('Y-m-d_H-i-s'));
+            $export->filename('Stock_Items_'.date('Y-m-d_H-i-s'));
             $export->except(['image', 'description', 'gallery']);
             $export->originalValue(['buying_price', 'selling_price', 'current_quantity', 'original_quantity']);
         });
-        
+
         // Grid columns
         $grid->column('id', __('ID'))->sortable();
 
         $grid->column('image', __('Photo'))
             ->lightbox(['width' => 50, 'height' => 50])
             ->width(60);
-            
+
         // Product name - editable, clean display
         $grid->column('name', __('Product Name'))
             ->editable()
@@ -96,14 +96,15 @@ class StockItemController extends AdminController
         $grid->column('stock_sub_category_id', __('Category'))
             ->display(function ($stock_sub_category_id) {
                 $subcat = StockSubCategory::find($stock_sub_category_id);
+
                 return $subcat ? $subcat->name : 'N/A';
             })
             ->sortable();
-            
+
         // SKU - clean display, sortable
         $grid->column('sku', __('SKU/Batch'))
             ->sortable();
-            
+
         // Barcode - clean display, hidden by default
         $grid->column('barcode', __('Barcode'))
             ->sortable()
@@ -112,35 +113,37 @@ class StockItemController extends AdminController
         // Buying price - with totals (NOT editable - use Edit form)
         $grid->column('buying_price', __('Cost Price'))
             ->display(function ($buying_price) {
-                return number_format((float)$buying_price, 2);
+                return number_format((float) $buying_price, 2);
             })
             ->sortable()
             ->totalRow(function ($amount) {
-                return "<strong>Total: " . number_format((float)$amount, 2) . "</strong>";
+                return '<strong>Total: '.number_format((float) $amount, 2).'</strong>';
             });
 
         // Selling price - with totals (NOT editable - use Edit form)
         $grid->column('selling_price', __('Selling Price'))
             ->display(function ($selling_price) {
-                return number_format((float)$selling_price, 2);
+                return number_format((float) $selling_price, 2);
             })
             ->sortable()
             ->totalRow(function ($amount) {
-                return "<strong>Total: " . number_format((float)$amount, 2) . "</strong>";
+                return '<strong>Total: '.number_format((float) $amount, 2).'</strong>';
             });
-            
+
         // Profit margin - computed field, not sortable
         $grid->column('profit_margin', __('Margin %'))
             ->display(function () {
-                $buying = (float)$this->buying_price;
-                $selling = (float)$this->selling_price;
+                $buying = (float) $this->buying_price;
+                $selling = (float) $this->selling_price;
                 if ($buying > 0) {
                     $margin = (($selling - $buying) / $buying) * 100;
-                    return number_format($margin, 1) . '%';
+
+                    return number_format($margin, 1).'%';
                 }
+
                 return '0%';
             });
-            
+
         // Original quantity - clean display, hidden by default
         $grid->column('original_quantity', __('Initial Stock'))
             ->display(function ($original_quantity) {
@@ -148,30 +151,32 @@ class StockItemController extends AdminController
             })
             ->sortable()
             ->hide();
-            
+
         // Current quantity - NOT editable (only changes via StockRecords)
         $grid->column('current_quantity', __('Quantity'))
             ->display(function ($current_quantity) {
-                $quantity = number_format((float)$current_quantity, 2);
+                $quantity = number_format((float) $current_quantity, 2);
                 // Add visual indicator for low/out of stock
                 if ($current_quantity <= 0) {
                     return "<span class='label label-danger'>{$quantity} (Out of Stock)</span>";
                 } elseif ($current_quantity < 10) {
                     return "<span class='label label-warning'>{$quantity} (Low Stock)</span>";
                 }
+
                 return $quantity;
             })
             ->sortable()
             ->totalRow(function ($amount) {
-                return "<strong>Total: " . number_format((float)$amount, 2) . "</strong>";
+                return '<strong>Total: '.number_format((float) $amount, 2).'</strong>';
             });
-            
+
         // Stock value - computed field (quantity * buying_price), not sortable, no totalRow
         $grid->column('stock_value', __('Stock Value'))
             ->display(function () {
-                $quantity = (float)$this->current_quantity;
-                $price = (float)$this->buying_price;
+                $quantity = (float) $this->current_quantity;
+                $price = (float) $this->buying_price;
                 $value = $quantity * $price;
+
                 return number_format($value, 2);
             });
 
@@ -179,15 +184,17 @@ class StockItemController extends AdminController
         $grid->column('stock_category_id', __('Main Category'))
             ->display(function ($stock_category_id) {
                 $cat = StockCategory::find($stock_category_id);
+
                 return $cat ? $cat->name : 'N/A';
             })
             ->sortable()
             ->hide();
-            
+
         // Financial period - clean display, hidden by default
         $grid->column('financial_period_id', __('Financial Period'))
             ->display(function ($financial_period_id) {
                 $period = FinancialPeriod::find($financial_period_id);
+
                 return $period ? $period->name : 'N/A';
             })
             ->sortable()
@@ -197,6 +204,7 @@ class StockItemController extends AdminController
         $grid->column('created_by_id', __('Created By'))
             ->display(function ($created_by_id) {
                 $user = User::find($created_by_id);
+
                 return $user ? $user->name : 'N/A';
             })
             ->sortable()
@@ -209,7 +217,7 @@ class StockItemController extends AdminController
             })
             ->sortable()
             ->hide();
-            
+
         // Description - hidden by default
         $grid->column('description', __('Description'))
             ->hide();
@@ -220,7 +228,7 @@ class StockItemController extends AdminController
             $actions->disableView();
             $actions->disableEdit();
             $actions->disableDelete();
-            
+
             // Create dropdown menu with all actions
             $html = '
             <div class="btn-group">
@@ -229,29 +237,29 @@ class StockItemController extends AdminController
                 </button>
                 <ul class="dropdown-menu dropdown-menu-right" role="menu">
                     <li>
-                        <a href="' . admin_url('stock-items/' . $actions->row->id) . '">
+                        <a href="'.admin_url('stock-items/'.$actions->row->id).'">
                             <i class="fa fa-eye text-primary"></i> View Details
                         </a>
                     </li>
                     <li>
-                        <a href="' . admin_url('stock-items/' . $actions->row->id . '/edit') . '">
+                        <a href="'.admin_url('stock-items/'.$actions->row->id.'/edit').'">
                             <i class="fa fa-edit text-success"></i> Edit
                         </a>
                     </li>
                     <li>
-                        <a href="' . admin_url('stock-items/create?clone=' . $actions->row->id) . '">
+                        <a href="'.admin_url('stock-items/create?clone='.$actions->row->id).'">
                             <i class="fa fa-copy text-warning"></i> Clone
                         </a>
                     </li>
                     <li class="divider"></li>
                     <li>
-                        <a href="' . admin_url('stock-records?stock_item_id=' . $actions->row->id) . '" target="_blank">
+                        <a href="'.admin_url('stock-records?stock_item_id='.$actions->row->id).'" target="_blank">
                             <i class="fa fa-history text-info"></i> Stock Records
                         </a>
                     </li>
                 </ul>
             </div>';
-            
+
             // Add default delete action back (it has proper AJAX handling)
             $actions->append($html);
         });
@@ -261,11 +269,11 @@ class StockItemController extends AdminController
 
         // Disable batch delete (prevent accidental bulk deletion)
         $grid->disableBatchActions();
-        
+
         // Add helpful tools
         $grid->tools(function ($tools) {
             $tools->append('<div class="btn-group pull-right" style="margin-right: 10px">
-                <a href="' . admin_url('stock-records') . '" class="btn btn-sm btn-info" target="_blank">
+                <a href="'.admin_url('stock-records').'" class="btn btn-sm btn-info" target="_blank">
                     <i class="fa fa-history"></i> View All Stock Records
                 </a>
             </div>');
@@ -277,7 +285,7 @@ class StockItemController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -294,18 +302,20 @@ class StockItemController extends AdminController
         $show->field('description', __('Description'));
         $show->field('image', __('Product Image'))->image();
         $show->field('gallery', __('Product Gallery'))->gallery();
-        
+
         // Category Information
         $show->divider();
         $show->field('stock_sub_category_id', __('Sub Category'))
             ->as(function ($stock_sub_category_id) {
                 $subcat = StockSubCategory::find($stock_sub_category_id);
-                return $subcat ? $subcat->name . ' (' . $subcat->measurement_unit . ')' : 'N/A';
+
+                return $subcat ? $subcat->name.' ('.$subcat->measurement_unit.')' : 'N/A';
             });
-            
+
         $show->field('stock_category_id', __('Main Category'))
             ->as(function ($stock_category_id) {
                 $cat = StockCategory::find($stock_category_id);
+
                 return $cat ? $cat->name : 'N/A';
             });
 
@@ -321,22 +331,24 @@ class StockItemController extends AdminController
 
         $show->field('buying_price', __('Cost Price (UGX)'))
             ->as(function ($buying_price) {
-                return number_format((float)$buying_price, 2);
+                return number_format((float) $buying_price, 2);
             });
-            
+
         $show->field('selling_price', __('Selling Price (UGX)'))
             ->as(function ($selling_price) {
-                return number_format((float)$selling_price, 2);
+                return number_format((float) $selling_price, 2);
             });
-            
+
         $show->field('profit_margin', __('Profit Margin'))
             ->as(function () {
-                $buying = (float)$this->buying_price;
-                $selling = (float)$this->selling_price;
+                $buying = (float) $this->buying_price;
+                $selling = (float) $this->selling_price;
                 if ($buying > 0) {
                     $margin = (($selling - $buying) / $buying) * 100;
-                    return number_format($margin, 2) . '%';
+
+                    return number_format($margin, 2).'%';
                 }
+
                 return '0%';
             });
 
@@ -347,19 +359,20 @@ class StockItemController extends AdminController
 
         $show->field('original_quantity', __('Initial Quantity'))
             ->as(function ($original_quantity) {
-                return number_format((float)$original_quantity, 2);
+                return number_format((float) $original_quantity, 2);
             });
-            
+
         $show->field('current_quantity', __('Current Quantity'))
             ->as(function ($current_quantity) {
-                return number_format((float)$current_quantity, 2);
+                return number_format((float) $current_quantity, 2);
             });
-            
+
         $show->field('stock_value', __('Stock Value (UGX)'))
             ->as(function () {
-                $quantity = (float)$this->current_quantity;
-                $price = (float)$this->buying_price;
+                $quantity = (float) $this->current_quantity;
+                $price = (float) $this->buying_price;
                 $value = $quantity * $price;
+
                 return number_format($value, 2);
             });
 
@@ -371,15 +384,17 @@ class StockItemController extends AdminController
         $show->field('financial_period_id', __('Financial Period'))
             ->as(function ($financial_period_id) {
                 $period = FinancialPeriod::find($financial_period_id);
+
                 return $period ? $period->name : 'N/A';
             });
-            
+
         $show->field('created_by_id', __('Created By'))
             ->as(function ($created_by_id) {
                 $user = User::find($created_by_id);
+
                 return $user ? $user->name : 'N/A';
             });
-            
+
         $show->field('created_at', __('Created At'));
         $show->field('updated_at', __('Updated At'));
 
@@ -395,7 +410,7 @@ class StockItemController extends AdminController
     {
         $u = Admin::user();
         $fiancial_period = Utils::getActiveFinancialPeriod($u->company_id);
-        
+
         if ($fiancial_period == null) {
             return admin_error('Error', 'Please create a financial period first.');
         }
@@ -406,34 +421,35 @@ class StockItemController extends AdminController
         if ($cloneId) {
             $cloneData = StockItem::find($cloneId);
             if ($cloneData) {
-                admin_info('Cloning Product', 'You are creating a copy of "' . $cloneData->name . '". Please review and modify the details as needed.');
+                admin_info('Cloning Product', 'You are creating a copy of "'.$cloneData->name.'". Please review and modify the details as needed.');
             }
         }
 
         $form = new Form(new StockItem());
-        
+
         $form->hidden('company_id')->default($u->company_id);
         $form->hidden('created_by_id')->default($u->id);
-        
+
         $form->divider('Product Category');
-        
+
         // Category selection - immutable after creation
         if ($form->isEditing()) {
             // When editing, show as disabled field
             $form->display('stock_sub_category_id', __('Stock Category (Cannot be changed)'))
                 ->with(function ($value) {
                     $sub_cat = StockSubCategory::find($value);
-                    return $sub_cat ? $sub_cat->name_text . " (" . $sub_cat->measurement_unit . ")" : 'N/A';
+
+                    return $sub_cat ? $sub_cat->name_text.' ('.$sub_cat->measurement_unit.')' : 'N/A';
                 });
             $form->hidden('stock_sub_category_id');
-            
+
             $form->html('<div class="alert alert-info">
                 <i class="fa fa-info-circle"></i>
                 <strong>Note:</strong> Stock category cannot be changed after creation. If you need to change the category, please create a new stock item.
             </div>');
         } else {
             // When creating, allow selection
-            $sub_cat_ajax_url = url('api/stock-sub-categories') . '?company_id=' . $u->company_id;
+            $sub_cat_ajax_url = url('api/stock-sub-categories').'?company_id='.$u->company_id;
             $form->select('stock_sub_category_id', __('Stock Category'))
                 ->ajax($sub_cat_ajax_url)
                 ->options(function ($id) use ($cloneData) {
@@ -441,16 +457,17 @@ class StockItemController extends AdminController
                     if ($cloneData && $cloneData->stock_sub_category_id) {
                         $sub_cat = StockSubCategory::find($cloneData->stock_sub_category_id);
                         if ($sub_cat) {
-                            return [$sub_cat->id => $sub_cat->name_text . " (" . $sub_cat->measurement_unit . ")"];
+                            return [$sub_cat->id => $sub_cat->name_text.' ('.$sub_cat->measurement_unit.')'];
                         }
                     }
                     // Otherwise use the provided ID
                     if ($id) {
                         $sub_cat = StockSubCategory::find($id);
                         if ($sub_cat) {
-                            return [$sub_cat->id => $sub_cat->name_text . " (" . $sub_cat->measurement_unit . ")"];
+                            return [$sub_cat->id => $sub_cat->name_text.' ('.$sub_cat->measurement_unit.')'];
                         }
                     }
+
                     return [];
                 })
                 ->default($cloneData ? $cloneData->stock_sub_category_id : null)
@@ -462,7 +479,7 @@ class StockItemController extends AdminController
         $form->divider('Product Information');
 
         $form->text('name', __('Product Name'))
-            ->default($cloneData ? $cloneData->name . ' (Copy)' : null)
+            ->default($cloneData ? $cloneData->name.' (Copy)' : null)
             ->rules('required|max:255')
             ->required()
             ->help('Enter a clear and descriptive product name')
@@ -491,7 +508,7 @@ class StockItemController extends AdminController
             $form->radio('update_sku', __('Update SKU/Batch Number'))
                 ->options([
                     'Yes' => 'Yes, Update SKU',
-                    'No' => 'No, Keep Existing'
+                    'No' => 'No, Keep Existing',
                 ])
                 ->when('Yes', function (Form $form) {
                     $form->text('sku', __('Enter New SKU/Batch Number'))
@@ -502,16 +519,16 @@ class StockItemController extends AdminController
                 ->default('No');
         } else {
             $form->hidden('update_sku')->default('No');
-            
+
             $form->radio('generate_sku', __('SKU/Batch Number Generation'))
                 ->options([
                     'Auto' => 'Auto-generate SKU',
-                    'Manual' => 'Enter Manually'
+                    'Manual' => 'Enter Manually',
                 ])
                 ->when('Manual', function (Form $form) {
                     $form->text('sku', __('Enter SKU/Batch Number'))
                         ->rules('required|max:255')
-                         ->help('Enter a unique SKU or batch number');
+                        ->help('Enter a unique SKU or batch number');
                 })
                 ->rules('required')
                 ->default('Auto')
@@ -546,29 +563,30 @@ class StockItemController extends AdminController
             // When editing, show original quantity as read-only
             $form->display('original_quantity', __('Initial Stock Quantity (Cannot be changed)'))
                 ->with(function ($value) {
-                    return number_format((float)$value, 2);
+                    return number_format((float) $value, 2);
                 });
             $form->hidden('original_quantity');
-            
+
             // Show current quantity as read-only (managed by StockRecords)
             $form->display('current_quantity', __('Current Stock Quantity'))
                 ->with(function ($value) use ($form) {
                     $model = $form->model();
                     $subcat = StockSubCategory::find($model->stock_sub_category_id);
                     $unit = $subcat ? $subcat->measurement_unit : '';
-                    $formatted = number_format((float)$value, 2);
-                    
+                    $formatted = number_format((float) $value, 2);
+
                     if ($value <= 0) {
                         return "<span class='label label-danger'>{$formatted} {$unit} (Out of Stock)</span>";
                     } elseif ($value < 10) {
                         return "<span class='label label-warning'>{$formatted} {$unit} (Low Stock)</span>";
                     }
+
                     return "<span class='label label-success'>{$formatted} {$unit}</span>";
                 });
-            
+
             $form->html('<div class="alert alert-info">
                 <i class="fa fa-info-circle"></i>
-                <strong>Note:</strong> Stock quantities cannot be changed directly. Please use <a href="' . admin_url('stock-records') . '" target="_blank">Stock Records</a> to manage inventory adjustments (sales, purchases, damages, etc.)
+                <strong>Note:</strong> Stock quantities cannot be changed directly. Please use <a href="'.admin_url('stock-records').'" target="_blank">Stock Records</a> to manage inventory adjustments (sales, purchases, damages, etc.)
             </div>');
         } else {
             // When creating, allow setting initial quantity
@@ -576,52 +594,56 @@ class StockItemController extends AdminController
                 ->default($cloneData ? null : 0.00)
                 ->rules('required|numeric|min:0')
                 ->required()
-                ->help($cloneData 
-                    ? 'Enter the initial quantity for this NEW product (cloned quantities are NOT copied)' 
+                ->help($cloneData
+                    ? 'Enter the initial quantity for this NEW product (cloned quantities are NOT copied)'
                     : 'Enter the initial quantity received (in units from category)')
                 ->placeholder('e.g., 100');
 
-            $form->html('<div class="alert alert-' . ($cloneData ? 'info' : 'warning') . '">
-                <i class="fa fa-' . ($cloneData ? 'info-circle' : 'warning') . '"></i>
-                <strong>Note:</strong> ' . ($cloneData 
-                    ? 'Stock quantities are NOT cloned. This is a new product with its own inventory tracking.' 
+            $form->html('<div class="alert alert-'.($cloneData ? 'info' : 'warning').'">
+                <i class="fa fa-'.($cloneData ? 'info-circle' : 'warning').'"></i>
+                <strong>Note:</strong> '.($cloneData
+                    ? 'Stock quantities are NOT cloned. This is a new product with its own inventory tracking.'
                     : 'Current quantity will be set to the initial quantity. Use Stock Records for future adjustments.'
-                ) . '
+            ).'
             </div>');
         }
 
         // Form saving hooks
         $form->saving(function (Form $form) {
             // Additional validation before saving
-            $buying_price = (float)$form->buying_price;
-            $selling_price = (float)$form->selling_price;
-            
+            $buying_price = (float) $form->buying_price;
+            $selling_price = (float) $form->selling_price;
+
             if ($buying_price < 0) {
                 admin_error('Validation Error', 'Buying price cannot be negative');
+
                 return back()->withInput();
             }
-            
+
             if ($selling_price < 0) {
                 admin_error('Validation Error', 'Selling price cannot be negative');
+
                 return back()->withInput();
             }
-            
+
             // Validate SKU during manual entry
-            if (!$form->isEditing() && $form->generate_sku == 'Manual') {
+            if (! $form->isEditing() && $form->generate_sku == 'Manual') {
                 $sku = $form->sku;
                 if (empty($sku)) {
                     admin_error('Validation Error', 'SKU is required when manual generation is selected');
+
                     return back()->withInput();
                 }
-                
+
                 // Check uniqueness
                 $u = Admin::user();
                 $exists = StockItem::where('sku', $sku)
                     ->where('company_id', $u->company_id)
                     ->exists();
-                    
+
                 if ($exists) {
                     admin_error('Validation Error', "SKU '{$sku}' already exists. Please use a different SKU.");
+
                     return back()->withInput();
                 }
             }
@@ -629,13 +651,13 @@ class StockItemController extends AdminController
 
         $form->saved(function (Form $form) {
             $model = $form->model();
-            
+
             if ($form->isCreating()) {
                 admin_success('Success', "Stock item '{$model->name}' created successfully! SKU: {$model->sku}");
             } else {
                 admin_success('Success', "Stock item '{$model->name}' updated successfully!");
             }
-            
+
             // Redirect to list or detail page
             return redirect(admin_url('stock-items'));
         });

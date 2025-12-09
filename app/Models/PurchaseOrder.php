@@ -2,16 +2,62 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
+/**
+ * Purchase Order Model
+ *
+ * Represents a purchase order for inventory procurement.
+ * Includes approval workflow and delivery tracking.
+ *
+ * @property int $id
+ * @property int $company_id
+ * @property int|null $created_by_id
+ * @property int|null $financial_period_id
+ * @property string $po_number
+ * @property \Illuminate\Support\Carbon $po_date
+ * @property \Illuminate\Support\Carbon|null $expected_delivery_date
+ * @property \Illuminate\Support\Carbon|null $actual_delivery_date
+ * @property string $supplier_name
+ * @property string|null $supplier_email
+ * @property string|null $supplier_phone
+ * @property string|null $supplier_address
+ * @property array $items JSON array of order items
+ * @property float $subtotal
+ * @property float $tax_amount
+ * @property float $shipping_cost
+ * @property float $discount_amount
+ * @property float $total_amount
+ * @property string $status Draft|Pending|Approved|Received|Cancelled
+ * @property int|null $approved_by_id
+ * @property \Illuminate\Support\Carbon|null $approved_at
+ * @property string|null $approval_notes
+ * @property int|null $items_ordered
+ * @property int|null $items_received
+ * @property float|null $received_percentage
+ * @property string|null $notes
+ * @property string|null $terms_and_conditions
+ * @property string|null $reference_number
+ * @property string|null $payment_terms
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ *
+ * @property-read Company $company
+ * @property-read User|null $createdBy
+ * @property-read User|null $approvedBy
+ * @property-read FinancialPeriod|null $financialPeriod
+ *
+ * @package App\Models
+ */
 class PurchaseOrder extends Model
 {
-    use HasFactory, SoftDeletes, AuditLogger;
-    
+    use AuditLogger, HasFactory, SoftDeletes;
+
     /**
      * The "booted" method of the model.
      */
@@ -65,17 +111,31 @@ class PurchaseOrder extends Model
         'received_percentage' => 'decimal:2',
     ];
 
-    // Relationships
+    /**
+     * Get the company this purchase order belongs to.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
     public function company()
     {
         return $this->belongsTo(Company::class);
     }
 
+    /**
+     * Get the user who created this purchase order.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_id');
     }
 
+    /**
+     * Get the user who approved this purchase order.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by_id');
@@ -99,8 +159,8 @@ class PurchaseOrder extends Model
             'fully_received' => '<span class="badge badge-success">Fully Received</span>',
             'cancelled' => '<span class="badge badge-dark">Cancelled</span>',
         ];
-        
-        return $badges[$this->status] ?? '<span class="badge badge-secondary">' . ucfirst($this->status) . '</span>';
+
+        return $badges[$this->status] ?? '<span class="badge badge-secondary">'.ucfirst($this->status).'</span>';
     }
 
     public function getItemsCountAttribute()
@@ -110,7 +170,10 @@ class PurchaseOrder extends Model
 
     public function getTotalQuantityAttribute()
     {
-        if (!is_array($this->items)) return 0;
+        if (! is_array($this->items)) {
+            return 0;
+        }
+
         return array_sum(array_column($this->items, 'quantity'));
     }
 
@@ -120,7 +183,7 @@ class PurchaseOrder extends Model
         $lastPO = self::where('company_id', $companyId)
             ->orderBy('id', 'desc')
             ->first();
-        
+
         if ($lastPO && $lastPO->po_number) {
             // Extract number from PO-YYYY-0001 format
             preg_match('/PO-\d{4}-(\d+)/', $lastPO->po_number, $matches);
@@ -129,8 +192,7 @@ class PurchaseOrder extends Model
         } else {
             $newNumber = 1;
         }
-        
-        return 'PO-' . date('Y') . '-' . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
+
+        return 'PO-'.date('Y').'-'.str_pad($newNumber, 4, '0', STR_PAD_LEFT);
     }
 }
-

@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
 use App\Services\FinancialReportService;
+use App\Traits\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class FinancialReport extends Model
 {
-    use HasFactory, AuditLogger;
-    
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -22,7 +22,7 @@ class FinancialReport extends Model
     {
         static::addGlobalScope(new CompanyScope);
     }
-    
+
     /**
      * The attributes that are mass assignable.
      */
@@ -40,7 +40,7 @@ class FinancialReport extends Model
         'total_expense',
         'profit',
     ];
-    
+
     //boot
     protected static function boot()
     {
@@ -55,22 +55,21 @@ class FinancialReport extends Model
                 $model = self::prepare($model);
                 $model->do_generate = 'No';
             }
+
             return $model;
         });
     }
 
-
-
     //static prepare
-    static public function prepare($model)
+    public static function prepare($model)
     {
         $user = User::find($model->user_id);
         if ($user == null) {
-            throw new \Exception("Invalid User");
+            throw new \Exception('Invalid User');
         }
         $company = Company::find($user->company_id);
         if ($company == null) {
-            throw new \Exception("Invalid Company");
+            throw new \Exception('Invalid Company');
         }
         $start_date = null;
         $end_date = null;
@@ -120,7 +119,7 @@ class FinancialReport extends Model
             case 'Cycle':
                 $financial_period = Utils::getActiveFinancialPeriod($user->company_id);
                 if ($financial_period == null) {
-                    throw new \Exception("Financial Period is not active. Please activate the financial period.");
+                    throw new \Exception('Financial Period is not active. Please activate the financial period.');
                 }
                 $start_date = Carbon::parse($financial_period->start_date);
                 $end_date = Carbon::parse($financial_period->end_date);
@@ -135,9 +134,6 @@ class FinancialReport extends Model
                 break;
         }
 
-
-
-
         $model->start_date = $start_date;
         $model->end_date = $end_date;
         $model->company_id = $user->company_id;
@@ -150,11 +146,11 @@ class FinancialReport extends Model
                 $start_date,
                 $end_date
             );
-            
+
             $model->total_income = $financialData['total_income'];
             $model->total_expense = $financialData['total_expense'];
             $model->profit = $financialData['profit'];
-        } else if ($model->type == 'Inventory') {
+        } elseif ($model->type == 'Inventory') {
             //Use service layer for accurate inventory calculations with proper joins
             $service = new FinancialReportService();
             $inventoryData = $service->calculateInventoryData(
@@ -162,13 +158,13 @@ class FinancialReport extends Model
                 $start_date,
                 $end_date
             );
-            
+
             $model->inventory_total_buying_price = $inventoryData['inventory_total_buying_price'];
             $model->inventory_total_selling_price = $inventoryData['inventory_total_selling_price'];
             $model->inventory_total_expected_profit = $inventoryData['inventory_total_expected_profit'];
             $model->inventory_total_earned_profit = $inventoryData['inventory_total_earned_profit'];
         }
-        
+
         // Only update do_generate if model already exists
         if ($model->exists && $model->id) {
             $table_name = $model->getTable();
@@ -183,15 +179,16 @@ class FinancialReport extends Model
         }
         $pdf->loadHTML(view('reports.financial-report', [
             'data' => $model,
-            'company' => $company
+            'company' => $company,
         ]));
 
         $pdf->render();
         $output = $pdf->output();
-        $store_file_path = public_path('storage/files/report-' . $model->id . '.pdf');
+        $store_file_path = public_path('storage/files/report-'.$model->id.'.pdf');
         file_put_contents($store_file_path, $output);
-        $model->file = 'files/report-' . $model->id . '.pdf';
+        $model->file = 'files/report-'.$model->id.'.pdf';
         $model->file_generated = 'Yes';
+
         return $model;
     }
 
@@ -201,23 +198,25 @@ class FinancialReport extends Model
         return $this->belongsTo(Company::class);
     }
 
-    //appends 
+    //appends
     protected $appends = ['title'];
 
     //getter for title
     public function getTitleAttribute()
     {
-        $t = $this->type . ' Report';
+        $t = $this->type.' Report';
         $start_date = Carbon::parse($this->start_date);
         $end_date = Carbon::parse($this->end_date);
-        $t .= ' for the period ' . $start_date->format('d/m/Y') . ' - ' . $end_date->format('d/m/Y') . '';
-        $t .= ' (' . $this->period_type . ')';
+        $t .= ' for the period '.$start_date->format('d/m/Y').' - '.$end_date->format('d/m/Y').'';
+        $t .= ' ('.$this->period_type.')';
+
         return $t;
     }
 
     public function finance_accounts()
     {
         $service = new FinancialReportService();
+
         return $service->getFinanceAccounts(
             $this->company_id,
             $this->start_date,
@@ -229,6 +228,7 @@ class FinancialReport extends Model
     public function finance_records()
     {
         $service = new FinancialReportService();
+
         return $service->getFinanceRecords(
             $this->company_id,
             $this->start_date,
@@ -240,6 +240,7 @@ class FinancialReport extends Model
     public function get_inventory_categories()
     {
         $service = new FinancialReportService();
+
         return $service->getInventoryCategories(
             $this->company_id,
             $this->start_date,
@@ -251,13 +252,14 @@ class FinancialReport extends Model
     public function get_inventory_items()
     {
         $service = new FinancialReportService();
+
         return $service->getInventoryProducts(
             $this->company_id,
             $this->start_date,
             $this->end_date
         );
     }
-    
+
     /**
      * Relationship to User
      */

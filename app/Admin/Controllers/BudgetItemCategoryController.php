@@ -42,28 +42,28 @@ class BudgetItemCategoryController extends AdminController
                 return number_format($amount);
             })
             ->totalRow(function ($amount) {
-                return "<strong>" . number_format($amount) . "</strong>";
+                return '<strong>'.number_format($amount).'</strong>';
             })->sortable();
         $grid->column('invested_amount', __('Invested Amount (UGX)'))
             ->display(function ($amount) {
                 return number_format($amount);
             })
             ->totalRow(function ($amount) {
-                return "<strong>" . number_format($amount) . "</strong>";
+                return '<strong>'.number_format($amount).'</strong>';
             })->sortable();
         $grid->column('balance', __('Balance'))
             ->display(function ($amount) {
                 return number_format($amount);
             })
             ->totalRow(function ($amount) {
-                return "<strong>" . number_format($amount) . "</strong>";
+                return '<strong>'.number_format($amount).'</strong>';
             })->sortable();
         $grid->column('percentage_done', __('Percentage Done'))
             ->display(function ($amount) {
                 return number_format($amount);
             })
             ->totalRow(function ($amount) {
-                return "<strong>" . number_format($amount) . "</strong>";
+                return '<strong>'.number_format($amount).'</strong>';
             })->sortable();
         $grid->column('is_complete', __('Is complete'));
 
@@ -73,7 +73,7 @@ class BudgetItemCategoryController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)

@@ -17,21 +17,21 @@ class BatchCurrencyUpdate extends BatchAction
         $currency = $request->get('currency');
         $rate = $request->get('exchange_rate');
         $updateType = $request->get('update_type');
-        
-        if (!$currency || !$rate) {
+
+        if (! $currency || ! $rate) {
             return $this->response()->error('Please select currency and enter exchange rate!');
         }
-        
+
         $updated = 0;
         $errors = [];
-        
+
         DB::beginTransaction();
-        
+
         try {
             foreach ($collection as $product) {
                 $oldBuying = $product->buying_price;
                 $oldSelling = $product->selling_price;
-                
+
                 if ($updateType === 'convert_to') {
                     // Convert FROM UGX TO target currency
                     $newBuying = $oldBuying * $rate;
@@ -41,12 +41,12 @@ class BatchCurrencyUpdate extends BatchAction
                     $newBuying = $oldBuying / $rate;
                     $newSelling = $oldSelling / $rate;
                 }
-                
+
                 // Update prices
                 $product->buying_price = $newBuying;
                 $product->selling_price = $newSelling;
                 $product->save();
-                
+
                 // Create audit log
                 \App\Models\StockRecord::create([
                     'company_id' => $product->company_id,
@@ -67,12 +67,12 @@ class BatchCurrencyUpdate extends BatchAction
                     ),
                     'created_at' => now(),
                 ]);
-                
+
                 $updated++;
             }
-            
+
             DB::commit();
-            
+
             return $this->response()->success(
                 sprintf(
                     'Successfully updated %d product(s) from %s to %s using rate %.4f',
@@ -82,10 +82,11 @@ class BatchCurrencyUpdate extends BatchAction
                     $rate
                 )
             )->refresh();
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->response()->error('Failed to update prices: ' . $e->getMessage());
+
+            return $this->response()->error('Failed to update prices: '.$e->getMessage());
         }
     }
 

@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('budget_programs', function (Blueprint $table) {
             $table->text('title')->nullable();
-            $table->text('bottom')->nullable(); 
+            $table->text('bottom')->nullable();
         });
     }
 

@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class StockItem extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * Flag to allow quantity updates from sale processing
@@ -74,6 +74,7 @@ class StockItem extends Model
         'company_id',
         'created_by_id',
     ];
+
     //boot
     protected static function boot()
     {
@@ -82,22 +83,22 @@ class StockItem extends Model
         static::creating(function ($model) {
             // Prepare and validate model
             $model = self::prepare($model);
-            
+
             // Set initial current quantity equal to original quantity
             $model->current_quantity = $model->original_quantity;
-            
+
             // Validate stock quantities
             if ($model->original_quantity < 0) {
-                throw new \Exception("Initial stock quantity cannot be negative");
+                throw new \Exception('Initial stock quantity cannot be negative');
             }
-            
+
             return $model;
         });
 
         static::updating(function ($model) {
             // Get original values before any changes
             $original = $model->getOriginal();
-            
+
             // Protect immutable fields
             $immutableFields = [
                 'stock_category_id' => 'Stock Category',
@@ -107,24 +108,24 @@ class StockItem extends Model
                 'company_id' => 'Company',
                 'created_by_id' => 'Creator',
             ];
-            
+
             foreach ($immutableFields as $field => $label) {
                 if (isset($original[$field]) && $model->{$field} != $original[$field]) {
                     throw new \Exception("{$label} cannot be changed after creation. Please create a new stock item instead.");
                 }
             }
-            
+
             // Prevent manual changes to current_quantity (should only change via StockRecords)
             if (isset($original['current_quantity']) && $model->current_quantity != $original['current_quantity']) {
                 // Check if this is coming from a stock record update (allowed)
-                if (!$model->skipQuantityCheck) {
-                    throw new \Exception("Current quantity cannot be changed manually. Please use Stock Records to adjust inventory.");
+                if (! $model->skipQuantityCheck) {
+                    throw new \Exception('Current quantity cannot be changed manually. Please use Stock Records to adjust inventory.');
                 }
             }
-            
+
             // Prepare other fields
             $model = self::prepare($model, true);
-            
+
             return $model;
         });
 
@@ -147,37 +148,37 @@ class StockItem extends Model
     /**
      * Prepare model data before saving
      */
-    static public function prepare($model, $isUpdating = false)
+    public static function prepare($model, $isUpdating = false)
     {
         // Validate and set stock sub-category
         $sub_category = StockSubCategory::find($model->stock_sub_category_id);
         if ($sub_category == null) {
-            throw new \Exception("Invalid Stock Sub Category. Please select a valid category.");
+            throw new \Exception('Invalid Stock Sub Category. Please select a valid category.');
         }
-        
+
         // Auto-set parent category from sub-category (only on creation)
-        if (!$isUpdating) {
+        if (! $isUpdating) {
             $model->stock_category_id = $sub_category->stock_category_id;
         }
 
         // Validate user
         $user = User::find($model->created_by_id);
         if ($user == null) {
-            throw new \Exception("Invalid User. Authentication error.");
+            throw new \Exception('Invalid User. Authentication error.');
         }
-        
+
         // Get and validate financial period (only on creation)
-        if (!$isUpdating) {
+        if (! $isUpdating) {
             $financial_period = Utils::getActiveFinancialPeriod($user->company_id);
             if ($financial_period == null) {
-                throw new \Exception("No active Financial Period found. Please create or activate a financial period first.");
+                throw new \Exception('No active Financial Period found. Please create or activate a financial period first.');
             }
             $model->financial_period_id = $financial_period->id;
             $model->company_id = $user->company_id;
         }
 
         // Handle SKU generation/update
-        if (!$isUpdating) {
+        if (! $isUpdating) {
             // Creating new item
             if ($model->generate_sku == 'Auto' || empty($model->sku)) {
                 $model->sku = self::generateUniqueSKU($model->stock_sub_category_id);
@@ -187,8 +188,8 @@ class StockItem extends Model
             }
         } else {
             // Updating existing item
-            if ($model->update_sku == "Yes") {
-                if ($model->generate_sku == 'Manual' && !empty($model->sku)) {
+            if ($model->update_sku == 'Yes') {
+                if ($model->generate_sku == 'Manual' && ! empty($model->sku)) {
                     // Validate manual SKU
                     self::validateSKUUniqueness($model->sku, $model->company_id, $model->id);
                 } else {
@@ -200,10 +201,10 @@ class StockItem extends Model
 
         // Validate pricing
         if ($model->buying_price < 0) {
-            throw new \Exception("Buying price cannot be negative");
+            throw new \Exception('Buying price cannot be negative');
         }
         if ($model->selling_price < 0) {
-            throw new \Exception("Selling price cannot be negative");
+            throw new \Exception('Selling price cannot be negative');
         }
 
         return $model;
@@ -212,38 +213,38 @@ class StockItem extends Model
     /**
      * Generate a unique SKU for the stock item
      */
-    static private function generateUniqueSKU($subCategoryId)
+    private static function generateUniqueSKU($subCategoryId)
     {
         $maxAttempts = 10;
         $attempt = 0;
-        
+
         while ($attempt < $maxAttempts) {
             $sku = Utils::generateSKU($subCategoryId);
-            
+
             // Check if SKU already exists
             $exists = self::where('sku', $sku)->exists();
-            if (!$exists) {
+            if (! $exists) {
                 return $sku;
             }
-            
+
             $attempt++;
         }
-        
+
         // Fallback: append timestamp
-        return Utils::generateSKU($subCategoryId) . '-' . time();
+        return Utils::generateSKU($subCategoryId).'-'.time();
     }
 
     /**
      * Validate SKU uniqueness
      */
-    static private function validateSKUUniqueness($sku, $companyId, $excludeId = null)
+    private static function validateSKUUniqueness($sku, $companyId, $excludeId = null)
     {
         $query = self::where('sku', $sku)->where('company_id', $companyId);
-        
+
         if ($excludeId) {
             $query->where('id', '!=', $excludeId);
         }
-        
+
         if ($query->exists()) {
             throw new \Exception("SKU '{$sku}' already exists. Please use a different SKU.");
         }
@@ -252,7 +253,7 @@ class StockItem extends Model
     /**
      * Update parent categories after stock item changes
      */
-    static private function updateParentCategories($model)
+    private static function updateParentCategories($model)
     {
         try {
             $stock_category = StockCategory::find($model->stock_category_id);
@@ -266,20 +267,20 @@ class StockItem extends Model
             }
         } catch (\Exception $e) {
             // Log error but don't fail the operation
-            \Log::error("Failed to update parent categories: " . $e->getMessage());
+            \Log::error('Failed to update parent categories: '.$e->getMessage());
         }
     }
 
-
-    //getter for gallery 
+    //getter for gallery
     public function getGalleryAttribute($value)
     {
         if ($value != null && strlen($value) > 3) {
-            $d = json_decode($value); 
+            $d = json_decode($value);
             if (is_array($d)) {
                 return $d;
             }
         }
+
         return [];
     }
 
@@ -297,10 +298,11 @@ class StockItem extends Model
     {
         $name_text = $this->name;
         if ($this->stockSubCategory != null) {
-            $name_text =  $name_text . " - " . $this->stockSubCategory->name;
+            $name_text = $name_text.' - '.$this->stockSubCategory->name;
         }
         //add current quantity on name
-        $name_text = $name_text . " (" . number_format($this->current_quantity) . " " . $this->stockSubCategory->measurement_unit . ")";
+        $name_text = $name_text.' ('.number_format($this->current_quantity).' '.$this->stockSubCategory->measurement_unit.')';
+
         return $name_text;
     }
 

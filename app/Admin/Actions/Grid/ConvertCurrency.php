@@ -3,7 +3,6 @@
 namespace App\Admin\Actions\Grid;
 
 use Encore\Admin\Actions\RowAction;
-use Encore\Admin\Facades\Admin;
 use Illuminate\Database\Eloquent\Model;
 
 class ConvertCurrency extends RowAction
@@ -14,15 +13,15 @@ class ConvertCurrency extends RowAction
     {
         $currency = request('currency');
         $rate = request('exchange_rate');
-        
-        if (!$currency || !$rate) {
+
+        if (! $currency || ! $rate) {
             return $this->response()->error('Please select currency and enter exchange rate!');
         }
-        
+
         // Calculate converted prices
         $convertedBuyingPrice = $model->buying_price * $rate;
         $convertedSellingPrice = $model->selling_price * $rate;
-        
+
         // Create HTML response with conversion details
         $html = '
         <div style="padding: 20px;">
@@ -31,33 +30,33 @@ class ConvertCurrency extends RowAction
             </h4>
             
             <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                <h5 style="margin-top: 0;">Product: ' . htmlspecialchars($model->name) . '</h5>
+                <h5 style="margin-top: 0;">Product: '.htmlspecialchars($model->name).'</h5>
                 
                 <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                     <tr style="background: #00c0ef; color: white;">
                         <th style="padding: 10px; text-align: left;">Description</th>
                         <th style="padding: 10px; text-align: right;">UGX (Original)</th>
-                        <th style="padding: 10px; text-align: right;">' . strtoupper($currency) . ' (Converted)</th>
+                        <th style="padding: 10px; text-align: right;">'.strtoupper($currency).' (Converted)</th>
                     </tr>
                     <tr style="background: #fff;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Exchange Rate</strong></td>
                         <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">1.00</td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">' . number_format($rate, 4) . '</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.number_format($rate, 4).'</td>
                     </tr>
                     <tr style="background: #f9f9f9;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Cost Price</strong></td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX ' . number_format($model->buying_price, 2) . '</td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">' . strtoupper($currency) . ' ' . number_format($convertedBuyingPrice, 2) . '</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX '.number_format($model->buying_price, 2).'</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.strtoupper($currency).' '.number_format($convertedBuyingPrice, 2).'</td>
                     </tr>
                     <tr style="background: #fff;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Selling Price</strong></td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX ' . number_format($model->selling_price, 2) . '</td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">' . strtoupper($currency) . ' ' . number_format($convertedSellingPrice, 2) . '</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX '.number_format($model->selling_price, 2).'</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.strtoupper($currency).' '.number_format($convertedSellingPrice, 2).'</td>
                     </tr>
                     <tr style="background: #e8f5e9;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Profit Margin</strong></td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX ' . number_format($model->selling_price - $model->buying_price, 2) . '</td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">' . strtoupper($currency) . ' ' . number_format($convertedSellingPrice - $convertedBuyingPrice, 2) . '</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX '.number_format($model->selling_price - $model->buying_price, 2).'</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.strtoupper($currency).' '.number_format($convertedSellingPrice - $convertedBuyingPrice, 2).'</td>
                     </tr>
                 </table>
                 
@@ -76,7 +75,7 @@ class ConvertCurrency extends RowAction
             </div>
         </div>
         ';
-        
+
         return $this->response()->html($html);
     }
 

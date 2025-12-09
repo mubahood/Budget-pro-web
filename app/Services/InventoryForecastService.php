@@ -16,11 +16,11 @@ class InventoryForecastService
     public function generateForecast(StockItem $stockItem, $forecastDays = 30, $algorithm = 'moving_average')
     {
         $historicalData = $this->getHistoricalData($stockItem, 90); // Last 90 days
-        
+
         if (empty($historicalData)) {
             return $this->createDefaultForecast($stockItem);
         }
-        
+
         $forecast = new InventoryForecast();
         $forecast->company_id = $stockItem->company_id;
         $forecast->stock_item_id = $stockItem->id;
@@ -28,14 +28,14 @@ class InventoryForecastService
         $forecast->forecast_date = Carbon::now()->addDays($forecastDays);
         $forecast->forecast_period = 'monthly';
         $forecast->current_stock = $stockItem->current_quantity;
-        
+
         // Calculate historical statistics
         $demands = array_column($historicalData, 'demand');
         $forecast->historical_average = round(array_sum($demands) / count($demands));
         $forecast->historical_min = min($demands);
         $forecast->historical_max = max($demands);
         $forecast->standard_deviation = $this->calculateStandardDeviation($demands);
-        
+
         // Apply forecasting algorithm
         switch ($algorithm) {
             case 'exponential_smoothing':
@@ -49,50 +49,50 @@ class InventoryForecastService
                 $prediction = $this->movingAverage($demands);
                 break;
         }
-        
+
         $forecast->predicted_demand = round($prediction);
         $forecast->predicted_min = round($prediction * 0.8); // 20% lower bound
         $forecast->predicted_max = round($prediction * 1.2); // 20% upper bound
         $forecast->algorithm_used = $algorithm;
-        
+
         // Analyze trend
         $forecast->trend = $this->analyzeTrend($demands);
         $forecast->trend_percentage = $this->calculateTrendPercentage($demands);
-        
+
         // Check for seasonality
         $seasonality = $this->detectSeasonality($historicalData);
         $forecast->is_seasonal = $seasonality['is_seasonal'];
         $forecast->seasonal_factors = $seasonality['factors'];
-        
+
         // Calculate confidence level
         $forecast->confidence_level = $this->calculateConfidence($demands, $prediction);
-        
+
         // Calculate reorder recommendations
         $leadTime = 7; // Default 7 days lead time
         $safetyStock = round($forecast->standard_deviation * 1.65); // 95% service level
         $forecast->safety_stock = $safetyStock;
         $forecast->recommended_reorder_point = round(($forecast->predicted_demand / 30 * $leadTime) + $safetyStock);
         $forecast->recommended_order_quantity = round($forecast->predicted_demand * 1.5); // 1.5 months supply
-        
+
         // Calculate days until stockout
         if ($forecast->predicted_demand > 0) {
             $dailyDemand = $forecast->predicted_demand / 30;
             $forecast->days_until_stockout = $dailyDemand > 0 ? round($stockItem->current_quantity / $dailyDemand) : null;
         }
-        
+
         // Determine stock status
         $forecast->stock_status = $this->determineStockStatus(
             $stockItem->current_quantity,
             $forecast->recommended_reorder_point,
             $forecast->safety_stock
         );
-        
+
         // Generate action recommendations
         $forecast->action_required = in_array($forecast->stock_status, ['low', 'critical', 'stockout']);
         $forecast->recommended_action = $this->generateRecommendation($forecast);
-        
+
         $forecast->save();
-        
+
         return $forecast;
     }
 
@@ -102,7 +102,7 @@ class InventoryForecastService
     protected function getHistoricalData(StockItem $stockItem, $days = 90)
     {
         $startDate = Carbon::now()->subDays($days);
-        
+
         $records = StockRecord::where('stock_item_id', $stockItem->id)
             ->where('created_at', '>=', $startDate)
             ->whereIn('type', ['sale', 'stock_out'])
@@ -114,7 +114,7 @@ class InventoryForecastService
             ->orderBy('date')
             ->get()
             ->toArray();
-        
+
         return $records;
     }
 
@@ -127,8 +127,9 @@ class InventoryForecastService
         if ($count < $period) {
             return array_sum($data) / $count;
         }
-        
+
         $recentData = array_slice($data, -$period);
+
         return array_sum($recentData) / $period;
     }
 
@@ -137,13 +138,15 @@ class InventoryForecastService
      */
     protected function exponentialSmoothing($data, $alpha = 0.3)
     {
-        if (empty($data)) return 0;
-        
+        if (empty($data)) {
+            return 0;
+        }
+
         $forecast = $data[0];
         foreach ($data as $actual) {
             $forecast = $alpha * $actual + (1 - $alpha) * $forecast;
         }
-        
+
         return $forecast;
     }
 
@@ -153,13 +156,15 @@ class InventoryForecastService
     protected function linearRegression($data)
     {
         $n = count($data);
-        if ($n < 2) return end($data) ?: 0;
-        
+        if ($n < 2) {
+            return end($data) ?: 0;
+        }
+
         $sumX = 0;
         $sumY = 0;
         $sumXY = 0;
         $sumX2 = 0;
-        
+
         foreach ($data as $i => $y) {
             $x = $i + 1;
             $sumX += $x;
@@ -167,10 +172,10 @@ class InventoryForecastService
             $sumXY += $x * $y;
             $sumX2 += $x * $x;
         }
-        
+
         $slope = ($n * $sumXY - $sumX * $sumY) / ($n * $sumX2 - $sumX * $sumX);
         $intercept = ($sumY - $slope * $sumX) / $n;
-        
+
         // Predict next value
         return $slope * ($n + 1) + $intercept;
     }
@@ -181,13 +186,15 @@ class InventoryForecastService
     protected function calculateStandardDeviation($data)
     {
         $count = count($data);
-        if ($count < 2) return 0;
-        
+        if ($count < 2) {
+            return 0;
+        }
+
         $mean = array_sum($data) / $count;
-        $variance = array_sum(array_map(function($x) use ($mean) {
+        $variance = array_sum(array_map(function ($x) use ($mean) {
             return pow($x - $mean, 2);
         }, $data)) / $count;
-        
+
         return sqrt($variance);
     }
 
@@ -197,25 +204,33 @@ class InventoryForecastService
     protected function analyzeTrend($data)
     {
         $count = count($data);
-        if ($count < 3) return 'stable';
-        
+        if ($count < 3) {
+            return 'stable';
+        }
+
         $firstHalf = array_slice($data, 0, floor($count / 2));
         $secondHalf = array_slice($data, floor($count / 2));
-        
+
         $firstAvg = array_sum($firstHalf) / count($firstHalf);
         $secondAvg = array_sum($secondHalf) / count($secondHalf);
-        
+
         $change = (($secondAvg - $firstAvg) / $firstAvg) * 100;
-        
+
         // Check volatility
         $stdDev = $this->calculateStandardDeviation($data);
         $mean = array_sum($data) / $count;
         $cv = $mean > 0 ? ($stdDev / $mean) * 100 : 0; // Coefficient of variation
-        
-        if ($cv > 50) return 'volatile';
-        if ($change > 10) return 'increasing';
-        if ($change < -10) return 'decreasing';
-        
+
+        if ($cv > 50) {
+            return 'volatile';
+        }
+        if ($change > 10) {
+            return 'increasing';
+        }
+        if ($change < -10) {
+            return 'decreasing';
+        }
+
         return 'stable';
     }
 
@@ -225,16 +240,20 @@ class InventoryForecastService
     protected function calculateTrendPercentage($data)
     {
         $count = count($data);
-        if ($count < 2) return 0;
-        
+        if ($count < 2) {
+            return 0;
+        }
+
         $firstHalf = array_slice($data, 0, floor($count / 2));
         $secondHalf = array_slice($data, floor($count / 2));
-        
+
         $firstAvg = array_sum($firstHalf) / count($firstHalf);
         $secondAvg = array_sum($secondHalf) / count($secondHalf);
-        
-        if ($firstAvg == 0) return 0;
-        
+
+        if ($firstAvg == 0) {
+            return 0;
+        }
+
         return (($secondAvg - $firstAvg) / $firstAvg) * 100;
     }
 
@@ -247,32 +266,32 @@ class InventoryForecastService
         if (count($historicalData) < 30) {
             return ['is_seasonal' => false, 'factors' => null];
         }
-        
+
         // Group by day of week
         $weekdayPatterns = [];
         foreach ($historicalData as $record) {
             $dayOfWeek = Carbon::parse($record['date'])->dayOfWeek;
             $weekdayPatterns[$dayOfWeek][] = $record['demand'];
         }
-        
+
         $weekdayAvgs = [];
         foreach ($weekdayPatterns as $day => $demands) {
             $weekdayAvgs[$day] = array_sum($demands) / count($demands);
         }
-        
+
         $overallAvg = array_sum($weekdayAvgs) / count($weekdayAvgs);
         $maxDeviation = 0;
-        
+
         foreach ($weekdayAvgs as $avg) {
             $deviation = abs(($avg - $overallAvg) / $overallAvg) * 100;
             $maxDeviation = max($maxDeviation, $deviation);
         }
-        
+
         $isSeasonal = $maxDeviation > 20; // 20% variation indicates seasonality
-        
+
         return [
             'is_seasonal' => $isSeasonal,
-            'factors' => $isSeasonal ? $weekdayAvgs : null
+            'factors' => $isSeasonal ? $weekdayAvgs : null,
         ];
     }
 
@@ -283,17 +302,27 @@ class InventoryForecastService
     {
         $stdDev = $this->calculateStandardDeviation($data);
         $mean = array_sum($data) / count($data);
-        
-        if ($mean == 0) return 50;
-        
+
+        if ($mean == 0) {
+            return 50;
+        }
+
         $cv = ($stdDev / $mean) * 100; // Coefficient of variation
-        
+
         // Lower CV = higher confidence
-        if ($cv < 10) return 95;
-        if ($cv < 20) return 85;
-        if ($cv < 30) return 75;
-        if ($cv < 50) return 60;
-        
+        if ($cv < 10) {
+            return 95;
+        }
+        if ($cv < 20) {
+            return 85;
+        }
+        if ($cv < 30) {
+            return 75;
+        }
+        if ($cv < 50) {
+            return 60;
+        }
+
         return 50;
     }
 
@@ -302,11 +331,19 @@ class InventoryForecastService
      */
     protected function determineStockStatus($currentStock, $reorderPoint, $safetyStock)
     {
-        if ($currentStock <= 0) return 'stockout';
-        if ($currentStock <= $safetyStock) return 'critical';
-        if ($currentStock <= $reorderPoint) return 'low';
-        if ($currentStock > $reorderPoint * 3) return 'overstocked';
-        
+        if ($currentStock <= 0) {
+            return 'stockout';
+        }
+        if ($currentStock <= $safetyStock) {
+            return 'critical';
+        }
+        if ($currentStock <= $reorderPoint) {
+            return 'low';
+        }
+        if ($currentStock > $reorderPoint * 3) {
+            return 'overstocked';
+        }
+
         return 'optimal';
     }
 
@@ -323,9 +360,9 @@ class InventoryForecastService
             case 'low':
                 return "LOW STOCK: Current stock ({$forecast->current_stock}) is below reorder point ({$forecast->recommended_reorder_point}). Order {$forecast->recommended_order_quantity} units.";
             case 'overstocked':
-                return "OVERSTOCKED: Consider reducing orders. Current stock is {$forecast->current_stock} units (optimal range: {$forecast->recommended_reorder_point} - " . ($forecast->recommended_reorder_point * 2) . ").";
+                return "OVERSTOCKED: Consider reducing orders. Current stock is {$forecast->current_stock} units (optimal range: {$forecast->recommended_reorder_point} - ".($forecast->recommended_reorder_point * 2).').';
             default:
-                return "Stock levels are optimal. No action required.";
+                return 'Stock levels are optimal. No action required.';
         }
     }
 
@@ -348,7 +385,7 @@ class InventoryForecastService
         $forecast->algorithm_used = 'default';
         $forecast->notes = 'Insufficient historical data for accurate forecasting';
         $forecast->save();
-        
+
         return $forecast;
     }
 
@@ -359,15 +396,15 @@ class InventoryForecastService
     {
         $stockItems = StockItem::where('company_id', $companyId)->get();
         $results = [];
-        
+
         foreach ($stockItems as $item) {
             try {
                 $results[] = $this->generateForecast($item);
             } catch (\Exception $e) {
-                \Log::error("Forecast generation failed for item {$item->id}: " . $e->getMessage());
+                \Log::error("Forecast generation failed for item {$item->id}: ".$e->getMessage());
             }
         }
-        
+
         return $results;
     }
 }

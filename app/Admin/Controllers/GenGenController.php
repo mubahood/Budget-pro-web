@@ -25,7 +25,7 @@ class GenGenController extends AdminController
      */
     protected function grid()
     {
-        $grid = new Grid(new Gen());        
+        $grid = new Grid(new Gen());
 
         $grid->model()->orderBy('id', 'desc');
         $grid->column('class_name', __('Class name'));
@@ -33,7 +33,8 @@ class GenGenController extends AdminController
         $grid->column('endpoint', __('Endpoint'));
         $grid->column('generate_action', __('Gen model'))
             ->display(function ($gen_model) {
-                $url = url('generate-models?id=' . $this->id);
+                $url = url('generate-models?id='.$this->id);
+
                 return "<a target='_blank' href='$url'>Generate Model</a>";
             });
 
@@ -43,7 +44,7 @@ class GenGenController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)

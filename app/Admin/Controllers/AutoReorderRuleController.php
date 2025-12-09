@@ -10,7 +10,6 @@ use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
-use Encore\Admin\Layout\Content;
 use Illuminate\Http\Request;
 
 class AutoReorderRuleController extends AdminController
@@ -38,8 +37,8 @@ class AutoReorderRuleController extends AdminController
         // Columns
         $grid->column('id', __('ID'))->sortable();
         $grid->column('is_enabled', __('Status'))->display(function ($enabled) {
-            return $enabled 
-                ? '<span class="label label-success">Active</span>' 
+            return $enabled
+                ? '<span class="label label-success">Active</span>'
                 : '<span class="label label-default">Disabled</span>';
         });
         $grid->column('rule_name', __('Rule Name'))->sortable();
@@ -52,6 +51,7 @@ class AutoReorderRuleController extends AdminController
                 'economic_order_quantity' => '<span class="label label-info">EOQ</span>',
                 'forecast_based' => '<span class="label label-warning">Forecast</span>',
             ];
+
             return $labels[$method] ?? $method;
         });
         $grid->column('check_frequency', __('Frequency'));
@@ -95,7 +95,7 @@ class AutoReorderRuleController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -167,7 +167,7 @@ class AutoReorderRuleController extends AdminController
             $form->number('reorder_quantity', __('Reorder Quantity'))->required()->help('Default quantity to order');
             $form->number('min_stock_level', __('Min Stock Level'))->default(0);
             $form->number('max_stock_level', __('Max Stock Level'))->default(0);
-            
+
             $form->select('reorder_method', __('Reorder Method'))->options([
                 'fixed_quantity' => 'Fixed Quantity',
                 'economic_order_quantity' => 'Economic Order Quantity (EOQ)',
@@ -203,7 +203,7 @@ class AutoReorderRuleController extends AdminController
         $form->tab('Approval & Notifications', function ($form) {
             $form->switch('requires_approval', __('Requires Approval'))->default(1);
             $form->decimal('auto_approve_threshold', __('Auto Approve If Below'))->help('Automatically approve orders under this amount');
-            
+
             $form->switch('send_email_notification', __('Send Email Notifications'))->default(1);
             $form->tags('notification_emails', __('Notification Emails'))->help('Enter email addresses');
         });
@@ -242,9 +242,9 @@ class AutoReorderRuleController extends AdminController
     {
         $service = app(AutoReorderService::class);
         $companyId = auth()->user()->company_id;
-        
+
         $results = $service->checkAllRules($companyId);
-        
+
         return back()->with([
             'message' => "Checked {$results['checked']} rules, triggered {$results['triggered']}, created {$results['orders_created']} orders.",
             'status' => count($results['errors']) > 0 ? 'warning' : 'success',

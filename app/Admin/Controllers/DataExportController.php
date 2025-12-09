@@ -39,6 +39,7 @@ class DataExportController extends AdminController
                 if ($u) {
                     return $u->name;
                 }
+
                 return 'N/A';
             })->hide();
         $grid->column('category_id', __('Category'))
@@ -50,7 +51,8 @@ class DataExportController extends AdminController
         //print
         $grid->column('print', __('Print'))
             ->display(function ($print) {
-                $url = url('data-exports-print?id=' . $this->id);
+                $url = url('data-exports-print?id='.$this->id);
+
                 return "<a href='$url' target='_blank'>Print</a>";
             });
 
@@ -60,7 +62,7 @@ class DataExportController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)

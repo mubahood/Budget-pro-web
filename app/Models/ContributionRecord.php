@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class ContributionRecord extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * The "booted" method of the model.
@@ -48,7 +48,7 @@ class ContributionRecord extends Model
         static::creating(function ($model) {
 
             $model->name = trim($model->name);
-            $withSameName  = ContributionRecord::where([
+            $withSameName = ContributionRecord::where([
                 'name' => $model->name,
                 'budget_program_id' => $model->budget_program_id,
             ])->first();
@@ -56,14 +56,14 @@ class ContributionRecord extends Model
                 throw new \Exception('Name already exists');
             }
 
-
             $model = self::prepare($model);
+
             return $model;
         });
 
         static::updating(function ($model) {
             $model->name = trim($model->name);
-            $withSameName  = ContributionRecord::where([
+            $withSameName = ContributionRecord::where([
                 'name' => $model->name,
                 'budget_program_id' => $model->budget_program_id,
             ])->where('id', '!=', $model->id)->first();
@@ -71,8 +71,8 @@ class ContributionRecord extends Model
                 throw new \Exception('Name already exists');
             }
 
-
             $model = self::prepare($model);
+
             return $model;
         });
 
@@ -106,7 +106,7 @@ class ContributionRecord extends Model
             $data->not_paid_amount = 0;
             $data->paid_amount = $data->amount;
         } else {
-            $data->not_paid_amount = ((int)$data->amount) - ((int)$data->paid_amount);
+            $data->not_paid_amount = ((int) $data->amount) - ((int) $data->paid_amount);
         }
 
         if ($data->paid_amount >= $data->amount) {
@@ -118,6 +118,7 @@ class ContributionRecord extends Model
             $data->not_paid_amount = 0;
         }
         $data->treasurer_id = $loggedUser->id;
+
         return $data;
     }
 
@@ -141,6 +142,7 @@ class ContributionRecord extends Model
         }
         //first letter of first name
         $first = substr($treasurer->name, 0, 1);
+
         return strtoupper($first);
     }
 
@@ -154,6 +156,7 @@ class ContributionRecord extends Model
         if ($treasurer == null) {
             return 'N/A';
         }
+
         return $treasurer->name;
     }
 
@@ -164,6 +167,7 @@ class ContributionRecord extends Model
         if ($changed_by == null) {
             return 'N/A';
         }
+
         return $changed_by->name;
     }
 
@@ -226,7 +230,7 @@ class ContributionRecord extends Model
     public function scopeThisMonth($query)
     {
         return $query->whereMonth('date', now()->month)
-                    ->whereYear('date', now()->year);
+            ->whereYear('date', now()->year);
     }
 
     public function scopeThisYear($query)

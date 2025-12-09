@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class AutoReorderRule extends Model
 {
-    use HasFactory, AuditLogger;
-    
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -82,10 +82,10 @@ class AutoReorderRule extends Model
     // Helper methods
     public function shouldTriggerReorder($currentStock)
     {
-        if (!$this->is_enabled) {
+        if (! $this->is_enabled) {
             return false;
         }
-        
+
         return $currentStock <= $this->reorder_point;
     }
 
@@ -95,17 +95,17 @@ class AutoReorderRule extends Model
         // D = Annual demand
         // S = Ordering cost
         // H = Holding cost per unit per year
-        
+
         if ($this->ordering_cost <= 0 || $this->holding_cost_percentage <= 0) {
             return $this->reorder_quantity;
         }
-        
+
         // Estimate annual demand (simplified)
         $annualDemand = $this->reorder_quantity * (365 / 30); // Rough estimate
         $holdingCost = $this->preferred_unit_price * ($this->holding_cost_percentage / 100);
-        
+
         $eoq = sqrt((2 * $annualDemand * $this->ordering_cost) / $holdingCost);
-        
+
         return round($eoq);
     }
 
@@ -114,16 +114,18 @@ class AutoReorderRule extends Model
         switch ($this->reorder_method) {
             case 'economic_order_quantity':
                 return $this->calculateEOQ();
-                
+
             case 'forecast_based':
                 if ($forecast && $this->use_forecasting) {
                     // Order enough to cover forecast period plus safety stock
                     $forecastDemand = $forecast->predicted_demand ?? 0;
                     $safetyStock = $forecast->safety_stock ?? 0;
+
                     return max($forecastDemand + $safetyStock, $this->reorder_quantity);
                 }
+
                 return $this->reorder_quantity;
-                
+
             case 'fixed_quantity':
             default:
                 return $this->reorder_quantity;
@@ -132,14 +134,14 @@ class AutoReorderRule extends Model
 
     public function shouldAutoApprove($totalAmount)
     {
-        if (!$this->requires_approval) {
+        if (! $this->requires_approval) {
             return true;
         }
-        
+
         if ($this->auto_approve_threshold === null) {
             return false;
         }
-        
+
         return $totalAmount <= $this->auto_approve_threshold;
     }
 

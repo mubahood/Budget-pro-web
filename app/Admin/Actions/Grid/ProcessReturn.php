@@ -17,22 +17,22 @@ class ProcessReturn extends RowAction
         $reason = request('return_reason');
         $refundAmount = request('refund_amount');
         $notes = request('notes');
-        
-        if (!$returnQty || $returnQty <= 0) {
+
+        if (! $returnQty || $returnQty <= 0) {
             return $this->response()->error('Please enter a valid return quantity!');
         }
-        
-        if (!$reason) {
+
+        if (! $reason) {
             return $this->response()->error('Please select a return reason!');
         }
-        
+
         DB::beginTransaction();
-        
+
         try {
             // Update stock quantity (return back to inventory)
             $model->current_quantity += $returnQty;
             $model->save();
-            
+
             // Create stock record for the return
             \App\Models\StockRecord::create([
                 'company_id' => $model->company_id,
@@ -51,18 +51,19 @@ class ProcessReturn extends RowAction
                 'total_sales' => -($refundAmount ?? 0), // Negative to track refund
                 'created_at' => now(),
             ]);
-            
+
             DB::commit();
-            
+
             return $this->response()->success(sprintf(
                 'Return processed successfully! %s unit(s) returned to stock. Refund: UGX %s',
                 $returnQty,
                 number_format($refundAmount ?? 0, 2)
             ))->refresh();
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->response()->error('Failed to process return: ' . $e->getMessage());
+
+            return $this->response()->error('Failed to process return: '.$e->getMessage());
         }
     }
 

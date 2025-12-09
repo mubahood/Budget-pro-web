@@ -14,7 +14,7 @@ class BatchPriceUpdate extends BatchAction
     {
         $updateType = $request->get('update_type');
         $value = $request->get('value');
-        
+
         if (empty($value) || $value == 0) {
             return $this->response()->error('Please enter a valid value')->refresh();
         }
@@ -39,7 +39,7 @@ class BatchPriceUpdate extends BatchAction
                 // Set to specific price
                 $model->selling_price = $value;
             }
-            
+
             $model->save();
             $count++;
         }
@@ -68,7 +68,7 @@ class BatchPriceUpdate extends BatchAction
 
     public function html()
     {
-        return <<<HTML
+        return <<<'HTML'
         <a class="btn btn-sm btn-warning"><i class="fa fa-money"></i> Update Prices</a>
 HTML;
     }

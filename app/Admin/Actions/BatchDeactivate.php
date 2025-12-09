@@ -14,18 +14,19 @@ class BatchDeactivate extends BatchAction
     {
         try {
             DB::beginTransaction();
-            
+
             foreach ($collection as $model) {
                 $model->status = 'Inactive';
                 $model->save();
             }
-            
+
             DB::commit();
-            
+
             return $this->response()->success('Selected items have been deactivated successfully.')->refresh();
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->response()->error('Error: ' . $e->getMessage());
+
+            return $this->response()->error('Error: '.$e->getMessage());
         }
     }
 

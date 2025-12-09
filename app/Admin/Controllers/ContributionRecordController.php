@@ -27,16 +27,16 @@ class ContributionRecordController extends AdminController
     {
         $grid = new Grid(new ContributionRecord());
         $grid->disableBatchActions();
-        
+
         $u = Admin::user();
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('created_at', 'desc');
-            
+
         $grid->filter(function ($filter) {
             $u = auth()->user();
             $users = \App\Models\User::where('company_id', $u->company_id)->get();
-            
+
             $filter->equal('treasurer_id', __('Recorded By'))->select($users->pluck('name', 'id'));
             $filter->like('name', __('Contributor Name'));
             $filter->equal('category_id', __('Category'))
@@ -46,18 +46,18 @@ class ContributionRecordController extends AdminController
                     'MTK' => 'MTK',
                     'Member' => 'Member',
                     'Sponsor' => 'Sponsor',
-                    'Other' => 'Other'
+                    'Other' => 'Other',
                 ]);
             $filter->equal('fully_paid', __('Payment Status'))
                 ->select(['Yes' => 'Paid in Full', 'No' => 'Pending/Partial']);
             $filter->between('created_at', __('Date Recorded'))->datetime();
             $filter->disableIdFilter();
         });
-        
+
         $grid->quickSearch('name')->placeholder('Search contributor name');
-        
+
         $grid->column('id', __('ID'))->sortable();
-        
+
         $grid->column('created_at', __('Date'))
             ->display(function ($created_at) {
                 return date('d M Y, h:i A', strtotime($created_at));
@@ -66,6 +66,7 @@ class ContributionRecordController extends AdminController
         $grid->column('budget_program_id', __('Budget Program'))
             ->display(function ($budget_program_id) {
                 $bp = \App\Models\BudgetProgram::find($budget_program_id);
+
                 return $bp ? $bp->name : 'N/A';
             })->sortable()->hide();
 
@@ -73,7 +74,7 @@ class ContributionRecordController extends AdminController
             ->display(function ($name) {
                 return "<strong>{$name}</strong>";
             })->sortable();
-            
+
         $grid->column('category_id', __('Category'))
             ->using([
                 'Family' => 'Family',
@@ -81,7 +82,7 @@ class ContributionRecordController extends AdminController
                 'MTK' => 'MTK',
                 'Member' => 'Member',
                 'Sponsor' => 'Sponsor',
-                'Other' => 'Other'
+                'Other' => 'Other',
             ])
             ->label([
                 'Family' => 'primary',
@@ -89,7 +90,7 @@ class ContributionRecordController extends AdminController
                 'MTK' => 'info',
                 'Member' => 'warning',
                 'Sponsor' => 'danger',
-                'Other' => 'default'
+                'Other' => 'default',
             ])
             ->sortable()
             ->editable('select', [
@@ -98,62 +99,64 @@ class ContributionRecordController extends AdminController
                 'MTK' => 'MTK',
                 'Member' => 'Member',
                 'Sponsor' => 'Sponsor',
-                'Other' => 'Other'
+                'Other' => 'Other',
             ]);
-            
+
         $grid->column('amount', __('Pledged Amount'))
             ->display(function ($amount) {
-                return '<span class="badge badge-primary">UGX ' . number_format($amount) . '</span>';
+                return '<span class="badge badge-primary">UGX '.number_format($amount).'</span>';
             })->sortable()
             ->totalRow(function ($amount) {
-                return "<strong>UGX " . number_format($amount) . "</strong>";
+                return '<strong>UGX '.number_format($amount).'</strong>';
             });
-            
+
         $grid->column('paid_amount', __('Amount Paid'))
             ->display(function ($paid_amount) {
-                return '<span class="badge badge-success">UGX ' . number_format($paid_amount) . '</span>';
+                return '<span class="badge badge-success">UGX '.number_format($paid_amount).'</span>';
             })->sortable()
             ->totalRow(function ($paid_amount) {
-                return "<strong>UGX " . number_format($paid_amount) . "</strong>";
+                return '<strong>UGX '.number_format($paid_amount).'</strong>';
             });
-            
+
         $grid->column('not_paid_amount', __('Balance'))
             ->display(function ($not_paid_amount) {
                 if ($not_paid_amount > 0) {
-                    return '<span class="badge badge-danger">UGX ' . number_format($not_paid_amount) . '</span>';
+                    return '<span class="badge badge-danger">UGX '.number_format($not_paid_amount).'</span>';
                 } else {
                     return '<span class="badge badge-success">UGX 0</span>';
                 }
             })->sortable()
             ->totalRow(function ($not_paid_amount) {
-                return "<strong>UGX " . number_format($not_paid_amount) . "</strong>";
+                return '<strong>UGX '.number_format($not_paid_amount).'</strong>';
             });
-            
+
         $grid->column('fully_paid', __('Status'))
             ->using([
                 'Yes' => 'Paid in Full',
-                'No' => 'Pending'
+                'No' => 'Pending',
             ])
             ->label([
                 'Yes' => 'success',
-                'No' => 'warning'
+                'No' => 'warning',
             ])->filter([
                 'Yes' => 'Paid in Full',
-                'No' => 'Pending'
+                'No' => 'Pending',
             ])->sortable();
 
         $grid->column('treasurer_id', __('Recorded By'))
             ->display(function ($treasurer_id) {
                 $user = \App\Models\User::find($treasurer_id);
+
                 return $user ? $user->name : 'Unknown';
             })->sortable();
-            
+
         $grid->column('chaned_by_id', __('Last Updated By'))
             ->display(function ($chaned_by_id) {
                 $u = \App\Models\User::find($chaned_by_id);
                 if ($u == null) {
                     return 'N/A';
                 }
+
                 return $u->name;
             })->sortable()->hide();
 
@@ -164,7 +167,8 @@ class ContributionRecordController extends AdminController
 
         $grid->column('print', __('Receipt'))
             ->display(function () {
-                $url = url('thanks?id=' . $this->id);
+                $url = url('thanks?id='.$this->id);
+
                 return "<a href='{$url}' target='_blank' class='btn btn-xs btn-success'>
                     <i class='fa fa-print'></i> Print Thanks
                 </a>";
@@ -176,7 +180,7 @@ class ContributionRecordController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -208,15 +212,15 @@ class ContributionRecordController extends AdminController
     {
         $form = new Form(new ContributionRecord());
         $u = auth()->user();
-        
+
         if ($u == null) {
             throw new \Exception('User not found');
         }
-        
+
         $bps = \App\Models\BudgetProgram::where('company_id', $u->company_id)
             ->orderBy('id', 'desc')
             ->get();
-            
+
         $bp = [];
         $first_id = null;
         foreach ($bps as $b) {
@@ -225,15 +229,15 @@ class ContributionRecordController extends AdminController
                 $first_id = $b->id;
             }
         }
-        
+
         $form->select('budget_program_id', __('Budget Program'))
             ->options($bp)
             ->default($first_id)
             ->rules('required')
             ->required()
             ->help('Select the budget program for this contribution');
-            
-        $form->hidden('company_id')->default($u->company_id); 
+
+        $form->hidden('company_id')->default($u->company_id);
 
         $form->divider('Contributor Information');
 
@@ -250,26 +254,26 @@ class ContributionRecordController extends AdminController
                 'MTK' => 'MTK',
                 'Member' => 'Member',
                 'Sponsor' => 'Sponsor',
-                'Other' => 'Other'
+                'Other' => 'Other',
             ])
             ->rules('required')
             ->required()
             ->default('Friend')
             ->help('Select the contributor category');
-            
+
         $form->divider('Contribution Amount (Pledge)');
 
         $form->radio('custom_amount', __('Select or Enter Amount'))
             ->options([
-                '5000' => 'UGX ' . number_format(5000),
-                '10000' => 'UGX ' . number_format(10000),
-                '20000' => 'UGX ' . number_format(20000),
-                '30000' => 'UGX ' . number_format(30000),
-                '50000' => 'UGX ' . number_format(50000),
-                '100000' => 'UGX ' . number_format(100000),
-                '200000' => 'UGX ' . number_format(200000),
-                '500000' => 'UGX ' . number_format(500000),
-                'custom' => 'Custom Amount (Enter below)'
+                '5000' => 'UGX '.number_format(5000),
+                '10000' => 'UGX '.number_format(10000),
+                '20000' => 'UGX '.number_format(20000),
+                '30000' => 'UGX '.number_format(30000),
+                '50000' => 'UGX '.number_format(50000),
+                '100000' => 'UGX '.number_format(100000),
+                '200000' => 'UGX '.number_format(200000),
+                '500000' => 'UGX '.number_format(500000),
+                'custom' => 'Custom Amount (Enter below)',
             ])
             ->rules('required')
             ->required()
@@ -281,13 +285,13 @@ class ContributionRecordController extends AdminController
                     ->required()
                     ->help('Enter the pledged amount');
             });
-            
+
         $form->divider('Payment Status');
 
         $form->radio('fully_paid', __('Payment Status'))
             ->options([
                 'Yes' => 'Paid in Full',
-                'No' => 'Partially Paid / Pending'
+                'No' => 'Partially Paid / Pending',
             ])
             ->rules('required')
             ->required()
@@ -297,15 +301,15 @@ class ContributionRecordController extends AdminController
                 $form->radio('custom_paid_amount', __('Amount Paid So Far'))
                     ->options([
                         '0' => 'UGX 0 (Not Yet Paid)',
-                        '5000' => 'UGX ' . number_format(5000),
-                        '10000' => 'UGX ' . number_format(10000),
-                        '20000' => 'UGX ' . number_format(20000),
-                        '30000' => 'UGX ' . number_format(30000),
-                        '50000' => 'UGX ' . number_format(50000),
-                        '100000' => 'UGX ' . number_format(100000),
-                        '200000' => 'UGX ' . number_format(200000),
-                        '500000' => 'UGX ' . number_format(500000),
-                        'custom' => 'Custom Amount (Enter below)'
+                        '5000' => 'UGX '.number_format(5000),
+                        '10000' => 'UGX '.number_format(10000),
+                        '20000' => 'UGX '.number_format(20000),
+                        '30000' => 'UGX '.number_format(30000),
+                        '50000' => 'UGX '.number_format(50000),
+                        '100000' => 'UGX '.number_format(100000),
+                        '200000' => 'UGX '.number_format(200000),
+                        '500000' => 'UGX '.number_format(500000),
+                        'custom' => 'Custom Amount (Enter below)',
                     ])
                     ->rules('required')
                     ->required()
@@ -329,7 +333,7 @@ class ContributionRecordController extends AdminController
             ->required()
             ->default($u->id)
             ->help('Person recording this contribution');
-            
+
         $form->hidden('chaned_by_id')->default($u->id);
 
         $form->saved(function (Form $form) {

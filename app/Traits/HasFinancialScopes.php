@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Trait HasFinancialScopes
- * 
+ *
  * Provides financial-specific query scopes for models.
  * Models using this trait should have 'type', 'amount' columns.
  */
@@ -15,8 +15,7 @@ trait HasFinancialScopes
     /**
      * Scope a query to only include income records.
      *
-     * @param Builder $query
-     * @param string $column The type column to filter on (default: 'type')
+     * @param  string  $column  The type column to filter on (default: 'type')
      * @return Builder
      */
     public function scopeIncome(Builder $query, $column = 'type')
@@ -27,8 +26,7 @@ trait HasFinancialScopes
     /**
      * Scope a query to only include expense records.
      *
-     * @param Builder $query
-     * @param string $column The type column to filter on (default: 'type')
+     * @param  string  $column  The type column to filter on (default: 'type')
      * @return Builder
      */
     public function scopeExpense(Builder $query, $column = 'type')
@@ -39,9 +37,8 @@ trait HasFinancialScopes
     /**
      * Scope a query to filter by transaction type.
      *
-     * @param Builder $query
-     * @param string $type
-     * @param string $column The type column to filter on (default: 'type')
+     * @param  string  $type
+     * @param  string  $column  The type column to filter on (default: 'type')
      * @return Builder
      */
     public function scopeByType(Builder $query, $type, $column = 'type')
@@ -52,9 +49,8 @@ trait HasFinancialScopes
     /**
      * Scope a query to records with amount greater than a value.
      *
-     * @param Builder $query
-     * @param float $amount
-     * @param string $column The amount column to filter on (default: 'amount')
+     * @param  float  $amount
+     * @param  string  $column  The amount column to filter on (default: 'amount')
      * @return Builder
      */
     public function scopeAmountGreaterThan(Builder $query, $amount, $column = 'amount')
@@ -65,9 +61,8 @@ trait HasFinancialScopes
     /**
      * Scope a query to records with amount less than a value.
      *
-     * @param Builder $query
-     * @param float $amount
-     * @param string $column The amount column to filter on (default: 'amount')
+     * @param  float  $amount
+     * @param  string  $column  The amount column to filter on (default: 'amount')
      * @return Builder
      */
     public function scopeAmountLessThan(Builder $query, $amount, $column = 'amount')
@@ -78,10 +73,9 @@ trait HasFinancialScopes
     /**
      * Scope a query to records with amount between two values.
      *
-     * @param Builder $query
-     * @param float $min
-     * @param float $max
-     * @param string $column The amount column to filter on (default: 'amount')
+     * @param  float  $min
+     * @param  float  $max
+     * @param  string  $column  The amount column to filter on (default: 'amount')
      * @return Builder
      */
     public function scopeAmountBetween(Builder $query, $min, $max, $column = 'amount')
@@ -92,8 +86,7 @@ trait HasFinancialScopes
     /**
      * Scope a query to filter by payment method.
      *
-     * @param Builder $query
-     * @param string $method
+     * @param  string  $method
      * @return Builder
      */
     public function scopeByPaymentMethod(Builder $query, $method)
@@ -104,7 +97,6 @@ trait HasFinancialScopes
     /**
      * Scope a query to cash transactions only.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeCashOnly(Builder $query)
@@ -115,7 +107,6 @@ trait HasFinancialScopes
     /**
      * Scope a query to mobile money transactions only.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeMobileMoneyOnly(Builder $query)
@@ -126,7 +117,6 @@ trait HasFinancialScopes
     /**
      * Scope a query to bank transactions only.
      *
-     * @param Builder $query
      * @return Builder
      */
     public function scopeBankOnly(Builder $query)
@@ -137,8 +127,7 @@ trait HasFinancialScopes
     /**
      * Scope a query to filter by financial category.
      *
-     * @param Builder $query
-     * @param int $categoryId
+     * @param  int  $categoryId
      * @return Builder
      */
     public function scopeByCategory(Builder $query, $categoryId)
@@ -149,8 +138,7 @@ trait HasFinancialScopes
     /**
      * Scope a query to filter by financial period.
      *
-     * @param Builder $query
-     * @param int $periodId
+     * @param  int  $periodId
      * @return Builder
      */
     public function scopeByPeriod(Builder $query, $periodId)
@@ -161,7 +149,6 @@ trait HasFinancialScopes
     /**
      * Scope a query to get total income.
      *
-     * @param Builder $query
      * @return float
      */
     public function scopeTotalIncome(Builder $query)
@@ -172,7 +159,6 @@ trait HasFinancialScopes
     /**
      * Scope a query to get total expenses.
      *
-     * @param Builder $query
      * @return float
      */
     public function scopeTotalExpense(Builder $query)

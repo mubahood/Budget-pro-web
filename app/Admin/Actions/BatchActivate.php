@@ -14,18 +14,19 @@ class BatchActivate extends BatchAction
     {
         try {
             DB::beginTransaction();
-            
+
             foreach ($collection as $model) {
                 $model->status = 'Active';
                 $model->save();
             }
-            
+
             DB::commit();
-            
+
             return $this->response()->success('Selected items have been activated successfully.')->refresh();
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->response()->error('Error: ' . $e->getMessage());
+
+            return $this->response()->error('Error: '.$e->getMessage());
         }
     }
 

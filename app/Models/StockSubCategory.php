@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class StockSubCategory extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * The "booted" method of the model.
@@ -54,9 +54,7 @@ class StockSubCategory extends Model
         'current_quantity',
         'reorder_level',
         'in_stock',
-    ]; 
-    
-
+    ];
 
     //update_self
     public function update_self()
@@ -152,13 +150,13 @@ class StockSubCategory extends Model
     public function scopeInStock($query)
     {
         return $query->where('in_stock', 'Yes')
-                    ->where('current_quantity', '>', 0);
+            ->where('current_quantity', '>', 0);
     }
 
     public function scopeOutOfStock($query)
     {
         return $query->where('current_quantity', '<=', 0)
-                    ->orWhere('in_stock', 'No');
+            ->orWhere('in_stock', 'No');
     }
 
     public function scopeLowStock($query)
@@ -173,8 +171,9 @@ class StockSubCategory extends Model
     {
         $name_text = $this->name;
         if ($this->stockCategory != null) {
-            $name_text =  $name_text . " - " . $this->stockCategory->name;
+            $name_text = $name_text.' - '.$this->stockCategory->name;
         }
+
         return $name_text;
     }
 }

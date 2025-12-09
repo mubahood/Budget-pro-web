@@ -25,23 +25,23 @@ class BatchStockAdjustment extends BatchAction
         foreach ($collection as $model) {
             try {
                 $oldQuantity = $model->current_quantity;
-                
+
                 switch ($adjustmentType) {
                     case 'add':
                         $model->current_quantity += $quantity;
                         $description = "Stock increased by {$quantity} units. {$reason}";
                         break;
-                        
+
                     case 'subtract':
                         $model->current_quantity = max(0, $model->current_quantity - $quantity);
                         $description = "Stock decreased by {$quantity} units. {$reason}";
                         break;
-                        
+
                     case 'set':
                         $model->current_quantity = $quantity;
                         $description = "Stock set to {$quantity} units. {$reason}";
                         break;
-                        
+
                     default:
                         continue 2;
                 }
@@ -74,22 +74,22 @@ class BatchStockAdjustment extends BatchAction
     public function form()
     {
         $this->select('adjustment_type', 'Adjustment Type')
-             ->options([
-                 'add' => '➕ Add to Current Stock',
-                 'subtract' => '➖ Subtract from Current Stock',
-                 'set' => '🎯 Set Exact Stock Level',
-             ])
-             ->default('add')
-             ->required();
+            ->options([
+                'add' => '➕ Add to Current Stock',
+                'subtract' => '➖ Subtract from Current Stock',
+                'set' => '🎯 Set Exact Stock Level',
+            ])
+            ->default('add')
+            ->required();
 
         $this->decimal('quantity', 'Quantity')
-             ->attribute(['min' => 0, 'step' => 1])
-             ->required()
-             ->help('Enter the amount to add, subtract, or set');
+            ->attribute(['min' => 0, 'step' => 1])
+            ->required()
+            ->help('Enter the amount to add, subtract, or set');
 
         $this->textarea('reason', 'Reason (Optional)')
-             ->rows(3)
-             ->placeholder('e.g., Stock take adjustment, Damaged goods, Restock...');
+            ->rows(3)
+            ->placeholder('e.g., Stock take adjustment, Damaged goods, Restock...');
 
         $this->html('<div class="alert alert-info" style="margin-top: 15px;">
             <strong><i class="fa fa-info-circle"></i> How it works:</strong>
@@ -104,7 +104,7 @@ class BatchStockAdjustment extends BatchAction
 
     public function html()
     {
-        return <<<HTML
+        return <<<'HTML'
         <a class="btn btn-sm btn-warning batch-stock-adjustment">
             <i class="fa fa-balance-scale"></i> Adjust Stock
         </a>

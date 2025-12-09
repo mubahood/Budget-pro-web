@@ -13,7 +13,7 @@ return new class extends Migration
     {
         return;
         Schema::table('contribution_records', function (Blueprint $table) {
-            $table->string('category_id')->nullable()->default('Family'); 
+            $table->string('category_id')->nullable()->default('Family');
         });
     }
 

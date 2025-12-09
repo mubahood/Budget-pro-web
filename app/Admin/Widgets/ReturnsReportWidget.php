@@ -2,10 +2,10 @@
 
 namespace App\Admin\Widgets;
 
+use Carbon\Carbon;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Widgets\Widget;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class ReturnsReportWidget extends Widget
 {
@@ -21,7 +21,7 @@ class ReturnsReportWidget extends Widget
     {
         $u = Admin::user();
         $companyId = $u->company_id;
-        
+
         // Get returns data
         $data = [
             'summary' => $this->getReturnsSummary($companyId),
@@ -100,7 +100,7 @@ class ReturnsReportWidget extends Widget
             // Extract reason from description
             preg_match('/Reason: ([^.]+)/', $return->description, $matches);
             $reason = $matches[1] ?? 'Unknown';
-            
+
             $result[] = [
                 'reason' => $reason,
                 'count' => $return->count,
@@ -154,7 +154,7 @@ class ReturnsReportWidget extends Widget
         $refunds = [];
 
         foreach ($trend as $t) {
-            $labels[] = Carbon::parse($t->month . '-01')->format('M Y');
+            $labels[] = Carbon::parse($t->month.'-01')->format('M Y');
             $counts[] = $t->returns_count;
             $units[] = $t->units_returned;
             $refunds[] = $t->refund_amount;

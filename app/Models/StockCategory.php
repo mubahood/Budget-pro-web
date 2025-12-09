@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class StockCategory extends Model
 {
-    use HasFactory, AuditLogger;
-    
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -18,12 +18,12 @@ class StockCategory extends Model
     {
         static::addGlobalScope(new CompanyScope);
     }
-    
+
     /**
      * The relationships that should always be loaded.
      */
     protected $with = ['company'];
-    
+
     /**
      * The attributes that should be cast.
      */
@@ -37,7 +37,7 @@ class StockCategory extends Model
         'current_quantity' => 'decimal:2',
         'reorder_level' => 'decimal:2',
     ];
-    
+
     protected $fillable = [
         'company_id',
         'name',
@@ -51,7 +51,7 @@ class StockCategory extends Model
         'measurement_unit',
         'current_quantity',
         'reorder_level',
-    ]; 
+    ];
 
     use HasFactory;
 
@@ -74,11 +74,9 @@ class StockCategory extends Model
 
         $total_expected_profit = $total_selling_price - $total_buying_price;
 
-
         $this->earned_profit = StockRecord::where('stock_category_id', $this->id)
             ->where('financial_period_id', $active_financial_period->id)
             ->sum('profit');
-
 
         $this->buying_price = $total_buying_price;
         $this->selling_price = $total_selling_price;
@@ -86,13 +84,12 @@ class StockCategory extends Model
         $this->save();
     }
 
-
     protected $appends = ['name_text'];
 
     //name_text
     public function getNameTextAttribute()
     {
-        return $this->name . " (" . $this->code . ")";
+        return $this->name.' ('.$this->code.')';
     }
 
     /**
@@ -156,7 +153,7 @@ class StockCategory extends Model
         return $query->where('current_quantity', '<=', 0);
     }
 
-    /* 
+    /*
         "earned_profit" => 0
 */
 }

@@ -66,73 +66,81 @@ class BudgetItemController extends AdminController
         $grid->column('budget_item_category_id', __('Category'))
             ->display(function ($amount) {
                 if ($this->category == null) {
-                    return "N/A";
+                    return 'N/A';
                 }
+
                 return $this->category->name;
             })->sortable()
             ->filter($cats);
-            
+
         $grid->column('name', __('Item Name'))->sortable()->editable();
-        
+
         $grid->column('quantity', __('Quantity'))
             ->display(function ($quantity) {
                 return number_format($quantity);
             })
             ->sortable()
             ->editable();
-            
+
         $grid->column('unit_price', __('Unit Price'))
             ->display(function ($unit_price) {
-                return 'UGX ' . number_format($unit_price);
+                return 'UGX '.number_format($unit_price);
             })
             ->sortable()
             ->editable();
 
         $grid->column('target_amount', __('Target Amount'))->display(function ($amount) {
-            return 'UGX ' . number_format($amount);
+            return 'UGX '.number_format($amount);
         })
             ->totalRow(function ($amount) {
-                return "<strong>UGX " . number_format($amount) . "</strong>";
+                return '<strong>UGX '.number_format($amount).'</strong>';
             })->sortable();
-            
+
         $grid->column('invested_amount', __('Amount Invested'))
             ->display(function ($amount) {
-                return 'UGX ' . number_format($amount);
+                return 'UGX '.number_format($amount);
             })
             ->totalRow(function ($amount) {
-                return "<strong>UGX " . number_format($amount) . "</strong>";
+                return '<strong>UGX '.number_format($amount).'</strong>';
             })->sortable()->editable();
-            
+
         $grid->column('balance', __('Balance'))->display(function ($amount) {
             $color = $amount > 0 ? 'danger' : 'success';
-            return '<span class="badge badge-' . $color . '">UGX ' . number_format($amount) . '</span>';
+
+            return '<span class="badge badge-'.$color.'">UGX '.number_format($amount).'</span>';
         })
             ->totalRow(function ($amount) {
                 $color = $amount > 0 ? 'danger' : 'success';
-                return "<strong class='text-$color'>UGX " . number_format($amount) . "</strong>";
+
+                return "<strong class='text-$color'>UGX ".number_format($amount).'</strong>';
             })->sortable();
-            
+
         $grid->column('percentage_done', __('Progress'))
             ->display(function ($percentage) {
                 $percentage = round($percentage, 1);
                 $color = 'danger';
-                if ($percentage >= 75) $color = 'success';
-                elseif ($percentage >= 50) $color = 'warning';
-                elseif ($percentage >= 25) $color = 'info';
-                
+                if ($percentage >= 75) {
+                    $color = 'success';
+                } elseif ($percentage >= 50) {
+                    $color = 'warning';
+                } elseif ($percentage >= 25) {
+                    $color = 'info';
+                }
+
                 return '<div class="progress" style="min-width: 100px;">
-                    <div class="progress-bar progress-bar-' . $color . '" role="progressbar" 
-                         style="width: ' . $percentage . '%" 
-                         aria-valuenow="' . $percentage . '" 
+                    <div class="progress-bar progress-bar-'.$color.'" role="progressbar" 
+                         style="width: '.$percentage.'%" 
+                         aria-valuenow="'.$percentage.'" 
                          aria-valuemin="0" 
-                         aria-valuemax="100">' . $percentage . '%</div>
+                         aria-valuemax="100">'.$percentage.'%</div>
                 </div>';
             })
             ->totalRow(function ($amount) {
                 $avg = round($amount / count($this), 1);
-                return "<strong>" . $avg . "%</strong>";
+
+                return '<strong>'.$avg.'%</strong>';
             })->sortable();
-            
+
         $grid->column('is_complete', __('Status'))
             ->label([
                 'Yes' => 'success',
@@ -147,11 +155,10 @@ class BudgetItemController extends AdminController
             ->switch([
                 'On' => 'Yes',
                 'Off' => 'No',
-            ])->hide(); 
+            ])->hide();
         $grid->column('details', __('Remarks'))
             ->sortable()
             ->editable();
-
 
         return $grid;
     }
@@ -159,7 +166,7 @@ class BudgetItemController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -193,7 +200,6 @@ class BudgetItemController extends AdminController
     {
         $form = new Form(new BudgetItem());
 
-
         $u = auth()->user();
         if ($u == null) {
             throw new \Exception('User not found');
@@ -212,17 +218,17 @@ class BudgetItemController extends AdminController
             ->rules('required')
             ->required()
             ->help('Select the budget program this item belongs to');
-            
+
         $form->hidden('company_id', __('Company'))->default($u->company_id);
-        
+
         $form->divider('Item Details');
-        
+
         $form->text('name', __('Item Name'))
             ->rules('required|max:255')
             ->required()
             ->help('Enter a clear and specific item name')
             ->placeholder('e.g., Office Laptops, Monthly Salaries');
-            
+
         $cats = [];
         $u = Admin::user();
         foreach (BudgetItemCategory::where([
@@ -230,37 +236,37 @@ class BudgetItemController extends AdminController
         ])->get() as $key => $cat) {
             $cats[$cat->id] = $cat->name;
         }
-        
+
         $form->radio('budget_item_category_id', __('Item Category'))
             ->options($cats)
             ->rules('required')
             ->required()
             ->help('Select the category this item belongs to');
-            
+
         $form->divider('Pricing Information');
-        
+
         $form->decimal('quantity', __('Quantity'))
             ->default(1)
             ->rules('required|min:0')
             ->required()
             ->help('Enter the quantity needed');
-            
+
         $form->currency('unit_price', __('Unit Price (UGX)'))
             ->symbol('UGX')
             ->rules('required|min:0')
             ->required()
             ->help('Enter the price per unit');
-        
+
         $form->html('<div class="alert alert-info"><strong>Target Amount</strong> will be calculated automatically as: Quantity × Unit Price</div>');
-        
+
         $form->divider('Investment Tracking');
-        
+
         $form->currency('invested_amount', __('Amount Invested (UGX)'))
             ->symbol('UGX')
             ->default(0)
             ->rules('min:0')
             ->help('Enter the amount already invested/spent on this item');
-            
+
         $form->textarea('details', __('Remarks/Notes'))
             ->rows(3)
             ->help('Add any additional notes or remarks about this budget item');

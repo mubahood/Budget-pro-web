@@ -18,7 +18,9 @@ class SendBudgetItemNotification implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $budgetItemId;
+
     protected $companyId;
+
     protected $budgetProgramId;
 
     /**
@@ -38,15 +40,17 @@ class SendBudgetItemNotification implements ShouldQueue
     {
         try {
             $budgetItem = BudgetItem::find($this->budgetItemId);
-            
-            if (!$budgetItem) {
+
+            if (! $budgetItem) {
                 Log::warning("BudgetItem #{$this->budgetItemId} not found for notification");
+
                 return;
             }
 
             $program = BudgetProgram::find($this->budgetProgramId);
-            if (!$program) {
+            if (! $program) {
                 Log::warning("BudgetProgram #{$this->budgetProgramId} not found");
+
                 return;
             }
 
@@ -55,13 +59,13 @@ class SendBudgetItemNotification implements ShouldQueue
             $emails = $this->collectEmails($users);
 
             // Build email content
-            $budgetDownloadLink = url('budget-program-print?id=' . $this->budgetProgramId);
+            $budgetDownloadLink = url('budget-program-print?id='.$this->budgetProgramId);
             $mailBody = $this->buildEmailBody($budgetItem, $budgetDownloadLink);
 
             // Prepare mail data
             $mailData = [
                 'email' => $emails,
-                'subject' => $program->name . " - Budget Updates",
+                'subject' => $program->name.' - Budget Updates',
                 'body' => $mailBody,
                 'data' => $mailBody,
                 'name' => 'Admin',
@@ -69,11 +73,11 @@ class SendBudgetItemNotification implements ShouldQueue
 
             // Send email
             Utils::mail_sender($mailData);
-            
+
             Log::info("Budget item notification sent for item #{$this->budgetItemId}");
-            
+
         } catch (\Throwable $e) {
-            Log::error("Failed to send budget item notification: " . $e->getMessage());
+            Log::error('Failed to send budget item notification: '.$e->getMessage());
             // Don't throw - we don't want to retry email notifications indefinitely
         }
     }
@@ -84,21 +88,21 @@ class SendBudgetItemNotification implements ShouldQueue
     private function collectEmails($users)
     {
         $emails = [];
-        
+
         foreach ($users as $user) {
             if (filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
                 $emails[] = $user->email;
             }
-            
+
             if (filter_var($user->username, FILTER_VALIDATE_EMAIL)) {
-                if (!in_array($user->username, $emails)) {
+                if (! in_array($user->username, $emails)) {
                     $emails[] = $user->username;
                 }
             }
         }
 
         // Add default notification email if not present
-        if (!in_array('mubahood360@gmail.com', $emails)) {
+        if (! in_array('mubahood360@gmail.com', $emails)) {
             $emails[] = 'mubahood360@gmail.com';
         }
 

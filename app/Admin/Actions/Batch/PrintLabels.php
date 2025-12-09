@@ -17,14 +17,14 @@ class PrintLabels extends BatchAction
 
         // Generate print data
         $printData = [];
-        
+
         foreach ($collection as $model) {
             for ($i = 0; $i < $copiesPerItem; $i++) {
                 $printData[] = [
                     'name' => $model->name,
                     'sku' => $model->sku,
                     'barcode' => $model->barcode ?? 'N/A',
-                    'price' => 'UGX ' . number_format($model->selling_price),
+                    'price' => 'UGX '.number_format($model->selling_price),
                     'category' => $model->stock_sub_category->name ?? 'N/A',
                 ];
             }
@@ -41,19 +41,19 @@ class PrintLabels extends BatchAction
     public function form()
     {
         $this->select('label_type', 'Label Type')
-             ->options([
-                 'barcode' => '🏷️ Barcode Only (Small)',
-                 'price_tag' => '💰 Price Tag (Medium)',
-                 'full_label' => '📦 Full Product Label (Large)',
-             ])
-             ->default('barcode')
-             ->required();
+            ->options([
+                'barcode' => '🏷️ Barcode Only (Small)',
+                'price_tag' => '💰 Price Tag (Medium)',
+                'full_label' => '📦 Full Product Label (Large)',
+            ])
+            ->default('barcode')
+            ->required();
 
         $this->number('copies', 'Copies per Product')
-             ->attribute(['min' => 1, 'max' => 100])
-             ->default(1)
-             ->required()
-             ->help('How many labels to print for each product');
+            ->attribute(['min' => 1, 'max' => 100])
+            ->default(1)
+            ->required()
+            ->help('How many labels to print for each product');
 
         $this->html('<div class="alert alert-info" style="margin-top: 15px;">
             <strong><i class="fa fa-info-circle"></i> Label Types:</strong>
@@ -68,7 +68,7 @@ class PrintLabels extends BatchAction
 
     public function html()
     {
-        return <<<HTML
+        return <<<'HTML'
         <a class="btn btn-sm btn-primary print-labels">
             <i class="fa fa-print"></i> Print Labels
         </a>

@@ -43,7 +43,7 @@ class HandoverRecordController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -114,12 +114,10 @@ class HandoverRecordController extends AdminController
         $form->select('to_id', __('To'))->options(\App\Models\User::where('company_id', $u->company_id)->pluck('name', 'id'))
             ->required();
 
-
         $form->text('details', __('Details'));
         $form->datetime('transfer_date', __('Transfer date'))->default(date('Y-m-d H:i:s'));
         $form->decimal('amount', __('Amount Transfered'))
-            ->required(); 
-
+            ->required();
 
         return $form;
     }

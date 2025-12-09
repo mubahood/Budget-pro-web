@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class StockRecord extends Model
 {
-    use HasFactory, AuditLogger;
-    
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -20,12 +20,12 @@ class StockRecord extends Model
     {
         static::addGlobalScope(new CompanyScope);
     }
-    
+
     /**
      * The relationships that should always be loaded.
      */
     protected $with = ['stockItem', 'createdBy'];
-    
+
     /**
      * The attributes that should be cast.
      */
@@ -39,8 +39,8 @@ class StockRecord extends Model
         'total_sales' => 'decimal:2',
         'profit' => 'decimal:2',
     ];
-    
-    /*         
+
+    /*
             $table->foreignIdFor(Company::class);
             $table->foreignIdFor(StockItem::class);
             $table->foreignIdFor(StockCategory::class);
@@ -75,7 +75,6 @@ class StockRecord extends Model
         'date',
     ];
 
-
     protected static function boot()
     {
         parent::boot();
@@ -84,16 +83,15 @@ class StockRecord extends Model
 
             $stock_item = StockItem::find($model->stock_item_id);
             if ($stock_item == null) {
-                throw new \Exception("Invalid Stock Item.");
+                throw new \Exception('Invalid Stock Item.');
             }
 
             $financial_period = Utils::getActiveFinancialPeriod($stock_item->company_id);
 
             if ($financial_period == null) {
-                throw new \Exception("Invalid Financial Period");
+                throw new \Exception('Invalid Financial Period');
             }
             $model->financial_period_id = $financial_period->id;
-
 
             $model->company_id = $stock_item->company_id;
             $model->stock_category_id = $stock_item->stock_category_id;
@@ -106,7 +104,7 @@ class StockRecord extends Model
             }
             $quantity = abs($model->quantity);
             if ($quantity < 1) {
-                throw new \Exception("Invalid Quantity.");
+                throw new \Exception('Invalid Quantity.');
             }
             $model->selling_price = $stock_item->selling_price;
             $model->total_sales = $model->selling_price * $quantity;
@@ -134,17 +132,17 @@ class StockRecord extends Model
             return $model;
         });
 
-        //created 
+        //created
         static::created(function ($model) {
             return DB::transaction(function () use ($model) {
                 $stock_item = StockItem::find($model->stock_item_id);
                 if ($stock_item == null) {
-                    throw new \Exception("Invalid Stock Item.");
+                    throw new \Exception('Invalid Stock Item.');
                 }
 
                 // UPDATE STOCK QUANTITIES - This runs AFTER the record is successfully saved
                 $quantity = abs($model->quantity);
-                
+
                 if ($model->type == 'Sale') {
                     // Stock Out (removing inventory)
                     $new_quantity = $stock_item->current_quantity - $quantity;
@@ -152,7 +150,7 @@ class StockRecord extends Model
                     // Allow StockRecord to update quantity (bypass manual change check)
                     $stock_item->skipQuantityCheck = true;
                     $stock_item->save();
-                    
+
                     Log::info("Stock Out (Sale): Removed {$quantity} units from item #{$stock_item->id}. New quantity: {$new_quantity}");
                 } else {
                     // For other types, log but don't modify quantity (can be extended later)
@@ -166,22 +164,22 @@ class StockRecord extends Model
                 // Create financial record for sales
                 $company = Company::find($model->company_id);
                 if ($company == null) {
-                    throw new \Exception("Invalid Company.");
+                    throw new \Exception('Invalid Company.');
                 }
 
                 if ($model->type == 'Sale') {
                     $financial_category = FinancialCategory::where([
                         ['company_id', '=', $company->id],
-                        ['name', '=', 'Sales']
+                        ['name', '=', 'Sales'],
                     ])->first();
                     if ($financial_category == null) {
                         Company::prepare_account_categories($company->id);
                         $financial_category = FinancialCategory::where([
                             ['company_id', '=', $company->id],
-                            ['name', '=', 'Sales']
+                            ['name', '=', 'Sales'],
                         ])->first();
                         if ($financial_category == null) {
-                            throw new \Exception("Sales Account Category not found.");
+                            throw new \Exception('Sales Account Category not found.');
                         }
                     }
                     $fin_rec = new FinancialRecord();
@@ -196,7 +194,7 @@ class StockRecord extends Model
                     $fin_rec->recipient = '';
                     $fin_rec->receipt = '';
                     $fin_rec->date = $model->date;
-                    $fin_rec->description = 'Sales of #' . $model->id;
+                    $fin_rec->description = 'Sales of #'.$model->id;
                     $fin_rec->financial_period_id = $model->financial_period_id;
                     $fin_rec->save();
                 }
@@ -209,12 +207,13 @@ class StockRecord extends Model
                 $stock_item = StockItem::find($model->stock_item_id);
                 if ($stock_item == null) {
                     Log::warning("StockRecord #{$model->id} deletion: Stock item not found.");
+
                     return true;
                 }
 
                 // Restore stock quantities
                 $quantity = abs($model->quantity);
-                
+
                 if ($model->type == 'Sale') {
                     // Restore stock that was removed
                     $new_quantity = $stock_item->current_quantity + $quantity;
@@ -222,7 +221,7 @@ class StockRecord extends Model
                     // Allow StockRecord to update quantity (bypass manual change check)
                     $stock_item->skipQuantityCheck = true;
                     $stock_item->save();
-                    
+
                     Log::info("Stock Record Deleted: Restored {$quantity} units to item #{$stock_item->id}. New quantity: {$new_quantity}");
                 }
 
@@ -324,7 +323,7 @@ class StockRecord extends Model
     public function scopeThisMonth($query)
     {
         return $query->whereMonth('date', now()->month)
-                    ->whereYear('date', now()->year);
+            ->whereYear('date', now()->year);
     }
 
     public function scopeThisYear($query)
@@ -332,8 +331,8 @@ class StockRecord extends Model
         return $query->whereYear('date', now()->year);
     }
 
-    /* 
-    									
+    /*
+
 
 
     */

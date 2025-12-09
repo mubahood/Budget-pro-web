@@ -1,8 +1,22 @@
 {
-    "name": "laravel/laravel",
+    "name": "budgetpro/budget-pro",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "Budget Pro - Complete Inventory, Sales & Financial Management System with Multi-Tenant SaaS Architecture",
+    "keywords": [
+        "inventory management",
+        "financial management",
+        "sales management",
+        "stock management",
+        "pos system",
+        "accounting software",
+        "business management",
+        "multi-tenant",
+        "saas",
+        "laravel",
+        "purchase orders",
+        "reports",
+        "analytics"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.1",

@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
+use App\Jobs\SendBudgetItemNotification;
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
-use App\Jobs\SendBudgetItemNotification;
 
 class BudgetItem extends Model
 {
-    use HasFactory, AuditLogger;
+    use AuditLogger, HasFactory;
 
     /**
      * The "booted" method of the model.
@@ -52,7 +52,7 @@ class BudgetItem extends Model
         static::creating(function ($model) {
 
             $model->name = trim($model->name);
-            $withSameName  = BudgetItem::where([
+            $withSameName = BudgetItem::where([
                 'name' => $model->name,
                 'budget_item_category_id' => $model->budget_item_category_id,
             ])->first();
@@ -61,14 +61,14 @@ class BudgetItem extends Model
                 throw new \Exception('Name already exists');
             }
 
-
             $model = self::prepare($model);
+
             return $model;
         });
 
         static::updating(function ($model) {
             $model->name = trim($model->name);
-            $withSameName  = BudgetItem::where([
+            $withSameName = BudgetItem::where([
                 'name' => $model->name,
                 'budget_item_category_id' => $model->budget_item_category_id,
             ])->where('id', '!=', $model->id)->first();
@@ -77,6 +77,7 @@ class BudgetItem extends Model
             }
 
             $model = self::prepare($model);
+
             return $model;
         });
 
@@ -105,6 +106,7 @@ class BudgetItem extends Model
         if ($cat == null) {
             throw new \Exception('Category not found');
         }
+
         return $data;
     }
 
@@ -133,7 +135,7 @@ class BudgetItem extends Model
         is_complete = '$is_complete' WHERE id = $data->id";
         DB::update($sql);
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
-        
+
         try {
             $cat->updateSelf();
         } catch (\Throwable $th) {
@@ -148,7 +150,7 @@ class BudgetItem extends Model
                 $data->budget_program_id
             );
         } catch (\Throwable $th) {
-            Log::error("Failed to dispatch budget item notification: " . $th->getMessage());
+            Log::error('Failed to dispatch budget item notification: '.$th->getMessage());
         }
     }
 
@@ -236,6 +238,7 @@ class BudgetItem extends Model
         if ($this->category == null) {
             return 'N/A';
         }
+
         return $this->category->name;
     }
 

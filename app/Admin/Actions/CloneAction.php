@@ -14,19 +14,19 @@ class CloneAction extends RowAction
     {
         try {
             DB::beginTransaction();
-            
+
             // Create a replica of the model
             $newModel = $model->replicate();
-            
+
             // Update the name to indicate it's a copy
             if (isset($newModel->name)) {
-                $newModel->name = $model->name . ' (Copy)';
+                $newModel->name = $model->name.' (Copy)';
             }
-            
+
             // Reset timestamps
             $newModel->created_at = now();
             $newModel->updated_at = now();
-            
+
             // Reset calculated fields
             if (method_exists($model, 'getFillable')) {
                 $fillable = $model->getFillable();
@@ -46,18 +46,19 @@ class CloneAction extends RowAction
                     $newModel->earned_profit = 0;
                 }
             }
-            
+
             $newModel->save();
-            
+
             DB::commit();
-            
+
             return $this->response()
                 ->success('Item cloned successfully.')
                 ->refresh();
-                
+
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->response()->error('Error cloning item: ' . $e->getMessage());
+
+            return $this->response()->error('Error cloning item: '.$e->getMessage());
         }
     }
 

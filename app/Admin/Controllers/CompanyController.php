@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\Company;
 use App\Models\User;
-use Encore\Admin\Auth\Database\Administrator;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -28,7 +27,7 @@ class CompanyController extends AdminController
     protected function grid()
     {
         $grid = new Grid(new Company());
-        
+
         // SAAS: Filter to show only user's own company unless super admin
         $user = auth()->user();
         if ($user->user_type !== 'admin') {
@@ -50,6 +49,7 @@ class CompanyController extends AdminController
             if ($user == null) {
                 return 'Not found';
             }
+
             return $user->name;
         })->sortable();
 
@@ -80,7 +80,7 @@ class CompanyController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -118,15 +118,16 @@ class CompanyController extends AdminController
     protected function form()
     {
         $form = new Form(new Company());
-        
+
         $user = auth()->user();
-        
+
         // SAAS: Ensure users can only edit their own company
         $form->saving(function (Form $form) use ($user) {
             // Prevent changing company_id or owner for non-admins
             if ($user->user_type !== 'admin') {
                 if ($form->model()->id && $form->model()->id != $user->company_id) {
                     admin_error('Access Denied', 'You cannot edit other companies.');
+
                     return back();
                 }
             }
@@ -137,16 +138,16 @@ class CompanyController extends AdminController
             $admin_role_users = DB::table('admin_role_users')->where([
                 'role_id' => 2,
             ])->get();
-            
+
             $company_admins = [];
             foreach ($admin_role_users as $key => $value) {
                 $u = User::find($value->user_id);
                 if ($u == null) {
                     continue;
                 }
-                $company_admins[$u->id] = $u->name . ' - ' . $u->id;
+                $company_admins[$u->id] = $u->name.' - '.$u->id;
             }
-            
+
             $form->select('owner_id', __('Company owner'))
                 ->options($company_admins)
                 ->rules('required');
@@ -154,6 +155,7 @@ class CompanyController extends AdminController
             // Regular users cannot change owner
             $form->display('owner_id', __('Company Owner'))->with(function ($value) {
                 $owner = User::find($value);
+
                 return $owner ? $owner->name : 'N/A';
             });
         }
@@ -162,7 +164,7 @@ class CompanyController extends AdminController
         $form->image('logo', __('Logo'));
         $form->url('website', __('Website'));
         $form->textarea('about', __('About Company'));
-        
+
         // Only super admins can change status and license
         if ($user->user_type === 'admin') {
             $form->select('status', __('Status'))

@@ -12,7 +12,7 @@ class BatchDelete extends BatchAction
     public function handle(Collection $collection)
     {
         $count = $collection->count();
-        
+
         foreach ($collection as $model) {
             $model->delete();
         }
@@ -27,7 +27,7 @@ class BatchDelete extends BatchAction
 
     public function html()
     {
-        return <<<HTML
+        return <<<'HTML'
         <a class="btn btn-sm btn-danger"><i class="fa fa-trash"></i> Delete Selected</a>
 HTML;
     }

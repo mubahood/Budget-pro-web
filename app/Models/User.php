@@ -4,38 +4,70 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
+use App\Traits\AuditLogger;
 use Encore\Admin\Auth\Database\Administrator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use App\Traits\AuditLogger;
 
+/**
+ * User Model
+ *
+ * Represents a system user with admin capabilities.
+ * Extends Encore Admin's Administrator model.
+ *
+ * @property int $id
+ * @property string $username
+ * @property string $password
+ * @property string $name
+ * @property string $first_name
+ * @property string $last_name
+ * @property string $email
+ * @property string|null $avatar
+ * @property int|null $company_id
+ * @property string|null $phone_number
+ * @property string|null $address
+ * @property string|null $remember_token
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ *
+ * @property-read Company|null $company
+ *
+ * @package App\Models
+ */
 class User extends Administrator
 {
-    use HasApiTokens, HasFactory, Notifiable, AuditLogger;
-
+    use AuditLogger, HasApiTokens, HasFactory, Notifiable;
 
     protected $table = 'admin_users';
 
-    //company
+    /**
+     * Get the company this user belongs to.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
     public function company()
     {
         return $this->belongsTo(Company::class, 'company_id');
     }
 
-    //boot
+    /**
+     * Boot method for model events.
+     * Handles automatic name generation and role assignment.
+     *
+     * @return void
+     */
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($model) {
-            $name = "";
+            $name = '';
             if ($model->first_name != null && strlen($model->first_name) > 0) {
                 $name = $model->first_name;
             }
             if ($model->last_name != null && strlen($model->last_name) > 0) {
-                $name .= " " . $model->last_name;
+                $name .= ' '.$model->last_name;
             }
             $name = trim($name);
 
@@ -47,17 +79,17 @@ class User extends Administrator
             if ($model->password == null || strlen($model->password) < 3) {
                 $model->password = bcrypt('admin');
             }
+
             return $model;
         });
 
-
         static::updating(function ($model) {
-            $name = "";
+            $name = '';
             if ($model->first_name != null && strlen($model->first_name) > 0) {
                 $name = $model->first_name;
             }
             if ($model->last_name != null && strlen($model->last_name) > 0) {
-                $name .= " " . $model->last_name;
+                $name .= ' '.$model->last_name;
             }
             $name = trim($name);
 
@@ -65,6 +97,7 @@ class User extends Administrator
                 $model->name = $name;
             }
             $model->username = $model->email;
+
             return $model;
         });
 
@@ -97,14 +130,14 @@ class User extends Administrator
         if ($company) {
             // This user IS a company owner - ensure they have role ID 2
             $companyOwnerRoleId = 2;
-            
+
             // Check if role assignment already exists
             $existingRole = \DB::table('admin_role_users')
                 ->where('user_id', $user->id)
                 ->where('role_id', $companyOwnerRoleId)
                 ->first();
 
-            if (!$existingRole) {
+            if (! $existingRole) {
                 // Role not assigned yet - assign it now
                 \DB::table('admin_role_users')->insert([
                     'role_id' => $companyOwnerRoleId,
@@ -119,7 +152,6 @@ class User extends Administrator
             }
         }
     }
-
 
     /**
      * The attributes that are mass assignable.

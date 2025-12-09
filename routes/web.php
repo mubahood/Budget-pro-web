@@ -27,6 +27,7 @@ Route::post('api/sales/quick-record', [ApiController::class, 'quick_sale_record'
 Route::get('api/global-search', [ApiController::class, 'global_search']);
 Route::get('migrate', function () {
     Artisan::call('migrate', ['--force' => true]);
+
     return Artisan::output();
 });
 Route::get('thanks', function () {
@@ -46,9 +47,9 @@ Route::get('thanks', function () {
     if ($record->not_paid_amount > 0) {
         $paid = '🅿️';
     }
-    $msg = str_replace('[AMOUNT]', Utils::money_short($record->amount) . $paid, $msg);
+    $msg = str_replace('[AMOUNT]', Utils::money_short($record->amount).$paid, $msg);
     echo $msg;
-    die();
+    exit();
 });
 Route::get('data-exports-print', function () {
     $id = $_GET['id'];
@@ -64,7 +65,7 @@ Route::get('data-exports-print', function () {
     }
     $recs
         = ContributionRecord::where($conds)
-        ->orderBy('not_paid_amount', 'desc')->get();
+            ->orderBy('not_paid_amount', 'desc')->get();
     $patially_paid = [];
     $not_paid = [];
     $fully_paid = [];
@@ -77,7 +78,7 @@ Route::get('data-exports-print', function () {
         $not_paid_amount += $rec->not_paid_amount;
         if ($rec->fully_paid == 'Yes') {
             $fully_paid[] = $rec;
-        } else if ($rec->paid_amount > 0) {
+        } elseif ($rec->paid_amount > 0) {
             $patially_paid[] = $rec;
         } else {
             $not_paid[] = $rec;
@@ -98,49 +99,49 @@ Route::get('data-exports-print', function () {
     }
 
     echo '📌 *MUBARAKA\'s WEDDING CONTRIBUTIONS*';
-    echo '<br><br> 🗓️ : ' . $days_left . " $days_word left";
-    echo '<br><br>_*-----SUMMARY-------*_<br>' . "";
+    echo '<br><br> 🗓️ : '.$days_left." $days_word left";
+    echo '<br><br>_*-----SUMMARY-------*_<br>'.'';
 
     /*     echo '<br>*TOAL PLEDGED:* ' . number_format($pledged) . "<br>"; */
-    echo '*Cash Paid:✅* ' . number_format($paid) . "<br>";
-    echo '*PLEDGED:🅿️* ' . number_format($not_paid_amount) . "<br>";
-    echo '<br>*Fully Paid:* ' . count($fully_paid) . "<br>";
+    echo '*Cash Paid:✅* '.number_format($paid).'<br>';
+    echo '*PLEDGED:🅿️* '.number_format($not_paid_amount).'<br>';
+    echo '<br>*Fully Paid:* '.count($fully_paid).'<br>';
     /* echo '*Partially Paid:* ' . count($patially_paid) . "<br>"; */
-    echo '*Not Paid:* ' . (count($not_paid) + count($patially_paid)) . "<br>";
-    echo '<br> *_PLEDGED MEMBERS_*' . "";
+    echo '*Not Paid:* '.(count($not_paid) + count($patially_paid)).'<br>';
+    echo '<br> *_PLEDGED MEMBERS_*'.'';
     $i = 1;
     foreach ($not_paid as $rec) {
-        echo "<br>$i. " . $rec->name . " - " . Utils::money_short($rec->not_paid_amount) . '🅿️';
+        echo "<br>$i. ".$rec->name.' - '.Utils::money_short($rec->not_paid_amount).'🅿️';
         $i++;
     }
 
     /*  echo '<br><br> *_PARTIALLY PAID MEMBERS_*' . "";
     $i = 1; */
     foreach ($patially_paid as $rec) {
-        echo "<br>$i. " . $rec->name . " - " . Utils::money_short($rec->paid_amount) . '✅' . $rec->tr() . ', ' . Utils::money_short($rec->not_paid_amount) . '🅿️';
+        echo "<br>$i. ".$rec->name.' - '.Utils::money_short($rec->paid_amount).'✅'.$rec->tr().', '.Utils::money_short($rec->not_paid_amount).'🅿️';
         $i++;
     }
 
-    echo '<br><br> *_FULLY PAID MEMBERS_*' . "";
+    echo '<br><br> *_FULLY PAID MEMBERS_*'.'';
     $i = 1;
     foreach ($fully_paid as $rec) {
-        echo "<br>$i. " . $rec->name . " - " . Utils::money_short($rec->amount) . '✅' . $rec->tr();
+        echo "<br>$i. ".$rec->name.' - '.Utils::money_short($rec->amount).'✅'.$rec->tr();
         $i++;
     }
 
-    echo "<br><br>----------R.S.V.P:🙏-----------<br>";
+    echo '<br><br>----------R.S.V.P:🙏-----------<br>';
     echo '1. *Siama Saleh* - 0782349228 0706906707<br>';
     echo '2. *Bwambale Muhidin* - 0762556385 0703903402 <br>';
     echo '3. *Muhindo Mubaraka* - 0783204665 0706638494<br>';
     echo '<br>*Jazakumullah Khairan* 🧎';
-    die();
+    exit();
 });
 
 Route::get('financial-report', function () {
     $id = request('id');
     $rep = FinancialReport::find($id);
     if ($rep == null) {
-        return die('Gen not found');
+        return exit('Gen not found');
     }
 
     $pdf = App::make('dompdf.wrapper');
@@ -155,17 +156,16 @@ Route::get('financial-report', function () {
 
     $pdf->loadHTML(view('reports.financial-report', [
         'data' => $rep,
-        'company' => $company
+        'company' => $company,
     ]));
 
     $model = $rep;
     $pdf->render();
     $output = $pdf->output();
-    $store_file_path = public_path('storage/files/report-' . $model->id . '.pdf');
+    $store_file_path = public_path('storage/files/report-'.$model->id.'.pdf');
     file_put_contents($store_file_path, $output);
-    $model->file = 'files/report-' . $model->id . '.pdf';
+    $model->file = 'files/report-'.$model->id.'.pdf';
     $model->file_generated = 'Yes';
-
 
     return $pdf->stream();
 
@@ -177,7 +177,7 @@ Route::get('budget-program-print', function () {
     $id = request('id');
     $rep = BudgetProgram::find($id);
     if ($rep == null) {
-        return die('Gen not found');
+        return exit('Gen not found');
     }
 
     $pdf = App::make('dompdf.wrapper');
@@ -195,16 +195,15 @@ Route::get('budget-program-print', function () {
     $rep->get_categories();
     $pdf->loadHTML(view('reports.budget-report', [
         'data' => $rep,
-        'company' => $company
+        'company' => $company,
     ]));
 
     $model = $rep;
     $pdf->render();
     $output = $pdf->output();
-    $store_file_path = public_path('storage/files/budget-' . $model->id . '.pdf');
+    $store_file_path = public_path('storage/files/budget-'.$model->id.'.pdf');
     file_put_contents($store_file_path, $output);
-    $model->file = 'files/budget-' . $model->id . '.pdf';
-
+    $model->file = 'files/budget-'.$model->id.'.pdf';
 
     return $pdf->stream();
 
@@ -225,18 +224,18 @@ Route::get('sale-receipt-pdf', function () {
 
     $pdf->loadHTML(view('reports.sale-receipt', [
         'sale' => $sale,
-        'company' => $company
+        'company' => $company,
     ]));
 
     $pdf->render();
     $output = $pdf->output();
-    $store_file_path = public_path('storage/files/receipt-' . $sale->id . '.pdf');
+    $store_file_path = public_path('storage/files/receipt-'.$sale->id.'.pdf');
     file_put_contents($store_file_path, $output);
-    $sale->receipt_pdf_url = 'files/receipt-' . $sale->id . '.pdf';
+    $sale->receipt_pdf_url = 'files/receipt-'.$sale->id.'.pdf';
     $sale->receipt_pdf_is_generated = 'Yes';
     $sale->saveQuietly();
 
-    return $pdf->stream('receipt-' . $sale->receipt_number . '.pdf');
+    return $pdf->stream('receipt-'.$sale->receipt_number.'.pdf');
 });
 
 Route::get('sale-invoice-pdf', function () {
@@ -252,18 +251,18 @@ Route::get('sale-invoice-pdf', function () {
 
     $pdf->loadHTML(view('reports.sale-invoice', [
         'sale' => $sale,
-        'company' => $company
+        'company' => $company,
     ]));
 
     $pdf->render();
     $output = $pdf->output();
-    $store_file_path = public_path('storage/files/invoice-' . $sale->id . '.pdf');
+    $store_file_path = public_path('storage/files/invoice-'.$sale->id.'.pdf');
     file_put_contents($store_file_path, $output);
-    $sale->invoice_pdf_url = 'files/invoice-' . $sale->id . '.pdf';
+    $sale->invoice_pdf_url = 'files/invoice-'.$sale->id.'.pdf';
     $sale->invoice_pdf_is_generated = 'Yes';
     $sale->saveQuietly();
 
-    return $pdf->stream('invoice-' . $sale->invoice_number . '.pdf');
+    return $pdf->stream('invoice-'.$sale->invoice_number.'.pdf');
 });
 
 // Route get generate-models
@@ -272,12 +271,12 @@ Route::get('generate-models', function () {
     $id = request('id');
     $gen = Gen::find($id);
     if ($gen == null) {
-        return die('Gen not found');
+        return exit('Gen not found');
     }
     $gen->gen_model();
-    return die('generate-models');
-});
 
+    return exit('generate-models');
+});
 
 /* Route::get('/', function () {
     return die('welcome');

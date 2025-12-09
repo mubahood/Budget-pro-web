@@ -32,7 +32,6 @@ class StockCategoryController extends AdminController
         $grid->disableBatchActions();
         $grid->quickSearch('name', 'description', 'status');
 
-
         $grid->column('id', __('Id'))->sortable();
         $grid->column('created_at', __('Created'))
             ->display(function ($created_at) {
@@ -69,7 +68,7 @@ class StockCategoryController extends AdminController
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -110,7 +109,7 @@ class StockCategoryController extends AdminController
         $form->radio('status', __('Status'))
             ->options([
                 'Active' => 'Active',
-                'Inactive' => 'Inactive'
+                'Inactive' => 'Inactive',
             ])->default('Active')
             ->rules('required');
 

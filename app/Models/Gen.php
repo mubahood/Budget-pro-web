@@ -19,7 +19,6 @@ class Gen extends Model
         $toJson = Gen::to_json($table_cols);
         $sqlTableVars = Gen::sqlTableVars($table_cols);
 
-
         $this->end_point = $this->endpoint;
         $x = <<<EOT
         <pre>import 'package:flutter/material.dart';
@@ -249,15 +248,13 @@ class Gen extends Model
         EOT;
 
         echo $x;
-        die();
+        exit();
     }
 
-
-    public  function sqlTableVars($tables)
+    public function sqlTableVars($tables)
     {
 
-
-        $_data = "";
+        $_data = '';
         $done = [];
         foreach ($tables as $v) {
             $key = trim($v);
@@ -282,12 +279,9 @@ class Gen extends Model
         return $_data;
     }
 
-
-
-
     public static function to_json($recs)
     {
-        $_data = "";
+        $_data = '';
         foreach ($recs as $v) {
             $key = trim($v);
             if (strlen($key) < 2) {
@@ -299,12 +293,13 @@ class Gen extends Model
                 $_data .= "'$_key' : $_key,<br>";
             }
         }
+
         return $_data;
     }
 
     public static function fromJsons($recs = [])
     {
-        $_data = "";
+        $_data = '';
         foreach ($recs as $v) {
             $key = trim($v);
             if (strlen($key) < 1) {
@@ -320,13 +315,13 @@ class Gen extends Model
                 }
             }
         }
+
         return $_data;
     }
 
-
-    public  function makeVars($table_cols)
+    public function makeVars($table_cols)
     {
-        $_data = "";
+        $_data = '';
         $i = 0;
         $done = [];
 
@@ -348,6 +343,7 @@ class Gen extends Model
                 }
             }
         }
+
         return $_data;
     }
 }

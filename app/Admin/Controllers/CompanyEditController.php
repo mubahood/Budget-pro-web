@@ -46,13 +46,14 @@ class CompanyEditController extends AdminController
             $actions->disableDelete();
             $actions->disableView();
         });
+
         return $grid;
     }
 
     /**
      * Make a show builder.
      *
-     * @param mixed $id
+     * @param  mixed  $id
      * @return Show
      */
     protected function detail($id)
@@ -148,7 +149,6 @@ class CompanyEditController extends AdminController
             ])
             ->default('Yes');
 
-
         $form->tools(function (Form\Tools $tools) {
             $tools->disableDelete();
             $tools->disableView();
@@ -157,6 +157,7 @@ class CompanyEditController extends AdminController
         $form->disableEditingCheck();
         $form->disableReset();
         $form->disableViewCheck();
+
         return $form;
     }
 }

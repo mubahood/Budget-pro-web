@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
+use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\AuditLogger;
-use App\Scopes\CompanyScope;
 
 class InventoryForecast extends Model
 {
-    use HasFactory, AuditLogger;
-    
+    use AuditLogger, HasFactory;
+
     /**
      * The "booted" method of the model.
      */
@@ -89,8 +89,8 @@ class InventoryForecast extends Model
             'critical' => '<span class="badge badge-danger">Critical</span>',
             'stockout' => '<span class="badge badge-dark">Stock Out</span>',
         ];
-        
-        return $badges[$this->stock_status] ?? '<span class="badge badge-secondary">' . ucfirst($this->stock_status) . '</span>';
+
+        return $badges[$this->stock_status] ?? '<span class="badge badge-secondary">'.ucfirst($this->stock_status).'</span>';
     }
 
     public function getTrendBadgeAttribute()
@@ -102,8 +102,8 @@ class InventoryForecast extends Model
             'seasonal' => '<span class="badge badge-primary"><i class="fa fa-calendar"></i> Seasonal</span>',
             'volatile' => '<span class="badge badge-warning"><i class="fa fa-exclamation"></i> Volatile</span>',
         ];
-        
-        return $badges[$this->trend] ?? '<span class="badge badge-secondary">' . ucfirst($this->trend) . '</span>';
+
+        return $badges[$this->trend] ?? '<span class="badge badge-secondary">'.ucfirst($this->trend).'</span>';
     }
 
     // Helper methods
@@ -119,9 +119,16 @@ class InventoryForecast extends Model
 
     public function getConfidenceLevelColor()
     {
-        if ($this->confidence_level >= 80) return 'success';
-        if ($this->confidence_level >= 60) return 'info';
-        if ($this->confidence_level >= 40) return 'warning';
+        if ($this->confidence_level >= 80) {
+            return 'success';
+        }
+        if ($this->confidence_level >= 60) {
+            return 'info';
+        }
+        if ($this->confidence_level >= 40) {
+            return 'warning';
+        }
+
         return 'danger';
     }
 }
