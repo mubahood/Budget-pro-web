@@ -138,7 +138,8 @@ class BudgetItemController extends AdminController
                 </div>';
             })
             ->totalRow(function ($amount) {
-                $avg = round($amount / count($this), 1);
+                $rowCount = BudgetItem::where('company_id', Admin::user()->company_id)->count();
+                $avg = $rowCount > 0 ? round($amount / $rowCount, 1) : 0;
 
                 return '<strong>'.$avg.'%</strong>';
             })->sortable();
