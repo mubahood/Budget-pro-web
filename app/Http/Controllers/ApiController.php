@@ -94,7 +94,7 @@ class ApiController extends BaseController
         $object->company_id = $u->company_id;
 
         try {
-            $object->save();
+            $object->saveQuietly();
         } catch (\Exception $e) {
             Utils::error($e->getMessage());
         }
@@ -382,7 +382,7 @@ class ApiController extends BaseController
         $object->treasurer_id = $treasurer->id; //set treasurer_id
 
         try {
-            $object->save();
+            $object->saveQuietly();
         } catch (\Exception $e) {
             Utils::error($e->getMessage());
         }
@@ -460,7 +460,7 @@ class ApiController extends BaseController
         }
 
         try {
-            $object->save();
+            $object->saveQuietly();
         } catch (\Exception $e) {
             Utils::error($e->getMessage());
         }

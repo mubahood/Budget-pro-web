@@ -51,11 +51,15 @@ class BudgetItemCategory extends Model
                 throw new \Exception('Category name already exists in this program');
             }
 
-            $loggedUser = auth()->user();
-            if ($loggedUser == null) {
-                throw new \Exception('User not found');
+            // Try Laravel session auth (web portal), then admin guard
+            $loggedUser = auth()->user() ?? auth('admin')->user();
+            if ($loggedUser !== null) {
+                $model->company_id = $loggedUser->company_id;
             }
-            $model->company_id = $loggedUser->company_id;
+            // If no auth user (mobile API), company_id must already be set on the model
+            if (empty($model->company_id)) {
+                throw new \Exception('User not found — unable to determine company.');
+            }
 
             // Default calculated fields for new categories (no children yet)
             $model->target_amount = $model->target_amount ?? 0;

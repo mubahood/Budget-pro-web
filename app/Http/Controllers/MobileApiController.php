@@ -856,7 +856,7 @@ class MobileApiController extends BaseController
         $object->company_id = $u->company_id;
 
         try {
-            $object->save();
+            $object->saveQuietly();
         } catch (\Exception $e) {
             Utils::error('Failed to save: ' . $e->getMessage());
         }

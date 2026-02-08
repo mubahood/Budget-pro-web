@@ -68,11 +68,17 @@ class BudgetProgram extends Model
     //public static function prepare
     public static function prepare($data)
     {
-        $loggedUser = auth()->user();
-        if ($loggedUser == null) {
-            throw new \Exception('User not found');
+        // Try Laravel session auth first (web portal), then admin guard
+        $loggedUser = auth()->user() ?? auth('admin')->user();
+
+        if ($loggedUser !== null) {
+            $data->company_id = $loggedUser->company_id;
         }
-        $data->company_id = $loggedUser->company_id;
+        // If no auth user (mobile API), company_id must already be set on the model
+        // by the controller (MobileApiController / ApiController both set it before save)
+        if (empty($data->company_id)) {
+            throw new \Exception('User not found — unable to determine company.');
+        }
 
         return $data;
     }
