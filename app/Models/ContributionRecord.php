@@ -7,6 +7,7 @@ use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ContributionRecord extends Model
 {
@@ -91,6 +92,9 @@ class ContributionRecord extends Model
     public static function prepare($data)
     {
         $loggedUser = User::find($data->treasurer_id);
+        if ($loggedUser == null) {
+            throw new \Exception('Treasurer/User not found for ID: ' . $data->treasurer_id);
+        }
         $data->company_id = $loggedUser->company_id;
 
         $custom_amount = (int) $data->custom_amount;
@@ -102,14 +106,23 @@ class ContributionRecord extends Model
             $data->paid_amount = $custom_paid_amount;
         }
 
+        // Ensure amount is non-negative
+        $data->amount = max(0, (int) $data->amount);
+
+        // Ensure paid_amount is non-negative and cannot exceed pledged amount
+        $data->paid_amount = max(0, (int) $data->paid_amount);
+        if ($data->paid_amount > $data->amount && $data->amount > 0) {
+            $data->paid_amount = $data->amount;
+        }
+
         if ($data->fully_paid == 'Yes') {
             $data->not_paid_amount = 0;
             $data->paid_amount = $data->amount;
         } else {
-            $data->not_paid_amount = ((int) $data->amount) - ((int) $data->paid_amount);
+            $data->not_paid_amount = $data->amount - $data->paid_amount;
         }
 
-        if ($data->paid_amount >= $data->amount) {
+        if ($data->paid_amount >= $data->amount && $data->amount > 0) {
             $data->fully_paid = 'Yes';
         } else {
             $data->fully_paid = 'No';
@@ -129,6 +142,15 @@ class ContributionRecord extends Model
         //sql set custom_paid_amount to null and custom_amount to null
         $sql = "UPDATE $table_name SET custom_paid_amount = NULL, custom_amount = NULL WHERE id = ?";
         DB::update($sql, [$data->id]);
+
+        // Cascade up to parent BudgetProgram to update contribution totals
+        try {
+            if ($data->budget_program_id) {
+                BudgetProgram::recalculateFromChildren((int) $data->budget_program_id);
+            }
+        } catch (\Throwable $th) {
+            Log::error('ContributionRecord::finalizer cascade to program failed: ' . $th->getMessage());
+        }
 
         return $data;
     }

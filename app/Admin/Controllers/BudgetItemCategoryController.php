@@ -2,6 +2,7 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Batch\BatchFixCategories;
 use App\Models\BudgetItemCategory;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
@@ -27,12 +28,16 @@ class BudgetItemCategoryController extends AdminController
     {
         $grid = new Grid(new BudgetItemCategory());
 
-        $grid->disableBatchActions();
         $grid->quickSearch('name');
         $u = Admin::user();
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('target_amount', 'desc');
+
+        // Enable batch fix action (max 50 categories per batch)
+        $grid->batchActions(function ($batch) {
+            $batch->add(new BatchFixCategories());
+        });
         $grid->column('id', __('Id'))->sortable();
         /*         $grid->column('created_at', __('Created at'));
         $grid->column('updated_at', __('Updated at')); */
@@ -117,23 +122,43 @@ class BudgetItemCategoryController extends AdminController
                 $first_id = $b->id;
             }
         }
-        $form->select('budget_program_id', __('Budget program id'))->options($bp)
+        $form->select('budget_program_id', __('Budget Program'))->options($bp)
             ->default($first_id)
             ->required();
         $form->hidden('company_id', __('Company id'))->default($u->company_id);
-        $form->text('name', __('Name'))->rules('required');
-        $form->number('target_amount', __('Target amount'));
-        $form->number('invested_amount', __('Invested amount'));
-        $form->number('balance', __('Balance'));
-        $form->number('percentage_done', __('Percentage done'));
+        $form->text('name', __('Category Name'))->rules('required');
 
-        $form->radio('is_complete', __('Is complete'))
-            ->options([
-                'Yes' => 'Yes',
-                'No' => 'No',
-            ])
-            ->default('No')
-            ->rules('required');
+        $form->divider('Financial Summary (Auto-calculated from Budget Items)');
+
+        $form->html('<div class="alert alert-info">
+            <i class="fa fa-info-circle"></i>
+            <strong>Note:</strong> These values are automatically calculated from child budget items. 
+            They will be recalculated whenever budget items are created or updated.
+        </div>');
+
+        $form->display('target_amount', __('Target Amount (UGX)'))
+            ->with(function ($value) {
+                return 'UGX ' . number_format($value ?? 0);
+            });
+
+        $form->display('invested_amount', __('Invested Amount (UGX)'))
+            ->with(function ($value) {
+                return 'UGX ' . number_format($value ?? 0);
+            });
+
+        $form->display('balance', __('Balance (UGX)'))
+            ->with(function ($value) {
+                $balance = $value ?? 0;
+                $color = $balance > 0 ? 'red' : 'green';
+                return "<span style='color: {$color}; font-weight: bold;'>UGX " . number_format($balance) . '</span>';
+            });
+
+        $form->display('percentage_done', __('Progress'))
+            ->with(function ($value) {
+                return round($value ?? 0, 2) . '%';
+            });
+
+        $form->display('is_complete', __('Is Complete'));
 
         return $form;
     }

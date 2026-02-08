@@ -2,6 +2,7 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Batch\BatchFixPrograms;
 use App\Models\BudgetProgram;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
@@ -26,12 +27,15 @@ class BudgetProgramController extends AdminController
     protected function grid()
     {
         $grid = new Grid(new BudgetProgram());
-        $grid->disableBatchActions();
-
         $u = Admin::user();
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('created_at', 'desc');
+
+        // Enable batch fix action (full cascade: items → categories → program, max 50)
+        $grid->batchActions(function ($batch) {
+            $batch->add(new BatchFixPrograms());
+        });
 
         $grid->filter(function ($filter) {
             $filter->like('name', __('Program Name'));

@@ -2,6 +2,7 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Batch\BatchFixContributions;
 use App\Models\ContributionRecord;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
@@ -26,12 +27,15 @@ class ContributionRecordController extends AdminController
     protected function grid()
     {
         $grid = new Grid(new ContributionRecord());
-        $grid->disableBatchActions();
-
         $u = Admin::user();
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('created_at', 'desc');
+
+        // Enable batch fix action (max 50 contributions per batch)
+        $grid->batchActions(function ($batch) {
+            $batch->add(new BatchFixContributions());
+        });
 
         $grid->filter(function ($filter) {
             $u = auth()->user();

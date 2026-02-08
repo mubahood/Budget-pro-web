@@ -6,6 +6,8 @@ use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BudgetProgram extends Model
 {
@@ -99,6 +101,10 @@ class BudgetProgram extends Model
     //getter for budget_spent
     public function getBudgetSpentAttribute($budget_spent)
     {
+        // Use stored value if available to avoid N+1 queries
+        if ($budget_spent !== null && $budget_spent > 0) {
+            return $budget_spent;
+        }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->get();
         $total = 0;
@@ -112,6 +118,10 @@ class BudgetProgram extends Model
     //getter for budget_total
     public function getBudgetTotalAttribute($budget_total)
     {
+        // Use stored value if available to avoid N+1 queries
+        if ($budget_total !== null && $budget_total > 0) {
+            return $budget_total;
+        }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->get();
         $total = 0;
@@ -125,6 +135,10 @@ class BudgetProgram extends Model
     //getter for budget_balance
     public function getBudgetBalanceAttribute($budget_balance)
     {
+        // Use stored value if available to avoid N+1 queries
+        if ($budget_balance !== null && $budget_balance != 0) {
+            return $budget_balance;
+        }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->get();
         $total = 0;
@@ -144,7 +158,50 @@ budget_total
 
 
 */
-    //update self
+    /**
+     * Recalculate all stored totals for a BudgetProgram from its children.
+     * Uses direct DB queries to avoid model events and infinite loops.
+     *
+     * @param int $programId
+     * @return void
+     */
+    public static function recalculateFromChildren(int $programId): void
+    {
+        try {
+            // Budget totals from categories
+            $budgetAggregates = DB::table('budget_item_categories')
+                ->where('budget_program_id', $programId)
+                ->selectRaw('COALESCE(SUM(target_amount), 0) as budget_total, COALESCE(SUM(invested_amount), 0) as budget_spent')
+                ->first();
+
+            // Contribution totals
+            $contributionAggregates = DB::table('contribution_records')
+                ->where('budget_program_id', $programId)
+                ->selectRaw('COALESCE(SUM(amount), 0) as total_expected, COALESCE(SUM(paid_amount), 0) as total_collected, COALESCE(SUM(not_paid_amount), 0) as total_in_pledge')
+                ->first();
+
+            $budgetTotal = (float) ($budgetAggregates->budget_total ?? 0);
+            $budgetSpent = (float) ($budgetAggregates->budget_spent ?? 0);
+
+            DB::table('budget_programs')
+                ->where('id', $programId)
+                ->update([
+                    'budget_total'    => $budgetTotal,
+                    'budget_spent'    => $budgetSpent,
+                    'budget_balance'  => $budgetTotal - $budgetSpent,
+                    'total_expected'  => (float) ($contributionAggregates->total_expected ?? 0),
+                    'total_collected' => (float) ($contributionAggregates->total_collected ?? 0),
+                    'total_in_pledge' => (float) ($contributionAggregates->total_in_pledge ?? 0),
+                    'updated_at'      => now(),
+                ]);
+        } catch (\Throwable $th) {
+            Log::error('BudgetProgram::recalculateFromChildren failed for program #' . $programId . ': ' . $th->getMessage());
+        }
+    }
+
+    /**
+     * @deprecated Use recalculateFromChildren() instead
+     */
     public static function update_self()
     {
     }

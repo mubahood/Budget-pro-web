@@ -2,6 +2,7 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Batch\BatchFixBudgetItems;
 use App\Models\BudgetItem;
 use App\Models\BudgetItemCategory;
 use Encore\Admin\Controllers\AdminController;
@@ -33,11 +34,15 @@ class BudgetItemController extends AdminController
             $cats[$cat->id] = $cat->name;
         }
 
-        $grid->disableBatchActions();
         $u = Admin::user();
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('target_amount', 'desc');
+
+        // Enable batch fix action (max 50 items per batch)
+        $grid->batchActions(function ($batch) {
+            $batch->add(new BatchFixBudgetItems());
+        });
 
         $grid->filter(function ($filter) {
             $filter->disableIdFilter();

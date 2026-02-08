@@ -107,6 +107,14 @@ class BudgetItem extends Model
             throw new \Exception('Category not found');
         }
 
+        // Always sync budget_program_id from the category to prevent mismatch
+        $data->budget_program_id = $cat->budget_program_id;
+
+        // Ensure invested_amount defaults to 0 if null
+        if ($data->invested_amount === null) {
+            $data->invested_amount = 0;
+        }
+
         return $data;
     }
 
@@ -120,7 +128,7 @@ class BudgetItem extends Model
         if ($data->target_amount == 0) {
             $percentage_done = 0;
         } else {
-            $percentage_done = ($data->invested_amount / $data->target_amount) * 100;
+            $percentage_done = round(($data->invested_amount / $data->target_amount) * 100, 2);
         }
 
         if ($percentage_done >= 98) {
@@ -128,18 +136,25 @@ class BudgetItem extends Model
         } else {
             $is_complete = 'No';
         }
-        $table = (new self())->getTable();
-        $sql = "UPDATE $table SET 
-        balance = $balance, 
-        percentage_done = $percentage_done, 
-        is_complete = '$is_complete' WHERE id = $data->id";
-        DB::update($sql);
+
+        DB::table((new self())->getTable())
+            ->where('id', $data->id)
+            ->update([
+                'balance'         => $balance,
+                'percentage_done' => $percentage_done,
+                'is_complete'     => $is_complete,
+            ]);
+
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
 
-        try {
-            $cat->updateSelf();
-        } catch (\Throwable $th) {
-            //throw $th;
+        if ($cat) {
+            try {
+                $cat->updateSelf();
+            } catch (\Throwable $th) {
+                Log::error('BudgetItem::finalizer - category update failed for category #' . $data->budget_item_category_id . ': ' . $th->getMessage());
+            }
+        } else {
+            Log::warning('BudgetItem::finalizer - orphaned item #' . $data->id . ' has no valid category #' . $data->budget_item_category_id);
         }
 
         // Dispatch email notification job (async)

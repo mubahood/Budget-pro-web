@@ -7,6 +7,7 @@ use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BudgetItemCategory extends Model
 {
@@ -34,52 +35,100 @@ class BudgetItemCategory extends Model
         'is_complete',
     ];
 
+    //boot
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            $model->name = trim($model->name);
+            // Prevent duplicate names within the same program
+            $existing = BudgetItemCategory::where([
+                'name' => $model->name,
+                'budget_program_id' => $model->budget_program_id,
+            ])->first();
+            if ($existing) {
+                throw new \Exception('Category name already exists in this program');
+            }
+
+            $loggedUser = auth()->user();
+            if ($loggedUser == null) {
+                throw new \Exception('User not found');
+            }
+            $model->company_id = $loggedUser->company_id;
+
+            // Default calculated fields for new categories (no children yet)
+            $model->target_amount = $model->target_amount ?? 0;
+            $model->invested_amount = $model->invested_amount ?? 0;
+            $model->balance = $model->balance ?? 0;
+            $model->percentage_done = $model->percentage_done ?? 0;
+            $model->is_complete = $model->is_complete ?? 'No';
+
+            return $model;
+        });
+
+        static::updating(function ($model) {
+            $model->name = trim($model->name);
+            // Prevent duplicate names within the same program (excluding self)
+            $existing = BudgetItemCategory::where([
+                'name' => $model->name,
+                'budget_program_id' => $model->budget_program_id,
+            ])->where('id', '!=', $model->id)->first();
+            if ($existing) {
+                throw new \Exception('Category name already exists in this program');
+            }
+
+            return $model;
+        });
+    }
+
     //update self
     public function updateSelf()
     {
         $target_amount = BudgetItem::where('budget_item_category_id', $this->id)->sum('target_amount');
         $invested_amount = BudgetItem::where('budget_item_category_id', $this->id)->sum('invested_amount');
-        $table = (new BudgetItemCategory())->getTable();
         $balance = $target_amount - $invested_amount;
         $percentage_done = 0;
         if ($target_amount > 0) {
             $percentage_done = round(($invested_amount / $target_amount) * 100, 2);
         }
 
-        //is_complete
-        if ($balance <= 0) {
-            $this->is_complete = 'Yes';
-        } else {
-            $this->is_complete = 'No';
-        }
+        $is_complete = ($percentage_done >= 98 || $balance <= 0) ? 'Yes' : 'No';
 
-        $sql = "UPDATE {$table} SET target_amount = $target_amount, 
-        balance = $balance, 
-        is_complete = '{$this->is_complete}',
-        percentage_done = $percentage_done, 
-        invested_amount = $invested_amount WHERE id = $this->id";
-        DB::update($sql);
+        DB::table((new self())->getTable())
+            ->where('id', $this->id)
+            ->update([
+                'target_amount'   => $target_amount,
+                'invested_amount' => $invested_amount,
+                'balance'         => $balance,
+                'percentage_done' => $percentage_done,
+                'is_complete'     => $is_complete,
+            ]);
+
+        // Cascade up to parent BudgetProgram
+        try {
+            if ($this->budget_program_id) {
+                BudgetProgram::recalculateFromChildren($this->budget_program_id);
+            }
+        } catch (\Throwable $th) {
+            Log::error('BudgetItemCategory::updateSelf cascade to program failed: ' . $th->getMessage());
+        }
     }
 
     //getter for percentage_done
     public function getPercentageDoneAttribute($percentage_done)
     {
-
         if ($percentage_done > 100) {
             return 100;
         }
-        if ($percentage_done > 1) {
-            return round($percentage_done, 2);
+        if ($percentage_done !== null && $percentage_done > 0) {
+            return round((float) $percentage_done, 2);
         }
         if ($this->target_amount == 0) {
             return 0;
         }
-        $x = round(($this->invested_amount / $this->target_amount) * 100, 2);
-        //save
-        $this->percentage_done = $x;
-        $this->save();
 
-        return $x;
+        return round(($this->invested_amount / $this->target_amount) * 100, 2);
     }
 
     public function get_items()
