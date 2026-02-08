@@ -96,12 +96,28 @@ class BudgetItem extends Model
     public static function prepare($data)
     {
         $data->target_amount = $data->unit_price * $data->quantity;
-        $loggedUser = User::find($data->created_by_id);
-        if ($loggedUser == null) {
-            throw new \Exception('User not found');
+
+        // Use auth user first for company_id (most reliable), fallback to created_by_id
+        $loggedUser = null;
+        $authUser = auth('admin')->user();
+        if ($authUser !== null) {
+            $loggedUser = $authUser;
         }
+        if ($loggedUser === null && !empty($data->created_by_id)) {
+            $loggedUser = User::find($data->created_by_id);
+        }
+        if ($loggedUser === null) {
+            throw new \Exception('Cannot determine user — no authenticated user and created_by_id is invalid.');
+        }
+
         $data->company_id = $loggedUser->company_id;
         $data->changed_by_id = $loggedUser->id;
+
+        // Keep created_by_id pointing to original creator on create, update changed_by_id on edit
+        if (empty($data->created_by_id)) {
+            $data->created_by_id = $loggedUser->id;
+        }
+
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
         if ($cat == null) {
             throw new \Exception('Category not found');

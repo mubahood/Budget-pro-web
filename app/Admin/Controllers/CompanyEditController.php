@@ -98,6 +98,14 @@ class CompanyEditController extends AdminController
     {
         $form = new Form(new Company());
 
+        // SAAS protection: ensure users can only edit their own company
+        $form->saving(function (Form $form) {
+            $u = \Encore\Admin\Facades\Admin::user();
+            if ($form->model()->id && $form->model()->id != $u->company_id) {
+                return back()->withErrors(['error' => 'You can only edit your own company.']);
+            }
+        });
+
         $form->text('name', __('Name'))->rules('required');
         $form->text('email', __('Email'));
         $form->image('logo', __('Logo'));
@@ -113,7 +121,18 @@ class CompanyEditController extends AdminController
         $form->text('twitter', __('Twitter'));
         $form->divider('Settings');
 
-        $form->text('currency', __('Currency'))->default('USD')->rules('required');
+        $form->select('currency', __('Currency'))
+            ->options([
+                'UGX' => 'UGX - Ugandan Shilling',
+                'USD' => 'USD - US Dollar',
+                'KES' => 'KES - Kenyan Shilling',
+                'TZS' => 'TZS - Tanzanian Shilling',
+                'RWF' => 'RWF - Rwandan Franc',
+                'EUR' => 'EUR - Euro',
+                'GBP' => 'GBP - British Pound',
+            ])
+            ->default('USD')
+            ->rules('required');
         $form->radio('settings_worker_can_create_stock_item', __('Can worker create stock item'))
             ->options([
                 'Yes' => 'Yes',

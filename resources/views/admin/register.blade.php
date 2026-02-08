@@ -479,7 +479,7 @@
                             required>
                             <option value="">Select Currency</option>
                             <option value="UGX" {{ old('currency') == 'UGX' ? 'selected' : '' }}>UGX - Ugandan Shilling</option>
-                            <option value="USD" {{ old('currency') == 'USD' ? 'selected' : 'selected' }}>USD - US Dollar</option>
+                            <option value="USD" {{ old('currency') == 'USD' ? 'selected' : '' }}>USD - US Dollar</option>
                             <option value="KES" {{ old('currency') == 'KES' ? 'selected' : '' }}>KES - Kenyan Shilling</option>
                             <option value="TZS" {{ old('currency') == 'TZS' ? 'selected' : '' }}>TZS - Tanzanian Shilling</option>
                             <option value="RWF" {{ old('currency') == 'RWF' ? 'selected' : '' }}>RWF - Rwandan Franc</option>

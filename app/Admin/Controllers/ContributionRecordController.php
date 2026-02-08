@@ -28,6 +28,8 @@ class ContributionRecordController extends AdminController
     {
         $grid = new Grid(new ContributionRecord());
         $u = Admin::user();
+        $company = \App\Models\Company::find($u->company_id);
+        $currency = $company ? $company->currency : 'USD';
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('created_at', 'desc');
@@ -69,9 +71,7 @@ class ContributionRecordController extends AdminController
 
         $grid->column('budget_program_id', __('Budget Program'))
             ->display(function ($budget_program_id) {
-                $bp = \App\Models\BudgetProgram::find($budget_program_id);
-
-                return $bp ? $bp->name : 'N/A';
+                return $this->budgetProgram ? $this->budgetProgram->name : 'N/A';
             })->sortable()->hide();
 
         $grid->column('name', __('Contributor'))
@@ -107,31 +107,31 @@ class ContributionRecordController extends AdminController
             ]);
 
         $grid->column('amount', __('Pledged Amount'))
-            ->display(function ($amount) {
-                return '<span class="badge badge-primary">UGX '.number_format($amount).'</span>';
+            ->display(function ($amount) use ($currency) {
+                return '<span class="badge badge-primary">'.$currency.' '.number_format($amount).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('paid_amount', __('Amount Paid'))
-            ->display(function ($paid_amount) {
-                return '<span class="badge badge-success">UGX '.number_format($paid_amount).'</span>';
+            ->display(function ($paid_amount) use ($currency) {
+                return '<span class="badge badge-success">'.$currency.' '.number_format($paid_amount).'</span>';
             })->sortable()
-            ->totalRow(function ($paid_amount) {
-                return '<strong>UGX '.number_format($paid_amount).'</strong>';
+            ->totalRow(function ($paid_amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($paid_amount).'</strong>';
             });
 
         $grid->column('not_paid_amount', __('Balance'))
-            ->display(function ($not_paid_amount) {
+            ->display(function ($not_paid_amount) use ($currency) {
                 if ($not_paid_amount > 0) {
-                    return '<span class="badge badge-danger">UGX '.number_format($not_paid_amount).'</span>';
+                    return '<span class="badge badge-danger">'.$currency.' '.number_format($not_paid_amount).'</span>';
                 } else {
-                    return '<span class="badge badge-success">UGX 0</span>';
+                    return '<span class="badge badge-success">'.$currency.' 0</span>';
                 }
             })->sortable()
-            ->totalRow(function ($not_paid_amount) {
-                return '<strong>UGX '.number_format($not_paid_amount).'</strong>';
+            ->totalRow(function ($not_paid_amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($not_paid_amount).'</strong>';
             });
 
         $grid->column('fully_paid', __('Status'))
@@ -149,19 +149,12 @@ class ContributionRecordController extends AdminController
 
         $grid->column('treasurer_id', __('Recorded By'))
             ->display(function ($treasurer_id) {
-                $user = \App\Models\User::find($treasurer_id);
-
-                return $user ? $user->name : 'Unknown';
+                return $this->treasurer ? $this->treasurer->name : 'Unknown';
             })->sortable();
 
         $grid->column('chaned_by_id', __('Last Updated By'))
             ->display(function ($chaned_by_id) {
-                $u = \App\Models\User::find($chaned_by_id);
-                if ($u == null) {
-                    return 'N/A';
-                }
-
-                return $u->name;
+                return $this->changedBy ? $this->changedBy->name : 'N/A';
             })->sortable()->hide();
 
         $grid->column('updated_at', __('Last Updated'))
@@ -221,6 +214,9 @@ class ContributionRecordController extends AdminController
             throw new \Exception('User not found');
         }
 
+        $company = \App\Models\Company::find($u->company_id);
+        $currency = $company ? $company->currency : 'USD';
+
         $bps = \App\Models\BudgetProgram::where('company_id', $u->company_id)
             ->orderBy('id', 'desc')
             ->get();
@@ -269,22 +265,22 @@ class ContributionRecordController extends AdminController
 
         $form->radio('custom_amount', __('Select or Enter Amount'))
             ->options([
-                '5000' => 'UGX '.number_format(5000),
-                '10000' => 'UGX '.number_format(10000),
-                '20000' => 'UGX '.number_format(20000),
-                '30000' => 'UGX '.number_format(30000),
-                '50000' => 'UGX '.number_format(50000),
-                '100000' => 'UGX '.number_format(100000),
-                '200000' => 'UGX '.number_format(200000),
-                '500000' => 'UGX '.number_format(500000),
+                '5000' => $currency.' '.number_format(5000),
+                '10000' => $currency.' '.number_format(10000),
+                '20000' => $currency.' '.number_format(20000),
+                '30000' => $currency.' '.number_format(30000),
+                '50000' => $currency.' '.number_format(50000),
+                '100000' => $currency.' '.number_format(100000),
+                '200000' => $currency.' '.number_format(200000),
+                '500000' => $currency.' '.number_format(500000),
                 'custom' => 'Custom Amount (Enter below)',
             ])
             ->rules('required')
             ->required()
             ->default('10000')
-            ->when('custom', function ($form) {
-                $form->currency('amount', __('Custom Amount (UGX)'))
-                    ->symbol('UGX')
+            ->when('custom', function ($form) use ($currency) {
+                $form->currency('amount', __('Custom Amount ('.$currency.')'))
+                    ->symbol($currency)
                     ->rules('required|numeric|min:1')
                     ->required()
                     ->help('Enter the pledged amount');
@@ -301,26 +297,26 @@ class ContributionRecordController extends AdminController
             ->required()
             ->default('No')
             ->help('Has the contributor paid the full amount?')
-            ->when('No', function ($form) {
+            ->when('No', function ($form) use ($currency) {
                 $form->radio('custom_paid_amount', __('Amount Paid So Far'))
                     ->options([
-                        '0' => 'UGX 0 (Not Yet Paid)',
-                        '5000' => 'UGX '.number_format(5000),
-                        '10000' => 'UGX '.number_format(10000),
-                        '20000' => 'UGX '.number_format(20000),
-                        '30000' => 'UGX '.number_format(30000),
-                        '50000' => 'UGX '.number_format(50000),
-                        '100000' => 'UGX '.number_format(100000),
-                        '200000' => 'UGX '.number_format(200000),
-                        '500000' => 'UGX '.number_format(500000),
+                        '0' => $currency.' 0 (Not Yet Paid)',
+                        '5000' => $currency.' '.number_format(5000),
+                        '10000' => $currency.' '.number_format(10000),
+                        '20000' => $currency.' '.number_format(20000),
+                        '30000' => $currency.' '.number_format(30000),
+                        '50000' => $currency.' '.number_format(50000),
+                        '100000' => $currency.' '.number_format(100000),
+                        '200000' => $currency.' '.number_format(200000),
+                        '500000' => $currency.' '.number_format(500000),
                         'custom' => 'Custom Amount (Enter below)',
                     ])
                     ->rules('required')
                     ->required()
                     ->default('0')
-                    ->when('custom', function ($form) {
-                        $form->currency('paid_amount', __('Custom Paid Amount (UGX)'))
-                            ->symbol('UGX')
+                    ->when('custom', function ($form) use ($currency) {
+                        $form->currency('paid_amount', __('Custom Paid Amount ('.$currency.')'))
+                            ->symbol($currency)
                             ->rules('required|numeric|min:0')
                             ->required()
                             ->help('Enter the exact amount paid');

@@ -28,6 +28,8 @@ class BudgetProgramController extends AdminController
     {
         $grid = new Grid(new BudgetProgram());
         $u = Admin::user();
+        $company = \App\Models\Company::find($u->company_id);
+        $currency = $company ? $company->currency : 'USD';
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('created_at', 'desc');
@@ -77,55 +79,55 @@ class BudgetProgramController extends AdminController
             })->sortable();
 
         $grid->column('total_expected', __('Expected'))
-            ->display(function ($total_expected) {
-                return '<span class="badge badge-primary">UGX '.number_format($total_expected).'</span>';
+            ->display(function ($total_expected) use ($currency) {
+                return '<span class="badge badge-primary">'.$currency.' '.number_format($total_expected).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('total_collected', __('Collected'))
-            ->display(function ($total_collected) {
-                return '<span class="badge badge-success">UGX '.number_format($total_collected).'</span>';
+            ->display(function ($total_collected) use ($currency) {
+                return '<span class="badge badge-success">'.$currency.' '.number_format($total_collected).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('total_in_pledge', __('Pending'))
-            ->display(function ($total_in_pledge) {
-                return '<span class="badge badge-warning">UGX '.number_format($total_in_pledge).'</span>';
+            ->display(function ($total_in_pledge) use ($currency) {
+                return '<span class="badge badge-warning">'.$currency.' '.number_format($total_in_pledge).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('budget_total', __('Budget'))
-            ->display(function ($budget_total) {
-                return '<span class="badge badge-info">UGX '.number_format($budget_total).'</span>';
+            ->display(function ($budget_total) use ($currency) {
+                return '<span class="badge badge-info">'.$currency.' '.number_format($budget_total).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('budget_spent', __('Spent'))
-            ->display(function ($budget_spent) {
-                return '<span class="badge badge-danger">UGX '.number_format($budget_spent).'</span>';
+            ->display(function ($budget_spent) use ($currency) {
+                return '<span class="badge badge-danger">'.$currency.' '.number_format($budget_spent).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('budget_balance', __('Balance'))
-            ->display(function ($budget_balance) {
+            ->display(function ($budget_balance) use ($currency) {
                 $color = $budget_balance >= 0 ? 'success' : 'danger';
 
-                return "<span class='badge badge-{$color}'>UGX ".number_format($budget_balance).'</span>';
+                return "<span class='badge badge-{$color}'>".$currency." ".number_format($budget_balance).'</span>';
             })->sortable()
-            ->totalRow(function ($amount) {
+            ->totalRow(function ($amount) use ($currency) {
                 $color = $amount >= 0 ? 'success' : 'danger';
 
-                return "<strong class='text-{$color}'>UGX ".number_format($amount).'</strong>';
+                return "<strong class='text-{$color}'>".$currency." ".number_format($amount).'</strong>';
             });
 
         $grid->column('created_at', __('Created'))

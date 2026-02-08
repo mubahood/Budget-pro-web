@@ -91,11 +91,37 @@ class ContributionRecord extends Model
     //public static function prepare
     public static function prepare($data)
     {
-        $loggedUser = User::find($data->treasurer_id);
-        if ($loggedUser == null) {
-            throw new \Exception('Treasurer/User not found for ID: ' . $data->treasurer_id);
+        // Use auth user as primary source for company_id (most reliable)
+        $authUser = auth('admin')->user();
+        $loggedUser = null;
+
+        if ($authUser !== null) {
+            $loggedUser = $authUser;
         }
-        $data->company_id = $loggedUser->company_id;
+
+        // Validate treasurer exists
+        $treasurer = User::find($data->treasurer_id);
+        if ($treasurer === null) {
+            // Fallback: if no treasurer specified, use auth user
+            if ($loggedUser !== null) {
+                $data->treasurer_id = $loggedUser->id;
+                $treasurer = $loggedUser;
+            } else {
+                throw new \Exception('Treasurer/User not found for ID: ' . $data->treasurer_id);
+            }
+        }
+
+        // Set company_id from auth user first, fallback to treasurer
+        if ($loggedUser !== null) {
+            $data->company_id = $loggedUser->company_id;
+
+            // Validate treasurer belongs to the same company
+            if ($treasurer->company_id != $loggedUser->company_id) {
+                throw new \Exception('Treasurer does not belong to your company.');
+            }
+        } else {
+            $data->company_id = $treasurer->company_id;
+        }
 
         $custom_amount = (int) $data->custom_amount;
         if ($custom_amount > 0) {
@@ -130,7 +156,11 @@ class ContributionRecord extends Model
         if ($data->fully_paid == 'Yes') {
             $data->not_paid_amount = 0;
         }
-        $data->treasurer_id = $loggedUser->id;
+
+        // Track who last modified this record
+        if ($loggedUser !== null) {
+            $data->chaned_by_id = $loggedUser->id;
+        }
 
         return $data;
     }

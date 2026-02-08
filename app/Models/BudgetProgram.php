@@ -102,7 +102,7 @@ class BudgetProgram extends Model
     public function getBudgetSpentAttribute($budget_spent)
     {
         // Use stored value if available to avoid N+1 queries
-        if ($budget_spent !== null && $budget_spent > 0) {
+        if ($budget_spent !== null) {
             return $budget_spent;
         }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
@@ -119,7 +119,7 @@ class BudgetProgram extends Model
     public function getBudgetTotalAttribute($budget_total)
     {
         // Use stored value if available to avoid N+1 queries
-        if ($budget_total !== null && $budget_total > 0) {
+        if ($budget_total !== null) {
             return $budget_total;
         }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
@@ -136,7 +136,7 @@ class BudgetProgram extends Model
     public function getBudgetBalanceAttribute($budget_balance)
     {
         // Use stored value if available to avoid N+1 queries
-        if ($budget_balance !== null && $budget_balance != 0) {
+        if ($budget_balance !== null) {
             return $budget_balance;
         }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)

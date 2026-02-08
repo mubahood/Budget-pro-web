@@ -131,9 +131,8 @@ class AuthController extends BaseAuthController
                 throw new \Exception('Failed to create company.');
             }
 
-            // Step 5: Update user's company_id to the new company
-            $user->company_id = $company->id;
-            $user->save();
+            // Step 5: Refresh user from DB (Company::created event already set company_id)
+            $user->refresh();
 
             // Step 6: Create default financial year
             $currentYear = now()->year;
@@ -151,7 +150,8 @@ class AuthController extends BaseAuthController
             $financialPeriod->save();
 
             // Step 7: Assign Company Owner Role (ID 2)
-            // This is critical - company owners MUST have role_id = 2
+            // Note: ensureCompanyOwnerRole in User model may have already assigned this
+            // during Company::created event, so we check for duplicates first
             $companyOwnerRoleId = 2;
 
             // Check if role ID 2 exists
@@ -164,11 +164,18 @@ class AuthController extends BaseAuthController
                 }
             }
 
-            // Assign the company owner role
-            DB::table('admin_role_users')->insert([
-                'role_id' => $companyOwnerRoleId,
-                'user_id' => $user->id,
-            ]);
+            // Only assign if not already assigned (prevents duplicate from ensureCompanyOwnerRole)
+            $existingRole = DB::table('admin_role_users')
+                ->where('role_id', $companyOwnerRoleId)
+                ->where('user_id', $user->id)
+                ->first();
+
+            if (! $existingRole) {
+                DB::table('admin_role_users')->insert([
+                    'role_id' => $companyOwnerRoleId,
+                    'user_id' => $user->id,
+                ]);
+            }
 
             Log::info('Company owner role assigned during registration', [
                 'user_id' => $user->id,

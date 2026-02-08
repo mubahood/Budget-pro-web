@@ -56,9 +56,16 @@ class Company extends Model
 
         // Update owner's company_id when company is updated
         static::updated(function ($company) {
+            if (empty($company->owner_id)) {
+                return; // No owner set, skip
+            }
             $owner = User::find($company->owner_id);
             if ($owner == null) {
-                throw new \Exception('Owner not found');
+                \Illuminate\Support\Facades\Log::warning('Company updated but owner not found', [
+                    'company_id' => $company->id,
+                    'owner_id' => $company->owner_id,
+                ]);
+                return; // Don't crash company edit if owner record is missing
             }
             $owner->company_id = $company->id;
             $owner->save();
@@ -66,9 +73,16 @@ class Company extends Model
 
         // Set up company on creation
         static::created(function ($company) {
+            if (empty($company->owner_id)) {
+                return; // No owner set, skip
+            }
             $owner = User::find($company->owner_id);
             if ($owner == null) {
-                throw new \Exception('Owner not found');
+                \Illuminate\Support\Facades\Log::warning('Company created but owner not found', [
+                    'company_id' => $company->id,
+                    'owner_id' => $company->owner_id,
+                ]);
+                return; // Don't crash registration if owner record has issue
             }
             $owner->company_id = $company->id;
             $owner->save();

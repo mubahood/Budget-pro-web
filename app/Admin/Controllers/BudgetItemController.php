@@ -29,12 +29,9 @@ class BudgetItemController extends AdminController
     {
         $grid = new Grid(new BudgetItem());
 
-        $cats = [];
-        foreach (BudgetItemCategory::all() as $key => $cat) {
-            $cats[$cat->id] = $cat->name;
-        }
-
         $u = Admin::user();
+        $company = \App\Models\Company::find($u->company_id);
+        $currency = $company ? $company->currency : 'USD';
         $grid->model()
             ->where('company_id', $u->company_id)
             ->orderBy('target_amount', 'desc');
@@ -88,36 +85,36 @@ class BudgetItemController extends AdminController
             ->editable();
 
         $grid->column('unit_price', __('Unit Price'))
-            ->display(function ($unit_price) {
-                return 'UGX '.number_format($unit_price);
+            ->display(function ($unit_price) use ($currency) {
+                return $currency.' '.number_format($unit_price);
             })
             ->sortable()
             ->editable();
 
-        $grid->column('target_amount', __('Target Amount'))->display(function ($amount) {
-            return 'UGX '.number_format($amount);
+        $grid->column('target_amount', __('Target Amount'))->display(function ($amount) use ($currency) {
+            return $currency.' '.number_format($amount);
         })
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             })->sortable();
 
         $grid->column('invested_amount', __('Amount Invested'))
-            ->display(function ($amount) {
-                return 'UGX '.number_format($amount);
+            ->display(function ($amount) use ($currency) {
+                return $currency.' '.number_format($amount);
             })
-            ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+            ->totalRow(function ($amount) use ($currency) {
+                return '<strong>'.$currency.' '.number_format($amount).'</strong>';
             })->sortable()->editable();
 
-        $grid->column('balance', __('Balance'))->display(function ($amount) {
+        $grid->column('balance', __('Balance'))->display(function ($amount) use ($currency) {
             $color = $amount > 0 ? 'danger' : 'success';
 
-            return '<span class="badge badge-'.$color.'">UGX '.number_format($amount).'</span>';
+            return '<span class="badge badge-'.$color.'">'.$currency.' '.number_format($amount).'</span>';
         })
-            ->totalRow(function ($amount) {
+            ->totalRow(function ($amount) use ($currency) {
                 $color = $amount > 0 ? 'danger' : 'success';
 
-                return "<strong class='text-$color'>UGX ".number_format($amount).'</strong>';
+                return "<strong class='text-$color'>".$currency." ".number_format($amount).'</strong>';
             })->sortable();
 
         $grid->column('percentage_done', __('Progress'))
@@ -209,6 +206,9 @@ class BudgetItemController extends AdminController
         if ($u == null) {
             throw new \Exception('User not found');
         }
+        $company = \App\Models\Company::find($u->company_id);
+        $currency = $company ? $company->currency : 'USD';
+
         $bps = \App\Models\BudgetProgram::where('company_id', $u->company_id)->orderBy('id', 'desc')->get();
         $bp = [];
         $first_id = null;
@@ -256,8 +256,8 @@ class BudgetItemController extends AdminController
             ->required()
             ->help('Enter the quantity needed');
 
-        $form->currency('unit_price', __('Unit Price (UGX)'))
-            ->symbol('UGX')
+        $form->currency('unit_price', __('Unit Price ('.$currency.')'))
+            ->symbol($currency)
             ->rules('required|min:0')
             ->required()
             ->help('Enter the price per unit');
@@ -266,8 +266,8 @@ class BudgetItemController extends AdminController
 
         $form->divider('Investment Tracking');
 
-        $form->currency('invested_amount', __('Amount Invested (UGX)'))
-            ->symbol('UGX')
+        $form->currency('invested_amount', __('Amount Invested ('.$currency.')'))
+            ->symbol($currency)
             ->default(0)
             ->rules('min:0')
             ->help('Enter the amount already invested/spent on this item');

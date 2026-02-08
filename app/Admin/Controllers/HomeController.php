@@ -18,6 +18,17 @@ class HomeController extends Controller
         $company = Company::find($u->company_id);
         $companyId = $u->company_id;
 
+        // Guard against null company (deleted/missing company)
+        if ($company === null) {
+            admin_error('Company Not Found', 'Your account is not linked to a valid company. Please contact support.');
+            return $content
+                ->title('Dashboard')
+                ->description('Company configuration required')
+                ->body('<div class="alert alert-danger"><h4>Company Not Found</h4>
+                    <p>Your user account (ID: '.$u->id.') is linked to company ID '.$u->company_id.' which does not exist.</p>
+                    <p>Please contact your administrator to resolve this issue.</p></div>');
+        }
+
         // Get comprehensive dashboard data
         $dashboardData = $this->getDashboardData($companyId);
 
