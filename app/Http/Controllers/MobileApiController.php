@@ -600,9 +600,6 @@ class MobileApiController extends BaseController
         if (empty($programId)) {
             Utils::error('Budget program is required.');
         }
-        if (empty($treasurerId)) {
-            Utils::error('Treasurer is required.');
-        }
 
         // Verify program belongs to user's company
         $program = BudgetProgram::withoutGlobalScopes()->where('id', $programId)->where('company_id', $u->company_id)->first();
@@ -610,10 +607,10 @@ class MobileApiController extends BaseController
             Utils::error('Budget program not found or access denied.');
         }
 
-        // Verify treasurer belongs to user's company
-        $treasurer = User::where('id', $treasurerId)->where('company_id', $u->company_id)->first();
-        if (!$treasurer) {
-            Utils::error('Treasurer not found or does not belong to your company.');
+        // Verify treasurer if provided (optional)
+        $treasurer = null;
+        if (!empty($treasurerId)) {
+            $treasurer = User::where('id', $treasurerId)->where('company_id', $u->company_id)->first();
         }
 
         // Check duplicate name within program (only on create)
@@ -667,7 +664,7 @@ class MobileApiController extends BaseController
         $object->name = $name;
         $object->budget_program_id = $programId;
         $object->company_id = $u->company_id;
-        $object->treasurer_id = $treasurer->id;
+        $object->treasurer_id = $treasurer ? $treasurer->id : ($object->treasurer_id ?? $u->id);
         $object->chaned_by_id = $u->id;
         $object->amount = $amount;
         $object->paid_amount = $paidAmount;
@@ -696,7 +693,7 @@ class MobileApiController extends BaseController
         $saved = DB::table('contribution_records')->where('id', $object->id)->first();
         $saved->budget_program_text = $program->name ?? '';
         $saved->company_text = '';
-        $saved->treasurer_text = $treasurer->name ?? '';
+        $saved->treasurer_text = $treasurer ? ($treasurer->name ?? '') : ($u->name ?? '');
         $saved->chaned_by_text = $u->name ?? '';
         $saved->category_text = $saved->category_id ?? '';
 
