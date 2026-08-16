@@ -48,6 +48,7 @@ class ApiController extends BaseController
         'FinancialPeriod' => \App\Models\FinancialPeriod::class,
         'FinancialCategory' => \App\Models\FinancialCategory::class,
         'FinancialReport' => \App\Models\FinancialReport::class,
+        'FinancialRecord' => \App\Models\FinancialRecord::class,
         'User' => \App\Models\User::class,
     ];
 
@@ -270,7 +271,17 @@ class ApiController extends BaseController
         }
 
         try {
-            $object->saveQuietly();
+            // StockItem/StockRecord/FinancialRecord derive required, NOT-NULL
+            // fields (financial_period_id, stock_category_id, SKU, pricing) in
+            // their `creating` hook, which the shipped app relies on and never
+            // sends itself. saveQuietly() skips that hook and breaks these
+            // three on create, so use a real save() for their creation only
+            // (edits keep saveQuietly() — unchanged, lower-risk behavior).
+            if (! $isEdit && in_array($model, ['StockItem', 'StockRecord', 'FinancialRecord'], true)) {
+                $object->save();
+            } else {
+                $object->saveQuietly();
+            }
         } catch (\Exception $e) {
             Utils::error($e->getMessage());
         }
@@ -395,6 +406,37 @@ class ApiController extends BaseController
             'user_id' => $registered_user->id,
             'role_id' => 2,
         ]);
+
+        // A default active financial period is required before the app can
+        // record stock/sales/finance data (StockItem, StockRecord and
+        // FinancialRecord all require one). Web registration already does
+        // this; the legacy API registration did not, which silently blocked
+        // every mobile-registered company from using Stock/Finance features.
+        try {
+            \App\Models\FinancialPeriod::withoutGlobalScopes()
+                ->where('company_id', $registered_company->id)
+                ->where('status', 'Active')
+                ->firstOr(function () use ($registered_company) {
+                    $period = new \App\Models\FinancialPeriod();
+                    $period->company_id = $registered_company->id;
+                    $period->name = 'FY '.date('Y');
+                    $period->start_date = now()->startOfYear();
+                    $period->end_date = now()->endOfYear();
+                    $period->status = 'Active';
+                    $period->description = 'Default financial year created during registration';
+                    $period->total_investment = 0;
+                    $period->total_sales = 0;
+                    $period->total_profit = 0;
+                    $period->total_expenses = 0;
+                    $period->saveQuietly();
+                });
+        } catch (\Exception $e) {
+            // Non-fatal: registration should still succeed even if this fails.
+            \Illuminate\Support\Facades\Log::warning('Failed to create default financial period on legacy register', [
+                'company_id' => $registered_company->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         $registered_user->refresh();
 
