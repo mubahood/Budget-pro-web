@@ -36,6 +36,25 @@ class Company extends Model
     use AuditLogger, HasFactory;
 
     /**
+     * Mass-assignable fields. Every write path in this app currently sets
+     * properties explicitly (`$company->name = ...`), so this is not relied
+     * on for security — it only unblocks legitimate use of Eloquent's
+     * create()/update() convenience methods (e.g. in tests) without opening
+     * up the sensitive fields (owner_id, status, license_expire) that are
+     * managed exclusively through controlled flows (registration, billing).
+     */
+    protected $fillable = [
+        'name', 'email', 'phone_number', 'phone_number_2', 'address',
+        'website', 'about', 'slogan', 'logo', 'currency', 'pobox', 'color',
+        'facebook', 'twitter',
+        'settings_worker_can_create_stock_item',
+        'settings_worker_can_create_stock_record',
+        'settings_worker_can_create_stock_category',
+        'settings_worker_can_view_balance',
+        'settings_worker_can_view_stats',
+    ];
+
+    /**
      * The attributes that should be cast.
      */
     protected $casts = [
@@ -90,6 +109,121 @@ class Company extends Model
             // Prepare default account categories
             self::prepare_account_categories($company->id);
         });
+    }
+
+    /**
+     * The user who owns / administers this company.
+     */
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    /**
+     * All users (employees) belonging to this company.
+     */
+    public function users()
+    {
+        return $this->hasMany(User::class, 'company_id');
+    }
+
+    /**
+     * The company's current subscription (most recent).
+     */
+    public function subscription()
+    {
+        return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    /**
+     * All subscriptions this company has had.
+     */
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    /**
+     * Whether this tenant currently has valid, paid-for access.
+     *
+     * Order of precedence:
+     *   1. An explicitly Inactive company never has access.
+     *   2. An active/trialing subscription grants access.
+     *   3. Fallback for pre-billing tenants: the legacy `license_expire` date.
+     *   4. If neither subscription nor licence date exists, access is granted
+     *      (legacy tenants created before billing existed).
+     */
+    public function hasActiveAccess(): bool
+    {
+        if (strtolower((string) $this->status) === 'inactive') {
+            return false;
+        }
+
+        // Subscription-based access (only if the table/relationship is available).
+        try {
+            $subscription = $this->subscription;
+            if ($subscription !== null) {
+                return $subscription->isActive();
+            }
+        } catch (\Throwable $e) {
+            // subscriptions table not migrated yet — fall through to licence check.
+        }
+
+        // Legacy licence-date fallback.
+        if ($this->license_expire !== null) {
+            return $this->license_expire->endOfDay()->isFuture();
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether this company should be billed as a Ugandan customer (UGX + mobile
+     * money). International customers default to card in USD.
+     */
+    public function isUgandaBilling(): bool
+    {
+        return strtoupper((string) $this->currency) === 'UGX';
+    }
+
+    /**
+     * Activate (or renew/upgrade) this company's subscription to a plan after a
+     * confirmed payment, extending the period from the later of "now" or the
+     * current period end, and keeping the legacy license_expire column in sync.
+     */
+    public function activateSubscription(Plan $plan, string $provider = 'flutterwave', ?string $providerRef = null): Subscription
+    {
+        $subscription = $this->subscription ?? new Subscription(['company_id' => $this->id]);
+
+        // Extend from the current expiry if still in the future (renewal), else from now.
+        $base = ($subscription->ends_at && $subscription->ends_at->isFuture())
+            ? $subscription->ends_at->copy()
+            : now();
+
+        $endsAt = match ($plan->interval) {
+            'year' => $base->copy()->addYear(),
+            'lifetime' => $base->copy()->addYears(100),
+            default => $base->copy()->addMonth(),
+        };
+
+        $subscription->company_id = $this->id;
+        $subscription->plan_id = $plan->id;
+        $subscription->status = 'active';
+        $subscription->starts_at = $subscription->starts_at ?? now();
+        $subscription->ends_at = $endsAt;
+        $subscription->canceled_at = null;
+        $subscription->provider = $provider;
+        if ($providerRef !== null) {
+            $subscription->provider_subscription_id = $providerRef;
+        }
+        $subscription->save();
+
+        // Keep the legacy licence column consistent with the subscription.
+        $this->license_expire = $endsAt;
+        $this->status = 'Active';
+        $this->saveQuietly();
+
+        return $subscription;
     }
 
     /**

@@ -11,13 +11,18 @@ use App\Models\StockItem;
 use App\Models\StockRecord;
 use App\Models\StockSubCategory;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 class SaleRecordStockDeductionTest extends TestCase
 {
-    use RefreshDatabase;
+    // Uses DatabaseTransactions (not RefreshDatabase) against the pre-built
+    // budget_pro_test schema: several historical migrations are neutered
+    // (`return;`) which makes a real `migrate:fresh` fail — see
+    // BACKEND_API_MASTER_TASKS.md "Repair migrations". Transactions roll back
+    // after each test, so no data is persisted and no migration ever runs here.
+    use DatabaseTransactions;
 
     protected $user;
 
@@ -48,8 +53,10 @@ class SaleRecordStockDeductionTest extends TestCase
             'password' => bcrypt('password'),
         ]);
 
-        // Update company owner
-        $this->company->update(['owner_id' => $this->user->id]);
+        // Update company owner (owner_id is intentionally not mass-assignable;
+        // set it directly, matching how the rest of the app writes it)
+        $this->company->owner_id = $this->user->id;
+        $this->company->save();
 
         // Authenticate user
         Auth::login($this->user);

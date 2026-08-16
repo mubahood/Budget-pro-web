@@ -58,7 +58,7 @@ class Utils
             return $t;
         }
 
-        return $c->format('d M, Y - h:m a');
+        return $c->format('d M, Y - h:i a');
     }
 
     public static function to_date_time($raw)

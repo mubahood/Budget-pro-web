@@ -12,18 +12,44 @@ use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Legacy API (pre-v1) + web AJAX helpers for the laravel-admin panel.
+ *
+ * The mobile/third-party REST API lives under /api/v1 (see
+ * app/Http/Controllers/Api/V1) and is the path forward for all new clients.
+ *
+ * The methods below (login, register, my_list, my_update, budget_item_create,
+ * contribution_records_create) are kept ONLY because the currently-installed
+ * mobile app (pre-v1, published build) still calls them directly with
+ * `logged_in_user_id`-param auth. They are intentionally NOT used by anything
+ * new — do not build new features against this controller. When the mobile
+ * app has fully migrated to /api/v1 token auth, these can be retired.
+ *
+ * my_list/my_update are restricted to a fixed model whitelist (the exact set
+ * the shipped app actually addresses) to close the arbitrary-model /
+ * privilege-escalation hole that existed here previously, without changing
+ * the request/response contract the app expects.
+ */
 class ApiController extends BaseController
 {
-    public function file_uploading(Request $r)
-    {
-        $path = Utils::file_upload($r->file('photo'));
-        if ($path == '') {
-            Utils::error('File not uploaded.');
-        }
-        Utils::success([
-            'file_name' => $path,
-        ], 'File uploaded successfully.');
-    }
+    /**
+     * Models reachable via the legacy generic api/{model} route — the exact
+     * set the shipped mobile app sends today. Anything else is rejected.
+     */
+    private const LEGACY_MODEL_WHITELIST = [
+        'BudgetProgram' => \App\Models\BudgetProgram::class,
+        'BudgetItem' => \App\Models\BudgetItem::class,
+        'BudgetItemCategory' => \App\Models\BudgetItemCategory::class,
+        'ContributionRecord' => \App\Models\ContributionRecord::class,
+        'StockItem' => \App\Models\StockItem::class,
+        'StockCategory' => \App\Models\StockCategory::class,
+        'StockSubCategory' => \App\Models\StockSubCategory::class,
+        'StockRecord' => \App\Models\StockRecord::class,
+        'FinancialPeriod' => \App\Models\FinancialPeriod::class,
+        'FinancialCategory' => \App\Models\FinancialCategory::class,
+        'FinancialReport' => \App\Models\FinancialReport::class,
+        'User' => \App\Models\User::class,
+    ];
 
     public function manifest(Request $r)
     {
@@ -52,8 +78,11 @@ class ApiController extends BaseController
         if ($u == null) {
             Utils::error('Unauthonticated.');
         }
-        $model = "App\Models\\".$model;
-        $data = $model::where('company_id', $u->company_id)->limit(100000)->get();
+        if (! isset(self::LEGACY_MODEL_WHITELIST[$model])) {
+            Utils::error('Invalid model: '.$model);
+        }
+        $modelClass = self::LEGACY_MODEL_WHITELIST[$model];
+        $data = $modelClass::where('company_id', $u->company_id)->limit(100000)->get();
         Utils::success($data, 'Listed successfully.');
     }
 
@@ -64,7 +93,7 @@ class ApiController extends BaseController
             Utils::error('Unauthonticated.');
         }
         $model = BudgetItem::class;
-        $object = BudgetItem::find($r->get('id'));
+        $object = BudgetItem::where('id', $r->get('id'))->where('company_id', $u->company_id)->first();
         $isEdit = true;
         if ($object == null) {
             $object = new $model();
@@ -111,227 +140,6 @@ class ApiController extends BaseController
         }
     }
 
-    /**
-     * Quick Add Product - AJAX endpoint for instant product creation
-     * Uses Laravel Admin web authentication
-     */
-    public function product_quick_add(Request $r)
-    {
-        // Use Laravel Admin authentication
-        $u = \Encore\Admin\Facades\Admin::user();
-
-        if ($u == null) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthenticated. Please log in.',
-            ], 401);
-        }
-
-        // Validate required fields
-        $r->validate([
-            'name' => 'required|string|max:255',
-            'selling_price' => 'required|numeric|min:0',
-        ]);
-
-        try {
-            // Auto-generate SKU if not provided
-            $sku = $r->get('sku');
-            if (empty($sku)) {
-                $sku = 'PROD-'.time().'-'.rand(1000, 9999);
-            }
-
-            // Create the product
-            $product = new \App\Models\StockItem();
-            $product->company_id = $u->company_id;
-            $product->name = $r->get('name');
-            $product->sku = $sku;
-            $product->barcode = $r->get('barcode', '');
-            $product->stock_sub_category_id = $r->get('stock_sub_category_id');
-            $product->buying_price = $r->get('buying_price', 0);
-            $product->selling_price = $r->get('selling_price');
-            $product->current_quantity = $r->get('current_quantity', 0);
-            $product->original_quantity = $r->get('current_quantity', 0);
-            $product->created_by_id = $u->id;
-            $product->description = $r->get('description', '');
-
-            $product->save();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Product added successfully! ✅',
-                'data' => [
-                    'id' => $product->id,
-                    'name' => $product->name,
-                    'sku' => $product->sku,
-                    'selling_price' => number_format($product->selling_price),
-                    'stock' => number_format($product->current_quantity),
-                ],
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: '.$e->getMessage(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Quick Sale Recording - AJAX endpoint
-     * Uses Laravel Admin web authentication
-     */
-    public function quick_sale_record(Request $r)
-    {
-        // Use Laravel Admin authentication
-        $u = \Encore\Admin\Facades\Admin::user();
-
-        if ($u == null) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthenticated',
-            ], 401);
-        }
-
-        try {
-            // Validate input
-            $validator = \Validator::make($r->all(), [
-                'stock_item_id' => 'required|exists:stock_items,id',
-                'quantity' => 'required|numeric|min:1',
-                'price' => 'nullable|numeric|min:0',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $validator->errors()->first(),
-                ], 422);
-            }
-
-            $stockItem = \App\Models\StockItem::find($r->stock_item_id);
-
-            // Check if product belongs to user's company
-            if ($stockItem->company_id != $u->company_id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Product not found',
-                ], 404);
-            }
-
-            // Check stock availability
-            if ($stockItem->current_quantity < $r->quantity) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Insufficient stock! Available: '.$stockItem->current_quantity.' units',
-                ], 422);
-            }
-
-            // Use selling price if not provided
-            $salePrice = $r->price ?? $stockItem->selling_price;
-
-            // Create stock record (sale)
-            $stockRecord = new \App\Models\StockRecord();
-            $stockRecord->company_id = $u->company_id;
-            $stockRecord->stock_item_id = $stockItem->id;
-            $stockRecord->quantity = -abs($r->quantity); // Negative for sale
-            $stockRecord->type = 'Sale';
-            $stockRecord->created_by_id = $u->id;
-            $stockRecord->description = $r->description ?? 'Quick sale recorded';
-            $stockRecord->save();
-
-            // Update stock quantity
-            $stockItem->current_quantity -= $r->quantity;
-            $stockItem->save();
-
-            // Calculate totals
-            $totalAmount = $salePrice * $r->quantity;
-            $profit = ($salePrice - $stockItem->buying_price) * $r->quantity;
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Sale recorded successfully!',
-                'data' => [
-                    'id' => $stockRecord->id,
-                    'product' => $stockItem->name,
-                    'quantity' => $r->quantity,
-                    'price' => $salePrice,
-                    'total' => $totalAmount,
-                    'profit' => $profit,
-                    'remaining_stock' => $stockItem->current_quantity,
-                ],
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: '.$e->getMessage(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Global Search - AJAX endpoint for searching across products, categories, sales
-     * Uses Laravel Admin web authentication
-     */
-    public function global_search(Request $r)
-    {
-        // Use Laravel Admin authentication
-        $u = \Encore\Admin\Facades\Admin::user();
-
-        if ($u == null) {
-            return response()->json([
-                'products' => [],
-                'categories' => [],
-                'sales' => [],
-            ], 401);
-        }
-
-        $query = $r->get('q', '');
-        $companyId = $u->company_id;
-
-        // Search Products (limit 10)
-        $products = \App\Models\StockItem::where('company_id', $companyId)
-            ->where(function ($q) use ($query) {
-                $q->where('name', 'like', "%{$query}%")
-                    ->orWhere('sku', 'like', "%{$query}%")
-                    ->orWhere('barcode', 'like', "%{$query}%");
-            })
-            ->limit(10)
-            ->get(['id', 'name', 'sku', 'current_quantity', 'selling_price']);
-
-        // Search Categories (limit 5)
-        $categories = \App\Models\StockSubCategory::where('company_id', $companyId)
-            ->where('name', 'like', "%{$query}%")
-            ->withCount('stock_items')
-            ->limit(5)
-            ->get(['id', 'name']);
-
-        // Search Sales/Stock Records (limit 10)
-        $sales = \App\Models\StockRecord::where('company_id', $companyId)
-            ->whereHas('stock_item', function ($q) use ($query) {
-                $q->where('name', 'like', "%{$query}%");
-            })
-            ->with('stock_item:id,name')
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
-
-        $salesFormatted = $sales->map(function ($sale) {
-            return [
-                'id' => $sale->id,
-                'product_name' => $sale->stock_item ? $sale->stock_item->name : 'N/A',
-                'date' => date('d M Y', strtotime($sale->created_at)),
-                'quantity' => $sale->quantity,
-                'total' => $sale->total,
-            ];
-        });
-
-        return response()->json([
-            'products' => $products,
-            'categories' => $categories,
-            'sales' => $salesFormatted,
-        ]);
-    }
-
     public function contribution_records_create(Request $r)
     {
         $u = Utils::get_user($r);
@@ -340,18 +148,17 @@ class ApiController extends BaseController
         }
 
         $treasurer = null;
-        //check if treasurer_id is not set and abort
         if ($r->treasurer_id == null) {
             Utils::error('Treasurer is required.');
         } else {
-            $treasurer = User::find($r->treasurer_id);
+            $treasurer = User::where('id', $r->treasurer_id)->where('company_id', $u->company_id)->first();
             if ($treasurer == null) {
                 Utils::error('Treasurer not found.');
             }
         }
 
         $model = ContributionRecord::class;
-        $object = ContributionRecord::find($r->get('id'));
+        $object = ContributionRecord::where('id', $r->get('id'))->where('company_id', $u->company_id)->first();
         $isEdit = true;
         if ($object == null) {
             $object = new $model();
@@ -379,7 +186,7 @@ class ApiController extends BaseController
             $object->$key = $value;
         }
         $object->company_id = $u->company_id;
-        $object->treasurer_id = $treasurer->id; //set treasurer_id
+        $object->treasurer_id = $treasurer->id;
 
         try {
             $object->saveQuietly();
@@ -405,11 +212,14 @@ class ApiController extends BaseController
         if ($u == null) {
             Utils::error('Unauthonticated.');
         }
-        $model = "App\Models\\".$model;
-        $object = $model::find($r->get('id'));
+        if (! isset(self::LEGACY_MODEL_WHITELIST[$model])) {
+            Utils::error('Invalid model: '.$model);
+        }
+        $modelClass = self::LEGACY_MODEL_WHITELIST[$model];
+        $object = $modelClass::find($r->get('id'));
         $isEdit = true;
         if ($object == null) {
-            $object = new $model();
+            $object = new $modelClass();
             $isEdit = false;
         }
 
@@ -464,7 +274,7 @@ class ApiController extends BaseController
         } catch (\Exception $e) {
             Utils::error($e->getMessage());
         }
-        $new_object = $model::find($object->id);
+        $new_object = $modelClass::find($object->id);
 
         if ($isEdit) {
             Utils::success($new_object, 'Updated successfully.');
@@ -511,34 +321,27 @@ class ApiController extends BaseController
 
     public function register(Request $r)
     {
-
         if ($r->first_name == null) {
             Utils::error('First name is required.');
         }
-        //check if last name is provided
         if ($r->last_name == null) {
             Utils::error('Last name is required.');
         }
-        //check if email is provided
         if ($r->email == null) {
             Utils::error('Email is required.');
         }
-        //check if email is valid
         if (! filter_var($r->email, FILTER_VALIDATE_EMAIL)) {
             Utils::error('Email is invalid.');
         }
 
-        //check if email is already registered
         $u = User::where('email', $r->email)->first();
         if ($u != null) {
             Utils::error('Email is already registered.');
         }
-        //check if password is provided
         if ($r->password == null) {
             Utils::error('Password is required.');
         }
 
-        //check if company name is provided
         if ($r->company_name == null) {
             Utils::error('Company name is required.');
         }
@@ -588,15 +391,215 @@ class ApiController extends BaseController
             Utils::error('Failed to register company.');
         }
 
-        //DB instert into admin_role_users
         DB::table('admin_role_users')->insert([
             'user_id' => $registered_user->id,
             'role_id' => 2,
         ]);
 
+        $registered_user->refresh();
+
         Utils::success([
             'user' => $registered_user,
             'company' => $registered_company,
         ], 'Registration successful.');
+    }
+
+    /**
+     * Quick Add Product — AJAX endpoint for instant product creation.
+     */
+    public function product_quick_add(Request $r)
+    {
+        $u = \Encore\Admin\Facades\Admin::user();
+
+        if ($u == null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated. Please log in.',
+            ], 401);
+        }
+
+        $r->validate([
+            'name' => 'required|string|max:255',
+            'selling_price' => 'required|numeric|min:0',
+        ]);
+
+        try {
+            $sku = $r->get('sku');
+            if (empty($sku)) {
+                $sku = 'PROD-'.time().'-'.rand(1000, 9999);
+            }
+
+            $product = new \App\Models\StockItem();
+            $product->company_id = $u->company_id;
+            $product->name = $r->get('name');
+            $product->sku = $sku;
+            $product->barcode = $r->get('barcode', '');
+            $product->stock_sub_category_id = $r->get('stock_sub_category_id');
+            $product->buying_price = $r->get('buying_price', 0);
+            $product->selling_price = $r->get('selling_price');
+            $product->current_quantity = $r->get('current_quantity', 0);
+            $product->original_quantity = $r->get('current_quantity', 0);
+            $product->created_by_id = $u->id;
+            $product->description = $r->get('description', '');
+
+            $product->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Product added successfully!',
+                'data' => [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'selling_price' => number_format($product->selling_price),
+                    'stock' => number_format($product->current_quantity),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Quick Sale Recording — AJAX endpoint.
+     */
+    public function quick_sale_record(Request $r)
+    {
+        $u = \Encore\Admin\Facades\Admin::user();
+
+        if ($u == null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        try {
+            $validator = \Validator::make($r->all(), [
+                'stock_item_id' => 'required|exists:stock_items,id',
+                'quantity' => 'required|numeric|min:1',
+                'price' => 'nullable|numeric|min:0',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first(),
+                ], 422);
+            }
+
+            $stockItem = \App\Models\StockItem::find($r->stock_item_id);
+
+            if ($stockItem == null || $stockItem->company_id != $u->company_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Product not found',
+                ], 404);
+            }
+
+            if ($stockItem->current_quantity < $r->quantity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient stock! Available: '.$stockItem->current_quantity.' units',
+                ], 422);
+            }
+
+            $salePrice = $r->price ?? $stockItem->selling_price;
+
+            $stockRecord = new \App\Models\StockRecord();
+            $stockRecord->company_id = $u->company_id;
+            $stockRecord->stock_item_id = $stockItem->id;
+            $stockRecord->quantity = abs($r->quantity);
+            $stockRecord->type = 'Sale';
+            $stockRecord->created_by_id = $u->id;
+            $stockRecord->description = $r->description ?? 'Quick sale recorded';
+            $stockRecord->save();
+
+            $stockItem->refresh();
+
+            $totalAmount = $salePrice * $r->quantity;
+            $profit = ($salePrice - $stockItem->buying_price) * $r->quantity;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sale recorded successfully!',
+                'data' => [
+                    'id' => $stockRecord->id,
+                    'product' => $stockItem->name,
+                    'quantity' => $r->quantity,
+                    'price' => $salePrice,
+                    'total' => $totalAmount,
+                    'profit' => $profit,
+                    'remaining_stock' => $stockItem->current_quantity,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Global Search — AJAX endpoint for the admin command palette.
+     */
+    public function global_search(Request $r)
+    {
+        $u = \Encore\Admin\Facades\Admin::user();
+
+        if ($u == null) {
+            return response()->json([
+                'products' => [],
+                'categories' => [],
+                'sales' => [],
+            ], 401);
+        }
+
+        $query = $r->get('q', '');
+        $companyId = $u->company_id;
+
+        $products = \App\Models\StockItem::where('company_id', $companyId)
+            ->where(function ($q) use ($query) {
+                $q->where('name', 'like', "%{$query}%")
+                    ->orWhere('sku', 'like', "%{$query}%")
+                    ->orWhere('barcode', 'like', "%{$query}%");
+            })
+            ->limit(10)
+            ->get(['id', 'name', 'sku', 'current_quantity', 'selling_price']);
+
+        $categories = \App\Models\StockSubCategory::where('company_id', $companyId)
+            ->where('name', 'like', "%{$query}%")
+            ->withCount('stock_items')
+            ->limit(5)
+            ->get(['id', 'name']);
+
+        $sales = \App\Models\StockRecord::where('company_id', $companyId)
+            ->whereHas('stock_item', function ($q) use ($query) {
+                $q->where('name', 'like', "%{$query}%");
+            })
+            ->with('stock_item:id,name')
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        $salesFormatted = $sales->map(function ($sale) {
+            return [
+                'id' => $sale->id,
+                'product_name' => $sale->stock_item ? $sale->stock_item->name : 'N/A',
+                'date' => date('d M Y', strtotime($sale->created_at)),
+                'quantity' => $sale->quantity,
+                'total' => $sale->total,
+            ];
+        });
+
+        return response()->json([
+            'products' => $products,
+            'categories' => $categories,
+            'sales' => $salesFormatted,
+        ]);
     }
 }

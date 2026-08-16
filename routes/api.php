@@ -2,113 +2,150 @@
 
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\MobileApiController;
-use App\Models\StockItem;
-use App\Models\StockSubCategory;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BillingController;
+use App\Http\Controllers\Api\V1\BudgetItemCategoryController;
+use App\Http\Controllers\Api\V1\BudgetItemController;
+use App\Http\Controllers\Api\V1\BudgetProgramController;
+use App\Http\Controllers\Api\V1\CompanyController;
+use App\Http\Controllers\Api\V1\ContributionRecordController;
+use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\FinancialCategoryController;
+use App\Http\Controllers\Api\V1\FinancialPeriodController;
+use App\Http\Controllers\Api\V1\FinancialRecordController;
+use App\Http\Controllers\Api\V1\SaleController;
+use App\Http\Controllers\Api\V1\StockCategoryController;
+use App\Http\Controllers\Api\V1\StockItemController;
+use App\Http\Controllers\Api\V1\StockRecordController;
+use App\Http\Controllers\Api\V1\StockSubCategoryController;
+use App\Http\Controllers\Api\V1\UploadController;
 use Illuminate\Support\Facades\Route;
 
-// ── Legacy endpoints (kept for backward compatibility) ──────
-Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
-Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
+/*
+|--------------------------------------------------------------------------
+| API Routes — Budget Pro v1
+|--------------------------------------------------------------------------
+|
+| All endpoints live under /api/v1 and return the standard envelope:
+|   { "code": 1|0, "message": string, "data": mixed, "meta"?: object, "errors"?: object }
+|
+| Authentication: Laravel Sanctum bearer tokens (Authorization: Bearer <token>).
+| Tenant + subscription enforcement runs after auth via api.tenant / api.subscription.
+|
+*/
 
-Route::post('auth/register', [ApiController::class, 'register']);
+/**
+ * Register the standard resource route set for a CRUD controller:
+ * list / show / create / update / delete, plus /options (dropdowns) and /search (typeahead).
+ */
+if (! function_exists('apiCrud')) {
+    function apiCrud(string $uri, string $controller): void
+    {
+        Route::get("{$uri}/options", [$controller, 'options']);
+        Route::get("{$uri}/search", [$controller, 'search']);
+        Route::get($uri, [$controller, 'index']);
+        Route::post($uri, [$controller, 'store']);
+        Route::get("{$uri}/{id}", [$controller, 'show'])->whereNumber('id');
+        Route::put("{$uri}/{id}", [$controller, 'update'])->whereNumber('id');
+        Route::patch("{$uri}/{id}", [$controller, 'update'])->whereNumber('id');
+        Route::delete("{$uri}/{id}", [$controller, 'destroy'])->whereNumber('id');
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Legacy API (pre-v1) — kept ONLY for the currently-installed mobile app
+|--------------------------------------------------------------------------
+|
+| The shipped Budget Dynamics app (pre-v1) authenticates with a
+| `logged_in_user_id` request field and calls these exact paths. Do not
+| remove or change their request/response shape without a coordinated
+| mobile app release — see app/Http/Controllers/ApiController.php for the
+| full rationale. New clients must use /api/v1 instead.
+|
+*/
 Route::post('auth/login', [ApiController::class, 'login']);
-Route::post('api/{model}', [ApiController::class, 'my_update']);
+Route::post('auth/register', [ApiController::class, 'register']);
+Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
+Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
 Route::get('api/{model}', [ApiController::class, 'my_list']);
-Route::post('file-uploading', [ApiController::class, 'file_uploading']);
-Route::get('manifest', [ApiController::class, 'manifest']);
+Route::post('api/{model}', [ApiController::class, 'my_update']);
 
-// ── Mobile API v2 — dedicated, rich endpoints ───────────────
 Route::prefix('mobile')->group(function () {
-    // Dashboard
     Route::get('dashboard', [MobileApiController::class, 'dashboard']);
 
-    // Budget Programs
     Route::get('budget-programs', [MobileApiController::class, 'budgetPrograms']);
     Route::get('budget-program/{id}', [MobileApiController::class, 'budgetProgramDetail']);
     Route::post('budget-program-save', [MobileApiController::class, 'budgetProgramSave']);
 
-    // Budget Item Categories
     Route::get('budget-categories', [MobileApiController::class, 'budgetCategories']);
     Route::post('budget-category-save', [MobileApiController::class, 'budgetCategorySave']);
 
-    // Budget Items
     Route::get('budget-items', [MobileApiController::class, 'budgetItems']);
     Route::post('budget-item-save', [MobileApiController::class, 'budgetItemSave']);
 
-    // Contribution Records
     Route::get('contribution-records', [MobileApiController::class, 'contributionRecords']);
     Route::post('contribution-record-save', [MobileApiController::class, 'contributionRecordSave']);
 
-    // Generic (backward-compatible)
     Route::get('list/{model}', [MobileApiController::class, 'genericList']);
     Route::post('save/{model}', [MobileApiController::class, 'genericSave']);
 });
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
+Route::prefix('v1')->group(function () {
 
-//rout for stock-categories
-Route::get('/stock-items', function (Request $request) {
-    $q = $request->get('q');
+    // ── Public auth endpoints (rate-limited to deter brute force) ──
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('auth/register', [AuthController::class, 'register']);
+        Route::post('auth/login', [AuthController::class, 'login']);
+    });
 
-    $company_id = $request->get('company_id');
-    if ($company_id == null) {
-        return response()->json([
-            'data' => [],
-        ], 400);
-    }
+    // ── Public billing: pricing page + Flutterwave webhook (signature-verified) ──
+    Route::get('plans', [BillingController::class, 'plans']);
+    Route::post('webhooks/flutterwave', [BillingController::class, 'webhook']);
 
-    $sub_categories =
-        StockItem::where('company_id', $company_id)
-            ->where('name', 'like', "%$q%")
-            ->orderBy('name', 'asc')
-            ->limit(20)
-            ->get();
+    // ── Authenticated: session/profile (no subscription gate) ──
+    Route::middleware(['auth:sanctum', 'api.tenant'])->group(function () {
+        Route::get('auth/me', [AuthController::class, 'me']);
+        Route::post('auth/logout', [AuthController::class, 'logout']);
+        Route::post('auth/logout-all', [AuthController::class, 'logoutAll']);
+        Route::put('auth/password', [AuthController::class, 'updatePassword']);
 
-    $data = [];
+        Route::get('company', [CompanyController::class, 'show']);
+        Route::put('company', [CompanyController::class, 'update']);
 
-    foreach ($sub_categories as $sub_category) {
-        $data[] = [
-            'id' => $sub_category->id,
-            'text' => $sub_category->sku.' '.$sub_category->name_text,
-        ];
-    }
+        // Billing — reachable even when the subscription has lapsed, so a
+        // customer can always pay to reactivate.
+        Route::get('subscription', [BillingController::class, 'current']);
+        Route::post('subscription/checkout', [BillingController::class, 'checkout']);
+        Route::post('subscription/verify', [BillingController::class, 'verify']);
+    });
 
-    return response()->json([
-        'data' => $data,
-    ]);
-});
+    // ── Authenticated + active subscription: the product surface ──
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription'])->group(function () {
+        Route::get('dashboard', [DashboardController::class, 'index']);
 
-//rout for stock-categories
-Route::get('/stock-sub-categories', function (Request $request) {
-    $q = $request->get('q');
+        Route::post('uploads', [UploadController::class, 'store']);
 
-    $company_id = $request->get('company_id');
-    if ($company_id == null) {
-        return response()->json([
-            'data' => [],
-        ], 400);
-    }
+        // Inventory
+        apiCrud('stock-categories', StockCategoryController::class);
+        apiCrud('stock-sub-categories', StockSubCategoryController::class);
+        apiCrud('stock-items', StockItemController::class);
+        Route::get('stock-items/by-barcode/{code}', [StockItemController::class, 'byBarcode']);
+        apiCrud('stock-records', StockRecordController::class);
 
-    $sub_categories =
-        StockSubCategory::where('company_id', $company_id)
-            ->where('name', 'like', "%$q%")
-            ->orderBy('name', 'asc')
-            ->limit(20)
-            ->get();
+        // Sales / POS
+        apiCrud('sales', SaleController::class);
+        Route::post('sales/checkout', [SaleController::class, 'checkout']);
 
-    $data = [];
+        // Finance
+        apiCrud('financial-categories', FinancialCategoryController::class);
+        apiCrud('financial-periods', FinancialPeriodController::class);
+        apiCrud('financial-records', FinancialRecordController::class);
 
-    foreach ($sub_categories as $sub_category) {
-        $data[] = [
-            'id' => $sub_category->id,
-            'text' => $sub_category->name_text.' ('.$sub_category->measurement_unit.')',
-        ];
-    }
-
-    return response()->json([
-        'data' => $data,
-    ]);
+        // Budget / fundraising
+        apiCrud('budget-programs', BudgetProgramController::class);
+        apiCrud('budget-item-categories', BudgetItemCategoryController::class);
+        apiCrud('budget-items', BudgetItemController::class);
+        apiCrud('contribution-records', ContributionRecordController::class);
+    });
 });

@@ -101,9 +101,10 @@ class SendBudgetItemNotification implements ShouldQueue
             }
         }
 
-        // Add default notification email if not present
-        if (! in_array('mubahood360@gmail.com', $emails)) {
-            $emails[] = 'mubahood360@gmail.com';
+        // Optionally CC a platform notification address, configured per-deployment.
+        $platformEmail = config('mail.platform_notifications_email');
+        if ($platformEmail && ! in_array($platformEmail, $emails, true)) {
+            $emails[] = $platformEmail;
         }
 
         return $emails;
