@@ -3,285 +3,114 @@
 use App\Admin\Controllers\AuthController;
 use App\Http\Controllers\ApiController;
 use App\Models\BudgetProgram;
-use App\Models\ContributionRecord;
-use App\Models\DataExport;
 use App\Models\FinancialReport;
-use App\Models\Gen;
-use App\Models\Utils;
-use Carbon\Carbon;
+use Encore\Admin\Facades\Admin;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
-// Registration Routes (Public - No Authentication Required) //new reg form
+/*
+|--------------------------------------------------------------------------
+| Web routes (admin panel + registration)
+|--------------------------------------------------------------------------
+|
+| NOTE: The REST API lives entirely in routes/api.php (/api/v1). The routes
+| below serve the laravel-admin web panel only. Everything that reads or
+| writes tenant data is behind the `admin` guard and re-checks company_id.
+|
+*/
+
+// Registration (public)
 Route::get('auth/register', [AuthController::class, 'getRegister'])->name('admin.register');
 Route::post('auth/register', [AuthController::class, 'postRegister'])->name('admin.register.post');
 
-// Quick Add Product - Web route (uses Laravel Admin auth)
-Route::post('api/products/quick-add', [ApiController::class, 'product_quick_add']);
+// Admin-only AJAX helpers (require a laravel-admin session) + tenant-scoped PDFs.
+Route::middleware('admin.auth')->group(function () {
+    // Quick actions used by the admin dashboard (already scope by Admin::user()->company_id).
+    Route::post('api/products/quick-add', [ApiController::class, 'product_quick_add']);
+    Route::post('api/sales/quick-record', [ApiController::class, 'quick_sale_record']);
+    Route::get('api/global-search', [ApiController::class, 'global_search']);
 
-// Quick Sale Recording - Web route
-Route::post('api/sales/quick-record', [ApiController::class, 'quick_sale_record']);
-
-// Global Search - Web route (uses Laravel Admin auth)
-Route::get('api/global-search', [ApiController::class, 'global_search']);
-Route::get('migrate', function () {
-    Artisan::call('migrate', ['--force' => true]);
-
-    return Artisan::output();
-});
-Route::get('thanks', function () {
-    $thanks = [
-        '[NAME] - [AMOUNT], Thank you so much.<br><br>May Allah bless you abundantly.<br>🧎',
-        '[NAME] - [AMOUNT], May Allah reward you abundantly.<br>🧎',
-        '[NAME] - [AMOUNT], Thank you so much for your contribution.<br>🧎',
-        '[NAME] - [AMOUNT], May Allah bless you abundantly.<br>🧎',
-        '[NAME] - [AMOUNT], May Allah reward you abundantly.<br>🧎',
-        '[NAME] - [AMOUNT], Thank you so much for your contribution.<br>🧎',
-        '[NAME] - [AMOUNT], May Allah bless you abundantly.<br>🧎',
-    ];
-    $record = ContributionRecord::find($_GET['id']);
-    $msg = $thanks[array_rand($thanks)];
-    $msg = str_replace('[NAME]', $record->name, $msg);
-    $paid = '✅';
-    if ($record->not_paid_amount > 0) {
-        $paid = '🅿️';
-    }
-    $msg = str_replace('[AMOUNT]', Utils::money_short($record->amount).$paid, $msg);
-    echo $msg;
-    exit();
-});
-Route::get('data-exports-print', function () {
-    $id = $_GET['id'];
-    $d = DataExport::find($id);
-    $conds = [
-        'category_id' => $d->category_id,
-    ];
-    if ($d->treasurer_id != null && $d->treasurer_id != 0) {
-        $t = \App\Models\User::find($d->treasurer_id);
-        if ($t != null) {
-            $conds = ['treasurer_id' => $t->id];
+    Route::get('financial-report', function () {
+        $rep = FinancialReport::find(request('id'));
+        if ($rep === null || (int) $rep->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
         }
-    }
-    $recs
-        = ContributionRecord::where($conds)
-            ->orderBy('not_paid_amount', 'desc')->get();
-    $patially_paid = [];
-    $not_paid = [];
-    $fully_paid = [];
-    $pledged = 0;
-    $paid = 0;
-    $not_paid_amount = 0;
-    foreach ($recs as $rec) {
-        $pledged += $rec->amount;
-        $paid += $rec->paid_amount;
-        $not_paid_amount += $rec->not_paid_amount;
-        if ($rec->fully_paid == 'Yes') {
-            $fully_paid[] = $rec;
-        } elseif ($rec->paid_amount > 0) {
-            $patially_paid[] = $rec;
-        } else {
-            $not_paid[] = $rec;
+
+        $company = $rep->company;
+        if ($company && $company->logo === null) {
+            $company->logo = null;
         }
-    }
 
-    //last day 10th may
-    $last_dat = Carbon::create(2024, 5, 12, 0, 0, 0);
-    $days_left = Carbon::now()->diffInDays($last_dat);
+        $pdf = App::make('dompdf.wrapper');
+        $pdf->loadHTML(view('reports.financial-report', ['data' => $rep, 'company' => $company]));
+        $pdf->render();
 
-    if ($days_left < 0) {
-        $days_left = 0;
-    }
+        $storePath = public_path('storage/files/report-'.$rep->id.'.pdf');
+        file_put_contents($storePath, $pdf->output());
+        $rep->file = 'files/report-'.$rep->id.'.pdf';
+        $rep->file_generated = 'Yes';
+        $rep->saveQuietly();
 
-    $days_word = 'days';
-    if ($days_left == 1) {
-        $days_word = 'day';
-    }
+        return $pdf->stream();
+    });
 
-    echo '📌 *MUBARAKA\'s WEDDING CONTRIBUTIONS*';
-    echo '<br><br> 🗓️ : '.$days_left." $days_word left";
-    echo '<br><br>_*-----SUMMARY-------*_<br>'.'';
+    Route::get('budget-program-print', function () {
+        $rep = BudgetProgram::find(request('id'));
+        if ($rep === null || (int) $rep->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
+        }
 
-    /*     echo '<br>*TOAL PLEDGED:* ' . number_format($pledged) . "<br>"; */
-    echo '*Cash Paid:✅* '.number_format($paid).'<br>';
-    echo '*PLEDGED:🅿️* '.number_format($not_paid_amount).'<br>';
-    echo '<br>*Fully Paid:* '.count($fully_paid).'<br>';
-    /* echo '*Partially Paid:* ' . count($patially_paid) . "<br>"; */
-    echo '*Not Paid:* '.(count($not_paid) + count($patially_paid)).'<br>';
-    echo '<br> *_PLEDGED MEMBERS_*'.'';
-    $i = 1;
-    foreach ($not_paid as $rec) {
-        echo "<br>$i. ".$rec->name.' - '.Utils::money_short($rec->not_paid_amount).'🅿️';
-        $i++;
-    }
+        $company = $rep->company;
+        if ($rep->logo === null || strlen((string) $rep->logo) < 2) {
+            $rep->logo = null;
+        }
 
-    /*  echo '<br><br> *_PARTIALLY PAID MEMBERS_*' . "";
-    $i = 1; */
-    foreach ($patially_paid as $rec) {
-        echo "<br>$i. ".$rec->name.' - '.Utils::money_short($rec->paid_amount).'✅'.$rec->tr().', '.Utils::money_short($rec->not_paid_amount).'🅿️';
-        $i++;
-    }
+        $rep->get_categories();
+        $pdf = App::make('dompdf.wrapper');
+        $pdf->loadHTML(view('reports.budget-report', ['data' => $rep, 'company' => $company]));
+        $pdf->render();
 
-    echo '<br><br> *_FULLY PAID MEMBERS_*'.'';
-    $i = 1;
-    foreach ($fully_paid as $rec) {
-        echo "<br>$i. ".$rec->name.' - '.Utils::money_short($rec->amount).'✅'.$rec->tr();
-        $i++;
-    }
+        $storePath = public_path('storage/files/budget-'.$rep->id.'.pdf');
+        file_put_contents($storePath, $pdf->output());
+        $rep->file = 'files/budget-'.$rep->id.'.pdf';
+        $rep->saveQuietly();
 
-    echo '<br><br>----------R.S.V.P:🙏-----------<br>';
-    echo '1. *Siama Saleh* - 0782349228 0706906707<br>';
-    echo '2. *Bwambale Muhidin* - 0762556385 0703903402 <br>';
-    echo '3. *Muhindo Mubaraka* - 0783204665 0706638494<br>';
-    echo '<br>*Jazakumullah Khairan* 🧎';
-    exit();
+        return $pdf->stream();
+    });
+
+    Route::get('sale-receipt-pdf', function () {
+        $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find(request('id'));
+        if ($sale === null || (int) $sale->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
+        }
+
+        $pdf = App::make('dompdf.wrapper');
+        $pdf->loadHTML(view('reports.sale-receipt', ['sale' => $sale, 'company' => $sale->company]));
+        $pdf->render();
+
+        file_put_contents(public_path('storage/files/receipt-'.$sale->id.'.pdf'), $pdf->output());
+        $sale->receipt_pdf_url = 'files/receipt-'.$sale->id.'.pdf';
+        $sale->receipt_pdf_is_generated = 'Yes';
+        $sale->saveQuietly();
+
+        return $pdf->stream('receipt-'.$sale->receipt_number.'.pdf');
+    });
+
+    Route::get('sale-invoice-pdf', function () {
+        $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find(request('id'));
+        if ($sale === null || (int) $sale->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
+        }
+
+        $pdf = App::make('dompdf.wrapper');
+        $pdf->loadHTML(view('reports.sale-invoice', ['sale' => $sale, 'company' => $sale->company]));
+        $pdf->render();
+
+        file_put_contents(public_path('storage/files/invoice-'.$sale->id.'.pdf'), $pdf->output());
+        $sale->invoice_pdf_url = 'files/invoice-'.$sale->id.'.pdf';
+        $sale->invoice_pdf_is_generated = 'Yes';
+        $sale->saveQuietly();
+
+        return $pdf->stream('invoice-'.$sale->invoice_number.'.pdf');
+    });
 });
-
-Route::get('financial-report', function () {
-    $id = request('id');
-    $rep = FinancialReport::find($id);
-    if ($rep == null) {
-        return exit('Gen not found');
-    }
-
-    $pdf = App::make('dompdf.wrapper');
-    $company = $rep->company;
-
-    //check fi has logo and if it exisits
-    if ($company->logo != null) {
-        //$company->logo = public_path() . '/storage/' . $company->logo;
-    } else {
-        $company->logo = null;
-    }
-
-    $pdf->loadHTML(view('reports.financial-report', [
-        'data' => $rep,
-        'company' => $company,
-    ]));
-
-    $model = $rep;
-    $pdf->render();
-    $output = $pdf->output();
-    $store_file_path = public_path('storage/files/report-'.$model->id.'.pdf');
-    file_put_contents($store_file_path, $output);
-    $model->file = 'files/report-'.$model->id.'.pdf';
-    $model->file_generated = 'Yes';
-
-    return $pdf->stream();
-
-    //view reports.financial-report
-    return view('reports.financial-report', ['data' => $rep]);
-});
-
-Route::get('budget-program-print', function () {
-    $id = request('id');
-    $rep = BudgetProgram::find($id);
-    if ($rep == null) {
-        return exit('Gen not found');
-    }
-
-    $pdf = App::make('dompdf.wrapper');
-    $company = $rep->company;
-
-    if ($rep->logo == null || strlen($rep->logo) < 2) {
-        $rep->logo = null;
-    }
-
-    /* return view('reports.budget-report', [
-        'data' => $rep,
-        'company' => $company
-    ]); */
-
-    $rep->get_categories();
-    $pdf->loadHTML(view('reports.budget-report', [
-        'data' => $rep,
-        'company' => $company,
-    ]));
-
-    $model = $rep;
-    $pdf->render();
-    $output = $pdf->output();
-    $store_file_path = public_path('storage/files/budget-'.$model->id.'.pdf');
-    file_put_contents($store_file_path, $output);
-    $model->file = 'files/budget-'.$model->id.'.pdf';
-
-    return $pdf->stream();
-
-    //view reports.financial-report
-    return view('reports.financial-report', ['data' => $rep]);
-});
-
-Route::get('sale-receipt-pdf', function () {
-    $id = request('id');
-    $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find($id);
-
-    if ($sale == null) {
-        return response()->json(['error' => 'Sale record not found'], 404);
-    }
-
-    $pdf = App::make('dompdf.wrapper');
-    $company = $sale->company;
-
-    $pdf->loadHTML(view('reports.sale-receipt', [
-        'sale' => $sale,
-        'company' => $company,
-    ]));
-
-    $pdf->render();
-    $output = $pdf->output();
-    $store_file_path = public_path('storage/files/receipt-'.$sale->id.'.pdf');
-    file_put_contents($store_file_path, $output);
-    $sale->receipt_pdf_url = 'files/receipt-'.$sale->id.'.pdf';
-    $sale->receipt_pdf_is_generated = 'Yes';
-    $sale->saveQuietly();
-
-    return $pdf->stream('receipt-'.$sale->receipt_number.'.pdf');
-});
-
-Route::get('sale-invoice-pdf', function () {
-    $id = request('id');
-    $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find($id);
-
-    if ($sale == null) {
-        return response()->json(['error' => 'Sale record not found'], 404);
-    }
-
-    $pdf = App::make('dompdf.wrapper');
-    $company = $sale->company;
-
-    $pdf->loadHTML(view('reports.sale-invoice', [
-        'sale' => $sale,
-        'company' => $company,
-    ]));
-
-    $pdf->render();
-    $output = $pdf->output();
-    $store_file_path = public_path('storage/files/invoice-'.$sale->id.'.pdf');
-    file_put_contents($store_file_path, $output);
-    $sale->invoice_pdf_url = 'files/invoice-'.$sale->id.'.pdf';
-    $sale->invoice_pdf_is_generated = 'Yes';
-    $sale->saveQuietly();
-
-    return $pdf->stream('invoice-'.$sale->invoice_number.'.pdf');
-});
-
-// Route get generate-models
-
-Route::get('generate-models', function () {
-    $id = request('id');
-    $gen = Gen::find($id);
-    if ($gen == null) {
-        return exit('Gen not found');
-    }
-    $gen->gen_model();
-
-    return exit('generate-models');
-});
-
-/* Route::get('/', function () {
-    return die('welcome');
-});
-Route::get('/home', function () {
-    return die('welcome home');
-});
- */

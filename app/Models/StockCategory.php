@@ -34,26 +34,17 @@ class StockCategory extends Model
         'selling_price' => 'decimal:2',
         'expected_profit' => 'decimal:2',
         'earned_profit' => 'decimal:2',
-        'current_quantity' => 'decimal:2',
-        'reorder_level' => 'decimal:2',
     ];
 
+    // Note: buying_price/selling_price/expected_profit/earned_profit are rollups
+    // maintained by update_self(); name/description/status/image are user-editable.
     protected $fillable = [
         'company_id',
         'name',
         'description',
         'status',
         'image',
-        'buying_price',
-        'selling_price',
-        'expected_profit',
-        'earned_profit',
-        'measurement_unit',
-        'current_quantity',
-        'reorder_level',
     ];
-
-    use HasFactory;
 
     public function update_self()
     {
@@ -89,7 +80,7 @@ class StockCategory extends Model
     //name_text
     public function getNameTextAttribute()
     {
-        return $this->name.' ('.$this->code.')';
+        return (string) $this->name;
     }
 
     /**
@@ -102,7 +93,7 @@ class StockCategory extends Model
 
     public function stockSubCategories()
     {
-        return $this->hasMany(StockSubCategory::class, 'parent_id');
+        return $this->hasMany(StockSubCategory::class, 'stock_category_id');
     }
 
     public function stockItems()
@@ -138,22 +129,6 @@ class StockCategory extends Model
         return $query->where('status', $status);
     }
 
-    public function scopeLowStock($query)
-    {
-        return $query->where('current_quantity', '<', 'reorder_level');
-    }
-
-    public function scopeInStock($query)
-    {
-        return $query->where('current_quantity', '>', 0);
-    }
-
-    public function scopeOutOfStock($query)
-    {
-        return $query->where('current_quantity', '<=', 0);
-    }
-
-    /*
-        "earned_profit" => 0
-*/
+    // Note: stock quantity lives on StockSubCategory / StockItem, not on the
+    // top-level category, so no current_quantity/reorder_level scopes here.
 }

@@ -42,9 +42,9 @@ class Kernel extends HttpKernel
 
         'api' => [
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            \App\Http\Middleware\ForceJsonResponse::class, // Always respond with JSON on /api/*
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \App\Http\Middleware\EnforceSaasIsolation::class, // SAAS Security Layer
         ],
     ];
 
@@ -67,6 +67,9 @@ class Kernel extends HttpKernel
         'signed' => \App\Http\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
-        'saas' => \App\Http\Middleware\EnforceSaasIsolation::class, // SAAS Enforcement
+        'saas' => \App\Http\Middleware\EnforceSaasIsolation::class, // SAAS Enforcement (web)
+        'force.json' => \App\Http\Middleware\ForceJsonResponse::class,
+        'api.tenant' => \App\Http\Middleware\EnsureApiTenant::class, // API: user has active company
+        'api.subscription' => \App\Http\Middleware\EnsureActiveSubscription::class, // API: plan/license valid
     ];
 }

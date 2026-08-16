@@ -17,3 +17,10 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+# Secrets / credentials — never track
+SSH_Access.txt
+id_rsa
+id_rsa.*
+*.pem
+*_credentials*
+deploy_key*
