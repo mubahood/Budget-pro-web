@@ -36,6 +36,25 @@ class Company extends Model
     use AuditLogger, HasFactory;
 
     /**
+     * Mass-assignable fields. Every write path in this app currently sets
+     * properties explicitly (`$company->name = ...`), so this is not relied
+     * on for security — it only unblocks legitimate use of Eloquent's
+     * create()/update() convenience methods (e.g. in tests) without opening
+     * up the sensitive fields (owner_id, status, license_expire) that are
+     * managed exclusively through controlled flows (registration, billing).
+     */
+    protected $fillable = [
+        'name', 'email', 'phone_number', 'phone_number_2', 'address',
+        'website', 'about', 'slogan', 'logo', 'currency', 'pobox', 'color',
+        'facebook', 'twitter',
+        'settings_worker_can_create_stock_item',
+        'settings_worker_can_create_stock_record',
+        'settings_worker_can_create_stock_category',
+        'settings_worker_can_view_balance',
+        'settings_worker_can_view_stats',
+    ];
+
+    /**
      * The attributes that should be cast.
      */
     protected $casts = [

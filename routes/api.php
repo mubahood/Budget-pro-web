@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\ApiController;
+use App\Http\Controllers\MobileApiController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\BudgetItemCategoryController;
@@ -49,6 +51,45 @@ if (! function_exists('apiCrud')) {
         Route::delete("{$uri}/{id}", [$controller, 'destroy'])->whereNumber('id');
     }
 }
+
+/*
+|--------------------------------------------------------------------------
+| Legacy API (pre-v1) — kept ONLY for the currently-installed mobile app
+|--------------------------------------------------------------------------
+|
+| The shipped Budget Dynamics app (pre-v1) authenticates with a
+| `logged_in_user_id` request field and calls these exact paths. Do not
+| remove or change their request/response shape without a coordinated
+| mobile app release — see app/Http/Controllers/ApiController.php for the
+| full rationale. New clients must use /api/v1 instead.
+|
+*/
+Route::post('auth/login', [ApiController::class, 'login']);
+Route::post('auth/register', [ApiController::class, 'register']);
+Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
+Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
+Route::get('api/{model}', [ApiController::class, 'my_list']);
+Route::post('api/{model}', [ApiController::class, 'my_update']);
+
+Route::prefix('mobile')->group(function () {
+    Route::get('dashboard', [MobileApiController::class, 'dashboard']);
+
+    Route::get('budget-programs', [MobileApiController::class, 'budgetPrograms']);
+    Route::get('budget-program/{id}', [MobileApiController::class, 'budgetProgramDetail']);
+    Route::post('budget-program-save', [MobileApiController::class, 'budgetProgramSave']);
+
+    Route::get('budget-categories', [MobileApiController::class, 'budgetCategories']);
+    Route::post('budget-category-save', [MobileApiController::class, 'budgetCategorySave']);
+
+    Route::get('budget-items', [MobileApiController::class, 'budgetItems']);
+    Route::post('budget-item-save', [MobileApiController::class, 'budgetItemSave']);
+
+    Route::get('contribution-records', [MobileApiController::class, 'contributionRecords']);
+    Route::post('contribution-record-save', [MobileApiController::class, 'contributionRecordSave']);
+
+    Route::get('list/{model}', [MobileApiController::class, 'genericList']);
+    Route::post('save/{model}', [MobileApiController::class, 'genericSave']);
+});
 
 Route::prefix('v1')->group(function () {
 

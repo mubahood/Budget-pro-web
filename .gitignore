@@ -24,3 +24,5 @@ id_rsa.*
 *.pem
 *_credentials*
 deploy_key*
+# Database backups — contain live production data, never track
+/backups
