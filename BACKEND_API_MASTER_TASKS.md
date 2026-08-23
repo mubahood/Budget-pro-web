@@ -122,6 +122,17 @@ security/architecture/consistency problem, not a "start over" problem.
 - **ContributionRecord**: pledges vs. payments (`amount`, `paid_amount`, `not_paid_amount`, `fully_paid`).
 - **HandoverRecord**: cash handover between users with approval.
 
+### Module C — Poultry Farm Management (NEW, greenfield — see PHASE 8)
+- Offline‑first farm management (batches, daily egg/feed/mortality records, sales, expenses,
+  customers, health & mortality events, vaccination schedules) already **fully built and shipped
+  client‑side** in the Flutter app, with zero backend today — the mobile sync engine talks to a
+  `NoopTransport` stub. This backend does not exist yet in any form (verified: zero hits for
+  poultry/batch/flock/egg anywhere in `app/`, migrations, or routes).
+- Unlike Modules A/B, the mobile client already dictates the wire contract (client‑generated UUID
+  primary keys, per‑row `version`/timestamp for conflict resolution, incremental changed‑since pull) —
+  this is the one place in the backend where UUID keys + a sync protocol are correct and necessary,
+  not a deviation to avoid elsewhere.
+
 ### Tenancy & identity
 - **Company** is the tenant root; one owner (`companies.owner_id`), one‑company‑per‑user
   (`admin_users.company_id`), no membership pivot, no org switching.
@@ -588,6 +599,232 @@ route; ❌ = missing):
 
 ---
 
+## PHASE 8 — POULTRY FARM MANAGEMENT MODULE (NEW) 🆕
+
+> Companion doc: `POULTRY_MODULE_MASTER_PLAN.md` in the `budget-pro-mobo` repo covers the Flutter‑side
+> half of this same effort (bug fixes, new pricing/weight fields, the real `PoultrySyncTransport`
+> implementation that replaces `NoopTransport` and talks to the endpoints specified here).
+>
+> Scope confirmed with the product owner (2026‑08‑22): build the **full bidirectional sync engine now**,
+> not a CRUD‑only stopgap — the Flutter sync engine (`poultry_sync_service.dart`) already exists and
+> expects push/pull/conflict semantics; this phase makes the other end of that contract real.
+
+### 8.1 Design decisions (resolving the ambiguities the client leaves open)
+
+The mobile client's `PoultrySyncTransport` interface (`push(table, uuid, json, isDelete)` /
+`pull(table, sinceCursor)`) defines the shape but not the semantics. These are settled here so
+client and server can't disagree at runtime:
+
+- **Conflict resolution = last‑write‑wins by client timestamp, server is authoritative once decided.**
+  Every poultry table gets a `client_updated_at` `BIGINT` column (the device epoch‑ms the client sent —
+  kept separate from Laravel's own `updated_at` `TIMESTAMP`, which tracks server‑side row mutation for
+  admin/debugging only, never used for conflict logic). On push:
+  - Row doesn't exist for `(company_id, uuid)` → insert, `conflict: false`.
+  - Row exists and `payload.updated_at >= existing.client_updated_at` → client wins, update the row,
+    `conflict: false`.
+  - Row exists and `payload.updated_at < existing.client_updated_at` → **server wins**, do **not** apply
+    the client's data, respond `conflict: true` with `server_data` = the existing row as JSON. The
+    client's own `_resolveConflict()` re‑compares timestamps and will correctly pick the server row
+    since the server just told it its timestamp is newer — no special client‑side trust required.
+  - `is_delete: true` is handled as an ordinary update carrying `is_deleted = 1` (a tombstone), through
+    the exact same LWW path — matches how the client already sends deletes through `push()` unchanged.
+- **Pull cursor = an internal auto‑increment `id`, not a timestamp.** Each poultry table has a normal
+  auto‑increment `BIGINT id PRIMARY KEY` (internal only, never exposed) *in addition to* the `uuid`
+  business key (`VARCHAR(64) UNIQUE NOT NULL` — sized generously for the client's
+  `p_<12-hex>_<16-hex>` format, ~31 chars today). `pull(table, since)` = `WHERE company_id = ? AND id >
+  ? ORDER BY id ASC LIMIT 500`, `new_cursor = MAX(id)` in the batch returned (unchanged if the batch is
+  empty). This sidesteps the "same‑millisecond timestamp" boundary bug a timestamp‑cursor would have,
+  for free, using a primitive Laravel already gives you.
+- **One generic sync controller, 13 typed Eloquent models.** Not 13 bespoke controllers, and not one
+  controller doing raw untyped queries — a `PoultrySyncable` trait + a table‑name → model‑class map, so
+  each model still gets normal Eloquent casts/validation/mass‑assignment‑safety (`$syncFillable`,
+  mirroring `BaseCrudController::$writable`) while the controller logic (push/pull/LWW/cursor) is
+  written once.
+- **Table‑name mapping**: client sends short keys (`batches`, `daily_records`, `feed_types`,
+  `feed_stock`, `customers`, `sales`, `expenses`, `egg_tx`, `mortality_events`, `health_events`,
+  `vacc_events`, `price_history`, `audit`) — its local `p_` prefix (`PoultryTables` in the Flutter repo)
+  is a local‑db‑only disambiguation and is stripped client‑side before the request is sent (see
+  `POULTRY_MODULE_MASTER_PLAN.md` Phase 4). Server table names: `poultry_<key>`, e.g. `poultry_batches`,
+  `poultry_daily_records`.
+- **Money**: `DECIMAL(15,2)` everywhere, per the codebase's current best‑practice convention (§3.1) —
+  not `bigInteger`/`double`.
+- **Company scoping**: plain `company_id` FK column on every table (no `CompanyScope` global scope
+  needed here the way Modules A/B use it, since every read in this module is already funneled through
+  the sync controller's explicit `where('company_id', ...)` — add it anyway for defense‑in‑depth and
+  consistency with the rest of the codebase's model layer).
+- **Photos** (`MortalityEvent`/`HealthEvent`): no new upload mechanism — reuse the existing generic
+  `POST /api/v1/uploads` endpoint as‑is. The client uploads first, then sends the returned path string
+  as an ordinary field value inside the entity's `json` payload on push (identical pattern to
+  `StockItem.image`) — the sync controller does not need to know anything about photos specifically.
+
+### 8.2 Schema (13 tables, all under `database/migrations/`)
+
+Every table gets: `id` (internal auto‑increment, sync cursor), `uuid` (unique business key),
+`company_id` (FK, indexed), the entity's own columns, `client_updated_at` (`BIGINT`), `version`
+(`INT UNSIGNED DEFAULT 1`), `is_deleted` (`BOOLEAN DEFAULT 0`), `entered_by` (`VARCHAR(255) NULL`),
+plus normal Laravel `timestamps()`. Indexes: `(company_id, id)` for pull, `(company_id, uuid)` unique
+for push lookup.
+
+- [ ] `poultry_batches` — name, type (layer/broiler/kienyeji), source, acquired_date, start_count,
+      cost_per_chick (decimal), status, notes.
+- [ ] `poultry_feed_types` — name, category, kg_per_bag.
+- [ ] `poultry_customers` — name, phone, notes.
+- [ ] `poultry_daily_records` — batch_uuid, date, eggs_trays, eggs_loose, mortality, feed_kg, water_l,
+      notes, **`egg_unit_price` (decimal), `feed_price_per_kg` (decimal), `avg_weight_kg` (decimal,
+      nullable)** — the three new fields from `POULTRY_MODULE_MASTER_PLAN.md` Phases 1–2; add these to
+      the schema from day one rather than as a follow‑up migration, since the Flutter side is adding
+      them in the same effort.
+- [ ] `poultry_feed_stock` — feed_type_uuid, direction, source, qty_kg (decimal), cost (decimal),
+      batch_uuid, ref_uuid, date, note.
+- [ ] `poultry_sales` — category, product_label, qty (decimal), unit, unit_price (decimal), total
+      (decimal), amount_paid (decimal), customer_uuid, batch_uuid, date, note.
+- [ ] `poultry_expenses` — category, feed_type_uuid, amount (decimal), batch_uuid, date, note.
+- [ ] `poultry_egg_tx` — type (broken/consumption/adjustment), eggs (signed int), date, note.
+- [ ] `poultry_mortality_events` — batch_uuid, count, cause, photo_path, date, note.
+- [ ] `poultry_health_events` — batch_uuid, symptoms, diagnosis, treatment, cost (decimal),
+      withdrawal_days, date, note.
+- [ ] `poultry_vacc_events` — batch_uuid, vaccine, method, age_days, withdrawal_days, due_date, done
+      (bool), done_date, note.
+- [ ] `poultry_price_history` — category, unit, unit_price (decimal), date.
+- [ ] `poultry_audit` — action, entity_table, entity_uuid, summary, actor, date.
+- [ ] All `*_uuid` foreign‑key‑ish columns are plain `VARCHAR(64)` (not real FK constraints) —
+      cross‑table references are by business‑key uuid, and rows can legitimately arrive out of
+      dependency order across retries/partial failures (see §8.1's push‑ordering note carried over
+      from the client). Do not add FK constraints that would reject a child row whose parent hasn't
+      synced yet; validate existence at the application layer (best‑effort) but never hard‑fail a
+      push solely because the referenced parent uuid isn't present yet.
+
+### 8.3 Models (`app/Models/Poultry/*.php`)
+
+- [ ] One Eloquent model per table (`PoultryBatch`, `PoultryFeedType`, … `PoultryAuditEntry`), each
+      declaring `protected array $syncFillable` (the entity‑specific columns only — never `id`,
+      `uuid`, `company_id`, `client_updated_at`, `version`, `is_deleted` via mass assignment) and a
+      `public static string $syncKey` (the short table key the client sends, e.g. `'batches'`).
+- [ ] `PoultrySyncable` trait (`app/Traits/PoultrySyncable.php`) providing the shared push/pull query
+      logic described in §8.1, used by all 13 models — this is where the LWW comparison and cursor
+      query actually live, not duplicated per model.
+- [ ] `Company` gets a `poultryBatches()`/etc. relations only if actually needed for reporting (§8.5) —
+      not required for sync itself.
+
+### 8.4 Sync endpoints
+
+- [ ] `POST /api/v1/poultry/sync/push` — body `{table, uuid, json, is_delete}`. Response (inside the
+      standard `{code, message, data}` envelope): `data: {ok, conflict, server_data}`.
+- [ ] `GET /api/v1/poultry/sync/pull?table=batches&since=0` — response `data: {rows: [...], new_cursor}`.
+      `rows` are plain entity JSON (server field names — the client's `fromMap()` already tolerates
+      unknown/extra fields per its existing `strOf`/`intOf`/`dblOf` null‑safe parsing helpers, but keep
+      field names identical to what the client's `toMap()` sends to avoid a translation layer).
+- [ ] Both routes live inside the existing `auth:sanctum` + `api.tenant` + `api.subscription` middleware
+      group, exactly like every other `/api/v1` resource — no separate auth scheme for poultry.
+- [ ] `PoultrySyncController` (`app/Http/Controllers/Api/V1/PoultrySyncController.php`) — thin, delegates
+      to the `PoultrySyncable` trait's logic per resolved model; validates `table` against the known
+      key map (reject unknown table keys with a 422, not a 500 from an unresolved class).
+- [ ] Rate/size guard: pushes are per‑row (matching the client's one‑row‑per‑request push loop with
+      retry+backoff already implemented client‑side) — no batch/bulk push endpoint needed for v1: the
+      client already paces itself, and building bulk semantics now would be speculative.
+
+### 8.5 Reporting / web‑admin visibility (secondary — do after sync itself works)
+
+- [ ] Company‑scoped read‑only list endpoints (`apiCrud`‑style, or just plain `index`/`show`) for the
+      web dashboard to *view* synced poultry data — not required for the mobile app to function, but
+      needed if farm data should ever be visible outside the phone that entered it (e.g. an owner
+      checking the web dashboard). Lower priority than sync itself; the mobile app already reads its own
+      data locally regardless of this.
+- [ ] Do **not** build write endpoints for the web admin side in this phase — poultry data entry is a
+      mobile‑only workflow by design (matching how the module was actually built); a web‑side create/edit
+      UI is out of scope unless separately requested.
+
+### 8.6 Testing
+
+- [ ] PHPUnit feature tests mirroring the existing `tests/Feature/` conventions: push‑creates‑row,
+      push‑updates‑row (client newer), push‑conflict (server newer, verify `server_data` returned and
+      the DB row is *unchanged*), push‑delete‑tombstone, pull‑pagination‑respects‑`since`, pull returns
+      nothing new when `since` already at the max id, cross‑tenant isolation (company A can never
+      push/pull company B's rows by uuid guessing).
+- [ ] A tenant‑isolation probe specifically for the uuid‑keyed lookup path (§0.2/§0.6's IDOR concerns
+      apply here too — a malicious `uuid` from another company must 404, not leak or silently adopt).
+
+---
+
+## PHASE 9 — POULTRY FARM TYPES & PRODUCTION GUIDES (NEW) 🆕
+
+> Requested 2026‑08‑23, alongside a Task Management feature built entirely client‑side (see
+> `POULTRY_MODULE_MASTER_PLAN.md` Part 2 in `budget-pro-mobo`). This phase is the one piece of
+> that request that needs a backend: farm types and their "production guide" task templates must
+> be **admin‑managed on the web dashboard**, not hardcoded in the mobile app, per the explicit
+> requirement that they be "dynamic."
+
+### 9.1 Design decisions
+
+- **Not tenant‑scoped.** Unlike every other poultry table (§Phase 8), farm types and production
+  guide tasks are **platform‑wide reference/template data** authored by the super‑admin, not
+  per‑company data — every farm using the app should see the same "layer/broiler/kienyeji"
+  starting types and their guides. No `company_id` column on either table. Still gated behind
+  `auth:sanctum` + `api.subscription` (a logged‑in, subscribed user of any company can read them)
+  but **not** `api.tenant`, since there is no tenant to scope by.
+- **Read‑only from the mobile app's perspective.** Farmers browse/read guides; only the
+  super‑admin edits them (web dashboard, laravel‑admin). The mobile sync engine's pull‑only mode
+  (§Phase 8.1, already designed for exactly this "admin‑authored, client never pushes" case)
+  applies here too — reuse it rather than inventing a second read‑only pattern.
+- **Seed the 3 existing hardcoded types as the initial rows** (`layer`, `broiler`, `kienyeji`) so
+  every already‑shipped mobile client's existing `Batch.type` values keep matching a real row the
+  moment this ships, with zero client‑side data migration needed.
+- **`days_after_start` is relative, not absolute** — a guide task fires `days_after_start` days
+  after the *batch's* `acquired_date`, not a fixed calendar date. This is the only sane way to
+  template a task across many different batches all created on different days.
+- **Not retroactive.** Adding a guide task after batches of that type already exist does not
+  backfill tasks onto those existing batches (mirrors the client‑side decision in the companion
+  plan doc) — this keeps the sync/pull contract simple (a plain pull‑and‑cache, no "did this admin
+  change require reconciling already‑generated tasks" logic).
+
+### 9.2 Schema
+
+- [ ] `poultry_farm_types` — `id` (internal), `slug` (`VARCHAR(64) UNIQUE`, e.g. `layer`,
+      matches the mobile client's existing `Batch.type` string values exactly), `name`
+      (display label), `description` (text, shown in the guide viewer), `is_active` (boolean,
+      soft‑disable without deleting), `client_updated_at`/`version` for the same LWW/cursor sync
+      mechanics as §Phase 8, standard timestamps.
+- [ ] `poultry_production_guide_tasks` — `id`, `farm_type_slug` (`VARCHAR(64)`, FK by value to
+      `poultry_farm_types.slug`), `title`, `description`, `days_after_start` (`INT UNSIGNED`),
+      `is_active`, same sync columns as above.
+- [ ] Seed migration/seeder inserting the 3 default farm types + a starter guide per type (a
+      handful of realistic tasks each — mirrors what the companion Flutter‑side plan asks the
+      *local* seeder to demo; keep the two seed lists in sync content‑wise so a fresh install and
+      a synced‑from‑server install show the same demo guide).
+
+### 9.3 Admin (laravel‑admin, web dashboard)
+
+- [ ] `app/Admin/Controllers/PoultryFarmTypeController.php` and
+      `PoultryProductionGuideTaskController.php` — plain laravel‑admin CRUD grids/forms, mirroring
+      the existing `FinancialCategoryController.php` pattern already used for this kind of
+      simple admin‑managed reference data in this codebase.
+- [ ] Guide tasks grid filterable/grouped by farm type; a simple drag‑or‑number `days_after_start`
+      field — no need for anything fancier than what `FinancialCategoryController` already does.
+
+### 9.4 API (mobile‑facing, reuses the Phase 8 sync engine)
+
+- [ ] Both tables register with the same `PoultrySyncable` trait / table‑key map from §Phase 8.3
+      (`farm_types`, `production_guide_tasks`), so they ride the existing
+      `GET /api/v1/poultry/sync/pull?table=farm_types&since=...` endpoint — **no new endpoints
+      needed**, only two new entries in the sync controller's table‑key map and two new models.
+      Push is simply never called for these two tables from the client (enforced client‑side per
+      the companion plan; the server doesn't need to separately block it, since there's no
+      admin‑facing reason a farmer's app would ever send one, but `PoultrySyncable`'s push path
+      should still correctly reject/no‑op a push against these two tables defensively rather than
+      silently accepting farmer‑authored edits to admin reference data).
+
+### 9.5 Testing
+
+- [ ] Pull returns the seeded defaults for a freshly‑registered company with zero prior sync
+      state (cursor `0`).
+- [ ] A push attempt against `farm_types`/`production_guide_tasks` is rejected (422 or a
+      clearly‑labeled no‑op), confirming farmer‑authored data can never leak into admin reference
+      tables.
+- [ ] Admin CRUD via laravel‑admin: create/edit/deactivate a farm type and a guide task, confirm
+      the change is visible on the next mobile pull.
+
+---
+
 ## Suggested execution order (milestones)
 
 1. **M0 — Security gate (Phase 0):** real token auth, kill unauth endpoints, fix mass assignment, correct
@@ -601,6 +838,12 @@ route; ❌ = missing):
 5. **M4 — Correctness + dead features (Phases 5–6):** fix the math, make forecasting/auto‑reorder either work
    or disappear, close admin IDOR, invoke policies.
 6. **M5 — Hardening (Phases 3 remainder + 7):** FKs/indexes/constraints, full test suite, docs, cleanup.
+7. **M6 — Poultry module (Phase 8):** schema + models + sync push/pull + conflict resolution, wired to
+   the Flutter `PoultrySyncTransport` implementation (companion doc: `POULTRY_MODULE_MASTER_PLAN.md`
+   in `budget-pro-mobo`). Independent of M0–M5 — can run in parallel once M0's security gate is in place,
+   since it's a net‑new module rather than a modification of Modules A/B.
+8. **M7 — Farm types & production guides (Phase 9):** depends on M6's sync engine existing (reuses it
+   directly, adds no new endpoints) — do after M6, not in parallel with it.
 
 ---
 
