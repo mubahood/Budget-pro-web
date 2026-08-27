@@ -4,12 +4,22 @@ namespace App\Models;
 
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\PoultrySyncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PoultryDailyRecord extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, PoultrySyncable;
+
+    protected static array $syncColumns = [
+        'date', 'eggs_trays', 'eggs_loose', 'mortality', 'feed_kg', 'water_l',
+        'notes', 'egg_unit_price', 'feed_price_per_kg', 'avg_weight_kg',
+    ];
+
+    protected static array $syncUuidRefs = [
+        'batch_uuid' => ['model' => PoultryBatch::class, 'column' => 'batch_id'],
+    ];
 
     protected static function booted(): void
     {

@@ -4,12 +4,17 @@ namespace App\Models;
 
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\PoultrySyncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PoultryFeedType extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, PoultrySyncable;
+
+    protected static array $syncColumns = ['name', 'category', 'kg_per_bag'];
+
+    protected static array $syncUuidRefs = [];
 
     protected static function booted(): void
     {

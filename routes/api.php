@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\FinancialCategoryController;
 use App\Http\Controllers\Api\V1\FinancialPeriodController;
 use App\Http\Controllers\Api\V1\FinancialRecordController;
+use App\Http\Controllers\Api\V1\PoultrySyncController;
 use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\StockCategoryController;
 use App\Http\Controllers\Api\V1\StockItemController;
@@ -147,5 +148,10 @@ Route::prefix('v1')->group(function () {
         apiCrud('budget-item-categories', BudgetItemCategoryController::class);
         apiCrud('budget-items', BudgetItemController::class);
         apiCrud('contribution-records', ContributionRecordController::class);
+
+        // Poultry module sync (§Phase 8/9) — mobile-facing, matches the
+        // Flutter client's PoultrySyncTransport push/pull contract exactly.
+        Route::get('poultry/sync/pull', [PoultrySyncController::class, 'pull']);
+        Route::post('poultry/sync/push', [PoultrySyncController::class, 'push']);
     });
 });

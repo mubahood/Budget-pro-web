@@ -324,9 +324,18 @@ class ApiController extends BaseController
             Utils::error('Company not found.');
         }
 
+        // Additive: issues a Sanctum token alongside the legacy response so
+        // the already-shipped mobile client (which never called /api/v1/auth
+        // and never had a token) can start authenticating to /api/v1
+        // endpoints — e.g. poultry sync — without any change to its login
+        // request. Existing clients ignore the extra field; nothing about
+        // the legacy response shape changes for them.
+        $token = $user->createToken((string) ($r->input('device_name') ?: $r->userAgent() ?: 'api-token'))->plainTextToken;
+
         Utils::success([
             'user' => $user,
             'company' => $company,
+            'token' => $token,
         ], 'Login successful.');
     }
 

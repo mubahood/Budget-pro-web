@@ -4,12 +4,19 @@ namespace App\Models;
 
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\PoultrySyncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PoultryBatch extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, PoultrySyncable;
+
+    protected static array $syncColumns = [
+        'name', 'type', 'source', 'acquired_date', 'start_count', 'cost_per_chick', 'status', 'notes', 'is_main_farm',
+    ];
+
+    protected static array $syncUuidRefs = [];
 
     protected static function booted(): void
     {

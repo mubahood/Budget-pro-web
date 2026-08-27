@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\AuditLogger;
+use App\Traits\PoultryReferenceSyncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -12,7 +13,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 class PoultryFarmType extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, PoultryReferenceSyncable;
+
+    protected static string $syncUuidColumn = 'slug';
+
+    protected static array $syncColumns = ['slug', 'name', 'description', 'is_active'];
 
     protected $casts = [
         'is_active' => 'boolean',
