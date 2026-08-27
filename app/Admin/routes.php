@@ -40,5 +40,16 @@ Route::group([
     $router->resource('sale-records', SaleRecordController::class);
     $router->resource('poultry-farm-types', PoultryFarmTypeController::class);
     $router->resource('poultry-production-guide-tasks', PoultryProductionGuideTaskController::class);
+    $router->resource('poultry-batches', PoultryBatchController::class);
+    $router->resource('poultry-feed-types', PoultryFeedTypeController::class);
+    $router->resource('poultry-feed-stock', PoultryFeedStockController::class);
+    $router->resource('poultry-customers', PoultryCustomerController::class);
+    $router->resource('poultry-sales', PoultrySaleController::class);
+    $router->resource('poultry-daily-records', PoultryDailyRecordController::class);
+    $router->resource('poultry-expenses', PoultryExpenseController::class);
+    $router->resource('poultry-egg-transactions', PoultryEggTransactionController::class);
+    $router->resource('poultry-mortality-events', PoultryMortalityEventController::class);
+    $router->resource('poultry-health-events', PoultryHealthEventController::class);
+    $router->resource('poultry-vaccination-events', PoultryVaccinationEventController::class);
 
 });
