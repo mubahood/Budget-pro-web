@@ -38,5 +38,7 @@ Route::group([
     $router->resource('auto-reorder-rules', AutoReorderRuleController::class);
     $router->get('auto-reorder-rules/trigger', 'AutoReorderRuleController@trigger');
     $router->resource('sale-records', SaleRecordController::class);
+    $router->resource('poultry-farm-types', PoultryFarmTypeController::class);
+    $router->resource('poultry-production-guide-tasks', PoultryProductionGuideTaskController::class);
 
 });
