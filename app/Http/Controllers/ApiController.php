@@ -449,9 +449,15 @@ class ApiController extends BaseController
 
         $registered_user->refresh();
 
+        // Additive, same rationale as login(): lets the already-shipped
+        // mobile client authenticate to /api/v1 (poultry sync, etc.)
+        // without any change to its registration request.
+        $token = $registered_user->createToken((string) ($r->input('device_name') ?: $r->userAgent() ?: 'api-token'))->plainTextToken;
+
         Utils::success([
             'user' => $registered_user,
             'company' => $registered_company,
+            'token' => $token,
         ], 'Registration successful.');
     }
 
