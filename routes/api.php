@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\StockCategoryController;
 use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
+use App\Http\Controllers\Api\V1\TrackingController;
 use App\Http\Controllers\Api\V1\UploadController;
 use Illuminate\Support\Facades\Route;
 
@@ -153,5 +154,11 @@ Route::prefix('v1')->group(function () {
         // Flutter client's PoultrySyncTransport push/pull contract exactly.
         Route::get('poultry/sync/pull', [PoultrySyncController::class, 'pull']);
         Route::post('poultry/sync/push', [PoultrySyncController::class, 'push']);
+
+        // Find My Phone — device registration, location push, config/command pull.
+        Route::post('tracking/devices/register', [TrackingController::class, 'register']);
+        Route::post('tracking/devices/{uuid}/locations/batch', [TrackingController::class, 'pushLocations']);
+        Route::get('tracking/devices/{uuid}/config', [TrackingController::class, 'getConfig']);
+        Route::post('tracking/devices/{uuid}/commands/{commandId}/ack', [TrackingController::class, 'ackCommand']);
     });
 });

@@ -52,4 +52,7 @@ Route::group([
     $router->resource('poultry-health-events', PoultryHealthEventController::class);
     $router->resource('poultry-vaccination-events', PoultryVaccinationEventController::class);
 
+    $router->resource('tracked-devices', TrackedDeviceController::class);
+    $router->post('tracked-devices/{id}/locate-now', 'TrackedDeviceController@locateNow');
+
 });
