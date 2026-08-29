@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
 use App\Http\Controllers\Api\V1\TrackingController;
+use App\PingPin\Http\Controllers\Api\V1\OrganisationController;
 use App\Http\Controllers\Api\V1\UploadController;
 use Illuminate\Support\Facades\Route;
 
@@ -120,6 +121,26 @@ Route::prefix('v1')->group(function () {
         Route::get('subscription', [BillingController::class, 'current']);
         Route::post('subscription/checkout', [BillingController::class, 'checkout']);
         Route::post('subscription/verify', [BillingController::class, 'verify']);
+    });
+
+    // ── Ping Pin — organisation membership (Task 1.7 / DECISIONS.md D13) ──
+    // Deliberately its OWN group, not nested under api.tenant/api.subscription:
+    // api.tenant checks the user's single PRIMARY company_id, which is the
+    // wrong question for a multi-org membership action on a DIFFERENT
+    // {company} route param, and api.subscription gates on budget-pro's own
+    // subscription — Ping Pin has its own separate billing (DECISIONS.md D2)
+    // not built yet (Phase 2), so gating on the other product's billing here
+    // would be exactly the cross-product coupling D2 exists to avoid.
+    // pingpin.member does the real per-organisation authorization itself.
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::get('pingpin/organisations', [OrganisationController::class, 'index']);
+        Route::post('pingpin/organisations/members/{membershipId}/accept', [OrganisationController::class, 'acceptInvite']);
+        Route::middleware('pingpin.member')->group(function () {
+            Route::post('pingpin/organisations/{company}/members/invite', [OrganisationController::class, 'inviteMember']);
+            Route::post('pingpin/organisations/{company}/members/{userId}/revoke', [OrganisationController::class, 'revokeMember']);
+            Route::post('pingpin/organisations/{company}/members/{userId}/role', [OrganisationController::class, 'changeRole']);
+            Route::post('pingpin/organisations/{company}/transfer-ownership', [OrganisationController::class, 'transferOwnership']);
+        });
     });
 
     // ── Authenticated + active subscription: the product surface ──

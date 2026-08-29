@@ -54,6 +54,19 @@ class TrackingController extends Controller
             ->where('company_id', $companyId)->where('uuid', $data['uuid'])->first();
 
         if (! $device) {
+            // uuid carries a database-level UNIQUE constraint GLOBALLY (by
+            // design — it's meant to be one device's one stable identity,
+            // never silently split into a separate row per tenant that
+            // happens to see the same value). Checked explicitly here so a
+            // genuine collision (another tenant's device, or a client bug/
+            // attack presenting a uuid it doesn't own) is a clean rejection
+            // instead of an unhandled SQL integrity-constraint 500.
+            $claimedElsewhere = TrackedDevice::withoutGlobalScopes()
+                ->where('uuid', $data['uuid'])->where('company_id', '!=', $companyId)->exists();
+            if ($claimedElsewhere) {
+                return $this->error('This device identifier is already registered to a different account.', 409);
+            }
+
             $device = new TrackedDevice();
             $device->company_id = $companyId;
             $device->user_id = $r->user()->id;
