@@ -128,6 +128,21 @@ class Company extends Model
     }
 
     /**
+     * Ping Pin's multi-member organisation model (company_members) — added
+     * alongside the legacy owner_id/users() relations above, not replacing
+     * them. See PLAN.md §2 / DECISIONS.md D1.
+     */
+    public function members()
+    {
+        return $this->hasMany(CompanyMember::class);
+    }
+
+    public function activeMembers()
+    {
+        return $this->members()->where('status', 'active');
+    }
+
+    /**
      * The company's current subscription (most recent).
      */
     public function subscription()
