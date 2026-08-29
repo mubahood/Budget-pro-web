@@ -44,6 +44,7 @@ class DeviceLocationController extends AdminController
         $grid->column('device.name', __('Device'))->display(function ($name) {
             return $name ?: '—';
         });
+        $grid->column('place_name', __('Place'))->display(fn ($v) => $v ?: '—');
         $grid->column('lat', __('Lat'));
         $grid->column('lng', __('Lng'));
         $grid->column('accuracy_m', __('Accuracy (m)'));
@@ -73,6 +74,7 @@ class DeviceLocationController extends AdminController
 
         $show->field('id', __('ID'));
         $show->field('device.name', __('Device'));
+        $show->field('place_name', __('Place'))->as(fn ($v) => $v ?: 'Not resolved yet');
         $show->field('lat', __('Latitude'));
         $show->field('lng', __('Longitude'));
         $show->field('accuracy_m', __('Accuracy (m)'));
@@ -97,7 +99,7 @@ class DeviceLocationController extends AdminController
     public function fleetMap(Content $content)
     {
         $devices = TrackedDevice::whereNotNull('last_lat')->whereNotNull('last_lng')->get([
-            'id', 'name', 'model', 'last_lat', 'last_lng', 'last_location_at', 'last_battery_pct', 'tracking_enabled',
+            'id', 'name', 'model', 'last_lat', 'last_lng', 'last_location_name', 'last_location_at', 'last_battery_pct', 'tracking_enabled',
         ]);
 
         // Shaped here, not in the Blade file, so the view's @json() call is a
@@ -110,6 +112,7 @@ class DeviceLocationController extends AdminController
                 'model' => $d->model,
                 'lat' => (float) $d->last_lat,
                 'lng' => (float) $d->last_lng,
+                'placeName' => $d->last_location_name,
                 'battery' => $d->last_battery_pct,
                 'lastFix' => $d->last_location_at ? \Carbon\Carbon::parse($d->last_location_at)->diffForHumans() : 'unknown',
                 'tracking' => (bool) $d->tracking_enabled,
@@ -140,12 +143,13 @@ class DeviceLocationController extends AdminController
             ->whereBetween('recorded_at', [$since, $until])
             ->orderBy('recorded_at')
             ->limit(2000)
-            ->get(['lat', 'lng', 'recorded_at', 'activity', 'battery_pct']);
+            ->get(['lat', 'lng', 'place_name', 'recorded_at', 'activity', 'battery_pct']);
 
         $pointsJson = $points->map(function ($p) {
             return [
                 'lat' => (float) $p->lat,
                 'lng' => (float) $p->lng,
+                'placeName' => $p->place_name,
                 'recordedAt' => \Carbon\Carbon::createFromTimestampMs($p->recorded_at)->format('d M Y, H:i:s'),
                 'activity' => $p->activity,
                 'battery' => $p->battery_pct,

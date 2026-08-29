@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\DeviceConfig;
 use App\Models\TrackedDevice;
+use App\Services\GeocodingService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,18 @@ use Illuminate\Support\Facades\DB;
 class TrackingController extends Controller
 {
     use ApiResponse;
+
+    private const DEFAULT_CONFIG = [
+        'tracking_interval_seconds' => 60,
+        'high_accuracy_mode' => true,
+        'min_distance_meters' => 0,
+        'stationary_interval_seconds' => null,
+        'geocoding_enabled' => true,
+        'low_battery_threshold_pct' => 5,
+    ];
+
+    /** Live calls Nominatim allows per push request beyond the guaranteed latest-point lookup. */
+    private const MAX_LIVE_GEOCODES_PER_PUSH = 3;
 
     /** First-run (and idempotent re-run): find-or-create by the device's own generated uuid. */
     public function register(Request $r)
@@ -54,15 +67,12 @@ class TrackingController extends Controller
         $device->app_version = $data['app_version'] ?? $device->app_version;
         $device->save();
 
-        $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], ['tracking_interval_seconds' => 60, 'high_accuracy_mode' => true]);
+        $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);
 
         return $this->success([
             'device_id' => $device->uuid,
             'tracking_enabled' => $device->tracking_enabled,
-            'config' => [
-                'tracking_interval_seconds' => $config->tracking_interval_seconds,
-                'high_accuracy_mode' => (bool) $config->high_accuracy_mode,
-            ],
+            'config' => $this->configPayload($config),
         ], 'Device registered.');
     }
 
@@ -91,12 +101,19 @@ class TrackingController extends Controller
             return $this->error('Device not found. Register it first.', 404);
         }
 
+        $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);
+
+        $placeNames = $config->geocoding_enabled
+            ? $this->resolvePlaceNames($data['points'], app(GeocodingService::class))
+            : [];
+
         $now = now();
         $rows = array_map(fn ($p) => [
             'company_id' => $companyId,
             'device_id' => $device->id,
             'lat' => $p['lat'],
             'lng' => $p['lng'],
+            'place_name' => $placeNames[$this->coordKey($p['lat'], $p['lng'])] ?? null,
             'accuracy_m' => $p['accuracy_m'] ?? null,
             'altitude_m' => $p['altitude_m'] ?? null,
             'speed_mps' => $p['speed_mps'] ?? null,
@@ -111,11 +128,14 @@ class TrackingController extends Controller
         DB::table('device_locations')->insert($rows);
 
         // Update the device's "last known" snapshot from whichever point is
-        // actually newest — a batch isn't guaranteed to arrive in order.
+        // actually newest — a batch isn't guaranteed to arrive in order. This
+        // is a cache of the thread's latest entry for quick status display,
+        // never a substitute for the full per-point history above.
         $latest = collect($data['points'])->sortByDesc('recorded_at')->first();
         $device->last_seen_at = $now;
         $device->last_lat = $latest['lat'];
         $device->last_lng = $latest['lng'];
+        $device->last_location_name = $placeNames[$this->coordKey($latest['lat'], $latest['lng'])] ?? $device->last_location_name;
         $device->last_location_at = \Carbon\Carbon::createFromTimestampMs($latest['recorded_at']);
         if (isset($latest['battery_pct'])) {
             $device->last_battery_pct = $latest['battery_pct'];
@@ -139,15 +159,58 @@ class TrackingController extends Controller
         $device->last_seen_at = now();
         $device->save();
 
-        $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], ['tracking_interval_seconds' => 60, 'high_accuracy_mode' => true]);
+        $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);
         $pending = $device->pendingCommands()->orderBy('id')->get(['id', 'command']);
 
         return $this->success([
             'tracking_enabled' => (bool) $device->tracking_enabled,
-            'tracking_interval_seconds' => $config->tracking_interval_seconds,
-            'high_accuracy_mode' => (bool) $config->high_accuracy_mode,
+            ...$this->configPayload($config),
             'pending_commands' => $pending,
         ]);
+    }
+
+    /**
+     * The device pushes its own local settings changes here (e.g. a user
+     * drags the interval slider in the app) so the server — edited from the
+     * admin panel — stays the single source of truth for both sides instead
+     * of the phone's local value just getting silently overwritten by the
+     * next getConfig() pull.
+     */
+    public function updateConfig(Request $r, string $uuid)
+    {
+        $data = $r->validate([
+            'tracking_enabled' => 'sometimes|boolean',
+            'tracking_interval_seconds' => 'sometimes|integer|min:15|max:3600',
+            'high_accuracy_mode' => 'sometimes|boolean',
+            'min_distance_meters' => 'sometimes|integer|min:0|max:5000',
+            'stationary_interval_seconds' => 'sometimes|nullable|integer|min:15|max:7200',
+            'geocoding_enabled' => 'sometimes|boolean',
+            'low_battery_threshold_pct' => 'sometimes|integer|min:1|max:50',
+        ]);
+
+        $companyId = (int) $r->user()->company_id;
+        $device = TrackedDevice::withoutGlobalScopes()
+            ->where('company_id', $companyId)->where('uuid', $uuid)->first();
+
+        if (! $device) {
+            return $this->error('Device not found.', 404);
+        }
+
+        if (array_key_exists('tracking_enabled', $data)) {
+            $device->tracking_enabled = $data['tracking_enabled'];
+            $device->save();
+        }
+
+        $configFields = collect($data)->except('tracking_enabled')->toArray();
+        $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);
+        if (! empty($configFields)) {
+            $config->update($configFields);
+        }
+
+        return $this->success([
+            'tracking_enabled' => (bool) $device->tracking_enabled,
+            ...$this->configPayload($config),
+        ], 'Config updated.');
     }
 
     /** Device confirms it executed a command (e.g. took the on-demand fix). */
@@ -171,5 +234,76 @@ class TrackingController extends Controller
         $command->save();
 
         return $this->success(null, 'Acknowledged.');
+    }
+
+    private function configPayload(DeviceConfig $config): array
+    {
+        return [
+            'tracking_interval_seconds' => $config->tracking_interval_seconds,
+            'high_accuracy_mode' => (bool) $config->high_accuracy_mode,
+            'min_distance_meters' => $config->min_distance_meters,
+            'stationary_interval_seconds' => $config->stationary_interval_seconds,
+            'geocoding_enabled' => (bool) $config->geocoding_enabled,
+            'low_battery_threshold_pct' => $config->low_battery_threshold_pct,
+        ];
+    }
+
+    private function coordKey(float|string $lat, float|string $lng): string
+    {
+        return round((float) $lat, 4).','.round((float) $lng, 4);
+    }
+
+    /**
+     * Resolves a place name for every unique coordinate in the batch,
+     * cache-first. The newest point always gets a live lookup on a cache
+     * miss (it drives the device's headline "last known location"); other
+     * misses in the same batch are capped so one big catch-up push from a
+     * device that was offline for a while can't turn into dozens of
+     * sequential Nominatim calls — those stay null and are picked up by the
+     * tracking:backfill-location-names scheduled command instead.
+     *
+     * @return array<string, string> coordKey => place name
+     */
+    private function resolvePlaceNames(array $points, GeocodingService $geocoding): array
+    {
+        $sorted = collect($points)->sortByDesc('recorded_at')->values();
+        $latestKey = $this->coordKey($sorted[0]['lat'], $sorted[0]['lng']);
+
+        $uniqueCoords = [];
+        foreach ($sorted as $p) {
+            $uniqueCoords[$this->coordKey($p['lat'], $p['lng'])] = [$p['lat'], $p['lng']];
+        }
+        // Resolve the latest point's coordinate first regardless of its
+        // position in the batch, so it never gets skipped by the live-call cap.
+        if (isset($uniqueCoords[$latestKey])) {
+            $uniqueCoords = [$latestKey => $uniqueCoords[$latestKey]] + $uniqueCoords;
+        }
+
+        $names = [];
+        $liveCallsUsed = 0;
+
+        foreach ($uniqueCoords as $key => [$lat, $lng]) {
+            $cached = $geocoding->cached((float) $lat, (float) $lng);
+            if ($cached !== null) {
+                $names[$key] = $cached;
+
+                continue;
+            }
+
+            $isLatest = $key === $latestKey;
+            if (! $isLatest && $liveCallsUsed >= self::MAX_LIVE_GEOCODES_PER_PUSH) {
+                continue;
+            }
+
+            $resolved = $geocoding->resolveLive((float) $lat, (float) $lng);
+            if (! $isLatest) {
+                $liveCallsUsed++;
+            }
+            if ($resolved !== null) {
+                $names[$key] = $resolved;
+            }
+        }
+
+        return $names;
     }
 }

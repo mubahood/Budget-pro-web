@@ -14,10 +14,19 @@ class DeviceConfig extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['device_id', 'tracking_interval_seconds', 'high_accuracy_mode'];
+    protected $fillable = [
+        'device_id',
+        'tracking_interval_seconds',
+        'high_accuracy_mode',
+        'min_distance_meters',
+        'stationary_interval_seconds',
+        'geocoding_enabled',
+        'low_battery_threshold_pct',
+    ];
 
     protected $casts = [
         'high_accuracy_mode' => 'boolean',
+        'geocoding_enabled' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

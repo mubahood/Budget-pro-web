@@ -2,8 +2,26 @@
 
 namespace Tests\Feature\Api;
 
+use Illuminate\Support\Facades\Http;
+
 class TrackingTest extends ApiTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Every test in this file goes through pushLocations() at least
+        // indirectly, and that path calls out to Nominatim whenever
+        // geocoding is enabled (the default) — faking it keeps the whole
+        // suite fast, deterministic, and off the real rate-limited API.
+        Http::fake([
+            'nominatim.openstreetmap.org/*' => Http::response([
+                'display_name' => 'Test Road, Test Town, Test Country',
+                'address' => ['road' => 'Test Road', 'city' => 'Test Town', 'country' => 'Test Country'],
+            ], 200),
+        ]);
+    }
+
     public function test_register_creates_a_device_with_default_config(): void
     {
         $t = $this->registerTenant();
@@ -133,5 +151,100 @@ class TrackingTest extends ApiTestCase
     {
         $this->postJson('/api/v1/tracking/devices/register', ['uuid' => 'x', 'name' => 'Phone'])->assertStatus(401);
         $this->getJson('/api/v1/tracking/devices/x/config')->assertStatus(401);
+    }
+
+    public function test_push_locations_resolves_and_stores_place_names(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+
+        $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
+            'points' => [['recorded_at' => 1787900001000, 'lat' => 1.111111, 'lng' => 32.222222]],
+        ], $this->auth($t['token']))->assertOk();
+
+        $this->assertDatabaseHas('device_locations', [
+            'lat' => 1.111111, 'lng' => 32.222222, 'place_name' => 'Test Road, Test Town, Test Country',
+        ]);
+        $this->assertDatabaseHas('tracked_devices', [
+            'uuid' => $uuid, 'last_location_name' => 'Test Road, Test Town, Test Country',
+        ]);
+        $this->assertDatabaseHas('geocode_cache', ['lat_rounded' => 1.1111, 'lng_rounded' => 32.2222]);
+    }
+
+    public function test_push_locations_reuses_geocode_cache_for_repeated_coordinates(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+
+        $point = ['lat' => 2.5, 'lng' => 33.5];
+        $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
+            'points' => [[...$point, 'recorded_at' => 1787900001000]],
+        ], $this->auth($t['token']))->assertOk();
+        $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
+            'points' => [[...$point, 'recorded_at' => 1787900002000]],
+        ], $this->auth($t['token']))->assertOk();
+
+        // Second push hits the geocode_cache row the first push created —
+        // Nominatim itself should only ever have been called once.
+        Http::assertSentCount(1);
+        $this->assertDatabaseCount('device_locations', 2);
+    }
+
+    public function test_geocoding_disabled_skips_place_name_resolution(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+        $this->postJson("/api/v1/tracking/devices/$uuid/config", ['geocoding_enabled' => false], $this->auth($t['token']))->assertOk();
+
+        $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
+            'points' => [['recorded_at' => 1787900001000, 'lat' => 4.0, 'lng' => 34.0]],
+        ], $this->auth($t['token']))->assertOk();
+
+        Http::assertNothingSent();
+        $this->assertDatabaseHas('device_locations', ['lat' => 4.0, 'lng' => 34.0, 'place_name' => null]);
+    }
+
+    public function test_update_config_persists_advanced_fields_and_round_trips_via_get_config(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+
+        $res = $this->postJson("/api/v1/tracking/devices/$uuid/config", [
+            'tracking_enabled' => false,
+            'tracking_interval_seconds' => 120,
+            'min_distance_meters' => 50,
+            'stationary_interval_seconds' => 300,
+            'low_battery_threshold_pct' => 10,
+        ], $this->auth($t['token']));
+
+        $res->assertOk()
+            ->assertJsonPath('data.tracking_enabled', false)
+            ->assertJsonPath('data.tracking_interval_seconds', 120)
+            ->assertJsonPath('data.min_distance_meters', 50)
+            ->assertJsonPath('data.stationary_interval_seconds', 300)
+            ->assertJsonPath('data.low_battery_threshold_pct', 10);
+
+        // The admin panel (and any other reader) must see the exact same
+        // values the device just pushed — server stays the single source
+        // of truth for both sides.
+        $get = $this->getJson("/api/v1/tracking/devices/$uuid/config", $this->auth($t['token']));
+        $get->assertJsonPath('data.tracking_enabled', false)
+            ->assertJsonPath('data.tracking_interval_seconds', 120)
+            ->assertJsonPath('data.min_distance_meters', 50);
+    }
+
+    public function test_update_config_rejects_cross_tenant_device(): void
+    {
+        $a = $this->registerTenant();
+        $b = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($a['token']))->assertOk();
+
+        $this->postJson("/api/v1/tracking/devices/$uuid/config", ['tracking_interval_seconds' => 999], $this->auth($b['token']))
+            ->assertStatus(404);
     }
 }

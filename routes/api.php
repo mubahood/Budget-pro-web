@@ -159,6 +159,7 @@ Route::prefix('v1')->group(function () {
         Route::post('tracking/devices/register', [TrackingController::class, 'register']);
         Route::post('tracking/devices/{uuid}/locations/batch', [TrackingController::class, 'pushLocations']);
         Route::get('tracking/devices/{uuid}/config', [TrackingController::class, 'getConfig']);
+        Route::post('tracking/devices/{uuid}/config', [TrackingController::class, 'updateConfig']);
         Route::post('tracking/devices/{uuid}/commands/{commandId}/ack', [TrackingController::class, 'ackCommand']);
     });
 });

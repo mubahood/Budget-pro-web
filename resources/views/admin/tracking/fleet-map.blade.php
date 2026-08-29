@@ -36,6 +36,7 @@
         marker.bindPopup(
             '<b>' + d.name + '</b><br>' +
             (d.model || '') + '<br>' +
+            '📍 ' + (d.placeName || (d.lat.toFixed(5) + ', ' + d.lng.toFixed(5))) + '<br>' +
             'Battery: ' + battery + '<br>' +
             'Last fix: ' + d.lastFix + '<br>' +
             '<a href="' + d.url + '">Device details</a> &middot; ' +
