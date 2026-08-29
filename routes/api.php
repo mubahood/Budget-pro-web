@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
 use App\Http\Controllers\Api\V1\TrackingController;
+use App\PingPin\Http\Controllers\Api\V1\BillingController as PingPinBillingController;
 use App\PingPin\Http\Controllers\Api\V1\OrganisationController;
 use App\Http\Controllers\Api\V1\UploadController;
 use Illuminate\Support\Facades\Route;
@@ -106,6 +107,10 @@ Route::prefix('v1')->group(function () {
     Route::get('plans', [BillingController::class, 'plans']);
     Route::post('webhooks/flutterwave', [BillingController::class, 'webhook']);
 
+    // ── Ping Pin — same public shape, its own separate billing (DECISIONS.md D2) ──
+    Route::get('pingpin/plans', [PingPinBillingController::class, 'plans']);
+    Route::post('pingpin/webhooks/flutterwave', [PingPinBillingController::class, 'webhook']);
+
     // ── Authenticated: session/profile (no subscription gate) ──
     Route::middleware(['auth:sanctum', 'api.tenant'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
@@ -140,6 +145,14 @@ Route::prefix('v1')->group(function () {
             Route::post('pingpin/organisations/{company}/members/{userId}/revoke', [OrganisationController::class, 'revokeMember']);
             Route::post('pingpin/organisations/{company}/members/{userId}/role', [OrganisationController::class, 'changeRole']);
             Route::post('pingpin/organisations/{company}/transfer-ownership', [OrganisationController::class, 'transferOwnership']);
+
+            // Billing — reachable even with a lapsed/no subscription, same as
+            // budget-pro's own pattern above, so an org can always pay to
+            // (re)activate. pingpin.member checks membership only, never
+            // subscription status, so no further gate is needed here.
+            Route::get('pingpin/organisations/{company}/subscription', [PingPinBillingController::class, 'current']);
+            Route::post('pingpin/organisations/{company}/subscription/checkout', [PingPinBillingController::class, 'checkout']);
+            Route::post('pingpin/organisations/{company}/subscription/verify', [PingPinBillingController::class, 'verify']);
         });
     });
 
