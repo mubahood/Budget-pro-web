@@ -59,4 +59,6 @@ Route::group([
     $router->get('tracking-map', 'DeviceLocationController@fleetMap');
     $router->get('tracking-map/{deviceId}', 'DeviceLocationController@deviceTrail');
 
+    $router->resource('pingpin-plans', PingPinPlanController::class);
+
 });
