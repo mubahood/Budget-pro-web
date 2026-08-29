@@ -169,6 +169,13 @@ class TrackedDeviceController extends AdminController
         $form->switch('high_accuracy_mode', __('High Accuracy Mode'))
             ->default($existingConfig->high_accuracy_mode ?? 1);
 
+        // Without this, Form still tries to write these two fields onto
+        // TrackedDevice itself (it doesn't have those columns) before the
+        // saved() hook below ever runs, throwing a SQL "column not found"
+        // on every save. ignore() keeps them submittable/readable via
+        // request() while excluding them from the model's own save.
+        $form->ignore(['tracking_interval_seconds', 'high_accuracy_mode']);
+
         $form->tools(function (Form\Tools $tools) {
             $tools->disableView();
         });
