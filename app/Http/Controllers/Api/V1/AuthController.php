@@ -8,6 +8,7 @@ use App\Http\Requests\Api\RegisterRequest;
 use App\Http\Resources\CompanyResource;
 use App\Http\Resources\UserResource;
 use App\Models\Company;
+use App\Models\CompanyMember;
 use App\Models\FinancialPeriod;
 use App\Models\Plan;
 use App\Models\Subscription;
@@ -55,6 +56,18 @@ class AuthController extends Controller
                 $company->currency = $data['currency'];
                 $company->license_expire = now()->addDays((int) config('saas.trial_days', 14));
                 $company->save();
+
+                // 2b. Ping Pin's multi-member organisation model (company_members)
+                //     needs an owner row for every company, not just the ones that
+                //     existed when that table was introduced (those were backfilled
+                //     by the migration itself) — every NEW signup needs one too.
+                CompanyMember::create([
+                    'company_id' => $company->id,
+                    'user_id' => $user->id,
+                    'role' => 'owner',
+                    'status' => 'active',
+                    'joined_at' => now(),
+                ]);
 
                 // 3. Start a trial subscription on the default plan.
                 $plan = Plan::where('slug', config('saas.default_plan', 'trial'))->first();

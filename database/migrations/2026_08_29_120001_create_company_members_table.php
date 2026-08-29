@@ -25,7 +25,10 @@ return new class extends Migration
         Schema::create('company_members', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('company_id');
-            $table->unsignedInteger('user_id');
+            // Nullable: an invite by email/phone may target someone who
+            // doesn't have an admin_users account yet — user_id is filled in
+            // once they sign up and accept (OrganisationService::acceptInvite).
+            $table->unsignedInteger('user_id')->nullable();
             $table->enum('role', ['owner', 'admin', 'member'])->default('member');
             $table->unsignedInteger('invited_by_id')->nullable();
             $table->string('invited_email')->nullable();
@@ -33,6 +36,9 @@ return new class extends Migration
             $table->enum('status', ['active', 'invited', 'revoked'])->default('active');
             $table->timestamp('joined_at')->nullable();
             $table->timestamps();
+
+            $table->index('invited_email');
+            $table->index('invited_phone');
 
             $table->unique(['company_id', 'user_id']);
             $table->foreign('company_id')->references('id')->on('companies')->cascadeOnDelete();
