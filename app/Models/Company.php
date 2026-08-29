@@ -159,6 +159,21 @@ class Company extends Model
     }
 
     /**
+     * Ping Pin's own, separate subscription (DECISIONS.md D2) — a company
+     * can have a budget-pro subscription, a Ping Pin subscription, both, or
+     * neither; the two are never conflated.
+     */
+    public function pingPinSubscription()
+    {
+        return $this->hasOne(PingPinSubscription::class)->latestOfMany();
+    }
+
+    public function pingPinSubscriptions()
+    {
+        return $this->hasMany(PingPinSubscription::class);
+    }
+
+    /**
      * Whether this tenant currently has valid, paid-for access.
      *
      * Order of precedence:
@@ -237,6 +252,41 @@ class Company extends Model
         $this->license_expire = $endsAt;
         $this->status = 'Active';
         $this->saveQuietly();
+
+        return $subscription;
+    }
+
+    /**
+     * Ping Pin's own activation (DECISIONS.md D2) — same extend-from-later-
+     * of-now-or-current-expiry logic as activateSubscription(), but this
+     * product has no legacy license_expire/status column to keep in sync;
+     * pingpin_subscriptions.status is the only source of truth for it.
+     */
+    public function activatePingPinSubscription(PingPinPlan $plan, string $provider = 'flutterwave', ?string $providerRef = null): PingPinSubscription
+    {
+        $subscription = $this->pingPinSubscription ?? new PingPinSubscription(['company_id' => $this->id]);
+
+        $base = ($subscription->ends_at && $subscription->ends_at->isFuture())
+            ? $subscription->ends_at->copy()
+            : now();
+
+        $endsAt = match ($plan->interval) {
+            'year' => $base->copy()->addYear(),
+            'lifetime' => $base->copy()->addYears(100),
+            default => $base->copy()->addMonth(),
+        };
+
+        $subscription->company_id = $this->id;
+        $subscription->plan_id = $plan->id;
+        $subscription->status = 'active';
+        $subscription->starts_at = $subscription->starts_at ?? now();
+        $subscription->ends_at = $endsAt;
+        $subscription->canceled_at = null;
+        $subscription->provider = $provider;
+        if ($providerRef !== null) {
+            $subscription->provider_subscription_id = $providerRef;
+        }
+        $subscription->save();
 
         return $subscription;
     }
