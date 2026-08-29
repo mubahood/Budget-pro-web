@@ -291,4 +291,48 @@ class TrackingTest extends ApiTestCase
         $res->assertStatus(403);
         $this->assertDatabaseCount('device_locations', 0);
     }
+
+    public function test_register_stores_declared_capabilities(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+
+        $this->postJson('/api/v1/tracking/devices/register', [
+            'uuid' => $uuid, 'name' => 'Phone',
+            'capabilities' => [
+                \App\Models\PingPinDeviceCapability::BACKGROUND_LOCATION => true,
+                \App\Models\PingPinDeviceCapability::REMOTE_WIPE => false,
+                'not_a_real_capability' => true,
+            ],
+        ], $this->auth($t['token']))->assertOk();
+
+        $deviceId = \App\Models\TrackedDevice::withoutGlobalScopes()->where('uuid', $uuid)->value('id');
+        $this->assertTrue(\App\Models\PingPinDeviceCapability::supports($deviceId, \App\Models\PingPinDeviceCapability::BACKGROUND_LOCATION));
+        $this->assertFalse(\App\Models\PingPinDeviceCapability::supports($deviceId, \App\Models\PingPinDeviceCapability::REMOTE_WIPE));
+        // A capability never declared at all defaults to allowed (see PingPinDeviceCapability::supports doc).
+        $this->assertTrue(\App\Models\PingPinDeviceCapability::supports($deviceId, \App\Models\PingPinDeviceCapability::SIM_WATCH));
+        // Unknown keys are silently dropped, never stored under any name.
+        $this->assertDatabaseMissing('pingpin_device_capabilities', ['device_id' => $deviceId, 'capability' => 'not_a_real_capability']);
+        $this->assertDatabaseCount('pingpin_device_capabilities', 2);
+    }
+
+    public function test_re_registering_updates_a_previously_declared_capability(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+
+        $this->postJson('/api/v1/tracking/devices/register', [
+            'uuid' => $uuid, 'name' => 'Phone',
+            'capabilities' => [\App\Models\PingPinDeviceCapability::REMOTE_RING => false],
+        ], $this->auth($t['token']))->assertOk();
+
+        $this->postJson('/api/v1/tracking/devices/register', [
+            'uuid' => $uuid, 'name' => 'Phone',
+            'capabilities' => [\App\Models\PingPinDeviceCapability::REMOTE_RING => true],
+        ], $this->auth($t['token']))->assertOk();
+
+        $deviceId = \App\Models\TrackedDevice::withoutGlobalScopes()->where('uuid', $uuid)->value('id');
+        $this->assertTrue(\App\Models\PingPinDeviceCapability::supports($deviceId, \App\Models\PingPinDeviceCapability::REMOTE_RING));
+        $this->assertDatabaseCount('pingpin_device_capabilities', 1);
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeviceConfig;
+use App\Models\PingPinDeviceCapability;
 use App\Models\PingPinDeviceConsent;
 use App\Models\TrackedDevice;
 use App\Services\GeocodingService;
@@ -43,6 +44,8 @@ class TrackingController extends Controller
             'model' => 'sometimes|nullable|string|max:191',
             'os_version' => 'sometimes|nullable|string|max:64',
             'app_version' => 'sometimes|nullable|string|max:32',
+            'capabilities' => 'sometimes|array',
+            'capabilities.*' => 'boolean',
         ]);
 
         $companyId = (int) $r->user()->company_id;
@@ -81,6 +84,20 @@ class TrackingController extends Controller
                 'consented_at' => now(),
                 'consent_text_version' => 'implicit-v0-self-registration',
             ]);
+        }
+
+        // Capability declaration (brief §6 / PLAN.md §5): only known keys are
+        // recorded, so a client typo or a future/unreleased capability name
+        // can never silently create an unenforceable row.
+        $declaredNow = now();
+        foreach ($data['capabilities'] ?? [] as $capability => $supported) {
+            if (! in_array($capability, PingPinDeviceCapability::ALL, true)) {
+                continue;
+            }
+            PingPinDeviceCapability::updateOrCreate(
+                ['device_id' => $device->id, 'capability' => $capability],
+                ['supported' => (bool) $supported, 'declared_at' => $declaredNow]
+            );
         }
 
         $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);

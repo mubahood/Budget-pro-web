@@ -4,6 +4,7 @@ namespace App\Admin\Controllers;
 
 use App\Models\DeviceCommand;
 use App\Models\DeviceConfig;
+use App\Models\PingPinDeviceCapability;
 use App\Models\TrackedDevice;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
@@ -245,6 +246,16 @@ class TrackedDeviceController extends AdminController
     public function locateNow($id): RedirectResponse
     {
         $device = TrackedDevice::findOrFail($id);
+
+        // Capability-checked (TASKS.md 1.6): default-allow if the device has
+        // never declared either way (every device today — capability
+        // declaration is Phase 4/6 client work not shipped yet), reject only
+        // if it EXPLICITLY declared it can't do background location.
+        if (! PingPinDeviceCapability::supports($device->id, PingPinDeviceCapability::BACKGROUND_LOCATION)) {
+            admin_toastr('This device has declared it does not support location capture — command not queued.', 'error');
+
+            return redirect()->back();
+        }
 
         DeviceCommand::create([
             'device_id' => $device->id,
