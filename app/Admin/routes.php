@@ -54,5 +54,9 @@ Route::group([
 
     $router->resource('tracked-devices', TrackedDeviceController::class);
     $router->post('tracked-devices/{id}/locate-now', 'TrackedDeviceController@locateNow');
+    $router->resource('device-locations', DeviceLocationController::class);
+    $router->resource('device-commands', DeviceCommandController::class);
+    $router->get('tracking-map', 'DeviceLocationController@fleetMap');
+    $router->get('tracking-map/{deviceId}', 'DeviceLocationController@deviceTrail');
 
 });

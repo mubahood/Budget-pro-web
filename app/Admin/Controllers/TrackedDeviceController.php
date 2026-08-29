@@ -63,6 +63,9 @@ class TrackedDeviceController extends AdminController
                 ? '<span class="badge badge-success">Enabled</span>'
                 : '<span class="badge badge-secondary">Disabled</span>';
         });
+        $grid->column('trail', __('Trail'))->display(function () {
+            return "<a href='".admin_url('tracking-map/'.$this->id)."'><i class='fa fa-road'></i> View</a>";
+        });
 
         return $grid;
     }
@@ -89,19 +92,30 @@ class TrackedDeviceController extends AdminController
 
         $show->divider();
 
-        $show->html(view('admin.tracking.locate-now-button', [
-            'device' => $device,
-            'intervalSeconds' => $config->tracking_interval_seconds,
-        ])->render());
+        // Show::html() doesn't exist — __call() silently routes it through
+        // addField(), HTML-escaping the string into a field *label* instead
+        // of rendering it. field(name, ' ')->unescape()->as(...) is the
+        // real API for raw HTML blocks (see Show\Field::unescape()).
+        $show->field('locate_now_button', ' ')->unescape()->as(function () use ($device, $config) {
+            return view('admin.tracking.locate-now-button', [
+                'device' => $device,
+                'intervalSeconds' => $config->tracking_interval_seconds,
+            ])->render();
+        });
+
+        $show->field('trail_link', ' ')->unescape()->as(function () use ($device) {
+            return "<a class='btn btn-sm btn-primary' style='margin-top:8px' href='".admin_url('tracking-map/'.$device->id)."'>"
+                ."<i class='fa fa-road'></i> View Trail on Map</a>";
+        });
 
         $show->divider();
 
-        $show->html(
-            '<b>Tracking interval:</b> '.$config->tracking_interval_seconds.'s &nbsp; '
-            .'<b>High accuracy:</b> '.($config->high_accuracy_mode ? 'Yes' : 'No')
-            .'<br><small class="text-muted">Edit these from the form (pencil icon above) — pulled by the '
-            .'device on its next sync.</small>'
-        );
+        $show->field('tracking_config_summary', ' ')->unescape()->as(function () use ($config) {
+            return '<b>Tracking interval:</b> '.$config->tracking_interval_seconds.'s &nbsp; '
+                .'<b>High accuracy:</b> '.($config->high_accuracy_mode ? 'Yes' : 'No')
+                .'<br><small class="text-muted">Edit these from the form (pencil icon above) — pulled by the '
+                .'device on its next sync.</small>';
+        });
 
         $show->divider();
 
