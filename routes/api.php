@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
 use App\Http\Controllers\Api\V1\TrackingController;
+use App\PingPin\Http\Controllers\Api\V1\AuthController as PingPinAuthController;
 use App\PingPin\Http\Controllers\Api\V1\BillingController as PingPinBillingController;
 use App\PingPin\Http\Controllers\Api\V1\OrganisationController;
 use App\Http\Controllers\Api\V1\UploadController;
@@ -101,6 +102,13 @@ Route::prefix('v1')->group(function () {
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('auth/register', [AuthController::class, 'register']);
         Route::post('auth/login', [AuthController::class, 'login']);
+
+        // Ping Pin's own, independent signup/login (Task 3.1) — NOT the
+        // routes above. Same admin_users/Sanctum identity (DECISIONS.md D6),
+        // its own registration shape (phone-or-email, no company_name/
+        // currency required) and its own trial-subscription creation.
+        Route::post('pingpin/auth/register', [PingPinAuthController::class, 'register']);
+        Route::post('pingpin/auth/login', [PingPinAuthController::class, 'login']);
     });
 
     // ── Public billing: pricing page + Flutterwave webhook (signature-verified) ──
