@@ -247,4 +247,48 @@ class TrackingTest extends ApiTestCase
         $this->postJson("/api/v1/tracking/devices/$uuid/config", ['tracking_interval_seconds' => 999], $this->auth($b['token']))
             ->assertStatus(404);
     }
+
+    public function test_register_records_consent_for_the_device(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+
+        $deviceId = \App\Models\TrackedDevice::withoutGlobalScopes()->where('uuid', $uuid)->value('id');
+        $this->assertTrue(\App\Models\PingPinDeviceConsent::isActiveFor($deviceId));
+        $this->assertDatabaseHas('pingpin_device_consents', [
+            'device_id' => $deviceId, 'consented_by_user_id' => $t['user_id'], 'consent_text_version' => 'implicit-v0-self-registration',
+        ]);
+    }
+
+    public function test_register_does_not_duplicate_consent_on_idempotent_re_register(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Renamed'], $this->auth($t['token']))->assertOk();
+
+        $deviceId = \App\Models\TrackedDevice::withoutGlobalScopes()->where('uuid', $uuid)->value('id');
+        $this->assertDatabaseCount('pingpin_device_consents', 1);
+        $this->assertEquals(1, \App\Models\PingPinDeviceConsent::where('device_id', $deviceId)->count());
+    }
+
+    public function test_push_locations_rejected_once_consent_is_revoked(): void
+    {
+        $t = $this->registerTenant();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+
+        $deviceId = \App\Models\TrackedDevice::withoutGlobalScopes()->where('uuid', $uuid)->value('id');
+        \App\Models\PingPinDeviceConsent::where('device_id', $deviceId)->update(['revoked_at' => now()]);
+
+        $res = $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
+            'points' => [['recorded_at' => 1787900001000, 'lat' => 1.0, 'lng' => 32.0]],
+        ], $this->auth($t['token']));
+
+        $res->assertStatus(403);
+        $this->assertDatabaseCount('device_locations', 0);
+    }
 }

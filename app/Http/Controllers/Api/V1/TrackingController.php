@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeviceConfig;
+use App\Models\PingPinDeviceConsent;
 use App\Models\TrackedDevice;
 use App\Services\GeocodingService;
 use App\Traits\ApiResponse;
@@ -67,6 +68,21 @@ class TrackingController extends Controller
         $device->app_version = $data['app_version'] ?? $device->app_version;
         $device->save();
 
+        // Interim consent policy (DECISIONS.md D11): the person registering
+        // a device via this endpoint IS the person physically setting up
+        // tracking on it (self-registration, no invite/remote-enrolment
+        // flow exists yet), so their own registration action is recorded as
+        // the consent event. Recorded once per device, never re-recorded on
+        // an idempotent re-register.
+        if (! PingPinDeviceConsent::isActiveFor($device->id)) {
+            PingPinDeviceConsent::create([
+                'device_id' => $device->id,
+                'consented_by_user_id' => $r->user()->id,
+                'consented_at' => now(),
+                'consent_text_version' => 'implicit-v0-self-registration',
+            ]);
+        }
+
         $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);
 
         return $this->success([
@@ -99,6 +115,10 @@ class TrackingController extends Controller
 
         if (! $device) {
             return $this->error('Device not found. Register it first.', 404);
+        }
+
+        if (! PingPinDeviceConsent::isActiveFor($device->id)) {
+            return $this->error('Location sharing consent has been revoked for this device.', 403);
         }
 
         $config = DeviceConfig::firstOrCreate(['device_id' => $device->id], self::DEFAULT_CONFIG);
