@@ -140,6 +140,28 @@ class AuthController extends Controller
         return $this->success($this->authPayload($user, $membership->company), 'Logged in.');
     }
 
+    /**
+     * Re-authentication step for anything that WEAKENS protection on an
+     * enrolled device — disabling tracking, signing out, (later) requesting
+     * an uninstall/Device Admin release. A stolen phone's tracking
+     * notification is required to stay visible (Android enforces this, and
+     * so does Play policy — see the app's own onboarding copy), so the real
+     * defence against a thief isn't hiding that tracking is happening, it's
+     * making sure noticing it doesn't let them casually turn it off:
+     * whoever is holding the phone needs the OWNER's password to do that,
+     * not just an already-unlocked screen and an already-logged-in app.
+     */
+    public function verifyPassword(Request $r)
+    {
+        $data = $r->validate(['password' => 'required|string']);
+
+        if (! Hash::check($data['password'], $r->user()->password)) {
+            return $this->error('Incorrect password.', 401);
+        }
+
+        return $this->success(null, 'Verified.');
+    }
+
     private function authPayload(User $user, Company $company): array
     {
         $token = $user->createToken('pingpin-mobile')->plainTextToken;

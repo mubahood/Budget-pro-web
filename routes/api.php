@@ -109,6 +109,13 @@ Route::prefix('v1')->group(function () {
         // currency required) and its own trial-subscription creation.
         Route::post('pingpin/auth/register', [PingPinAuthController::class, 'register']);
         Route::post('pingpin/auth/login', [PingPinAuthController::class, 'login']);
+
+        // Re-authentication step before weakening protection on an already-
+        // enrolled device (disable tracking, sign out) — rate-limited here
+        // too, since it's a password check an attacker could otherwise
+        // brute-force. Only needs auth:sanctum (checks the CALLER's own
+        // password), not pingpin.member — it isn't scoped to an organisation.
+        Route::middleware('auth:sanctum')->post('pingpin/auth/verify-password', [PingPinAuthController::class, 'verifyPassword']);
     });
 
     // ── Public billing: pricing page + Flutterwave webhook (signature-verified) ──

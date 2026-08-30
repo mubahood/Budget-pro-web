@@ -127,4 +127,43 @@ class AuthControllerTest extends ApiTestCase
 
         $res->assertOk()->assertJsonPath('data.company.id', $ownCompanyId);
     }
+
+    public function test_verify_password_accepts_the_correct_password(): void
+    {
+        $email = 'verify_'.uniqid('', true).'@example.com';
+        $token = $this->postJson('/api/v1/pingpin/auth/register', ['name' => 'X', 'email' => $email, 'password' => 'secret123'])
+            ->json('data.token');
+
+        $this->postJson('/api/v1/pingpin/auth/verify-password', ['password' => 'secret123'], $this->auth($token))
+            ->assertOk();
+    }
+
+    public function test_verify_password_rejects_the_wrong_password(): void
+    {
+        $email = 'verify2_'.uniqid('', true).'@example.com';
+        $token = $this->postJson('/api/v1/pingpin/auth/register', ['name' => 'X', 'email' => $email, 'password' => 'secret123'])
+            ->json('data.token');
+
+        $this->postJson('/api/v1/pingpin/auth/verify-password', ['password' => 'wrong-guess'], $this->auth($token))
+            ->assertStatus(401);
+    }
+
+    public function test_verify_password_requires_authentication(): void
+    {
+        $this->postJson('/api/v1/pingpin/auth/verify-password', ['password' => 'anything'])
+            ->assertStatus(401);
+    }
+
+    public function test_verify_password_checks_the_callers_own_password_not_a_stated_identifier(): void
+    {
+        // A malicious caller can't pass someone ELSE's identifier — the
+        // endpoint deliberately takes no identifier at all, only the
+        // Bearer token's own owner is ever checked.
+        $a = $this->postJson('/api/v1/pingpin/auth/register', ['name' => 'A', 'email' => 'vpa_'.uniqid('', true).'@example.com', 'password' => 'secretA123']);
+        $b = $this->postJson('/api/v1/pingpin/auth/register', ['name' => 'B', 'email' => 'vpb_'.uniqid('', true).'@example.com', 'password' => 'secretB123']);
+
+        // a's token, b's password — must fail, since it's checked against a's own password.
+        $this->postJson('/api/v1/pingpin/auth/verify-password', ['password' => 'secretB123'], $this->auth($a->json('data.token')))
+            ->assertStatus(401);
+    }
 }
