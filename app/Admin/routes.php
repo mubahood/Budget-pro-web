@@ -61,4 +61,7 @@ Route::group([
 
     $router->resource('pingpin-plans', PingPinPlanController::class);
 
+    $router->resource('plans', PlanController::class);
+    $router->resource('subscriptions', SubscriptionController::class);
+
 });
