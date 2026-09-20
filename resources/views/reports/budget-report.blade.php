@@ -6,7 +6,7 @@
 <html>
 
 <head>
-    <title>Financial Report</title>
+    <title>{{ $data->title ?: $data->name }} - Budget Report</title>
     @include('css.css')
     <style>
         .my-table {
@@ -56,9 +56,9 @@
                 <div class="text-center">
                     <p class="fs-18 text-center fw-700 mt-2 text-uppercase  " style="color: black;">
                         {{ $data->title }}</p>
-                    <p class="fs-14 lh-6 mt-1">R.S.V.P:
-                        {{ $data->rsvp }}
-                    </p>
+                    @if ($data->rsvp)
+                        <p class="fs-14 lh-6 mt-1">R.S.V.P: {{ $data->rsvp }}</p>
+                    @endif
                     <p class="fs-14 lh-6 mt-1">EMAIL: {{ $company->email }}</p>
                 </div>
             </td>

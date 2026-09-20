@@ -3,6 +3,7 @@
 use App\Admin\Controllers\AuthController;
 use App\Http\Controllers\ApiController;
 use App\Models\BudgetProgram;
+use App\Models\ContributionRecord;
 use App\Models\FinancialReport;
 use Encore\Admin\Facades\Admin;
 use Illuminate\Support\Facades\App;
@@ -70,12 +71,30 @@ Route::middleware('admin.auth')->group(function () {
         $pdf->loadHTML(view('reports.budget-report', ['data' => $rep, 'company' => $company]));
         $pdf->render();
 
+        // Cache the rendered PDF to disk (matches the sibling financial-report
+        // route's pattern), but unlike FinancialReport, budget_programs has no
+        // `file` column -- writing one via saveQuietly() threw "Unknown column
+        // 'file'" and 500'd on every single request to this route.
         $storePath = public_path('storage/files/budget-'.$rep->id.'.pdf');
         file_put_contents($storePath, $pdf->output());
-        $rep->file = 'files/budget-'.$rep->id.'.pdf';
-        $rep->saveQuietly();
 
         return $pdf->stream();
+    });
+
+    // "Print Thanks" button on ContributionRecordController's grid links here
+    // (App\Admin\Controllers\ContributionRecordController.php). The previous
+    // /thanks page hardcoded one specific person's wedding details (real
+    // name, phone numbers, a stale deadline) into every company's receipt
+    // and was removed for that reason, but the button was left pointing at
+    // a route that no longer existed. This is a fresh, generic, tenant-
+    // scoped replacement built from the actual contribution record.
+    Route::get('thanks', function () {
+        $record = ContributionRecord::withoutGlobalScopes()->find(request('id'));
+        if ($record === null || (int) $record->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
+        }
+
+        return view('reports.thanks', ['record' => $record]);
     });
 
     Route::get('sale-receipt-pdf', function () {
