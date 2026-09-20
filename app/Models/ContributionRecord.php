@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,7 +25,7 @@ class ContributionRecord extends Model
     /**
      * The relationships that should always be loaded.
      */
-    protected $with = ['budgetProgram', 'treasurer'];
+    protected $with = ['budgetProgram', 'treasurer', 'changedBy'];
 
     /**
      * The attributes that should be cast.
@@ -43,7 +44,7 @@ class ContributionRecord extends Model
 
         //disable deleting
         static::deleting(function ($model) {
-            throw new \Exception('Deleting is not allowed');
+            throw new BusinessRuleException('Deleting is not allowed');
         });
 
         static::creating(function ($model) {
@@ -54,7 +55,7 @@ class ContributionRecord extends Model
                 'budget_program_id' => $model->budget_program_id,
             ])->first();
             if ($withSameName) {
-                throw new \Exception('Name already exists');
+                throw new BusinessRuleException('Name already exists');
             }
 
             $model = self::prepare($model);
@@ -69,7 +70,7 @@ class ContributionRecord extends Model
                 'budget_program_id' => $model->budget_program_id,
             ])->where('id', '!=', $model->id)->first();
             if ($withSameName) {
-                throw new \Exception('Name already exists');
+                throw new BusinessRuleException('Name already exists');
             }
 
             $model = self::prepare($model);
@@ -107,7 +108,7 @@ class ContributionRecord extends Model
                 $data->treasurer_id = $loggedUser->id;
                 $treasurer = $loggedUser;
             } else {
-                throw new \Exception('Treasurer/User not found for ID: ' . $data->treasurer_id);
+                throw new BusinessRuleException('Treasurer/User not found for ID: ' . $data->treasurer_id);
             }
         }
 
@@ -117,7 +118,7 @@ class ContributionRecord extends Model
 
             // Validate treasurer belongs to the same company
             if ($treasurer->company_id != $loggedUser->company_id) {
-                throw new \Exception('Treasurer does not belong to your company.');
+                throw new BusinessRuleException('Treasurer does not belong to your company.');
             }
         } else {
             $data->company_id = $treasurer->company_id;
@@ -132,6 +133,11 @@ class ContributionRecord extends Model
             $data->paid_amount = $custom_paid_amount;
         }
 
+        // Captured BEFORE the normalization below touches paid_amount
+        // unconditionally (which would otherwise make isDirty() true even
+        // when the caller never sent a real figure at all).
+        $paidAmountExplicitlySet = $data->isDirty('paid_amount');
+
         // Ensure amount is non-negative
         $data->amount = max(0, (int) $data->amount);
 
@@ -142,8 +148,16 @@ class ContributionRecord extends Model
         }
 
         if ($data->fully_paid == 'Yes') {
-            $data->not_paid_amount = 0;
-            $data->paid_amount = $data->amount;
+            // Only default paid_amount up to the full pledge when THIS save
+            // didn't also carry a real paid_amount/custom_paid_amount — a
+            // "mark as fully paid" shortcut that sends only the flag still
+            // works, but a caller that submits fully_paid=Yes alongside a
+            // genuine (lower) receipt figure no longer has that real figure
+            // silently overwritten to the full pledge amount.
+            if (! $paidAmountExplicitlySet) {
+                $data->paid_amount = $data->amount;
+            }
+            $data->not_paid_amount = max(0, $data->amount - $data->paid_amount);
         } else {
             $data->not_paid_amount = $data->amount - $data->paid_amount;
         }
@@ -204,23 +218,24 @@ class ContributionRecord extends Model
     //getter for treasurer_text
     public function getTreasurerTextAttribute()
     {
-        $treasurer = User::find($this->treasurer_id);
-        if ($treasurer == null) {
+        // `treasurer` is already eager-loaded via $with -- a fresh
+        // User::find() here re-queried on every serialized record (N+1 on
+        // every list/show call).
+        if ($this->treasurer == null) {
             return 'N/A';
         }
 
-        return $treasurer->name;
+        return $this->treasurer->name;
     }
 
     //getter for chaned_by_text
     public function getChanedByTextAttribute()
     {
-        $changed_by = User::find($this->chaned_by_id);
-        if ($changed_by == null) {
+        if ($this->changedBy == null) {
             return 'N/A';
         }
 
-        return $changed_by->name;
+        return $this->changedBy->name;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -47,7 +48,7 @@ class BudgetProgram extends Model
         static::creating(function ($model) {
             //stop with same name and company_id is the same
             if (BudgetProgram::where('name', $model->name)->where('company_id', $model->company_id)->exists()) {
-                throw new \Exception('Name already exists');
+                throw new BusinessRuleException('Name already exists');
             }
             $model = self::prepare($model);
 
@@ -57,7 +58,7 @@ class BudgetProgram extends Model
         static::updating(function ($model) {
             //stop with same name but not the same id and company_id is the same
             if (BudgetProgram::where('name', $model->name)->where('id', '!=', $model->id)->where('company_id', $model->company_id)->exists()) {
-                throw new \Exception('Name already exists');
+                throw new BusinessRuleException('Name already exists');
             }
             $model = self::prepare($model);
 
@@ -77,7 +78,7 @@ class BudgetProgram extends Model
         // If no auth user (mobile API), company_id must already be set on the model
         // by the controller (MobileApiController / ApiController both set it before save)
         if (empty($data->company_id)) {
-            throw new \Exception('User not found — unable to determine company.');
+            throw new BusinessRuleException('User not found — unable to determine company.');
         }
 
         return $data;

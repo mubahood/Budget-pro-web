@@ -25,6 +25,8 @@ class HandoverRecordController extends AdminController
     protected function grid()
     {
         $grid = new Grid(new HandoverRecord());
+        $u = auth()->user();
+        $grid->model()->where('company_id', $u->company_id)->orderBy('id', 'desc');
 
         $grid->column('id', __('Id'));
         $grid->column('created_at', __('Created at'));

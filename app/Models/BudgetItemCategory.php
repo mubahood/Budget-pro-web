@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -48,7 +49,7 @@ class BudgetItemCategory extends Model
                 'budget_program_id' => $model->budget_program_id,
             ])->first();
             if ($existing) {
-                throw new \Exception('Category name already exists in this program');
+                throw new BusinessRuleException('Category name already exists in this program');
             }
 
             // Try Laravel session auth (web portal), then admin guard
@@ -58,7 +59,7 @@ class BudgetItemCategory extends Model
             }
             // If no auth user (mobile API), company_id must already be set on the model
             if (empty($model->company_id)) {
-                throw new \Exception('User not found — unable to determine company.');
+                throw new BusinessRuleException('User not found — unable to determine company.');
             }
 
             // Default calculated fields for new categories (no children yet)
@@ -79,7 +80,7 @@ class BudgetItemCategory extends Model
                 'budget_program_id' => $model->budget_program_id,
             ])->where('id', '!=', $model->id)->first();
             if ($existing) {
-                throw new \Exception('Category name already exists in this program');
+                throw new BusinessRuleException('Category name already exists in this program');
             }
 
             return $model;
@@ -122,9 +123,9 @@ class BudgetItemCategory extends Model
     //getter for percentage_done
     public function getPercentageDoneAttribute($percentage_done)
     {
-        if ($percentage_done > 100) {
-            return 100;
-        }
+        // Was clamped to 100 here, which hid genuinely over-budget categories
+        // (invested_amount > target_amount is a real, useful signal for a
+        // budget tracker to surface, not something to mask as "100% done").
         if ($percentage_done !== null && $percentage_done > 0) {
             return round((float) $percentage_done, 2);
         }

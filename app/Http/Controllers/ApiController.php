@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\BudgetItem;
+use App\Models\BudgetItemCategory;
+use App\Models\BudgetProgram;
 use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\User;
@@ -132,6 +134,21 @@ class ApiController extends BaseController
             Utils::error('Failed to save.');
         }
 
+        // saveQuietly() skips every Eloquent event, so BudgetItem::prepare()/
+        // finalizer() never run here -- meaning the category/program rollup
+        // totals (balance, percentage_done, is_complete) silently went stale
+        // on every write through this endpoint. Mirrors the same cascade
+        // MobileApiController::budgetItemSave already does after its own
+        // saveQuietly() call.
+        try {
+            $cat = BudgetItemCategory::withoutGlobalScopes()->find($object->budget_item_category_id);
+            if ($cat) {
+                $cat->updateSelf();
+            }
+        } catch (\Throwable $th) {
+            // Don't fail the response over a rollup recalculation issue.
+        }
+
         $new_object = $model::find($object->id);
 
         if ($isEdit) {
@@ -196,6 +213,18 @@ class ApiController extends BaseController
         }
         if ($object == null) {
             Utils::error('Failed to save.');
+        }
+
+        // saveQuietly() skips ContributionRecord::prepare()/finalizer(), so
+        // the parent BudgetProgram's rollup totals silently went stale on
+        // every write through this endpoint. Mirrors the same cascade
+        // MobileApiController::contributionRecordSave already does.
+        try {
+            if ($object->budget_program_id) {
+                BudgetProgram::recalculateFromChildren((int) $object->budget_program_id);
+            }
+        } catch (\Throwable $th) {
+            // Don't fail the response over a rollup recalculation issue.
         }
 
         $new_object = $model::find($object->id);

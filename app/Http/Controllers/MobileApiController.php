@@ -630,6 +630,12 @@ class MobileApiController extends BaseController
         $customAmount = (int) $r->get('custom_amount', 0);
         $customPaidAmount = (int) $r->get('custom_paid_amount', 0);
         $fullyPaid = $r->get('fully_paid', 'No');
+        // Captured before any defaulting -- a "mark as fully paid" shortcut
+        // that sends only the flag should still push paid_amount to the full
+        // pledge, but a caller that ALSO sends a genuine (lower) receipt
+        // figure alongside fully_paid=Yes must not have that real figure
+        // silently overwritten below.
+        $paidAmountExplicitlySet = $r->filled('paid_amount') || $customPaidAmount > 0;
 
         // Apply custom amounts if provided
         if ($customAmount > 0) {
@@ -650,8 +656,10 @@ class MobileApiController extends BaseController
 
         // Calculate fully_paid and not_paid
         if ($fullyPaid === 'Yes') {
-            $paidAmount = $amount;
-            $notPaid = 0;
+            if (! $paidAmountExplicitlySet) {
+                $paidAmount = $amount;
+            }
+            $notPaid = max(0, $amount - $paidAmount);
         } else {
             $notPaid = $amount - $paidAmount;
         }
@@ -659,6 +667,12 @@ class MobileApiController extends BaseController
         if ($paidAmount >= $amount && $amount > 0) {
             $fullyPaid = 'Yes';
             $notPaid = 0;
+        } else {
+            // Without this, a client-supplied fully_paid=Yes that was NOT
+            // forced up to the full pledge above (because a genuine, lower
+            // paid_amount was also sent) left fully_paid stuck at 'Yes' even
+            // though paid_amount < amount -- self-contradictory record.
+            $fullyPaid = 'No';
         }
 
         $object->name = $name;

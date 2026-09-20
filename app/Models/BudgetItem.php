@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessRuleException;
 use App\Jobs\SendBudgetItemNotification;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
@@ -46,7 +47,7 @@ class BudgetItem extends Model
 
         //disable deleting
         static::deleting(function ($model) {
-            //throw new \Exception('Deleting is not allowed');
+            //throw new BusinessRuleException('Deleting is not allowed');
         });
 
         static::creating(function ($model) {
@@ -58,7 +59,7 @@ class BudgetItem extends Model
             ])->first();
 
             if ($withSameName) {
-                throw new \Exception('Name already exists');
+                throw new BusinessRuleException('Name already exists');
             }
 
             $model = self::prepare($model);
@@ -73,7 +74,7 @@ class BudgetItem extends Model
                 'budget_item_category_id' => $model->budget_item_category_id,
             ])->where('id', '!=', $model->id)->first();
             if ($withSameName) {
-                throw new \Exception('Name already exists');
+                throw new BusinessRuleException('Name already exists');
             }
 
             $model = self::prepare($model);
@@ -107,7 +108,7 @@ class BudgetItem extends Model
             $loggedUser = User::find($data->created_by_id);
         }
         if ($loggedUser === null) {
-            throw new \Exception('Cannot determine user — no authenticated user and created_by_id is invalid.');
+            throw new BusinessRuleException('Cannot determine user — no authenticated user and created_by_id is invalid.');
         }
 
         $data->company_id = $loggedUser->company_id;
@@ -120,7 +121,7 @@ class BudgetItem extends Model
 
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
         if ($cat == null) {
-            throw new \Exception('Category not found');
+            throw new BusinessRuleException('Category not found');
         }
 
         // Always sync budget_program_id from the category to prevent mismatch
@@ -266,11 +267,15 @@ class BudgetItem extends Model
     //getter for budget_item_category_text
     public function getBudgetItemCategoryTextAttribute()
     {
-        if ($this->category == null) {
+        // $with eager-loads the `budgetItemCategory` relation, not `category`
+        // (both point at the same FK) -- using `category` here silently
+        // re-queried on every single serialized BudgetItem (N+1 on every
+        // API list/show call) despite the eager-load already being declared.
+        if ($this->budgetItemCategory == null) {
             return 'N/A';
         }
 
-        return $this->category->name;
+        return $this->budgetItemCategory->name;
     }
 
     //appends budget_item_category_text

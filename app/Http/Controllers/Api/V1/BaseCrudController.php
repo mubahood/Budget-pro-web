@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Traits\ApiResponse;
 use Illuminate\Database\Eloquent\Model;
@@ -143,7 +144,11 @@ abstract class BaseCrudController extends Controller
         $model = new $this->modelClass();
         $this->fill($model, $validated, $request);
 
-        $model->save();
+        try {
+            $model->save();
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422);
+        }
 
         $fresh = $this->findOwned($request, $model->getKey(), $this->showWith) ?? $model;
         $this->afterSave($request, $fresh, true);
@@ -162,7 +167,11 @@ abstract class BaseCrudController extends Controller
         $validated = $request->validate($this->rules($request, $model));
         $this->fill($model, $validated, $request);
 
-        $model->save();
+        try {
+            $model->save();
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422);
+        }
 
         $fresh = $this->findOwned($request, $model->getKey(), $this->showWith) ?? $model;
         $this->afterSave($request, $fresh, false);
