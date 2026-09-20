@@ -3,6 +3,7 @@
 use App\Admin\Controllers\AuthController;
 use App\Http\Controllers\ApiController;
 use App\Models\BudgetProgram;
+use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\DataExport;
 use App\Models\FinancialReport;
@@ -98,36 +99,6 @@ Route::middleware('admin.auth')->group(function () {
         return view('reports.thanks', ['record' => $record]);
     });
 
-    // "Print" button on DataExportController's grid links here (a saved
-    // treasurer + category filter, e.g. "Samuel's Family pledges"). This
-    // route didn't exist at all (404) -- per BACKEND_API_MASTER_TASKS.md the
-    // previous version dumped every tenant's contribution records with no
-    // company_id filter and was removed. Rebuilt tenant-scoped, applying the
-    // saved category (required on every DataExport) and treasurer (optional)
-    // as filters on ContributionRecord.
-    Route::get('data-exports-print', function () {
-        $export = DataExport::find(request('id'));
-        if ($export === null || (int) $export->company_id !== (int) Admin::user()->company_id) {
-            abort(404);
-        }
-
-        $company = $export->company;
-        $treasurer = $export->treasurer_id ? \App\Models\User::find($export->treasurer_id) : null;
-
-        $records = ContributionRecord::where('company_id', $export->company_id)
-            ->where('category_id', $export->category_id)
-            ->when($export->treasurer_id, fn ($q) => $q->where('treasurer_id', $export->treasurer_id))
-            ->orderBy('name')
-            ->get();
-
-        return view('reports.data-export', [
-            'export' => $export,
-            'company' => $company,
-            'treasurer' => $treasurer,
-            'records' => $records,
-        ]);
-    });
-
     Route::get('sale-receipt-pdf', function () {
         $sale = \App\Models\SaleRecord::with(['saleRecordItems', 'company'])->find(request('id'));
         if ($sale === null || (int) $sale->company_id !== (int) Admin::user()->company_id) {
@@ -163,4 +134,79 @@ Route::middleware('admin.auth')->group(function () {
 
         return $pdf->stream('invoice-'.$sale->invoice_number.'.pdf');
     });
+});
+
+/*
+|--------------------------------------------------------------------------
+| data-exports-print -- deliberately OUTSIDE the admin.auth group
+|--------------------------------------------------------------------------
+|
+| Two different, unrelated buttons link here with two different URL shapes,
+| and only one of them has a browser session to check:
+|
+| 1. Admin panel "Print" button (DataExportController grid) -- ?id=<numeric
+|    data_exports.id>, clicked from an already-authenticated admin session.
+| 2. The Flutter app's contribution-records share menu (budget-pro-mobo's
+|    ContributionRecordsScreen.dart) -- ?id=<category string>&company_id=
+|    <int>, opened via url_launcher in the device's EXTERNAL browser, which
+|    carries no admin session cookie at all. Putting this behind admin.auth
+|    would just bounce every mobile user to the web login form -- confirmed
+|    live: that request currently gets a 302 to /auth/login, and before this
+|    route existed at all it was a plain 404 either way. This is the exact
+|    URL shape the shipped app already calls; it cannot be changed without a
+|    coordinated mobile release, same reasoning as routes/api.php's legacy
+|    endpoints.
+|
+| Branching on whether `id` is numeric tells the two apart. The mobile path
+| still can't verify the caller actually owns `company_id` (no session to
+| check it against) -- but it now at least scopes strictly to that one
+| company_id + category, which is already narrower than the previous
+| /data-exports-print this replaced (BACKEND_API_MASTER_TASKS.md: removed
+| for returning literally every tenant's contribution records).
+*/
+Route::get('data-exports-print', function () {
+    $rawId = request('id');
+
+    if (ctype_digit((string) $rawId)) {
+        if (! Admin::user()) {
+            return redirect()->guest('auth/login');
+        }
+
+        $export = DataExport::find($rawId);
+        if ($export === null || (int) $export->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
+        }
+
+        $companyId = (int) $export->company_id;
+        $categoryId = $export->category_id;
+        $treasurerId = $export->treasurer_id;
+    } else {
+        $companyId = (int) request('company_id');
+        $categoryId = $rawId;
+        $treasurerId = null;
+
+        if ($companyId <= 0 || $categoryId === null || $categoryId === '') {
+            abort(404);
+        }
+    }
+
+    $company = Company::find($companyId);
+    if ($company === null) {
+        abort(404);
+    }
+
+    $treasurer = $treasurerId ? \App\Models\User::find($treasurerId) : null;
+
+    $records = ContributionRecord::where('company_id', $companyId)
+        ->where('category_id', $categoryId)
+        ->when($treasurerId, fn ($q) => $q->where('treasurer_id', $treasurerId))
+        ->orderBy('name')
+        ->get();
+
+    return view('reports.data-export', [
+        'export' => (object) ['category_id' => $categoryId, 'treasurer_id' => $treasurerId],
+        'company' => $company,
+        'treasurer' => $treasurer,
+        'records' => $records,
+    ]);
 });
