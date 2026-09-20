@@ -4,6 +4,7 @@ use App\Admin\Controllers\AuthController;
 use App\Http\Controllers\ApiController;
 use App\Models\BudgetProgram;
 use App\Models\ContributionRecord;
+use App\Models\DataExport;
 use App\Models\FinancialReport;
 use Encore\Admin\Facades\Admin;
 use Illuminate\Support\Facades\App;
@@ -95,6 +96,36 @@ Route::middleware('admin.auth')->group(function () {
         }
 
         return view('reports.thanks', ['record' => $record]);
+    });
+
+    // "Print" button on DataExportController's grid links here (a saved
+    // treasurer + category filter, e.g. "Samuel's Family pledges"). This
+    // route didn't exist at all (404) -- per BACKEND_API_MASTER_TASKS.md the
+    // previous version dumped every tenant's contribution records with no
+    // company_id filter and was removed. Rebuilt tenant-scoped, applying the
+    // saved category (required on every DataExport) and treasurer (optional)
+    // as filters on ContributionRecord.
+    Route::get('data-exports-print', function () {
+        $export = DataExport::find(request('id'));
+        if ($export === null || (int) $export->company_id !== (int) Admin::user()->company_id) {
+            abort(404);
+        }
+
+        $company = $export->company;
+        $treasurer = $export->treasurer_id ? \App\Models\User::find($export->treasurer_id) : null;
+
+        $records = ContributionRecord::where('company_id', $export->company_id)
+            ->where('category_id', $export->category_id)
+            ->when($export->treasurer_id, fn ($q) => $q->where('treasurer_id', $export->treasurer_id))
+            ->orderBy('name')
+            ->get();
+
+        return view('reports.data-export', [
+            'export' => $export,
+            'company' => $company,
+            'treasurer' => $treasurer,
+            'records' => $records,
+        ]);
     });
 
     Route::get('sale-receipt-pdf', function () {
