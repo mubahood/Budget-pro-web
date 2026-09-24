@@ -289,18 +289,44 @@ class StockItemController extends TenantAdminController
      */
     protected function detail($id)
     {
-        $show = new Show(StockItem::findOrFail($id));
+        $item = StockItem::findOrFail($id);
+        $show = new Show($item);
 
         // Product Information Panel
         $show->panel()
             ->title('Product Information')
-            ->style('primary');
+            ->style('primary')
+            ->tools(function ($tools) use ($item) {
+                $tools->append('<a class="btn btn-sm btn-success" href="'.admin_url('stock-records/create?stock_item_id='.$item->id.'&type=Stock%20In').'"><i class="fa fa-plus"></i> Add stock</a>&nbsp;');
+                $tools->append('<a class="btn btn-sm btn-warning" href="'.admin_url('stock-records/create?stock_item_id='.$item->id.'&type=Adjustment%20Out').'"><i class="fa fa-sliders"></i> Adjust</a>&nbsp;');
+            });
+
+        // Movement history with a running balance (plan A4/A9).
+        $show->field('movement_history', __('Movement history'))->unescape()->as(function () use ($item) {
+            $rows = \App\Models\StockRecord::withoutGlobalScopes()->where('stock_item_id', $item->id)->orderBy('id')->get(['id', 'date', 'type', 'reason', 'quantity_delta', 'description', 'is_reversal', 'created_by_id']);
+            $opening = round((float) $item->current_quantity - (float) $rows->sum('quantity_delta'), 3);
+            $running = $opening;
+            $html = '<table class="table table-condensed table-striped"><thead><tr><th>Date</th><th>Type</th><th>Change</th><th>Balance</th><th>Note</th></tr></thead><tbody>';
+            $html .= '<tr><td></td><td><em>Opening</em></td><td></td><td>'.e(rtrim(rtrim(number_format($opening, 3), '0'), '.')).'</td><td></td></tr>';
+            foreach ($rows as $r) {
+                $running = round($running + (float) $r->quantity_delta, 3);
+                $d = (float) $r->quantity_delta;
+                $html .= '<tr><td>'.e(optional($r->date)->format('d M Y H:i')).'</td><td>'.e($r->type).($r->is_reversal ? ' <span class="label label-default">reversal</span>' : '').($r->reason ? ' <small>('.e($r->reason).')</small>' : '').'</td>'
+                    .'<td style="color:'.($d < 0 ? '#c0392b' : '#27ae60').'">'.($d > 0 ? '+' : '').e(rtrim(rtrim(number_format($d, 3), '0'), '.')).'</td><td><strong>'.e(rtrim(rtrim(number_format($running, 3), '0'), '.')).'</strong></td><td>'.e($r->description).'</td></tr>';
+            }
+
+            return $html.'</tbody></table>';
+        });
 
         $show->field('id', __('ID'));
         $show->field('name', __('Product Name'));
         $show->field('description', __('Description'));
         $show->field('image', __('Product Image'))->image();
-        $show->field('gallery', __('Product Gallery'))->gallery();
+        $show->field('gallery', __('Product Gallery'))->unescape()->as(function ($g) {
+            $imgs = array_filter(is_array($g) ? $g : (json_decode((string) $g, true) ?: []));
+
+            return $imgs === [] ? '—' : implode(' ', array_map(fn ($i) => '<img src="'.e(\Illuminate\Support\Str::startsWith($i, 'http') ? $i : url('storage/'.$i)).'" style="max-height:80px;margin:2px">', $imgs));
+        });
 
         // Category Information
         $show->divider();

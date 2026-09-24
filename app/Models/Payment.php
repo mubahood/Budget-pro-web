@@ -18,7 +18,7 @@ class Payment extends Model
     public const METHODS = ['cash', 'mobile_money', 'card', 'bank', 'credit', 'cheque', 'other'];
 
     protected $fillable = [
-        'client_uuid', 'company_id', 'sale_record_id', 'method', 'provider', 'reference', 'amount', 'currency',
+        'client_uuid', 'company_id', 'sale_record_id', 'customer_id', 'shift_id', 'method', 'provider', 'reference', 'amount', 'currency',
         'received_at', 'received_by_id', 'financial_record_id', 'is_reversal', 'reverses_id', 'notes',
         'uuid', 'device_id', 'created_by_uuid', 'client_created_at', 'client_updated_at',
     ];
@@ -54,6 +54,11 @@ class Payment extends Model
     public function sale(): BelongsTo
     {
         return $this->belongsTo(SaleRecord::class, 'sale_record_id');
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class, 'customer_id');
     }
 
     public function financialRecord(): BelongsTo

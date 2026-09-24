@@ -1,0 +1,17 @@
+*Kampala Corner Shop*
+Tel: 0772123456
+
+Receipt: *RCP-2026-000001*
+Date: 26 Sep 2026 14:05
+Customer: Nakato
+--------------------------------
+Rwenzori Water 500ml
+  3 x 1,500 = 4,500
+--------------------------------
+Subtotal: UGX 4,500
+Discount: UGX 500
+*TOTAL: UGX 4,000*
+Paid: UGX 4,000
+Change: UGX 1,000
+
+Webale nnyo!

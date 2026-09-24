@@ -7,20 +7,27 @@ use App\Http\Controllers\Api\V1\BudgetItemController;
 use App\Http\Controllers\Api\V1\BudgetProgramController;
 use App\Http\Controllers\Api\V1\CompanyController;
 use App\Http\Controllers\Api\V1\ContributionRecordController;
+use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FinancialCategoryController;
 use App\Http\Controllers\Api\V1\FinancialPeriodController;
 use App\Http\Controllers\Api\V1\FinancialRecordController;
+use App\Http\Controllers\Api\V1\GoodsReceiptController;
 use App\Http\Controllers\Api\V1\PoultrySyncController;
+use App\Http\Controllers\Api\V1\ProductBarcodeController;
 use App\Http\Controllers\Api\V1\SaleController;
+use App\Http\Controllers\Api\V1\ShiftController;
 use App\Http\Controllers\Api\V1\StockCategoryController;
 use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
+use App\Http\Controllers\Api\V1\StockTakeController;
+use App\Http\Controllers\Api\V1\SupplierController;
 use App\Http\Controllers\Api\V1\SyncController;
 use App\Http\Controllers\Api\V1\TrackingController;
+use App\Http\Controllers\Api\V1\UnitController;
 use App\Http\Controllers\Api\V1\UploadController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\MobileApiController;
@@ -208,6 +215,27 @@ Route::prefix('v1')->group(function () {
         Route::post('sales/checkout', [SaleController::class, 'checkout']);
         Route::post('sales/{id}/payments', [SaleController::class, 'addPayment']);
         Route::post('sales/{id}/void', [SaleController::class, 'void']);
+        Route::post('sales/{id}/returns', [SaleController::class, 'returns'])->whereNumber('id');
+        Route::get('sales/{id}/receipt.txt', [SaleController::class, 'receiptText'])->whereNumber('id');
+        Route::get('sales/{id}/receipt.pdf', [SaleController::class, 'receiptPdf'])->whereNumber('id');
+
+        // Phase 2 — POS & inventory
+        apiCrud('units', UnitController::class);
+        apiCrud('product-barcodes', ProductBarcodeController::class);
+        apiCrud('customers', CustomerController::class);
+        Route::get('customers/{id}/statement', [CustomerController::class, 'statement'])->whereNumber('id');
+        Route::post('customers/{id}/payments', [CustomerController::class, 'pay'])->whereNumber('id');
+        apiCrud('suppliers', SupplierController::class);
+        Route::get('suppliers/{id}/statement', [SupplierController::class, 'statement'])->whereNumber('id');
+        Route::post('suppliers/{id}/payments', [SupplierController::class, 'pay'])->whereNumber('id');
+        Route::get('shifts/current', [ShiftController::class, 'current']);
+        Route::post('shifts/open', [ShiftController::class, 'open']);
+        Route::post('shifts/{id}/close', [ShiftController::class, 'close'])->whereNumber('id');
+        apiCrud('shifts', ShiftController::class);
+        apiCrud('stock-takes', StockTakeController::class);
+        Route::post('stock-takes/{id}/counts', [StockTakeController::class, 'counts'])->whereNumber('id');
+        Route::post('stock-takes/{id}/post', [StockTakeController::class, 'post'])->whereNumber('id');
+        apiCrud('goods-receipts', GoodsReceiptController::class);
 
         // Finance
         apiCrud('financial-categories', FinancialCategoryController::class);

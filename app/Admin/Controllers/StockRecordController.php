@@ -474,6 +474,7 @@ class StockRecordController extends TenantAdminController
 
         $sub_items_ajax_url = url('api/stock-items').'?company_id='.$u->company_id;
         $form->select('stock_item_id', __('Stock Item'))
+            ->default(request('stock_item_id'))
             ->ajax($sub_items_ajax_url)
             ->options(function ($id) {
                 $item = StockItem::find($id);
@@ -506,8 +507,12 @@ class StockRecordController extends TenantAdminController
             ])
             ->rules('required')
             ->required()
-            ->default('Sale')
+            ->default(request('type', 'Sale'))
             ->help('Select the type of stock transaction');
+
+        $form->select('reason', __('Reason'))->options(array_combine(\App\Http\Controllers\Api\V1\StockRecordController::REASONS, array_map(fn ($r) => ucfirst(str_replace('_', ' ', $r)), \App\Http\Controllers\Api\V1\StockRecordController::REASONS)))
+            ->help('Why the stock changed (for adjustments)');
+        $form->image('image', __('Photo (optional)'))->move('files/adjustments')->uniqueName();
 
         $form->decimal('quantity', __('Quantity'))
             ->rules('required|numeric|min:0.01')

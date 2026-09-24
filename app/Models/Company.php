@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Company Model
@@ -53,6 +53,7 @@ class Company extends Model
         'settings_worker_can_create_stock_category',
         'settings_worker_can_view_balance',
         'settings_worker_can_view_stats',
+        'negative_stock_policy', 'low_stock_default', 'require_shift', 'receipt_header', 'receipt_footer', 'timezone',
     ];
 
     /**

@@ -57,7 +57,7 @@ class StockRecord extends Model
         'client_uuid', 'company_id', 'stock_item_id', 'stock_category_id', 'stock_sub_category_id', 'financial_period_id',
         'created_by_id', 'sku', 'name', 'measurement_unit', 'description', 'type', 'quantity', 'quantity_delta',
         'selling_price', 'buying_price', 'unit_cost', 'total_sales', 'profit', 'date', 'reference_type', 'reference_id',
-        'is_reversal', 'reverses_id', 'sale_record_id',
+        'is_reversal', 'reverses_id', 'sale_record_id', 'reason', 'image',
     ];
 
     /** Inserts always run in a transaction so the product lock covers the whole movement. */

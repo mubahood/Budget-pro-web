@@ -40,6 +40,20 @@ Route::group([
         $router->get('auto-reorder-rules/trigger', 'AutoReorderRuleController@trigger');
         $router->resource('auto-reorder-rules', AutoReorderRuleController::class);
     }
+    // Phase 2 — POS & inventory
+    $router->get('customers/{id}/pay', 'CustomerController@payForm');
+    $router->post('customers/{id}/pay', 'CustomerController@pay');
+    $router->resource('customers', CustomerController::class);
+    $router->get('suppliers/{id}/pay', 'SupplierController@payForm');
+    $router->post('suppliers/{id}/pay', 'SupplierController@pay');
+    $router->resource('suppliers', SupplierController::class);
+    $router->resource('units', UnitController::class);
+    $router->resource('shifts', ShiftController::class)->only(['index', 'show']);
+    $router->resource('goods-receipts', GoodsReceiptController::class)->only(['index', 'show', 'create', 'store']);
+    $router->get('stock-takes/{id}/count', 'StockTakeController@countForm');
+    $router->post('stock-takes/{id}/count', 'StockTakeController@saveCounts');
+    $router->post('stock-takes/{id}/post', 'StockTakeController@post');
+    $router->resource('stock-takes', StockTakeController::class)->only(['index', 'show', 'create']);
     $router->resource('sale-records', SaleRecordController::class);
     $router->post('sale-records/{id}/void', 'SaleRecordController@void');
     $router->resource('poultry-farm-types', PoultryFarmTypeController::class);

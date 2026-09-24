@@ -18,8 +18,7 @@ use Illuminate\Support\Facades\DB;
 class PaymentService
 {
     /**
-     * @param  array{method?:string, amount:float|string, provider?:string|null, reference?:string|null, received_at?:mixed,
-     *               received_by_id?:int|null, client_uuid?:string|null, notes?:string|null, currency?:string|null}  $attrs
+     * @param  array<string, mixed>  $attrs  amount, method, provider, reference, received_at, received_by_id, client_uuid, notes, currency, shift_id
      */
     public function record(SaleRecord $sale, array $attrs): Payment
     {
@@ -50,6 +49,8 @@ class PaymentService
             $payment->currency = $attrs['currency'] ?? $sale->currency ?? Company::withoutGlobalScopes()->find($sale->company_id)?->currency;
             $payment->received_at = $receivedAt;
             $payment->received_by_id = $attrs['received_by_id'] ?? $sale->created_by_id;
+            $payment->customer_id = $sale->customer_id;
+            $payment->shift_id = $attrs['shift_id'] ?? $sale->shift_id;
             $payment->notes = $attrs['notes'] ?? null;
             $payment->save();
 
@@ -58,6 +59,9 @@ class PaymentService
             $payment->saveQuietlySynced();
 
             $this->syncSaleTotals($sale);
+            if ($sale->customer_id) {
+                (new CustomerService())->recalc((int) $sale->customer_id);
+            }
 
             return $payment;
         });
@@ -115,12 +119,111 @@ class PaymentService
     {
         $paid = round((float) Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->sum('amount'), 2);
         $total = round((float) $sale->total_amount, 2);
+        $net = max(0, round($total - (float) $sale->refunded_amount, 2)); // what the customer owes after returns
 
-        $sale->amount_paid = min($paid, $total);
-        $sale->change_given = max(0, round($paid - $total, 2));
-        $sale->balance = max(0, round($total - $paid, 2));
+        $sale->amount_paid = max(0, min($paid, $net));
+        $sale->change_given = max(0, round($paid - $net, 2));
+        $sale->balance = max(0, round($net - $paid, 2));
         $sale->payment_status = $sale->balance <= 0 ? 'Paid' : ($sale->amount_paid > 0 ? 'Partial' : 'Unpaid');
+        if ($sale->voided_at === null && (float) $sale->refunded_amount > 0) {
+            $sale->status = (float) $sale->refunded_amount >= $total ? 'Refunded' : 'Partially Refunded';
+        }
         $sale->saveQuietlySynced();
+    }
+
+    /**
+     * Money handed back to a customer (return/refund, P2-6): a negative payment on
+     * the sale plus a contra Income row, so cash-up and the ledger both drop.
+     */
+    public function refund(SaleRecord $sale, float $amount, string $method, int $userId, ?int $shiftId = null, ?string $clientUuid = null): Payment
+    {
+        $amount = round($amount, 2);
+        if ($amount <= 0) {
+            throw BusinessRuleException::make('invalid_amount', 'Refund amount must be greater than zero.');
+        }
+
+        return DB::transaction(function () use ($sale, $amount, $method, $userId, $shiftId, $clientUuid) {
+            $p = new Payment();
+            $p->client_uuid = $clientUuid;
+            $p->company_id = $sale->company_id;
+            $p->sale_record_id = $sale->id;
+            $p->customer_id = $sale->customer_id;
+            $p->shift_id = $shiftId;
+            $p->method = Payment::normalizeMethod($method);
+            $p->amount = -$amount;
+            $p->currency = $sale->currency;
+            $p->received_at = now();
+            $p->received_by_id = $userId;
+            $p->notes = 'Refund for sale '.($sale->receipt_number ?: '#'.$sale->id);
+            $p->save();
+
+            $category = $this->salesCategory((int) $sale->company_id);
+            $row = new FinancialRecord();
+            $row->financial_category_id = $category->id;
+            $row->company_id = $sale->company_id;
+            $row->user_id = $userId;
+            $row->created_by_id = $userId;
+            $row->amount = -$amount;
+            $row->quantity = 1;
+            $row->type = 'Income';
+            $row->payment_method = $p->method;
+            $row->recipient = $sale->customer_name ?? '';
+            $row->receipt = $sale->receipt_number ?? '';
+            $row->date = now();
+            $row->description = 'Refund for sale '.($sale->receipt_number ?: '#'.$sale->id);
+            $row->source_type = 'payment';
+            $row->source_id = $p->id;
+            $row->is_reversal = true;
+            $row->currency = $sale->currency;
+            $row->save();
+            $p->financial_record_id = $row->id;
+            $p->saveQuietlySynced();
+
+            return $p;
+        });
+    }
+
+    /** Money received on a customer's account that is not tied to one sale (advance / overpayment). */
+    public function recordAccountPayment(\App\Models\Customer $customer, float $amount, string $method, int $userId, ?string $reference = null, ?string $clientUuid = null, ?int $shiftId = null): Payment
+    {
+        return DB::transaction(function () use ($customer, $amount, $method, $userId, $reference, $clientUuid, $shiftId) {
+            $p = new Payment();
+            $p->client_uuid = $clientUuid;
+            $p->company_id = $customer->company_id;
+            $p->customer_id = $customer->id;
+            $p->shift_id = $shiftId;
+            $p->method = Payment::normalizeMethod($method);
+            $p->reference = $reference;
+            $p->amount = round($amount, 2);
+            $p->currency = Company::withoutGlobalScopes()->find($customer->company_id)?->currency;
+            $p->received_at = now();
+            $p->received_by_id = $userId;
+            $p->notes = 'Payment on account';
+            $p->save();
+
+            $category = $this->salesCategory((int) $customer->company_id);
+            $row = new FinancialRecord();
+            $row->financial_category_id = $category->id;
+            $row->company_id = $customer->company_id;
+            $row->user_id = $userId;
+            $row->created_by_id = $userId;
+            $row->amount = $p->amount;
+            $row->quantity = 1;
+            $row->type = 'Income';
+            $row->payment_method = $p->method;
+            $row->recipient = $customer->name;
+            $row->receipt = $reference ?? '';
+            $row->date = now();
+            $row->description = 'Payment on account — '.$customer->name;
+            $row->source_type = 'payment';
+            $row->source_id = $p->id;
+            $row->currency = $p->currency;
+            $row->save();
+            $p->financial_record_id = $row->id;
+            $p->saveQuietlySynced();
+
+            return $p;
+        });
     }
 
     private function postIncome(SaleRecord $sale, Payment $payment): FinancialRecord

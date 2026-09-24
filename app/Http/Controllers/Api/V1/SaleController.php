@@ -31,11 +31,11 @@ class SaleController extends BaseCrudController
 
     protected array $sortable = ['id', 'sale_date', 'total_amount', 'created_at'];
 
-    protected array $filterable = ['payment_status', 'status', 'payment_method', 'sale_date', 'voided_at'];
+    protected array $filterable = ['payment_status', 'status', 'payment_method', 'sale_date', 'voided_at', 'customer_id', 'shift_id', 'created_by_id'];
 
     protected array $listWith = ['saleRecordItems'];
 
-    protected array $showWith = ['saleRecordItems', 'payments', 'createdBy'];
+    protected array $showWith = ['saleRecordItems', 'payments', 'returns.items', 'customer', 'createdBy'];
 
     protected string $optionLabel = 'receipt_number';
 
@@ -62,7 +62,10 @@ class SaleController extends BaseCrudController
             'sale_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'allow_negative_stock' => ['nullable', 'boolean'],
+            'customer_id' => ['nullable', 'integer'],
+            'shift_id' => ['nullable', 'integer'],
             'items' => ['required', 'array', 'min:1'],
+            'items.*.unit_id' => ['nullable', 'integer'],
             'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
@@ -74,6 +77,7 @@ class SaleController extends BaseCrudController
             'payments.*.provider' => ['nullable', 'string', 'max:50'],
         ]);
 
+        $data['payments_explicit'] = $request->has('payments');
         try {
             $result = (new SaleService())->checkout($companyId, (int) $request->user()->id, $data);
         } catch (BusinessRuleException $e) {
@@ -133,6 +137,60 @@ class SaleController extends BaseCrudController
         }
 
         return $this->success($this->transform($voided), 'Sale voided; stock and ledger reversed.');
+    }
+
+    /** POST sales/{id}/returns { items:[{sale_item_id, quantity, restock?}], reason?, refund_method?, client_uuid?, shift_id? } */
+    public function returns(Request $request, $id)
+    {
+        /** @var SaleRecord|null $sale */
+        $sale = $this->findOwned($request, $id);
+        if ($sale === null) {
+            return $this->notFound('Sale not found.');
+        }
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.sale_item_id' => ['required', 'integer'],
+            'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
+            'items.*.restock' => ['nullable', 'boolean'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'refund_method' => ['nullable', 'string', 'max:30'],
+            'client_uuid' => ['nullable', 'uuid'],
+            'shift_id' => ['nullable', 'integer'],
+        ]);
+        try {
+            $return = (new \App\Services\Shop\ReturnService())->create($sale, $data['items'], (int) $request->user()->id, $data['reason'] ?? null, $data['refund_method'] ?? 'cash', $data['client_uuid'] ?? null, $data['shift_id'] ?? null);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return $this->created(['return' => $return, 'sale' => $this->transform($this->findOwned($request, $id, $this->showWith))], 'Return recorded.');
+    }
+
+    /** GET sales/{id}/receipt.txt — WhatsApp-ready text. */
+    public function receiptText(Request $request, $id)
+    {
+        /** @var SaleRecord|null $sale */
+        $sale = $this->findOwned($request, $id);
+        if ($sale === null) {
+            return $this->notFound('Sale not found.');
+        }
+
+        return response((new \App\Services\Shop\ReceiptService())->text($sale), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+    }
+
+    /** GET sales/{id}/receipt.pdf */
+    public function receiptPdf(Request $request, $id)
+    {
+        /** @var SaleRecord|null $sale */
+        $sale = $this->findOwned($request, $id);
+        if ($sale === null) {
+            return $this->notFound('Sale not found.');
+        }
+
+        return response((new \App\Services\Shop\ReceiptService())->pdf($sale), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="receipt-'.($sale->receipt_number ?: $sale->id).'.pdf"',
+        ]);
     }
 
     public function destroy(Request $request, $id)

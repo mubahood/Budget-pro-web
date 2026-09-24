@@ -61,7 +61,7 @@ class StockService
         }
 
         $record = new StockRecord();
-        foreach (['stock_item_id', 'type', 'quantity', 'description', 'selling_price', 'unit_cost', 'created_by_id', 'client_uuid', 'reference_type', 'reference_id', 'sale_record_id'] as $key) {
+        foreach (['stock_item_id', 'type', 'quantity', 'description', 'selling_price', 'unit_cost', 'created_by_id', 'client_uuid', 'reference_type', 'reference_id', 'sale_record_id', 'reason', 'image'] as $key) {
             if (array_key_exists($key, $attrs) && $attrs[$key] !== null) {
                 $record->{$key} = $attrs[$key];
             }

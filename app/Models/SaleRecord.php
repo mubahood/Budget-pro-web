@@ -52,12 +52,14 @@ class SaleRecord extends Model
         'amount_paid' => 'decimal:2',
         'balance' => 'decimal:2',
         'change_given' => 'decimal:2',
+        'refunded_amount' => 'decimal:2',
+        'stock_exception' => 'boolean',
     ];
 
     protected $fillable = [
         'client_uuid', 'company_id', 'financial_period_id', 'created_by_id', 'sale_date', 'customer_name', 'customer_phone',
         'customer_address', 'subtotal', 'discount_amount', 'discount_reason', 'total_amount', 'amount_paid', 'balance',
-        'change_given', 'currency', 'payment_method', 'payment_status', 'status', 'receipt_number', 'receipt_pdf_url',
+        'change_given', 'refunded_amount', 'customer_id', 'shift_id', 'currency', 'payment_method', 'payment_status', 'status', 'receipt_number', 'receipt_pdf_url',
         'receipt_pdf_is_generated', 'invoice_number', 'invoice_pdf_url', 'invoice_pdf_is_generated', 'notes',
     ];
 
@@ -263,6 +265,21 @@ class SaleRecord extends Model
     public function stockRecords(): HasMany
     {
         return $this->hasMany(StockRecord::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'customer_id');
+    }
+
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(Shift::class, 'shift_id');
+    }
+
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class, 'sale_record_id');
     }
 
     public function payments(): HasMany

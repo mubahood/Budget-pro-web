@@ -23,7 +23,7 @@ class StockRecordController extends BaseCrudController
 
     protected string $resourceName = 'Stock record';
 
-    protected array $writable = ['stock_item_id', 'type', 'quantity', 'description', 'date', 'selling_price', 'unit_cost', 'client_uuid'];
+    protected array $writable = ['stock_item_id', 'type', 'quantity', 'description', 'date', 'selling_price', 'unit_cost', 'client_uuid', 'reason', 'image'];
 
     protected array $searchable = ['name', 'sku', 'description'];
 
@@ -37,9 +37,12 @@ class StockRecordController extends BaseCrudController
 
     protected string $optionLabel = 'name';
 
+    /** Reason codes for adjustments (plan A4). */
+    public const REASONS = ['damage', 'expired', 'lost', 'theft', 'internal_use', 'correction', 'gift', 'restock', 'return', 'other'];
+
     public function types()
     {
-        return $this->success(['inbound' => StockService::INBOUND, 'outbound' => StockService::OUTBOUND], 'Movement types.');
+        return $this->success(['inbound' => StockService::INBOUND, 'outbound' => StockService::OUTBOUND, 'reasons' => self::REASONS], 'Movement types.');
     }
 
     protected function rules(Request $request, ?Model $existing): array
@@ -55,6 +58,8 @@ class StockRecordController extends BaseCrudController
             'date' => ['nullable', 'date'],
             'selling_price' => ['nullable', 'numeric', 'min:0'],
             'unit_cost' => ['nullable', 'numeric', 'min:0'],
+            'reason' => ['nullable', 'string', 'in:'.implode(',', self::REASONS)],
+            'image' => ['nullable', 'string', 'max:255'],
         ];
     }
 

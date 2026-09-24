@@ -14,13 +14,13 @@ class StockItemController extends BaseCrudController
     protected string $resourceName = 'Stock item';
 
     // current_quantity is derived from original_quantity by the model and immutable after create.
-    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity', 'min_stock', 'allow_negative_stock'];
+    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity', 'min_stock', 'allow_negative_stock', 'track_stock', 'is_active', 'unit_id'];
 
     protected array $searchable = ['name', 'sku', 'barcode'];
 
     protected array $sortable = ['id', 'name', 'sku', 'selling_price', 'current_quantity', 'created_at', 'updated_at'];
 
-    protected array $filterable = ['stock_sub_category_id', 'stock_category_id'];
+    protected array $filterable = ['stock_sub_category_id', 'stock_category_id', 'is_active', 'track_stock', 'unit_id'];
 
     protected array $listWith = ['stockSubCategory', 'stockCategory'];
 
@@ -45,6 +45,9 @@ class StockItemController extends BaseCrudController
             'original_quantity' => ['nullable', 'numeric', 'min:0'],
             'min_stock' => ['nullable', 'numeric', 'min:0'],
             'allow_negative_stock' => ['nullable', 'boolean'],
+            'track_stock' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+            'unit_id' => ['nullable', Rule::exists('units', 'id')->where('company_id', $companyId)],
         ];
     }
 
@@ -53,9 +56,14 @@ class StockItemController extends BaseCrudController
      */
     public function byBarcode(Request $request, string $code)
     {
+        $companyId = $this->companyId($request);
+        $extra = \App\Models\ProductBarcode::withoutGlobalScopes()->where('company_id', $companyId)->where('barcode', $code)->where('is_deleted', 0)->first();
         $item = $this->scopedQuery($request)
-            ->where(function ($q) use ($code) {
+            ->where(function ($q) use ($code, $extra) {
                 $q->where('barcode', $code)->orWhere('sku', $code);
+                if ($extra) {
+                    $q->orWhere('stock_items.id', $extra->stock_item_id);
+                }
             })
             ->with($this->showWith)
             ->first();
@@ -63,8 +71,10 @@ class StockItemController extends BaseCrudController
         if ($item === null) {
             return $this->notFound('No product matches that barcode or SKU.');
         }
+        $payload = $this->transform($item);
+        $payload->setAttribute('scanned_unit_id', $extra?->unit_id);
 
-        return $this->success($this->transform($item), 'Product found.');
+        return $this->success($payload, 'Product found.');
     }
 
     protected function optionLabel(Model $model): string

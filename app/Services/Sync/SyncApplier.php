@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\Payment;
 use App\Models\SaleRecord;
+use App\Models\StockCategory;
 use App\Models\StockItem;
 use App\Models\StockRecord;
 use App\Models\SyncBatch;
@@ -198,6 +199,10 @@ class SyncApplier
             'sale' => $this->applySale($company, $deviceId, $userId, $uuid, $action, $data, $op, $assigned, $touchedProducts, $stockExceptions),
             'payment' => $this->applyPayment($companyId, $userId, $uuid, $action, $data),
             'movement' => $this->applyMovement($company, $deviceId, $userId, $uuid, $action, $data, $touchedProducts, $stockExceptions),
+            'shift' => $this->applyShift($companyId, $deviceId, $userId, $uuid, $action, $data),
+            'return' => $this->applyReturn($companyId, $userId, $uuid, $data, $touchedProducts),
+            'grn' => $this->applyGoodsReceipt($companyId, $deviceId, $userId, $uuid, $data, $touchedProducts),
+            'stock_take' => $this->applyStockTake($companyId, $deviceId, $userId, $uuid, $action, $data, $touchedProducts),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
     }
@@ -234,7 +239,28 @@ class SyncApplier
             if ($productId === null) {
                 return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'product_uuid'];
             }
-            $items[] = ['stock_item_id' => (int) $productId, 'quantity' => $line['quantity'] ?? 0, 'unit_price' => $line['unit_price'] ?? null, 'discount_amount' => $line['discount_amount'] ?? 0];
+            $unitId = null;
+            if (! empty($line['unit_uuid'])) {
+                $unitId = \App\Models\Unit::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $line['unit_uuid'])->value('id');
+                if ($unitId === null) {
+                    return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'unit_uuid'];
+                }
+            }
+            $items[] = ['stock_item_id' => (int) $productId, 'quantity' => $line['quantity'] ?? 0, 'unit_price' => $line['unit_price'] ?? null, 'discount_amount' => $line['discount_amount'] ?? 0, 'unit_id' => $unitId];
+        }
+        $customerId = null;
+        if (! empty($data['customer_uuid'])) {
+            $customerId = \App\Models\Customer::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['customer_uuid'])->value('id');
+            if ($customerId === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'customer_uuid'];
+            }
+        }
+        $shiftId = null;
+        if (! empty($data['shift_uuid'])) {
+            $shiftId = \App\Models\Shift::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['shift_uuid'])->value('id');
+            if ($shiftId === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'shift_uuid'];
+            }
         }
         if ($items === []) {
             return ['status' => 'rejected', 'code' => 'validation', 'message' => 'A sale needs at least one item.'];
@@ -258,6 +284,9 @@ class SyncApplier
             'notes' => $data['notes'] ?? null,
             'provisional_number' => $data['provisional_number'] ?? null,
             'device_id' => $deviceId,
+            'customer_id' => $customerId,
+            'shift_id' => $shiftId,
+            'from_sync' => true, // offline sales are never rejected for credit limits or closed shifts
             'allow_negative_stock' => true, // a completed offline sale is never rejected for stock (Appendix E)
         ]);
         $sale = $result['sale'];
@@ -301,6 +330,16 @@ class SyncApplier
             return ['status' => 'replayed', 'model' => $existing];
         }
         $saleUuid = $data['sale_uuid'] ?? null;
+        if (empty($saleUuid) && ! empty($data['customer_uuid'])) {
+            // Money received on a customer's account: allocated to their open sales oldest-first.
+            $customer = \App\Models\Customer::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['customer_uuid'])->first();
+            if ($customer === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'customer_uuid'];
+            }
+            $created = (new \App\Services\Shop\CustomerService())->receivePayment($customer, (float) ($data['amount'] ?? 0), $data['method'] ?? 'cash', $userId, $data['reference'] ?? null, $uuid);
+
+            return ['status' => 'applied', 'model' => $created[0]];
+        }
         $sale = $saleUuid ? SaleRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $saleUuid)->first() : null;
         if ($sale === null) {
             return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'sale_uuid'];
@@ -343,6 +382,7 @@ class SyncApplier
             'description' => $data['description'] ?? $data['reason'] ?? null,
             'date' => isset($data['occurred_at']) ? \Illuminate\Support\Carbon::createFromTimestampMs((int) $data['occurred_at']) : now(),
             'unit_cost' => $data['unit_cost'] ?? null, 'selling_price' => $data['unit_price'] ?? null,
+            'reason' => $data['reason'] ?? null, 'image' => $data['image'] ?? null,
             'created_by_id' => $userId, 'allow_negative' => true,
         ]);
         $touchedProducts[] = (int) $product->id;
@@ -355,6 +395,118 @@ class SyncApplier
         }
 
         return ['status' => 'applied', 'model' => $record];
+    }
+
+    private function applyShift(int $companyId, ?string $deviceId, int $userId, string $uuid, string $action, array $data): array
+    {
+        $svc = new \App\Services\Shop\ShiftService();
+        $shift = \App\Models\Shift::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($action === 'insert' || $action === 'upsert') {
+            if ($shift) {
+                return ['status' => 'replayed', 'model' => $shift];
+            }
+            // An older open shift of the same cashier on this device is closed first (it was closed offline and its close op is behind).
+            $shift = $svc->open($companyId, $userId, (float) ($data['opening_float'] ?? 0), $deviceId, $uuid, $data['notes'] ?? null);
+            if (isset($data['opened_at'])) {
+                $shift->opened_at = \Illuminate\Support\Carbon::createFromTimestampMs((int) $data['opened_at']);
+                $shift->saveQuietlySynced();
+            }
+
+            return ['status' => 'applied', 'model' => $shift];
+        }
+        if ($action === 'update' && ($data['status'] ?? '') === 'closed') {
+            if ($shift === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'uuid'];
+            }
+            $shift = $svc->close($shift, (float) ($data['counted_cash'] ?? 0), $userId, $data['notes'] ?? null);
+
+            return ['status' => 'applied', 'model' => $shift];
+        }
+
+        return ['status' => 'rejected', 'code' => 'immutable_event', 'message' => 'Shifts change only by opening and closing.'];
+    }
+
+    private function applyReturn(int $companyId, int $userId, string $uuid, array $data, array &$touchedProducts): array
+    {
+        $existing = \App\Models\SaleReturn::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $sale = SaleRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['sale_uuid'] ?? '')->first();
+        if ($sale === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'sale_uuid'];
+        }
+        $lines = [];
+        foreach ($data['items'] ?? [] as $l) {
+            $productId = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $l['product_uuid'] ?? '')->value('id');
+            $item = \App\Models\SaleRecordItem::withoutGlobalScopes()->where('sale_record_id', $sale->id)
+                ->when(! empty($l['sale_item_uuid']), fn ($q) => $q->where('uuid', $l['sale_item_uuid']), fn ($q) => $q->where('stock_item_id', $productId))
+                ->first();
+            if ($item === null) {
+                return ['status' => 'rejected', 'code' => 'validation', 'message' => 'A returned item is not part of the sale.'];
+            }
+            $lines[] = ['sale_item_id' => $item->id, 'quantity' => $l['quantity'] ?? 0, 'restock' => (bool) ($l['restock'] ?? true)];
+            $touchedProducts[] = (int) $item->stock_item_id;
+        }
+        $shiftId = ! empty($data['shift_uuid']) ? \App\Models\Shift::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['shift_uuid'])->value('id') : null;
+        $return = (new \App\Services\Shop\ReturnService())->create($sale, $lines, $userId, $data['reason'] ?? null, $data['refund_method'] ?? 'cash', $uuid, $shiftId);
+
+        return ['status' => 'applied', 'model' => $return];
+    }
+
+    private function applyGoodsReceipt(int $companyId, ?string $deviceId, int $userId, string $uuid, array $data, array &$touchedProducts): array
+    {
+        $existing = \App\Models\GoodsReceipt::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $supplierId = null;
+        if (! empty($data['supplier_uuid'])) {
+            $supplierId = \App\Models\Supplier::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['supplier_uuid'])->value('id');
+            if ($supplierId === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'supplier_uuid'];
+            }
+        }
+        $lines = [];
+        foreach ($data['items'] ?? [] as $l) {
+            $productId = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $l['product_uuid'] ?? '')->value('id');
+            if ($productId === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'product_uuid'];
+            }
+            $lines[] = ['stock_item_id' => (int) $productId, 'quantity' => $l['quantity'] ?? 0, 'unit_cost' => $l['unit_cost'] ?? 0];
+            $touchedProducts[] = (int) $productId;
+        }
+        $grn = (new \App\Services\Shop\GoodsReceiptService())->receive($companyId, $userId, $lines, $supplierId, $data['invoice_ref'] ?? null, (float) ($data['amount_paid'] ?? 0),
+            $data['payment_method'] ?? 'cash', isset($data['received_on']) ? (string) $data['received_on'] : null, $uuid, $data['notes'] ?? null, $deviceId);
+
+        return ['status' => 'applied', 'model' => $grn];
+    }
+
+    private function applyStockTake(int $companyId, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array &$touchedProducts): array
+    {
+        $svc = new \App\Services\Shop\StockTakeService();
+        $take = \App\Models\StockTake::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($take === null) {
+            $categoryId = ! empty($data['category_uuid']) ? StockCategory::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['category_uuid'])->value('id') : null;
+            $take = $svc->create($companyId, $userId, (string) ($data['name'] ?? ''), $categoryId, $uuid, $deviceId);
+        }
+        $counts = [];
+        foreach ($data['counts'] ?? [] as $c) {
+            $productId = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $c['product_uuid'] ?? '')->value('id');
+            if ($productId === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'product_uuid'];
+            }
+            $counts[] = ['stock_item_id' => (int) $productId, 'counted_quantity' => $c['counted_quantity'] ?? 0];
+            $touchedProducts[] = (int) $productId;
+        }
+        if ($counts !== [] && $take->status === 'draft') {
+            $take = $svc->count($take, $counts);
+        }
+        if (($data['status'] ?? '') === 'posted' && $take->status === 'draft') {
+            $take = $svc->post($take, $userId);
+        }
+
+        return ['status' => 'applied', 'model' => $take];
     }
 
     /** Wire movement types (lower_snake) → StockService types; a signed quantity decides direction for adjustments. */

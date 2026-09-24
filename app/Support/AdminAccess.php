@@ -37,7 +37,7 @@ class AdminAccess
         '/financial-periods*', '/financial-categories*', '/financial-records*', '/financial-reports*',
         '/budget-programs*', '/budget-item-categories*', '/budget-items*', '/contribution-records*',
         '/handover-records*', '/data-exports*',
-        '/purchase-orders*',
+        '/purchase-orders*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
         '/poultry-*',
         '/tracked-devices*', '/device-locations*', '/device-commands*', '/tracking-map*',
         '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search',

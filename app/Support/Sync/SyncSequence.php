@@ -30,6 +30,14 @@ class SyncSequence
         return (int) (DB::table('sync_sequence')->where('id', 1)->value('last_seq') ?? 0);
     }
 
+    /** Deterministic child uuid (e.g. the n-th payment created from one client payment) that still fits CHAR(36). */
+    public static function childUuid(string $parent, string $suffix): string
+    {
+        $h = md5($parent.'#'.$suffix);
+
+        return substr($h, 0, 8).'-'.substr($h, 8, 4).'-5'.substr($h, 13, 3).'-a'.substr($h, 17, 3).'-'.substr($h, 20, 12);
+    }
+
     public static function nowMs(): int
     {
         return (int) round(microtime(true) * 1000);

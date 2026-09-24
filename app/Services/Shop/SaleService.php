@@ -31,11 +31,9 @@ class SaleService
     }
 
     /**
-     * @param  array{items: array<int, array{stock_item_id:int, quantity:float|string, unit_price?:float|string|null, discount_amount?:float|string|null}>,
-     *               payments?: array<int, array{method?:string, amount:float|string, reference?:string|null, provider?:string|null}>,
-     *               amount_paid?: float|string|null, payment_method?: string|null, discount_amount?: float|string|null, discount_reason?: string|null,
-     *               customer_name?: string|null, customer_phone?: string|null, customer_address?: string|null, sale_date?: mixed, notes?: string|null,
-     *               client_uuid?: string|null, allow_negative_stock?: bool, provisional_number?: string|null, device_id?: string|null}  $data
+     * @param  array<string, mixed>  $data  items[{stock_item_id, quantity, unit_price?, discount_amount?, unit_id?}], payments[], amount_paid, payment_method,
+     *                                     discount_*, customer_*, customer_id, shift_id, sale_date, notes, client_uuid, provisional_number, device_id,
+     *                                     allow_negative_stock, payments_explicit, from_sync
      * @return array{sale: SaleRecord, replayed: bool}
      */
     public function checkout(int $companyId, int $userId, array $data): array
@@ -69,6 +67,24 @@ class SaleService
             $sale->currency = Company::withoutGlobalScopes()->find($companyId)?->currency;
             $sale->provisional_number = $data['provisional_number'] ?? null; // offline receipt ref (Appendix D)
             $sale->device_id = $data['device_id'] ?? null;
+            $customer = $this->resolveCustomer($companyId, $userId, $data);
+            if ($customer) {
+                $sale->customer_id = $customer->id;
+                if (empty($data['customer_name']) || $sale->customer_name === 'Walk-in Customer') {
+                    $sale->customer_name = $customer->name;
+                }
+                $sale->customer_phone = $sale->customer_phone ?: $customer->phone;
+            }
+            if (! empty($data['shift_id'])) {
+                $shift = \App\Models\Shift::withoutGlobalScopes()->where('company_id', $companyId)->find($data['shift_id']);
+                if ($shift === null) {
+                    throw BusinessRuleException::make('shift_not_found', 'Shift not found.');
+                }
+                if ($shift->status !== 'open' && empty($data['from_sync'])) {
+                    throw BusinessRuleException::make('shift_closed', 'That shift is already closed. Open a new shift to keep selling.');
+                }
+                $sale->shift_id = $shift->id;
+            }
             $sale->skipNumbering = true; // numbers are assigned in finalize(), inside this transaction
             $sale->save();
 
@@ -77,6 +93,14 @@ class SaleService
                 $item->company_id = $companyId;
                 $item->sale_record_id = $sale->id;
                 $item->stock_item_id = (int) $line['stock_item_id'];
+                if (! empty($line['unit_id'])) {
+                    $unit = \App\Models\Unit::withoutGlobalScopes()->where('company_id', $companyId)->find($line['unit_id']);
+                    if ($unit === null) {
+                        throw BusinessRuleException::make('unit_not_found', 'Unit not found.');
+                    }
+                    $item->unit_id = $unit->id;
+                    $item->unit_factor = max(0.001, (float) $unit->factor);
+                }
                 $item->quantity = $line['quantity'];
                 $item->unit_price = array_key_exists('unit_price', $line) && $line['unit_price'] !== null ? $line['unit_price'] : null;
                 $item->discount_amount = round((float) ($line['discount_amount'] ?? 0), 2);
@@ -88,6 +112,13 @@ class SaleService
                 $amountPaid = round((float) ($data['amount_paid'] ?? 0), 2);
                 $payments = $amountPaid > 0 ? [['method' => $data['payment_method'] ?? 'Cash', 'amount' => $amountPaid]] : [];
             }
+
+            // Money owed must be owed by someone: explicit-payment clients (POS, API v1) must
+            // name a customer for credit; the legacy amount_paid path and offline sync stay lenient.
+            $this->creditRules = [
+                'require_customer' => ! empty($data['payments_explicit']) && empty($data['from_sync']),
+                'enforce_limit' => empty($data['from_sync']),
+            ];
 
             return $this->finalize($sale->fresh(), $payments, $userId, (bool) ($data['allow_negative_stock'] ?? false));
         });
@@ -141,6 +172,9 @@ class SaleService
             $this->payments->syncSaleTotals($sale);
             $sale->status = 'Voided';
             $sale->saveQuietlySynced();
+            if ($sale->customer_id) {
+                (new CustomerService())->recalc((int) $sale->customer_id);
+            }
 
             return $this->loaded($sale);
         });
@@ -157,6 +191,38 @@ class SaleService
     }
 
     // ------------------------------------------------------------------
+
+    /** @var array{require_customer: bool, enforce_limit: bool} */
+    private array $creditRules = ['require_customer' => false, 'enforce_limit' => false];
+
+    /** customer_id, or find-or-create by phone when a named buyer is given (debt book). */
+    private function resolveCustomer(int $companyId, int $userId, array $data): ?\App\Models\Customer
+    {
+        if (! empty($data['customer_id'])) {
+            $c = \App\Models\Customer::withoutGlobalScopes()->where('company_id', $companyId)->find($data['customer_id']);
+            if ($c === null) {
+                throw BusinessRuleException::make('customer_not_found', 'Customer not found.');
+            }
+
+            return $c;
+        }
+        $phone = trim((string) ($data['customer_phone'] ?? ''));
+        $name = trim((string) ($data['customer_name'] ?? ''));
+        if ($phone === '' || $name === '' || strcasecmp($name, 'Walk-in Customer') === 0) {
+            return null;
+        }
+        $c = \App\Models\Customer::withoutGlobalScopes()->where('company_id', $companyId)->where('phone', $phone)->first();
+        if ($c === null) {
+            $c = new \App\Models\Customer();
+            $c->company_id = $companyId;
+            $c->name = $name;
+            $c->phone = $phone;
+            $c->created_by_id = $userId;
+            $c->save();
+        }
+
+        return $c;
+    }
 
     private function finalize(SaleRecord $sale, array $payments, int $userId, bool $allowNegative): SaleRecord
     {
@@ -185,7 +251,8 @@ class SaleService
             if ($qty <= 0) {
                 throw BusinessRuleException::make('invalid_quantity', 'Quantity must be greater than zero.');
             }
-            $unitPrice = $line->unit_price === null ? (float) $product->selling_price : (float) $line->unit_price;
+            $factor = max(0.001, (float) ($line->unit_factor ?: 1));
+            $unitPrice = $line->unit_price === null ? round((float) $product->selling_price * $factor, 2) : (float) $line->unit_price;
             if ($unitPrice < 0) {
                 throw BusinessRuleException::make('invalid_price', 'Unit price cannot be negative.');
             }
@@ -194,7 +261,7 @@ class SaleService
 
             $line->item_name = $product->name;
             $line->item_sku = $product->sku ?? '';
-            $line->unit_cost = (float) $product->buying_price;
+            $line->unit_cost = round((float) $product->buying_price * $factor, 2); // per sold unit
             $line->unit_price = $unitPrice;
             $line->subtotal = $lineSub;
             $line->discount_amount = $lineDiscount;
@@ -221,15 +288,39 @@ class SaleService
 
         $total = round(array_sum($lines->map(fn ($l) => (float) $l->line_total)->all()), 2);
 
-        // Movements (stock + profit at the *effective* price).
+        // Credit rules (plan A3): a balance needs a customer; stay within their credit limit.
+        $paying = round(array_sum(array_map(fn ($p) => max(0, (float) ($p['amount'] ?? 0)), $payments)), 2);
+        $owed = max(0, round($total - $paying, 2));
+        if ($owed > 0) {
+            if ($this->creditRules['require_customer'] && empty($sale->customer_id)) {
+                throw BusinessRuleException::make('customer_required', 'Choose a customer for a sale on credit.');
+            }
+            if ($this->creditRules['enforce_limit'] && $sale->customer_id) {
+                $customer = \App\Models\Customer::withoutGlobalScopes()->find($sale->customer_id);
+                if ($customer && $customer->credit_limit !== null) {
+                    $after = round((float) (new CustomerService())->balance($customer) + $owed, 2);
+                    if ($after > (float) $customer->credit_limit) {
+                        throw BusinessRuleException::make('credit_limit_exceeded', $customer->name.' would owe '.number_format($after, 2).', above the credit limit of '.number_format((float) $customer->credit_limit, 2).'.',
+                            ['credit_limit' => (float) $customer->credit_limit, 'balance_after' => $after]);
+                    }
+                }
+            }
+        }
+
+        // Movements (stock + profit at the *effective* price), in base units.
         foreach ($lines as $line) {
-            $qty = (float) $line->quantity;
+            $product = $products[(int) $line->stock_item_id];
+            if ($product->track_stock === false) {
+                continue; // services / non-stock items: no movement
+            }
+            $factor = max(0.001, (float) ($line->unit_factor ?: 1));
+            $qty = round((float) $line->quantity * $factor, 3);
             $movement = $this->stock->record([
                 'stock_item_id' => (int) $line->stock_item_id,
                 'type' => 'Sale',
                 'quantity' => $qty,
                 'selling_price' => $qty > 0 ? round((float) $line->line_total / $qty, 4) : 0,
-                'unit_cost' => (float) $line->unit_cost,
+                'unit_cost' => (float) $product->buying_price,
                 'description' => 'Sale '.($sale->receipt_number ?: '#'.$sale->id).' - '.($sale->customer_name ?? 'Walk-in Customer'),
                 'date' => $sale->sale_date,
                 'created_by_id' => $userId,
@@ -279,6 +370,9 @@ class SaleService
         if ($remaining < 0) {
             $sale->change_given = round(-$remaining, 2);
             $sale->saveQuietlySynced();
+        }
+        if ($sale->customer_id) {
+            (new CustomerService())->recalc((int) $sale->customer_id);
         }
 
         return $sale;

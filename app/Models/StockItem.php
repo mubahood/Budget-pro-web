@@ -46,6 +46,8 @@ class StockItem extends Model
         'current_quantity' => 'decimal:3',
         'min_stock' => 'decimal:3',
         'allow_negative_stock' => 'boolean',
+        'track_stock' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
     //fillables
@@ -69,6 +71,9 @@ class StockItem extends Model
         'current_quantity',
         'min_stock',
         'allow_negative_stock',
+        'track_stock',
+        'is_active',
+        'unit_id',
     ];
 
     /**
@@ -339,6 +344,16 @@ class StockItem extends Model
     }
 
     //stockRecords relation
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class, 'unit_id');
+    }
+
+    public function barcodes(): HasMany
+    {
+        return $this->hasMany(ProductBarcode::class, 'stock_item_id');
+    }
+
     public function stockRecords(): HasMany
     {
         return $this->hasMany(StockRecord::class);

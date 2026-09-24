@@ -358,4 +358,13 @@ class SyncTest extends ApiTestCase
         // v1 endpoint still serves the same row (kept one release).
         $this->getJson('/api/v1/poultry/sync/pull?table=batches&since=0', $this->auth($t['token']))->assertOk()->assertJsonPath('data.rows.0.uuid', $uuid);
     }
+
+    public function test_registry_wire_keys_are_unique(): void
+    {
+        // A duplicated array key silently overwrites the earlier table (it happened once with `customers`).
+        $src = file_get_contents(app_path('Services/Sync/SyncRegistry.php'));
+        preg_match_all("/^\\s{12}'([a-z_]+)' => \\['model'/m", $src, $m);
+        $this->assertSame(count($m[1]), count(array_unique($m[1])), 'duplicate wire keys: '.implode(',', array_diff_assoc($m[1], array_unique($m[1]))));
+        $this->assertGreaterThan(30, count($m[1]));
+    }
 }

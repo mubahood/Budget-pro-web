@@ -33,10 +33,12 @@ class SaleRecordItem extends Model
         'line_total' => 'decimal:2',
         'unit_cost' => 'decimal:2',
         'profit' => 'decimal:2',
+        'returned_quantity' => 'decimal:3',
+        'unit_factor' => 'decimal:3',
     ];
 
     protected $fillable = [
-        'company_id', 'sale_record_id', 'stock_item_id', 'stock_record_id', 'item_name', 'item_sku', 'quantity',
+        'company_id', 'sale_record_id', 'stock_item_id', 'unit_id', 'unit_factor', 'returned_quantity', 'stock_record_id', 'item_name', 'item_sku', 'quantity',
         'unit_price', 'subtotal', 'discount_amount', 'line_total', 'unit_cost', 'profit',
     ];
 
@@ -66,11 +68,12 @@ class SaleRecordItem extends Model
 
             $item->item_name = $item->item_name ?: $stockItem->name;
             $item->item_sku = $item->item_sku ?: ($stockItem->sku ?? '');
+            $factor = max(0.001, (float) ($item->unit_factor ?: 1));
             if ($item->getAttribute('unit_cost') === null) {
-                $item->unit_cost = $stockItem->buying_price ?? 0;
+                $item->unit_cost = round((float) ($stockItem->buying_price ?? 0) * $factor, 2);
             }
             if ($item->getAttribute('unit_price') === null || (float) $item->unit_price <= 0) {
-                $item->unit_price = $stockItem->selling_price ?? 0;
+                $item->unit_price = round((float) ($stockItem->selling_price ?? 0) * $factor, 2);
             }
             $item->discount_amount = round((float) ($item->discount_amount ?? 0), 2);
             $item->recompute();

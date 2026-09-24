@@ -132,6 +132,17 @@ class CompanyEditController extends TenantAdminController
             ])
             ->default('USD')
             ->rules('required');
+        $form->divider('Shop & receipts');
+        $form->select('negative_stock_policy', __('When a sale exceeds stock'))
+            ->options(['flag' => 'Allow it, but warn me (recommended)', 'allow' => 'Allow it silently', 'block' => 'Block the sale (online only)'])
+            ->default('flag');
+        $form->decimal('low_stock_default', __('Default low-stock level'))->help('Used when a product has no minimum stock of its own.');
+        $form->switch('require_shift', __('Require an open shift to sell'))->states(['on' => ['value' => 1, 'text' => 'Yes'], 'off' => ['value' => 0, 'text' => 'No']]);
+        $form->textarea('receipt_header', __('Receipt header'))->rows(2)->help('e.g. TIN, location, opening hours');
+        $form->textarea('receipt_footer', __('Receipt footer'))->rows(2)->help('e.g. "Goods once sold are not returnable"');
+        $form->text('timezone', __('Timezone'))->placeholder('Africa/Kampala');
+        $form->divider('Worker permissions');
+
         $form->radio('settings_worker_can_create_stock_item', __('Can worker create stock item'))
             ->options([
                 'Yes' => 'Yes',
