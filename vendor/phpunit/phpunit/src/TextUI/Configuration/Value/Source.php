@@ -76,9 +76,9 @@ final class Source
     }
 
     /**
-     * @throws NoBaselineException
-     *
      * @psalm-return non-empty-string
+     *
+     * @throws NoBaselineException
      */
     public function baseline(): string
     {

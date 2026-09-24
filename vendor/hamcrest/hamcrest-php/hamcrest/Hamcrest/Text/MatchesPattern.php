@@ -10,9 +10,7 @@ namespace Hamcrest\Text;
  */
 class MatchesPattern extends SubstringMatcher
 {
-    /**
-     * @param mixed $pattern
-     */
+
     public function __construct($pattern)
     {
         parent::__construct($pattern);
@@ -22,21 +20,20 @@ class MatchesPattern extends SubstringMatcher
      * Matches if value is a string that matches regular expression $pattern.
      *
      * @factory
-     * @param mixed $pattern
      */
-    public static function matchesPattern($pattern): self
+    public static function matchesPattern($pattern)
     {
         return new self($pattern);
     }
 
     // -- Protected Methods
 
-    protected function evalSubstringOf(string $item): bool
+    protected function evalSubstringOf($item)
     {
         return preg_match($this->_substring, (string) $item) >= 1;
     }
 
-    protected function relationship(): string
+    protected function relationship()
     {
         return 'matching';
     }

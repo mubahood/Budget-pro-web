@@ -30,7 +30,6 @@ abstract class AbstractStream
     protected $in;
     /** @var resource|null */
     protected $out;
-    protected $err;
 
     private string $debug = '';
 
@@ -38,7 +37,7 @@ abstract class AbstractStream
     {
         if ($debug) {
             foreach (explode("\n", trim($bytes)) as $line) {
-                $this->debug .= \sprintf("> %s\n", $line);
+                $this->debug .= sprintf("> %s\n", $line);
             }
         }
 
@@ -69,7 +68,7 @@ abstract class AbstractStream
 
     public function terminate(): void
     {
-        $this->stream = $this->err = $this->out = $this->in = null;
+        $this->stream = $this->out = $this->in = null;
     }
 
     public function readLine(): string
@@ -78,41 +77,20 @@ abstract class AbstractStream
             return '';
         }
 
-        $line = @fgets($this->out);
+        $line = fgets($this->out);
         if ('' === $line || false === $line) {
-            if (stream_get_meta_data($this->out)['timed_out']) {
-                throw new TransportException(\sprintf('Connection to "%s" timed out.', $this->getReadConnectionDescription()));
+            $metas = stream_get_meta_data($this->out);
+            if ($metas['timed_out']) {
+                throw new TransportException(sprintf('Connection to "%s" timed out.', $this->getReadConnectionDescription()));
             }
-            if (feof($this->out)) { // don't use "eof" metadata, it's not accurate on Windows
-                throw new TransportException(\sprintf('Connection to "%s" has been closed unexpectedly.', $this->getReadConnectionDescription()));
-            }
-            if (false === $line) {
-                throw new TransportException(\sprintf('Unable to read from connection to "%s": ', $this->getReadConnectionDescription().error_get_last()['message'] ?? ''));
+            if ($metas['eof']) {
+                throw new TransportException(sprintf('Connection to "%s" has been closed unexpectedly.', $this->getReadConnectionDescription()));
             }
         }
 
-        $this->debug .= \sprintf('< %s', $line);
+        $this->debug .= sprintf('< %s', $line);
 
         return $line;
-    }
-
-    /**
-     * Tells whether the server sent data that has not been read yet.
-     */
-    public function hasPendingData(): bool
-    {
-        if (!\is_resource($this->out)) {
-            return false;
-        }
-
-        if (0 < stream_get_meta_data($this->out)['unread_bytes']) {
-            return true;
-        }
-
-        $read = [$this->out];
-        $write = $except = [];
-
-        return 0 < @stream_select($read, $write, $except, 0);
     }
 
     public function getDebug(): string

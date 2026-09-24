@@ -45,11 +45,12 @@
     },
     "require": {
         "php": ">=7.3",
-        "hamcrest/hamcrest-php": "^2.0 || ^3.0"
+        "lib-pcre": ">=7.0",
+        "hamcrest/hamcrest-php": "^2.0.1"
     },
     "require-dev": {
-        "phpunit/phpunit": "^9.6.36",
-        "symplify/easy-coding-standard": "^13.2.17"
+        "phpunit/phpunit": "^8.5 || ^9.6.10",
+        "symplify/easy-coding-standard": "^12.0.8"
     },
     "conflict": {
         "phpunit/phpunit": "<8.0"
@@ -65,13 +66,13 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Tests\\Unit\\": "tests/Unit"
+            "Fixture\\": "tests/Fixture/",
+            "Mockery\\Tests\\Unit\\": "tests/Unit",
+            "test\\": "tests/"
         },
         "files": [
-            "tests/Bootstrap.php"
-        ],
-        "exclude-from-classmap": [
-            "tests/Fixture"
+            "fixtures/autoload.php",
+            "vendor/hamcrest/hamcrest-php/hamcrest/Hamcrest.php"
         ]
     },
     "config": {
@@ -85,11 +86,10 @@
     "scripts": {
         "check": [
             "@composer validate",
-            "@psalm:baseline",
+            "@ecs",
             "@test"
         ],
-        "disableProcessTimeout": "Composer\\Config::disableProcessTimeout",
-        "docs": "tools/phpdocumentor -d library -t docs/api",
+        "docs": "vendor/bin/phpdoc -d library -t docs/api",
         "ecs": [
             "@ecs:fix",
             "@ecs:check"
@@ -97,31 +97,21 @@
         "ecs:check": "ecs check --clear-cache || true",
         "ecs:fix": "ecs check --clear-cache --fix",
         "phive": [
-            "@disableProcessTimeout",
-            "tools/phive update --force-accept-unsigned",
-            "tools/phive purge"
+            ".phive/tools/phive update --force-accept-unsigned",
+            ".phive/tools/phive purge"
         ],
-        "phpunit": [
-            "@xdebug",
-            "@disableProcessTimeout",
-            "vendor/bin/phpunit --do-not-cache-result --colors=always"
-        ],
-        "psalm": [
-            "@disableProcessTimeout",
-            "tools/psalm --no-cache --threads=1"
-        ],
-        "psalm:alter": "@psalm --allow-backwards-incompatible-changes=false --alter --safe-types",
-        "psalm:baseline": "@psalm --no-diff --set-baseline=psalm-baseline.xml",
-        "psalm:dry-run": "@psalm:alter --dry-run --issues=all",
-        "psalm:fix": "@psalm:alter --issues=UnnecessaryVarAnnotation",
-        "psalm:security": "@psalm --no-diff --taint-analysis",
-        "psalm:shepherd": "@psalm --no-diff --output-format=github --shepherd --stats",
+        "phpunit": "vendor/bin/phpunit --do-not-cache-result --colors=always",
+        "phpunit:coverage": "@phpunit --coverage-clover=coverage.xml",
+        "psalm": ".phive/tools/psalm --no-diff --no-cache",
+        "psalm:baseline": "@psalm --set-baseline=psalm-baseline.xml",
+        "psalm:dry-run": "@psalm --alter --issues=all --dry-run",
+        "psalm:security": "@psalm --taint-analysis",
+        "psalm:shepherd": "@psalm --stats --shepherd --output-format=github",
         "test": [
-            "@phpunit",
-            "@psalm:baseline",
+            "@phpunit --stop-on-defect",
+            "@psalm",
             "@psalm:security",
             "@psalm:dry-run"
-        ],
-        "xdebug": "@putenv XDEBUG_MODE=coverage"
+        ]
     }
 }

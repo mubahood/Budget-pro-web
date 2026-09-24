@@ -1,9 +1,11 @@
-<?php declare(strict_types=1);
+<?php
 
 /**
  * This file is part of the Nette Framework (https://nette.org)
  * Copyright (c) 2004 David Grudl (https://davidgrudl.com)
  */
+
+declare(strict_types=1);
 
 namespace Nette\Schema\Elements;
 
@@ -11,7 +13,6 @@ use Nette;
 use Nette\Schema\Context;
 use Nette\Schema\Helpers;
 use Nette\Schema\Schema;
-use function array_diff_key, array_fill_keys, array_key_exists, array_keys, array_map, array_merge, array_pop, array_values, is_array, is_object, strval;
 
 
 final class Structure implements Schema
@@ -29,19 +30,18 @@ final class Structure implements Schema
 	private bool $skipDefaults = false;
 
 
-	/** @param Schema[]  $shape */
-	public function __construct(array $shape)
+	/**
+	 * @param  Schema[]  $items
+	 */
+	public function __construct(array $items)
 	{
-		(function (Schema ...$items) {})(...array_values($shape));
-		$this->items = $shape;
+		(function (Schema ...$items) {})(...array_values($items));
+		$this->items = $items;
 		$this->castTo('object');
 		$this->required = true;
 	}
 
 
-	/**
-	 * Not supported for structures; always throws.
-	 */
 	public function default(mixed $value): self
 	{
 		throw new Nette\InvalidStateException('Structure cannot have default value.');
@@ -62,9 +62,6 @@ final class Structure implements Schema
 	}
 
 
-	/**
-	 * Allows extra keys not defined in the shape, validating their values against the given type.
-	 */
 	public function otherItems(string|Schema $type = 'mixed'): self
 	{
 		$this->otherItems = $type instanceof Schema ? $type : new Type($type);
@@ -72,31 +69,10 @@ final class Structure implements Schema
 	}
 
 
-	/**
-	 * When enabled, properties whose value equals the default are omitted from the output.
-	 */
 	public function skipDefaults(bool $state = true): self
 	{
 		$this->skipDefaults = $state;
 		return $this;
-	}
-
-
-	/**
-	 * Creates a new structure by merging this shape with additional properties.
-	 * @param  Schema[]|self  $shape
-	 */
-	public function extend(array|self $shape): self
-	{
-		$shape = $shape instanceof self ? $shape->items : $shape;
-		return new self(array_merge($this->items, $shape));
-	}
-
-
-	/** @return Schema[] */
-	public function getShape(): array
-	{
-		return $this->items;
 	}
 
 
@@ -141,22 +117,25 @@ final class Structure implements Schema
 		}
 
 		if (is_array($value) && is_array($base)) {
-			$index = $this->otherItems === null ? null : 0;
+			$index = 0;
 			foreach ($value as $key => $val) {
 				if ($key === $index) {
 					$base[] = $val;
 					$index++;
-				} else {
-					$base[$key] = array_key_exists($key, $base) && ($itemSchema = $this->items[$key] ?? $this->otherItems)
+				} elseif (array_key_exists($key, $base)) {
+					$itemSchema = $this->items[$key] ?? $this->otherItems;
+					$base[$key] = $itemSchema
 						? $itemSchema->merge($val, $base[$key])
-						: $val;
+						: Helpers::merge($val, $base[$key]);
+				} else {
+					$base[$key] = $val;
 				}
 			}
 
 			return $base;
 		}
 
-		return $value ?? $base;
+		return Helpers::merge($value, $base);
 	}
 
 
@@ -177,7 +156,6 @@ final class Structure implements Schema
 	}
 
 
-	/** @param  array<mixed>  $value */
 	private function validateItems(array &$value, Context $context): void
 	{
 		$items = $this->items;
@@ -185,7 +163,7 @@ final class Structure implements Schema
 			if ($this->otherItems) {
 				$items += array_fill_keys($extraKeys, $this->otherItems);
 			} else {
-				$keys = array_map(strval(...), array_keys($items));
+				$keys = array_map('strval', array_keys($items));
 				foreach ($extraKeys as $key) {
 					$hint = Nette\Utils\Helpers::getSuggestion($keys, (string) $key);
 					$context->addError(
@@ -215,17 +193,8 @@ final class Structure implements Schema
 
 	public function completeDefault(Context $context): mixed
 	{
-		if (!$this->required) {
-			return null;
-		}
-
-		// the item is missing in the input, do not report it as used deprecated
-		$deprecated = $this->deprecated;
-		$this->deprecated = null;
-		try {
-			return $this->complete([], $context);
-		} finally {
-			$this->deprecated = $deprecated;
-		}
+		return $this->required
+			? $this->complete([], $context)
+			: null;
 	}
 }

@@ -22,7 +22,7 @@ use Monolog\LogRecord;
  *
  * @author Luís Cobucci <lcobucci@gmail.com>
  */
-class GoogleCloudLoggingFormatter extends JsonFormatter
+final class GoogleCloudLoggingFormatter extends JsonFormatter
 {
     protected function normalizeRecord(LogRecord $record): array
     {

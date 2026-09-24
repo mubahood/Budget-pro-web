@@ -6,7 +6,6 @@ namespace Hamcrest\Core;
  */
 use Hamcrest\Description;
 use Hamcrest\DiagnosingMatcher;
-use Hamcrest\Matcher;
 use Hamcrest\Util;
 
 /**
@@ -17,14 +16,8 @@ use Hamcrest\Util;
 class AllOf extends DiagnosingMatcher
 {
 
-    /**
-     * @var array<Matcher>
-     */
-    private array $_matchers;
+    private $_matchers;
 
-    /**
-     * @param array<Matcher> $matchers
-     */
     public function __construct(array $matchers)
     {
         Util::checkAllAreMatchers($matchers);
@@ -32,8 +25,9 @@ class AllOf extends DiagnosingMatcher
         $this->_matchers = $matchers;
     }
 
-    public function matchesWithDiagnosticDescription($item, Description $mismatchDescription): bool
+    public function matchesWithDiagnosticDescription($item, Description $mismatchDescription)
     {
+        /** @var $matcher \Hamcrest\Matcher */
         foreach ($this->_matchers as $matcher) {
             if (!$matcher->matches($item)) {
                 $mismatchDescription->appendDescriptionOf($matcher)->appendText(' ');
@@ -46,7 +40,7 @@ class AllOf extends DiagnosingMatcher
         return true;
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendList('(', ' and ', ')', $this->_matchers);
     }
@@ -56,7 +50,7 @@ class AllOf extends DiagnosingMatcher
      *
      * @factory ...
      */
-    public static function allOf(/* args... */): self
+    public static function allOf(/* args... */)
     {
         $args = func_get_args();
 

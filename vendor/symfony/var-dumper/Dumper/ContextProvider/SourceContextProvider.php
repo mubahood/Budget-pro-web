@@ -31,7 +31,7 @@ final class SourceContextProvider implements ContextProviderInterface
     private ?string $projectDir;
     private FileLinkFormatter|LegacyFileLinkFormatter|null $fileLinkFormatter;
 
-    public function __construct(?string $charset = null, ?string $projectDir = null, FileLinkFormatter|LegacyFileLinkFormatter|null $fileLinkFormatter = null, int $limit = 9)
+    public function __construct(string $charset = null, string $projectDir = null, FileLinkFormatter|LegacyFileLinkFormatter $fileLinkFormatter = null, int $limit = 9)
     {
         $this->charset = $charset;
         $this->projectDir = $projectDir;
@@ -115,7 +115,7 @@ final class SourceContextProvider implements ContextProviderInterface
     {
         $html = '';
 
-        $dumper = new HtmlDumper(static function ($line) use (&$html) { $html .= $line; }, $this->charset);
+        $dumper = new HtmlDumper(function ($line) use (&$html) { $html .= $line; }, $this->charset);
         $dumper->setDumpHeader('');
         $dumper->setDumpBoundaries('', '');
 

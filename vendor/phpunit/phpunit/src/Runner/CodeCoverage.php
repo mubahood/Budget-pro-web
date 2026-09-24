@@ -38,11 +38,7 @@ use SebastianBergmann\Timer\NoActiveTimerException;
 use SebastianBergmann\Timer\Timer;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
- *
- * @codeCoverageIgnore
  */
 final class CodeCoverage
 {
@@ -111,12 +107,12 @@ final class CodeCoverage
 
         if ($codeCoverageFilterRegistry->get()->isEmpty()) {
             if (!$codeCoverageFilterRegistry->configured()) {
-                EventFacade::emitter()->testRunnerTriggeredPhpunitWarning(
+                EventFacade::emitter()->testRunnerTriggeredWarning(
                     'No filter is configured, code coverage will not be processed',
                 );
             } else {
-                EventFacade::emitter()->testRunnerTriggeredPhpunitWarning(
-                    'Configured filter does not match any files, code coverage will not be processed',
+                EventFacade::emitter()->testRunnerTriggeredWarning(
+                    'Incorrect filter configuration, code coverage will not be processed',
                 );
             }
 
@@ -171,7 +167,7 @@ final class CodeCoverage
         $this->collecting = true;
     }
 
-    public function stop(bool $append, array|false $linesToBeCovered = [], array $linesToBeUsed = []): void
+    public function stop(bool $append = true, array|false $linesToBeCovered = [], array $linesToBeUsed = []): void
     {
         if (!$this->collecting) {
             return;
@@ -316,9 +312,7 @@ final class CodeCoverage
             $textReport = $processor->process($this->codeCoverage(), $configuration->colors());
 
             if ($configuration->coverageText() === 'php://stdout') {
-                if (!$configuration->noOutput() && !$configuration->debug()) {
-                    $printer->print($textReport);
-                }
+                $printer->print($textReport);
             } else {
                 file_put_contents($configuration->coverageText(), $textReport);
             }
@@ -370,7 +364,7 @@ final class CodeCoverage
                 $filter,
             );
         } catch (CodeCoverageException $e) {
-            EventFacade::emitter()->testRunnerTriggeredPhpunitWarning(
+            EventFacade::emitter()->testRunnerTriggeredWarning(
                 $e->getMessage(),
             );
         }

@@ -1,21 +1,16 @@
 <?php
 
 /**
- * Mockery (https://docs.mockery.io/en/stable/)
+ * Mockery (https://docs.mockery.io/)
  *
  * @copyright https://github.com/mockery/mockery/blob/HEAD/COPYRIGHT.md
  * @license   https://github.com/mockery/mockery/blob/HEAD/LICENSE BSD 3-Clause License
- * @see       https://github.com/mockery/mockery for the canonical source repository
+ * @link      https://github.com/mockery/mockery for the canonical source repository
  */
 
 namespace Mockery\Generator\StringManipulation\Pass;
 
-use Mockery\Exception;
 use Mockery\Generator\MockConfiguration;
-use Mockery\Generator\TargetClassInterface;
-use Override;
-
-use function preg_replace;
 
 /**
  * The standard Mockery\Mock class includes some methods to ease mocking, such
@@ -23,38 +18,25 @@ use function preg_replace;
  * mocked. This pass removes the builtin methods where they are final on the
  * target
  */
-class RemoveBuiltinMethodsThatAreFinalPass implements Pass
+class RemoveBuiltinMethodsThatAreFinalPass
 {
-    protected $methods = [
+    protected $methods = array(
         '__wakeup' => '/public function __wakeup\(\)\s+\{.*?\}/sm',
         '__toString' => '/public function __toString\(\)\s+(:\s+string)?\s*\{.*?\}/sm',
-    ];
+    );
 
-    /**
-     * @param  string $code
-     * @return string
-     *
-     * @throws Exception
-     */
-    #[Override]
     public function apply($code, MockConfiguration $config)
     {
-        $targetClass = $config->getTargetClass();
+        $target = $config->getTargetClass();
 
-        if (! $targetClass instanceof TargetClassInterface) {
+        if (!$target) {
             return $code;
         }
 
-        foreach ($targetClass->getMethods() as $method) {
-            if (! $method->isFinal()) {
-                continue;
+        foreach ($target->getMethods() as $method) {
+            if ($method->isFinal() && isset($this->methods[$method->getName()])) {
+                $code = preg_replace($this->methods[$method->getName()], '', $code);
             }
-
-            if (! isset($this->methods[$method->getName()])) {
-                continue;
-            }
-
-            $code = preg_replace($this->methods[$method->getName()], '', $code);
         }
 
         return $code;

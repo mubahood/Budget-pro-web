@@ -13,14 +13,9 @@ use Hamcrest\TypeSafeMatcher;
  */
 class IsEqualIgnoringWhiteSpace extends TypeSafeMatcher
 {
-    /**
-     * @var mixed
-     */
+
     private $_string;
 
-    /**
-     * @param mixed $string
-     */
     public function __construct($string)
     {
         parent::__construct(self::TYPE_STRING);
@@ -28,18 +23,18 @@ class IsEqualIgnoringWhiteSpace extends TypeSafeMatcher
         $this->_string = $string;
     }
 
-    protected function matchesSafely($item): bool
+    protected function matchesSafely($item)
     {
         return (strtolower($this->_stripSpace($item))
                 === strtolower($this->_stripSpace($this->_string)));
     }
 
-    protected function describeMismatchSafely($item, Description $mismatchDescription): void
+    protected function describeMismatchSafely($item, Description $mismatchDescription)
     {
         $mismatchDescription->appendText('was ')->appendText($item);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('equalToIgnoringWhiteSpace(')
                                 ->appendValue($this->_string)
@@ -51,16 +46,15 @@ class IsEqualIgnoringWhiteSpace extends TypeSafeMatcher
      * Matches if value is a string equal to $string, regardless of whitespace.
      *
      * @factory
-     * @param mixed $string
      */
-    public static function equalToIgnoringWhiteSpace($string): self
+    public static function equalToIgnoringWhiteSpace($string)
     {
         return new self($string);
     }
 
     // -- Private Methods
 
-    private function _stripSpace(string $string): string
+    private function _stripSpace($string)
     {
         $parts = preg_split("/[\r\n\t ]+/", $string);
         foreach ($parts as $i => $part) {

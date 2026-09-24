@@ -36,18 +36,17 @@ final class Psr4DirectoryLoader extends Loader implements DirectoryAwareLoaderIn
     /**
      * @param array{path: string, namespace: string} $resource
      */
-    public function load(mixed $resource, ?string $type = null): ?RouteCollection
+    public function load(mixed $resource, string $type = null): ?RouteCollection
     {
-        $excluded = $resource['_excluded'] ?? [];
         $path = $this->locator->locate($resource['path'], $this->currentDirectory);
         if (!is_dir($path)) {
             return new RouteCollection();
         }
 
-        return $this->loadFromDirectory($path, trim($resource['namespace'], '\\'), $excluded);
+        return $this->loadFromDirectory($path, trim($resource['namespace'], '\\'));
     }
 
-    public function supports(mixed $resource, ?string $type = null): bool
+    public function supports(mixed $resource, string $type = null): bool
     {
         return ('attribute' === $type || 'annotation' === $type) && \is_array($resource) && isset($resource['path'], $resource['namespace']);
     }
@@ -60,28 +59,23 @@ final class Psr4DirectoryLoader extends Loader implements DirectoryAwareLoaderIn
         return $loader;
     }
 
-    private function loadFromDirectory(string $directory, string $psr4Prefix, array $excluded = []): RouteCollection
+    private function loadFromDirectory(string $directory, string $psr4Prefix): RouteCollection
     {
         $collection = new RouteCollection();
         $collection->addResource(new DirectoryResource($directory, '/\.php$/'));
         $files = iterator_to_array(new \RecursiveIteratorIterator(
             new \RecursiveCallbackFilterIterator(
                 new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::FOLLOW_SYMLINKS),
-                static fn (\SplFileInfo $current) => !str_starts_with($current->getBasename(), '.')
+                fn (\SplFileInfo $current) => !str_starts_with($current->getBasename(), '.')
             ),
             \RecursiveIteratorIterator::SELF_FIRST
         ));
-        usort($files, static fn (\SplFileInfo $a, \SplFileInfo $b) => (string) $a > (string) $b ? 1 : -1);
+        usort($files, fn (\SplFileInfo $a, \SplFileInfo $b) => (string) $a > (string) $b ? 1 : -1);
 
         /** @var \SplFileInfo $file */
         foreach ($files as $file) {
-            $normalizedPath = rtrim(str_replace('\\', '/', $file->getPathname()), '/');
-            if (isset($excluded[$normalizedPath])) {
-                continue;
-            }
-
             if ($file->isDir()) {
-                $collection->addCollection($this->loadFromDirectory($file->getPathname(), $psr4Prefix.'\\'.$file->getFilename(), $excluded));
+                $collection->addCollection($this->loadFromDirectory($file->getPathname(), $psr4Prefix.'\\'.$file->getFilename()));
 
                 continue;
             }

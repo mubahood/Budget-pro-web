@@ -25,7 +25,7 @@ class IsString extends IsTypeOf
      *
      * @factory
      */
-    public static function stringValue(): self
+    public static function stringValue()
     {
         return new self;
     }

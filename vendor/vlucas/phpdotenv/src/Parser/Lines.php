@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dotenv\Parser;
 
 use Dotenv\Util\Regex;
+use Dotenv\Util\Str;
 
 final class Lines
 {
@@ -53,7 +54,7 @@ final class Lines
      * @param string   $line
      * @param string[] $buffer
      *
-     * @return array{bool,string, string[]}
+     * @return array{bool,string,string[]}
      */
     private static function multilineProcess(bool $multiline, string $line, array $buffer)
     {
@@ -86,19 +87,9 @@ final class Lines
      */
     private static function looksLikeMultilineStart(string $line)
     {
-        $pos = \strpos($line, '="');
-
-        if ($pos === false) {
-            return false;
-        }
-
-        $hash = \strpos($line, '#');
-
-        if ($hash !== false && $hash < $pos) {
-            return false;
-        }
-
-        return self::looksLikeMultilineStop($line, true) === false;
+        return Str::pos($line, '="')->map(static function () use ($line) {
+            return self::looksLikeMultilineStop($line, true) === false;
+        })->getOrElse(false);
     }
 
     /**
@@ -129,7 +120,7 @@ final class Lines
      */
     private static function isCommentOrWhitespace(string $line)
     {
-        $line = \trim($line, " \n\r\t\0\x0B");
+        $line = \trim($line);
 
         return $line === '' || (isset($line[0]) && $line[0] === '#');
     }

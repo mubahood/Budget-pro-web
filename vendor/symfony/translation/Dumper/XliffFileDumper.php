@@ -46,7 +46,7 @@ class XliffFileDumper extends FileDumper
             return $this->dumpXliff2($defaultLocale, $messages, $domain);
         }
 
-        throw new InvalidArgumentException(\sprintf('No support implemented for dumping XLIFF version "%s".', $xliffVersion));
+        throw new InvalidArgumentException(sprintf('No support implemented for dumping XLIFF version "%s".', $xliffVersion));
     }
 
     protected function getExtension(): string
@@ -156,11 +156,10 @@ class XliffFileDumper extends FileDumper
         }
 
         if ($catalogueMetadata = $messages->getCatalogueMetadata('', $domain) ?? []) {
-            $xliff->setAttribute('xmlns:mda', 'urn:oasis:names:tc:xliff:metadata:2.0');
-            $xliffMetadata = $xliffFile->appendChild($dom->createElement('mda:metadata'));
-            $xliffMetaGroup = $xliffMetadata->appendChild($dom->createElement('mda:metaGroup'));
+            $xliff->setAttribute('xmlns:m', 'urn:oasis:names:tc:xliff:metadata:2.0');
+            $xliffMetadata = $xliffFile->appendChild($dom->createElement('m:metadata'));
             foreach ($catalogueMetadata as $key => $value) {
-                $xliffMeta = $xliffMetaGroup->appendChild($dom->createElement('mda:meta'));
+                $xliffMeta = $xliffMetadata->appendChild($dom->createElement('prop'));
                 $xliffMeta->setAttribute('type', $key);
                 $xliffMeta->appendChild($dom->createTextNode($value));
             }
@@ -177,7 +176,7 @@ class XliffFileDumper extends FileDumper
             $metadata = $messages->getMetadata($source, $domain);
 
             // Add notes section
-            if ($this->hasMetadataArrayInfo('notes', $metadata) && $metadata['notes']) {
+            if ($this->hasMetadataArrayInfo('notes', $metadata)) {
                 $notesElement = $dom->createElement('notes');
                 foreach ($metadata['notes'] as $note) {
                     $n = $dom->createElement('note');
@@ -215,7 +214,7 @@ class XliffFileDumper extends FileDumper
         return $dom->saveXML();
     }
 
-    private function hasMetadataArrayInfo(string $key, ?array $metadata = null): bool
+    private function hasMetadataArrayInfo(string $key, array $metadata = null): bool
     {
         return is_iterable($metadata[$key] ?? null);
     }

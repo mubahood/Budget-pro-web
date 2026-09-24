@@ -15,7 +15,7 @@ use Hamcrest\Util;
 class IsArrayContaining extends TypeSafeMatcher
 {
 
-    private Matcher $_elementMatcher;
+    private $_elementMatcher;
 
     public function __construct(Matcher $elementMatcher)
     {
@@ -24,7 +24,7 @@ class IsArrayContaining extends TypeSafeMatcher
         $this->_elementMatcher = $elementMatcher;
     }
 
-    protected function matchesSafely($array): bool
+    protected function matchesSafely($array)
     {
         foreach ($array as $element) {
             if ($this->_elementMatcher->matches($element)) {
@@ -35,12 +35,12 @@ class IsArrayContaining extends TypeSafeMatcher
         return false;
     }
 
-    protected function describeMismatchSafely($array, Description $mismatchDescription): void
+    protected function describeMismatchSafely($array, Description $mismatchDescription)
     {
         $mismatchDescription->appendText('was ')->appendValue($array);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description
                  ->appendText('an array containing ')
@@ -56,7 +56,7 @@ class IsArrayContaining extends TypeSafeMatcher
      * @return \Hamcrest\Arrays\IsArrayContaining
      * @factory hasValue
      */
-    public static function hasItemInArray($item): self
+    public static function hasItemInArray($item)
     {
         return new self(Util::wrapValueWithIsEqual($item));
     }

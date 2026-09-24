@@ -19,24 +19,24 @@ use Hamcrest\Util;
 class Is extends BaseMatcher
 {
 
-    private Matcher $_matcher;
+    private $_matcher;
 
     public function __construct(Matcher $matcher)
     {
         $this->_matcher = $matcher;
     }
 
-    public function matches($arg): bool
+    public function matches($arg)
     {
         return $this->_matcher->matches($arg);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('is ')->appendDescriptionOf($this->_matcher);
     }
 
-    public function describeMismatch($item, Description $mismatchDescription): void
+    public function describeMismatch($item, Description $mismatchDescription)
     {
         $this->_matcher->describeMismatch($item, $mismatchDescription);
     }
@@ -49,9 +49,8 @@ class Is extends BaseMatcher
      *          vs.  assertThat($cheese, is(equalTo($smelly)))
      *
      * @factory
-     * @param mixed $value
      */
-    public static function is($value): self
+    public static function is($value)
     {
         return new self(Util::wrapValueWithIsEqual($value));
     }

@@ -9,7 +9,6 @@
  */
 namespace PHPUnit\Runner\Baseline;
 
-use const FILE_IGNORE_NEW_LINES;
 use function assert;
 use function file;
 use function is_file;
@@ -17,8 +16,6 @@ use function sha1;
 use PHPUnit\Runner\FileDoesNotExistException;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class Issue
@@ -119,20 +116,19 @@ final class Issue
      * @psalm-param non-empty-string $file
      * @psalm-param positive-int $line
      *
+     * @psalm-return non-empty-string
+     *
      * @throws FileDoesNotExistException
      * @throws FileDoesNotHaveLineException
-     *
-     * @psalm-return non-empty-string
      */
     private static function calculateHash(string $file, int $line): string
     {
-        $lines = @file($file, FILE_IGNORE_NEW_LINES);
-
-        if ($lines === false && !is_file($file)) {
+        if (!is_file($file)) {
             throw new FileDoesNotExistException($file);
         }
 
-        $key = $line - 1;
+        $lines = file($file, FILE_IGNORE_NEW_LINES);
+        $key   = $line - 1;
 
         if (!isset($lines[$key])) {
             throw new FileDoesNotHaveLineException($file, $line);
@@ -140,7 +136,7 @@ final class Issue
 
         $hash = sha1($lines[$key]);
 
-        assert($hash !== '');
+        assert(!empty($hash));
 
         return $hash;
     }

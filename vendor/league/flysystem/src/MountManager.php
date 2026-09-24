@@ -7,7 +7,6 @@ namespace League\Flysystem;
 use DateTimeInterface;
 use Throwable;
 
-use function compact;
 use function method_exists;
 use function sprintf;
 
@@ -32,15 +31,6 @@ class MountManager implements FilesystemOperator
     {
         $this->mountFilesystems($filesystems);
         $this->config = new Config($config);
-    }
-
-    /**
-     * It is not recommended to mount filesystems after creation because interacting
-     * with the Mount Manager becomes unpredictable. Use this as an escape hatch.
-     */
-    public function dangerouslyMountFilesystems(string $key, FilesystemOperator $filesystem): void
-    {
-        $this->mountFilesystem($key, $filesystem);
     }
 
     /**
@@ -166,15 +156,15 @@ class MountManager implements FilesystemOperator
         }
     }
 
-    public function visibility(string $path): string
+    public function visibility(string $location): string
     {
         /** @var FilesystemOperator $filesystem */
-        [$filesystem, $location] = $this->determineFilesystemAndPath($path);
+        [$filesystem, $path] = $this->determineFilesystemAndPath($location);
 
         try {
-            return $filesystem->visibility($location);
+            return $filesystem->visibility($path);
         } catch (UnableToRetrieveMetadata $exception) {
-            throw UnableToRetrieveMetadata::visibility($path, $exception->reason(), $exception);
+            throw UnableToRetrieveMetadata::visibility($location, $exception->reason(), $exception);
         }
     }
 
@@ -328,7 +318,11 @@ class MountManager implements FilesystemOperator
         }
     }
 
-    private function guardAgainstInvalidMount(mixed $key, mixed $filesystem): void
+    /**
+     * @param mixed $key
+     * @param mixed $filesystem
+     */
+    private function guardAgainstInvalidMount($key, $filesystem): void
     {
         if ( ! is_string($key)) {
             throw UnableToMountFilesystem::becauseTheKeyIsNotValid($key);
@@ -397,11 +391,10 @@ class MountManager implements FilesystemOperator
         try {
             if ($visibility == null && $retainVisibility) {
                 $visibility = $sourceFilesystem->visibility($sourcePath);
-                $config = $config->extend(compact('visibility'));
             }
 
             $stream = $sourceFilesystem->readStream($sourcePath);
-            $destinationFilesystem->writeStream($destinationPath, $stream, $config->toArray());
+            $destinationFilesystem->writeStream($destinationPath, $stream, $visibility ? compact(Config::OPTION_VISIBILITY) : []);
         } catch (UnableToRetrieveMetadata | UnableToReadFile | UnableToWriteFile $exception) {
             throw UnableToCopyFile::fromLocationTo($source, $destination, $exception);
         }

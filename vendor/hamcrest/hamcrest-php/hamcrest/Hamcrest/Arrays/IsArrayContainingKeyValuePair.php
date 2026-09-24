@@ -15,8 +15,9 @@ use Hamcrest\Util;
 
 class IsArrayContainingKeyValuePair extends TypeSafeMatcher
 {
-    private Matcher $_keyMatcher;
-    private Matcher $_valueMatcher;
+
+    private $_keyMatcher;
+    private $_valueMatcher;
 
     public function __construct(Matcher $keyMatcher, Matcher $valueMatcher)
     {
@@ -26,7 +27,7 @@ class IsArrayContainingKeyValuePair extends TypeSafeMatcher
         $this->_valueMatcher = $valueMatcher;
     }
 
-    protected function matchesSafely($array): bool
+    protected function matchesSafely($array)
     {
         foreach ($array as $key => $value) {
             if ($this->_keyMatcher->matches($key) && $this->_valueMatcher->matches($value)) {
@@ -37,7 +38,7 @@ class IsArrayContainingKeyValuePair extends TypeSafeMatcher
         return false;
     }
 
-    protected function describeMismatchSafely($array, Description $mismatchDescription): void
+    protected function describeMismatchSafely($array, Description $mismatchDescription)
     {
         //Not using appendValueList() so that keys can be shown
         $mismatchDescription->appendText('array was ')
@@ -54,7 +55,7 @@ class IsArrayContainingKeyValuePair extends TypeSafeMatcher
         $mismatchDescription->appendText(']');
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('array containing [')
                                 ->appendDescriptionOf($this->_keyMatcher)
@@ -68,10 +69,8 @@ class IsArrayContainingKeyValuePair extends TypeSafeMatcher
      * Test if an array has both an key and value in parity with each other.
      *
      * @factory hasEntry
-     * @param mixed $key
-     * @param mixed $value
      */
-    public static function hasKeyValuePair($key, $value): self
+    public static function hasKeyValuePair($key, $value)
     {
         return new self(
             Util::wrapValueWithIsEqual($key),

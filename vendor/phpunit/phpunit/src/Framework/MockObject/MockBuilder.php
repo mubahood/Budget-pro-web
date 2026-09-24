@@ -12,16 +12,14 @@ namespace PHPUnit\Framework\MockObject;
 use function array_merge;
 use function assert;
 use function trait_exists;
-use PHPUnit\Framework\Exception;
 use PHPUnit\Framework\InvalidArgumentException;
-use PHPUnit\Framework\MockObject\Generator\CannotUseAddMethodsException;
+use PHPUnit\Framework\MockObject\Generator\ClassAlreadyExistsException;
 use PHPUnit\Framework\MockObject\Generator\ClassIsEnumerationException;
 use PHPUnit\Framework\MockObject\Generator\ClassIsFinalException;
 use PHPUnit\Framework\MockObject\Generator\ClassIsReadonlyException;
 use PHPUnit\Framework\MockObject\Generator\DuplicateMethodException;
 use PHPUnit\Framework\MockObject\Generator\Generator;
 use PHPUnit\Framework\MockObject\Generator\InvalidMethodNameException;
-use PHPUnit\Framework\MockObject\Generator\NameAlreadyInUseException;
 use PHPUnit\Framework\MockObject\Generator\OriginalConstructorInvocationRequiredException;
 use PHPUnit\Framework\MockObject\Generator\ReflectionException;
 use PHPUnit\Framework\MockObject\Generator\RuntimeException;
@@ -77,13 +75,13 @@ final class MockBuilder
     /**
      * Creates a mock object using a fluent interface.
      *
+     * @throws ClassAlreadyExistsException
      * @throws ClassIsEnumerationException
      * @throws ClassIsFinalException
      * @throws ClassIsReadonlyException
      * @throws DuplicateMethodException
      * @throws InvalidArgumentException
      * @throws InvalidMethodNameException
-     * @throws NameAlreadyInUseException
      * @throws OriginalConstructorInvocationRequiredException
      * @throws ReflectionException
      * @throws RuntimeException
@@ -120,11 +118,11 @@ final class MockBuilder
     /**
      * Creates a mock object for an abstract class using a fluent interface.
      *
-     * @throws Exception
+     * @psalm-return MockObject&MockedType
+     *
+     * @throws \PHPUnit\Framework\Exception
      * @throws ReflectionException
      * @throws RuntimeException
-     *
-     * @psalm-return MockObject&MockedType
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5305
      */
@@ -151,11 +149,11 @@ final class MockBuilder
     /**
      * Creates a mock object for a trait using a fluent interface.
      *
-     * @throws Exception
+     * @psalm-return MockObject&MockedType
+     *
+     * @throws \PHPUnit\Framework\Exception
      * @throws ReflectionException
      * @throws RuntimeException
-     *
-     * @psalm-return MockObject&MockedType
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5306
      */
@@ -346,8 +344,6 @@ final class MockBuilder
      * @return $this
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5309
-     *
-     * @codeCoverageIgnore
      */
     public function disableAutoload(): self
     {
@@ -404,8 +400,6 @@ final class MockBuilder
      * @return $this
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5307
-     *
-     * @codeCoverageIgnore
      */
     public function enableProxyingToOriginalMethods(): self
     {
@@ -435,8 +429,6 @@ final class MockBuilder
      * @return $this
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5307
-     *
-     * @codeCoverageIgnore
      */
     public function setProxyTarget(object $object): self
     {

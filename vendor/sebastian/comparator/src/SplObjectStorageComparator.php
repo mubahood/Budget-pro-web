@@ -31,25 +31,25 @@ final class SplObjectStorageComparator extends Comparator
         $exporter = new Exporter;
 
         foreach ($actual as $object) {
-            if (!$expected->offsetExists($object)) {
+            if (!$expected->contains($object)) {
                 throw new ComparisonFailure(
                     $expected,
                     $actual,
                     $exporter->export($expected),
                     $exporter->export($actual),
-                    'Failed asserting that two objects are equal.',
+                    'Failed asserting that two objects are equal.'
                 );
             }
         }
 
         foreach ($expected as $object) {
-            if (!$actual->offsetExists($object)) {
+            if (!$actual->contains($object)) {
                 throw new ComparisonFailure(
                     $expected,
                     $actual,
                     $exporter->export($expected),
                     $exporter->export($actual),
-                    'Failed asserting that two objects are equal.',
+                    'Failed asserting that two objects are equal.'
                 );
             }
         }

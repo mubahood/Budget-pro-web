@@ -20,7 +20,7 @@ class IsCallable extends IsTypeOf
         parent::__construct('callable');
     }
 
-    public function matches($item): bool
+    public function matches($item)
     {
         return is_callable($item);
     }
@@ -30,7 +30,7 @@ class IsCallable extends IsTypeOf
      *
      * @factory
      */
-    public static function callableValue(): self
+    public static function callableValue()
     {
         return new self;
     }

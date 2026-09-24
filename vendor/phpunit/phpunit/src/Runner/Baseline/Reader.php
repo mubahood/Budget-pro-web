@@ -9,10 +9,9 @@
  */
 namespace PHPUnit\Runner\Baseline;
 
-use const DIRECTORY_SEPARATOR;
 use function assert;
 use function dirname;
-use function is_file;
+use function file_exists;
 use function realpath;
 use function sprintf;
 use function str_replace;
@@ -23,8 +22,6 @@ use PHPUnit\Util\Xml\Loader as XmlLoader;
 use PHPUnit\Util\Xml\XmlException;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class Reader
@@ -36,7 +33,7 @@ final class Reader
      */
     public function read(string $baselineFile): Baseline
     {
-        if (!is_file($baselineFile)) {
+        if (!file_exists($baselineFile)) {
             throw new CannotLoadBaselineException(
                 sprintf(
                     'Cannot read baseline %s, file does not exist',
@@ -88,6 +85,7 @@ final class Reader
 
                     $description = $issueElement->textContent;
 
+                    assert(!empty($file));
                     assert($line > 0);
                     assert(!empty($hash));
                     assert(!empty($description));

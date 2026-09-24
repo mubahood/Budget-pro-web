@@ -11,23 +11,11 @@ use Hamcrest\Matcher;
 class SeriesMatchingOnce
 {
 
-    /**
-     * @var array<Matcher>
-     */
-    private array $_elementMatchers;
-    /**
-     * @var list<int|string>
-     */
-    private array $_keys;
-    private Description $_mismatchDescription;
-    /**
-     * @var int|string|null
-     */
+    private $_elementMatchers;
+    private $_keys;
+    private $_mismatchDescription;
     private $_nextMatchKey;
 
-    /**
-     * @param array<Matcher> $elementMatchers
-     */
     public function __construct(array $elementMatchers, Description $mismatchDescription)
     {
         $this->_elementMatchers = $elementMatchers;
@@ -35,15 +23,12 @@ class SeriesMatchingOnce
         $this->_mismatchDescription = $mismatchDescription;
     }
 
-    /**
-     * @param mixed $item
-     */
-    public function matches($item): bool
+    public function matches($item)
     {
         return $this->_isNotSurplus($item) && $this->_isMatched($item);
     }
 
-    public function isFinished(): bool
+    public function isFinished()
     {
         if (!empty($this->_elementMatchers)) {
             $nextMatcher = current($this->_elementMatchers);
@@ -57,10 +42,7 @@ class SeriesMatchingOnce
 
     // -- Private Methods
 
-    /**
-     * @param mixed $item
-     */
-    private function _isNotSurplus($item): bool
+    private function _isNotSurplus($item)
     {
         if (empty($this->_elementMatchers)) {
             $this->_mismatchDescription->appendText('Not matched: ')->appendValue($item);
@@ -71,10 +53,7 @@ class SeriesMatchingOnce
         return true;
     }
 
-    /**
-     * @param mixed $item
-     */
-    private function _isMatched($item): bool
+    private function _isMatched($item)
     {
         $this->_nextMatchKey = array_shift($this->_keys);
         $nextMatcher = array_shift($this->_elementMatchers);
@@ -88,10 +67,7 @@ class SeriesMatchingOnce
         return true;
     }
 
-    /**
-     * @param mixed $item
-     */
-    private function _describeMismatch(Matcher $matcher, $item): void
+    private function _describeMismatch(Matcher $matcher, $item)
     {
         $this->_mismatchDescription->appendText('item with key ' . $this->_nextMatchKey . ': ');
         $matcher->describeMismatch($item, $this->_mismatchDescription);

@@ -1,61 +1,47 @@
 <?php
 
 /**
- * Mockery (https://docs.mockery.io/en/stable/)
+ * Mockery (https://docs.mockery.io/)
  *
  * @copyright https://github.com/mockery/mockery/blob/HEAD/COPYRIGHT.md
  * @license   https://github.com/mockery/mockery/blob/HEAD/LICENSE BSD 3-Clause License
- * @see       https://github.com/mockery/mockery for the canonical source repository
+ * @link      https://github.com/mockery/mockery for the canonical source repository
  */
 
 namespace Mockery\Generator;
 
 use Mockery\Reflector;
-use ReflectionMethod;
-use ReflectionParameter;
 
-use function array_map;
-
-/**
- * @mixin ReflectionMethod
- */
 class Method
 {
-    /**
-     * @var ReflectionMethod
-     */
-    private $reflectionMethod;
+    /** @var \ReflectionMethod */
+    private $method;
 
-    public function __construct(ReflectionMethod $method)
+    public function __construct(\ReflectionMethod $method)
     {
-        $this->reflectionMethod = $method;
+        $this->method = $method;
     }
 
-    /**
-     * @param  string       $method
-     * @param  array<mixed> $args
-     * @return mixed
-     */
     public function __call($method, $args)
     {
-        return $this->reflectionMethod->{$method}(...$args);
+        return call_user_func_array(array($this->method, $method), $args);
     }
 
     /**
-     * @return list<Parameter>
+     * @return Parameter[]
      */
     public function getParameters()
     {
-        return array_map(static function (ReflectionParameter $parameter) {
+        return array_map(function (\ReflectionParameter $parameter) {
             return new Parameter($parameter);
-        }, $this->reflectionMethod->getParameters());
+        }, $this->method->getParameters());
     }
 
     /**
-     * @return null|string
+     * @return string|null
      */
     public function getReturnType()
     {
-        return Reflector::getReturnType($this->reflectionMethod);
+        return Reflector::getReturnType($this->method);
     }
 }

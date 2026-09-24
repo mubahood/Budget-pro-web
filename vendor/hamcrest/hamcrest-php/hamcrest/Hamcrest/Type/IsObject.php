@@ -25,7 +25,7 @@ class IsObject extends IsTypeOf
      *
      * @factory anObject
      */
-    public static function objectValue(): self
+    public static function objectValue()
     {
         return new self;
     }

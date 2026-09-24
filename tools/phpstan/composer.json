@@ -1,0 +1,10 @@
+{
+    "name": "budget-pro/tools-phpstan",
+    "description": "Static-analysis toolchain kept out of the application's vendor/ (which is git-tracked and deployed as-is).",
+    "require-dev": {
+        "larastan/larastan": "^2.11"
+    },
+    "config": {
+        "allow-plugins": false
+    }
+}

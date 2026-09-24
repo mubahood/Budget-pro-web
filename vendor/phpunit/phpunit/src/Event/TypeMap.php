@@ -17,8 +17,6 @@ use function interface_exists;
 use function sprintf;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class TypeMap
@@ -68,9 +66,9 @@ final class TypeMap
     }
 
     /**
-     * @throws MapError
-     *
      * @psalm-return class-string
+     *
+     * @throws MapError
      */
     public function map(Subscriber $subscriber): string
     {

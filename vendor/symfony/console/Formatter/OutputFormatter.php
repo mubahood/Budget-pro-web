@@ -12,7 +12,6 @@
 namespace Symfony\Component\Console\Formatter;
 
 use Symfony\Component\Console\Exception\InvalidArgumentException;
-use Symfony\Component\Console\Helper\Helper;
 
 use function Symfony\Component\String\b;
 
@@ -41,7 +40,7 @@ class OutputFormatter implements WrappableOutputFormatterInterface
      */
     public static function escape(string $text): string
     {
-        $text = str_replace(['<', '>'], ['\\<', '\\>'], $text);
+        $text = preg_replace('/([^\\\\]|^)([<>])/', '$1\\\\$2', $text);
 
         return self::escapeTrailingBackslash($text);
     }
@@ -113,7 +112,7 @@ class OutputFormatter implements WrappableOutputFormatterInterface
     public function getStyle(string $name): OutputFormatterStyleInterface
     {
         if (!$this->hasStyle($name)) {
-            throw new InvalidArgumentException(\sprintf('Undefined style: "%s".', $name));
+            throw new InvalidArgumentException(sprintf('Undefined style: "%s".', $name));
         }
 
         return $this->styles[strtolower($name)];
@@ -133,10 +132,6 @@ class OutputFormatter implements WrappableOutputFormatterInterface
             return '';
         }
 
-        // For ASCII-only strings, byte positions equal character positions,
-        // so we can use native strlen/substr which is much faster than Helper::length/substr.
-        $isAscii = !preg_match('/[\x80-\xFF]/', $message);
-
         $offset = 0;
         $output = '';
         $openTagRegex = '[a-z](?:[^\\\\<>]*+ | \\\\.)*';
@@ -151,17 +146,9 @@ class OutputFormatter implements WrappableOutputFormatterInterface
                 continue;
             }
 
-            if ($isAscii) {
-                // For ASCII, byte position = character position, no conversion needed
-                $output .= $this->applyCurrentStyle(substr($message, $offset, $pos - $offset), $output, $width, $currentLineLength);
-                $offset = $pos + \strlen($text);
-            } else {
-                // convert byte position to character position.
-                $pos = Helper::length(substr($message, 0, $pos));
-                // add the text up to the next tag
-                $output .= $this->applyCurrentStyle(Helper::substr($message, $offset, $pos - $offset), $output, $width, $currentLineLength);
-                $offset = $pos + Helper::length($text);
-            }
+            // add the text up to the next tag
+            $output .= $this->applyCurrentStyle(substr($message, $offset, $pos - $offset), $output, $width, $currentLineLength);
+            $offset = $pos + \strlen($text);
 
             // opening tag?
             if ($open = '/' !== $text[1]) {
@@ -182,7 +169,7 @@ class OutputFormatter implements WrappableOutputFormatterInterface
             }
         }
 
-        $output .= $this->applyCurrentStyle($isAscii ? substr($message, $offset) : Helper::substr($message, $offset), $output, $width, $currentLineLength);
+        $output .= $this->applyCurrentStyle(substr($message, $offset), $output, $width, $currentLineLength);
 
         return strtr($output, ["\0" => '\\', '\\<' => '<', '\\>' => '>']);
     }
@@ -249,18 +236,8 @@ class OutputFormatter implements WrappableOutputFormatterInterface
         }
 
         if ($currentLineLength) {
-            $lines = explode("\n", $text, 2);
-            $prefix = Helper::substr($lines[0], 0, $i = $width - $currentLineLength)."\n";
-            $text = Helper::substr($lines[0], $i);
-
-            if (isset($lines[1])) {
-                // $prefix may contain the full first line in which the \n is already a part of $prefix.
-                if ('' !== $text) {
-                    $text .= "\n";
-                }
-
-                $text .= $lines[1];
-            }
+            $prefix = substr($text, 0, $i = $width - $currentLineLength)."\n";
+            $text = substr($text, $i);
         } else {
             $prefix = '';
         }
@@ -275,8 +252,8 @@ class OutputFormatter implements WrappableOutputFormatterInterface
 
         $lines = explode("\n", $text);
 
-        foreach ($lines as $i => $line) {
-            $currentLineLength = 0 === $i ? $currentLineLength + Helper::length($line) : Helper::length($line);
+        foreach ($lines as $line) {
+            $currentLineLength += \strlen($line);
             if ($width <= $currentLineLength) {
                 $currentLineLength = 0;
             }
@@ -295,6 +272,6 @@ class OutputFormatter implements WrappableOutputFormatterInterface
     {
         $encoding = mb_detect_encoding($text, null, true) ?: 'UTF-8';
 
-        return b($text)->toUnicodeString($encoding)->wordwrap($width, "\n", true)->toByteString($encoding);
+        return b($text)->toCodePointString($encoding)->wordwrap($width, "\n", true)->toByteString($encoding);
     }
 }

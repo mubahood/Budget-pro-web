@@ -42,12 +42,12 @@ final class InlineParserContext
      */
     private array $matches;
 
-    public function __construct(Cursor $contents, AbstractBlock $container, ReferenceMapInterface $referenceMap, int $maxDelimitersPerLine = PHP_INT_MAX)
+    public function __construct(Cursor $contents, AbstractBlock $container, ReferenceMapInterface $referenceMap)
     {
         $this->referenceMap   = $referenceMap;
         $this->container      = $container;
         $this->cursor         = $contents;
-        $this->delimiterStack = new DelimiterStack($maxDelimitersPerLine);
+        $this->delimiterStack = new DelimiterStack();
     }
 
     public function getContainer(): AbstractBlock

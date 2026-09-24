@@ -1,55 +1,103 @@
 <?php
 
 /**
- * Mockery (https://docs.mockery.io/en/stable/)
+ * Mockery (https://docs.mockery.io/)
  *
  * @copyright https://github.com/mockery/mockery/blob/HEAD/COPYRIGHT.md
  * @license   https://github.com/mockery/mockery/blob/HEAD/LICENSE BSD 3-Clause License
- * @see       https://github.com/mockery/mockery for the canonical source repository
+ * @link      https://github.com/mockery/mockery for the canonical source repository
  */
 
 namespace Mockery;
 
 use Closure;
-use Exception;
-use InvalidArgumentException;
 use ReflectionClass;
 use UnexpectedValueException;
-
-use function class_exists;
-use function restore_error_handler;
-use function set_error_handler;
-use function sprintf;
-use function strlen;
-use function unserialize;
+use InvalidArgumentException;
 
 /**
- * This is a trimmed down version of https://github.com/doctrine/instantiator, without the caching mechanism.
+ * This is a trimmed down version of https://github.com/doctrine/instantiator,
+ * basically without the caching
+ *
+ * @author Marco Pivetta <ocramius@gmail.com>
  */
 final class Instantiator
 {
     /**
-     * @template TObject of object
-     *
-     * @param  class-string<TObject> $className
-     * @return TObject
-     *
-     * @throws InvalidArgumentException
-     * @throws UnexpectedValueException
+     * {@inheritDoc}
      */
-    public function instantiate($className): object
+    public function instantiate($className)
     {
-        return $this->buildFactory($className)();
+        $factory    = $this->buildFactory($className);
+        $instance   = $factory();
+
+        return $instance;
     }
 
     /**
-     * @throws UnexpectedValueException
+     * Builds a {@see \Closure} capable of instantiating the given $className without
+     * invoking its constructor.
+     *
+     * @param string $className
+     *
+     * @return Closure
      */
-    private function attemptInstantiationViaUnSerialization(
-        ReflectionClass $reflectionClass,
-        string $serializedString
-    ): void {
-        set_error_handler(static function ($code, $message, $file, $line) use ($reflectionClass, &$error): void {
+    private function buildFactory($className)
+    {
+        $reflectionClass = $this->getReflectionClass($className);
+
+        if ($this->isInstantiableViaReflection($reflectionClass)) {
+            return function () use ($reflectionClass) {
+                return $reflectionClass->newInstanceWithoutConstructor();
+            };
+        }
+
+        $serializedString = sprintf(
+            'O:%d:"%s":0:{}',
+            strlen($className),
+            $className
+        );
+
+        $this->attemptInstantiationViaUnSerialization($reflectionClass, $serializedString);
+
+        return function () use ($serializedString) {
+            return unserialize($serializedString);
+        };
+    }
+
+    /**
+     * @param string $className
+     *
+     * @return ReflectionClass
+     *
+     * @throws InvalidArgumentException
+     */
+    private function getReflectionClass($className)
+    {
+        if (! class_exists($className)) {
+            throw new InvalidArgumentException("Class:$className does not exist");
+        }
+
+        $reflection = new ReflectionClass($className);
+
+        if ($reflection->isAbstract()) {
+            throw new InvalidArgumentException("Class:$className is an abstract class");
+        }
+
+        return $reflection;
+    }
+
+    /**
+     * @param ReflectionClass $reflectionClass
+     * @param string          $serializedString
+     *
+     * @throws UnexpectedValueException
+     *
+     * @return void
+     */
+    private function attemptInstantiationViaUnSerialization(ReflectionClass $reflectionClass, $serializedString)
+    {
+        set_error_handler(function ($code, $message, $file, $line) use ($reflectionClass, & $error) {
             $msg = sprintf(
                 'Could not produce an instance of "%s" via un-serialization, since an error was triggered in file "%s" at line "%d"',
                 $reflectionClass->getName(),
@@ -57,80 +105,42 @@ final class Instantiator
                 $line
             );
 
-            $error = new UnexpectedValueException($msg, 0, new Exception($message, $code));
+            $error = new UnexpectedValueException($msg, 0, new \Exception($message, $code));
         });
 
         try {
             unserialize($serializedString);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             restore_error_handler();
 
-            throw new UnexpectedValueException(
-                sprintf(
-                    'An exception was raised while trying to instantiate an instance of "%s" via un-serialization',
-                    $reflectionClass->getName()
-                ),
-                0,
-                $exception
-            );
+            throw new UnexpectedValueException("An exception was raised while trying to instantiate an instance of \"{$reflectionClass->getName()}\" via un-serialization", 0, $exception);
         }
 
         restore_error_handler();
 
-        if ($error instanceof UnexpectedValueException) {
+        if ($error) {
             throw $error;
         }
     }
 
     /**
-     * Builds a {@see Closure} capable of instantiating the given $className without invoking its constructor.
-     */
-    private function buildFactory(string $className): Closure
-    {
-        $reflectionClass = $this->getReflectionClass($className);
-
-        if ($this->isInstantiableViaReflection($reflectionClass)) {
-            return static function () use ($reflectionClass) {
-                return $reflectionClass->newInstanceWithoutConstructor();
-            };
-        }
-
-        $serializedString = sprintf('O:%d:"%s":0:{}', strlen($className), $className);
-
-        $this->attemptInstantiationViaUnSerialization($reflectionClass, $serializedString);
-
-        return static function () use ($serializedString) {
-            return unserialize($serializedString);
-        };
-    }
-
-    /**
-     * @template TObject of object
+     * @param ReflectionClass $reflectionClass
      *
-     * @param  class-string<TObject>    $className
-     * @return ReflectionClass<TObject>
-     *
-     * @throws InvalidArgumentException
+     * @return bool
      */
-    private function getReflectionClass(string $className): ReflectionClass
+    private function isInstantiableViaReflection(ReflectionClass $reflectionClass)
     {
-        if (! class_exists($className)) {
-            throw new InvalidArgumentException(sprintf('Class:%s does not exist', $className));
-        }
-
-        $reflectionClass = new ReflectionClass($className);
-
-        if ($reflectionClass->isAbstract()) {
-            throw new InvalidArgumentException(sprintf('Class:%s is an abstract class', $className));
-        }
-
-        return $reflectionClass;
+        return ! ($reflectionClass->isInternal() && $reflectionClass->isFinal());
     }
 
     /**
      * Verifies whether the given class is to be considered internal
+     *
+     * @param ReflectionClass $reflectionClass
+     *
+     * @return bool
      */
-    private function hasInternalAncestors(ReflectionClass $reflectionClass): bool
+    private function hasInternalAncestors(ReflectionClass $reflectionClass)
     {
         do {
             if ($reflectionClass->isInternal()) {
@@ -139,13 +149,5 @@ final class Instantiator
         } while ($reflectionClass = $reflectionClass->getParentClass());
 
         return false;
-    }
-
-    /**
-     * Verifies if the class is instantiable via reflection
-     */
-    private function isInstantiableViaReflection(ReflectionClass $reflectionClass): bool
-    {
-        return ! ($this->hasInternalAncestors($reflectionClass) && $reflectionClass->isFinal());
     }
 }

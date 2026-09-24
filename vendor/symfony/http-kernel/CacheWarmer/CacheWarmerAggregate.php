@@ -31,7 +31,7 @@ class CacheWarmerAggregate implements CacheWarmerInterface
     /**
      * @param iterable<mixed, CacheWarmerInterface> $warmers
      */
-    public function __construct(iterable $warmers = [], bool $debug = false, ?string $deprecationLogsFilepath = null)
+    public function __construct(iterable $warmers = [], bool $debug = false, string $deprecationLogsFilepath = null)
     {
         $this->warmers = $warmers;
         $this->debug = $debug;
@@ -51,7 +51,7 @@ class CacheWarmerAggregate implements CacheWarmerInterface
     /**
      * @param string|null $buildDir
      */
-    public function warmUp(string $cacheDir, string|SymfonyStyle|null $buildDir = null, ?SymfonyStyle $io = null): array
+    public function warmUp(string $cacheDir, string|SymfonyStyle $buildDir = null, SymfonyStyle $io = null): array
     {
         if ($buildDir instanceof SymfonyStyle) {
             trigger_deprecation('symfony/http-kernel', '6.4', 'Passing a "%s" as second argument of "%s()" is deprecated, pass it as third argument instead, after the build directory.', SymfonyStyle::class, __METHOD__);
@@ -61,7 +61,7 @@ class CacheWarmerAggregate implements CacheWarmerInterface
 
         if ($collectDeprecations = $this->debug && !\defined('PHPUNIT_COMPOSER_INSTALL')) {
             $collectedLogs = [];
-            $previousHandler = set_error_handler(static function ($type, $message, $file, $line) use (&$collectedLogs, &$previousHandler) {
+            $previousHandler = set_error_handler(function ($type, $message, $file, $line) use (&$collectedLogs, &$previousHandler) {
                 if (\E_USER_DEPRECATED !== $type && \E_DEPRECATED !== $type) {
                     return $previousHandler ? $previousHandler($type, $message, $file, $line) : false;
                 }
@@ -107,40 +107,27 @@ class CacheWarmerAggregate implements CacheWarmerInterface
                 $start = microtime(true);
                 foreach ((array) $warmer->warmUp($cacheDir, $buildDir) as $item) {
                     if (is_dir($item) || (str_starts_with($item, \dirname($cacheDir)) && !is_file($item)) || ($buildDir && str_starts_with($item, \dirname($buildDir)) && !is_file($item))) {
-                        throw new \LogicException(\sprintf('"%s::warmUp()" should return a list of files or classes but "%s" is none of them.', $warmer::class, $item));
+                        throw new \LogicException(sprintf('"%s::warmUp()" should return a list of files or classes but "%s" is none of them.', $warmer::class, $item));
                     }
                     $preload[] = $item;
                 }
 
                 if ($io?->isDebug()) {
-                    $io->info(\sprintf('"%s" completed in %0.2fms.', $warmer::class, 1000 * (microtime(true) - $start)));
+                    $io->info(sprintf('"%s" completed in %0.2fms.', $warmer::class, 1000 * (microtime(true) - $start)));
                 }
             }
         } finally {
             if ($collectDeprecations) {
                 restore_error_handler();
 
-                if ($h = fopen($this->deprecationLogsFilepath, 'c+')) {
-                    flock($h, \LOCK_EX);
-
-                    set_error_handler(static fn () => true);
-                    try {
-                        $previousLogs = unserialize(stream_get_contents($h), ['allowed_classes' => false]);
-                    } finally {
-                        restore_error_handler();
-                    }
+                if (is_file($this->deprecationLogsFilepath)) {
+                    $previousLogs = unserialize(file_get_contents($this->deprecationLogsFilepath));
                     if (\is_array($previousLogs)) {
                         $collectedLogs = array_merge($previousLogs, $collectedLogs);
                     }
-
-                    $serializedLogs = serialize(array_values($collectedLogs));
-
-                    ftruncate($h, 0);
-                    rewind($h);
-                    fwrite($h, $serializedLogs);
-                    flock($h, \LOCK_UN);
-                    fclose($h);
                 }
+
+                file_put_contents($this->deprecationLogsFilepath, serialize(array_values($collectedLogs)));
             }
         }
 

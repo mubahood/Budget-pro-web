@@ -12,14 +12,9 @@ use Hamcrest\TypeSafeMatcher;
  */
 class StringContainsInOrder extends TypeSafeMatcher
 {
-    /**
-     * @var array<string>
-     */
-    private array $_substrings;
 
-    /**
-     * @param array<string> $substrings
-     */
+    private $_substrings;
+
     public function __construct(array $substrings)
     {
         parent::__construct(self::TYPE_STRING);
@@ -27,7 +22,7 @@ class StringContainsInOrder extends TypeSafeMatcher
         $this->_substrings = $substrings;
     }
 
-    protected function matchesSafely($item): bool
+    protected function matchesSafely($item)
     {
         $fromIndex = 0;
 
@@ -40,12 +35,12 @@ class StringContainsInOrder extends TypeSafeMatcher
         return true;
     }
 
-    protected function describeMismatchSafely($item, Description $mismatchDescription): void
+    protected function describeMismatchSafely($item, Description $mismatchDescription)
     {
         $mismatchDescription->appendText('was ')->appendText($item);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('a string containing ')
                                 ->appendValueList('', ', ', '', $this->_substrings)
@@ -58,7 +53,7 @@ class StringContainsInOrder extends TypeSafeMatcher
      *
      * @factory ...
      */
-    public static function stringContainsInOrder(/* args... */): self
+    public static function stringContainsInOrder(/* args... */)
     {
         $args = func_get_args();
 

@@ -12,14 +12,12 @@ namespace PHPUnit\Util;
 use Throwable;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class Cloner
 {
     /**
-     * @psalm-template OriginalType of object
+     * @psalm-template OriginalType
      *
      * @psalm-param OriginalType $original
      *

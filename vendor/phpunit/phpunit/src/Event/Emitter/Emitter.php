@@ -17,9 +17,7 @@ use PHPUnit\Framework\Constraint;
 use PHPUnit\TextUI\Configuration\Configuration;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
- * @internal This interface is not covered by the backward compatibility promise for PHPUnit
+ * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 interface Emitter
 {
@@ -78,47 +76,37 @@ interface Emitter
     /**
      * @psalm-param class-string $testClassName
      */
-    public function beforeFirstTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
+    public function testBeforeFirstTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function beforeFirstTestMethodErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
+    public function testBeforeFirstTestMethodErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function beforeFirstTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
+    public function testBeforeFirstTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function beforeTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
+    public function testBeforeTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function beforeTestMethodErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
+    public function testBeforeTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function beforeTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
+    public function testPreConditionCalled(string $testClassName, ClassMethod $calledMethod): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function preConditionCalled(string $testClassName, ClassMethod $calledMethod): void;
-
-    /**
-     * @psalm-param class-string $testClassName
-     */
-    public function preConditionErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
-
-    /**
-     * @psalm-param class-string $testClassName
-     */
-    public function preConditionFinished(string $testClassName, ClassMethod ...$calledMethods): void;
+    public function testPreConditionFinished(string $testClassName, ClassMethod ...$calledMethods): void;
 
     public function testPrepared(Code\Test $test): void;
 
@@ -275,53 +263,38 @@ interface Emitter
     /**
      * @psalm-param class-string $testClassName
      */
-    public function postConditionCalled(string $testClassName, ClassMethod $calledMethod): void;
+    public function testPostConditionCalled(string $testClassName, ClassMethod $calledMethod): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function postConditionErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
+    public function testPostConditionFinished(string $testClassName, ClassMethod ...$calledMethods): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function postConditionFinished(string $testClassName, ClassMethod ...$calledMethods): void;
+    public function testAfterTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function afterTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
+    public function testAfterTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function afterTestMethodErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
+    public function testAfterLastTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
 
     /**
      * @psalm-param class-string $testClassName
      */
-    public function afterTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
-
-    /**
-     * @psalm-param class-string $testClassName
-     */
-    public function afterLastTestMethodCalled(string $testClassName, ClassMethod $calledMethod): void;
-
-    /**
-     * @psalm-param class-string $testClassName
-     */
-    public function afterLastTestMethodErrored(string $testClassName, ClassMethod $calledMethod, Throwable $throwable): void;
-
-    /**
-     * @psalm-param class-string $testClassName
-     */
-    public function afterLastTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
+    public function testAfterLastTestMethodFinished(string $testClassName, ClassMethod ...$calledMethods): void;
 
     public function testSuiteFinished(TestSuite $testSuite): void;
 
-    public function testRunnerTriggeredPhpunitDeprecation(string $message): void;
+    public function testRunnerTriggeredDeprecation(string $message): void;
 
-    public function testRunnerTriggeredPhpunitWarning(string $message): void;
+    public function testRunnerTriggeredWarning(string $message): void;
 
     public function testRunnerEnabledGarbageCollection(): void;
 

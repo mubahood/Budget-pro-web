@@ -13,15 +13,15 @@ use Hamcrest\Description;
 class IsNull extends BaseMatcher
 {
 
-    private static ?self $_INSTANCE = null;
-    private static ?IsNot $_NOT_INSTANCE = null;
+    private static $_INSTANCE;
+    private static $_NOT_INSTANCE;
 
-    public function matches($item): bool
+    public function matches($item)
     {
         return is_null($item);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('null');
     }
@@ -31,7 +31,7 @@ class IsNull extends BaseMatcher
      *
      * @factory
      */
-    public static function nullValue(): self
+    public static function nullValue()
     {
         if (!self::$_INSTANCE) {
             self::$_INSTANCE = new self();
@@ -45,7 +45,7 @@ class IsNull extends BaseMatcher
      *
      * @factory
      */
-    public static function notNullValue(): IsNot
+    public static function notNullValue()
     {
         if (!self::$_NOT_INSTANCE) {
             self::$_NOT_INSTANCE = IsNot::not(self::nullValue());

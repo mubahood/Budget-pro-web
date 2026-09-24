@@ -16,12 +16,12 @@ namespace PHPUnit\Metadata;
  */
 final class TestWith extends Metadata
 {
-    private readonly mixed $data;
+    private readonly array $data;
 
     /**
      * @psalm-param 0|1 $level
      */
-    protected function __construct(int $level, mixed $data)
+    protected function __construct(int $level, array $data)
     {
         parent::__construct($level);
 
@@ -36,7 +36,7 @@ final class TestWith extends Metadata
         return true;
     }
 
-    public function data(): mixed
+    public function data(): array
     {
         return $this->data;
     }

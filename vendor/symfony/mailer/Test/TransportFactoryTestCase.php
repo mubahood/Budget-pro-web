@@ -13,9 +13,6 @@ namespace Symfony\Component\Mailer\Test;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
-use Symfony\Component\EventDispatcher\EventDispatcher;
-use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\Mailer\Exception\IncompleteDsnException;
 use Symfony\Component\Mailer\Exception\UnsupportedSchemeException;
 use Symfony\Component\Mailer\Transport\Dsn;
@@ -72,7 +69,7 @@ abstract class TransportFactoryTestCase extends TestCase
         $factory = $this->getFactory();
 
         $this->assertEquals($transport, $factory->create($dsn));
-        if (\in_array($dsn->getScheme(), ['smtp', 'smtps'], true)) {
+        if (str_contains('smtp', $dsn->getScheme())) {
             $this->assertStringMatchesFormat($dsn->getScheme().'://%S'.$dsn->getHost().'%S', (string) $transport);
         }
     }
@@ -80,7 +77,7 @@ abstract class TransportFactoryTestCase extends TestCase
     /**
      * @dataProvider unsupportedSchemeProvider
      */
-    public function testUnsupportedSchemeException(Dsn $dsn, ?string $message = null)
+    public function testUnsupportedSchemeException(Dsn $dsn, string $message = null)
     {
         $factory = $this->getFactory();
 
@@ -105,16 +102,16 @@ abstract class TransportFactoryTestCase extends TestCase
 
     protected function getDispatcher(): EventDispatcherInterface
     {
-        return $this->dispatcher ??= new EventDispatcher();
+        return $this->dispatcher ??= $this->createMock(EventDispatcherInterface::class);
     }
 
     protected function getClient(): HttpClientInterface
     {
-        return $this->client ??= new MockHttpClient();
+        return $this->client ??= $this->createMock(HttpClientInterface::class);
     }
 
     protected function getLogger(): LoggerInterface
     {
-        return $this->logger ??= new NullLogger();
+        return $this->logger ??= $this->createMock(LoggerInterface::class);
     }
 }

@@ -15,25 +15,25 @@ use Hamcrest\Description;
 class IsEmptyString extends BaseMatcher
 {
 
-    private static ?self $_INSTANCE = null;
-    private static ?AnyOf $_NULL_OR_EMPTY_INSTANCE = null;
-    private static ?self $_NOT_INSTANCE = null;
+    private static $_INSTANCE;
+    private static $_NULL_OR_EMPTY_INSTANCE;
+    private static $_NOT_INSTANCE;
 
-    private bool $_empty;
+    private $_empty;
 
-    public function __construct(bool $empty = true)
+    public function __construct($empty = true)
     {
         $this->_empty = $empty;
     }
 
-    public function matches($item): bool
+    public function matches($item)
     {
         return $this->_empty
             ? ($item === '')
             : is_string($item) && $item !== '';
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText($this->_empty ? 'an empty string' : 'a non-empty string');
     }
@@ -43,7 +43,7 @@ class IsEmptyString extends BaseMatcher
      *
      * @factory emptyString
      */
-    public static function isEmptyString(): self
+    public static function isEmptyString()
     {
         if (!self::$_INSTANCE) {
             self::$_INSTANCE = new self(true);
@@ -57,7 +57,7 @@ class IsEmptyString extends BaseMatcher
      *
      * @factory nullOrEmptyString
      */
-    public static function isEmptyOrNullString(): AnyOf
+    public static function isEmptyOrNullString()
     {
         if (!self::$_NULL_OR_EMPTY_INSTANCE) {
             self::$_NULL_OR_EMPTY_INSTANCE = AnyOf::anyOf(
@@ -74,7 +74,7 @@ class IsEmptyString extends BaseMatcher
      *
      * @factory nonEmptyString
      */
-    public static function isNonEmptyString(): self
+    public static function isNonEmptyString()
     {
         if (!self::$_NOT_INSTANCE) {
             self::$_NOT_INSTANCE = new self(false);

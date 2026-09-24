@@ -12,7 +12,7 @@ namespace Hamcrest;
  */
 class Util
 {
-    public static function registerGlobalFunctions(): void
+    public static function registerGlobalFunctions()
     {
         require_once __DIR__.'/../Hamcrest.php';
     }
@@ -34,10 +34,10 @@ class Util
     /**
      * Throws an exception if any item in $matchers is not a Hamcrest\Matcher.
      *
-     * @param array<mixed> $matchers expected to contain only matchers
+     * @param array $matchers expected to contain only matchers
      * @throws \InvalidArgumentException if any item is not a matcher
      */
-    public static function checkAllAreMatchers(array $matchers): void
+    public static function checkAllAreMatchers(array $matchers)
     {
         foreach ($matchers as $m) {
             if (!($m instanceof Matcher)) {
@@ -54,8 +54,8 @@ class Util
      * is an array, it is used as the $items array to support the old style
      * of passing an array as the sole argument to a matcher.
      *
-     * @param array<mixed> $items contains items and matchers
-     * @return array<Matcher> all items are
+     * @param array $items contains items and matchers
+     * @return array<Matchers> all items are
      */
     public static function createMatcherArray(array $items)
     {

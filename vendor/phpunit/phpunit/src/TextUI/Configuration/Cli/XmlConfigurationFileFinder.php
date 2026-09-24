@@ -15,8 +15,6 @@ use function is_file;
 use function realpath;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class XmlConfigurationFileFinder
@@ -29,7 +27,7 @@ final class XmlConfigurationFileFinder
             if (is_dir($configuration->configurationFile())) {
                 $candidate = $this->configurationFileInDirectory($configuration->configurationFile());
 
-                if ($candidate !== false) {
+                if ($candidate) {
                     return $candidate;
                 }
 
@@ -42,7 +40,7 @@ final class XmlConfigurationFileFinder
         if ($useDefaultConfiguration) {
             $candidate = $this->configurationFileInDirectory(getcwd());
 
-            if ($candidate !== false) {
+            if ($candidate) {
                 return $candidate;
             }
         }

@@ -12,7 +12,7 @@ use Hamcrest\Internal\SelfDescribingValue;
 abstract class BaseDescription implements Description
 {
 
-    public function appendText(string $text): self
+    public function appendText($text)
     {
         $this->append($text);
 
@@ -26,7 +26,7 @@ abstract class BaseDescription implements Description
         return $this;
     }
 
-    public function appendValue($value): self
+    public function appendValue($value)
     {
         if (is_null($value)) {
             $this->append('null');
@@ -55,7 +55,7 @@ abstract class BaseDescription implements Description
         return $this;
     }
 
-    public function appendValueList(string $start, string $separator, string $end, iterable $values): self
+    public function appendValueList($start, $separator, $end, $values)
     {
         $list = array();
         foreach ($values as $v) {
@@ -67,7 +67,7 @@ abstract class BaseDescription implements Description
         return $this;
     }
 
-    public function appendList(string $start, string $separator, string $end, iterable $values): self
+    public function appendList($start, $separator, $end, $values)
     {
         $this->append($start);
 
@@ -96,13 +96,12 @@ abstract class BaseDescription implements Description
 
     /**
      * Append the String <var>$str</var> to the description.
-     * @param mixed $str
      */
-    abstract protected function append($str): void;
+    abstract protected function append($str);
 
     // -- Private Methods
 
-    private function _toPhpSyntax(string $value): void
+    private function _toPhpSyntax($value)
     {
         $str = '"';
         for ($i = 0, $len = strlen($value); $i < $len; ++$i) {

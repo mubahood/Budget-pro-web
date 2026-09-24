@@ -14,7 +14,6 @@ use PhpParser\Node\Expr\Cast;
 use PhpParser\Node\IntersectionType;
 use PhpParser\Node\MatchArm;
 use PhpParser\Node\Param;
-use PhpParser\Node\PropertyHook;
 use PhpParser\Node\Scalar;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\UnionType;
@@ -59,11 +58,9 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
         BinaryOp\Mod::class            => [ 40,  41,  40],
         BinaryOp\Plus::class           => [ 50,  51,  50],
         BinaryOp\Minus::class          => [ 50,  51,  50],
-        // FIXME: This precedence is incorrect for PHP 8.
         BinaryOp\Concat::class         => [ 50,  51,  50],
         BinaryOp\ShiftLeft::class      => [ 60,  61,  60],
         BinaryOp\ShiftRight::class     => [ 60,  61,  60],
-        BinaryOp\Pipe::class           => [ 65,  66,  65],
         BinaryOp\Smaller::class        => [ 70,  70,  70],
         BinaryOp\SmallerOrEqual::class => [ 70,  70,  70],
         BinaryOp\Greater::class        => [ 70,  70,  70],
@@ -79,7 +76,7 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
         BinaryOp\BooleanAnd::class     => [120, 121, 120],
         BinaryOp\BooleanOr::class      => [130, 131, 130],
         BinaryOp\Coalesce::class       => [140, 140, 141],
-        Expr\Ternary::class            => [150, 150, 150],
+        Expr\Ternary::class            => [150,  -1,  -1],
         Expr\Assign::class             => [160,  -1,  -1],
         Expr\AssignRef::class          => [160,  -1,  -1],
         AssignOp\Plus::class           => [160,  -1,  -1],
@@ -104,20 +101,10 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
         Expr\Include_::class           => [220,  -1,  -1],
         Expr\ArrowFunction::class      => [230,  -1,  -1],
         Expr\Throw_::class             => [240,  -1,  -1],
-        Expr\Cast\Void_::class         => [250,  -1,  -1],
     ];
 
     /** @var int Current indentation level. */
     protected int $indentLevel;
-    /** @var string String for single level of indentation */
-    private string $indent;
-    /** @var int Width in spaces to indent by. */
-    private int $indentWidth;
-    /** @var bool Whether to use tab indentation. */
-    private bool $useTabs;
-    /** @var int Width in spaces of one tab. */
-    private int $tabWidth = 4;
-
     /** @var string Newline style. Does not include current indentation. */
     protected string $newline;
     /** @var string Newline including current indentation. */
@@ -166,9 +153,8 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
      * @var array<string, array{int|string|null, string, string}>
      */
     protected array $emptyListInsertionMap;
-    /** @var array<string, array{string, int, int}>
-     *       Map from "{$class}->{$subNode}" to [$printFn, $skipToken, $findToken] where $printFn is the function to
-     *       print the modifiers, $skipToken is the token to skip at the start and $findToken is the token before which
+    /** @var array<string, array{string, int}> Map from "{$class}->{$subNode}" to [$printFn, $token]
+     *       where $printFn is the function to print the modifiers and $token is the token before which
      *       the modifiers should be reprinted. */
     protected array $modifierChangeMap;
 
@@ -183,14 +169,12 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
      *                            PHP version while specifying an older target (but the result will
      *                            of course not be compatible with the older version in that case).
      *  * string $newline:        The newline style to use. Should be "\n" (default) or "\r\n".
-     *  * string $indent:         The indentation to use. Should either be all spaces or a single
-     *                            tab. Defaults to four spaces ("    ").
      *  * bool $shortArraySyntax: Whether to use [] instead of array() as the default array
      *                            syntax, if the node does not specify a format. Defaults to whether
      *                            the phpVersion support short array syntax.
      *
      * @param array{
-     *     phpVersion?: PhpVersion, newline?: string, indent?: string, shortArraySyntax?: bool
+     *     phpVersion?: PhpVersion, newline?: string, shortArraySyntax?: bool
      * } $options Dictionary of formatting options
      */
     public function __construct(array $options = []) {
@@ -205,17 +189,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
             $options['shortArraySyntax'] ?? $this->phpVersion->supportsShortArraySyntax();
         $this->docStringEndToken =
             $this->phpVersion->supportsFlexibleHeredoc() ? null : '_DOC_STRING_END_' . mt_rand();
-
-        $this->indent = $indent = $options['indent'] ?? '    ';
-        if ($indent === "\t") {
-            $this->useTabs = true;
-            $this->indentWidth = $this->tabWidth;
-        } elseif ($indent === \str_repeat(' ', \strlen($indent))) {
-            $this->useTabs = false;
-            $this->indentWidth = \strlen($indent);
-        } else {
-            throw new \LogicException('Option "indent" must either be all spaces or a single tab');
-        }
     }
 
     /**
@@ -234,29 +207,24 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
      */
     protected function setIndentLevel(int $level): void {
         $this->indentLevel = $level;
-        if ($this->useTabs) {
-            $tabs = \intdiv($level, $this->tabWidth);
-            $spaces = $level % $this->tabWidth;
-            $this->nl = $this->newline . \str_repeat("\t", $tabs) . \str_repeat(' ', $spaces);
-        } else {
-            $this->nl = $this->newline . \str_repeat(' ', $level);
-        }
+        $this->nl = $this->newline . \str_repeat(' ', $level);
     }
 
     /**
      * Increase indentation level.
      */
     protected function indent(): void {
-        $this->indentLevel += $this->indentWidth;
-        $this->nl .= $this->indent;
+        $this->indentLevel += 4;
+        $this->nl .= '    ';
     }
 
     /**
      * Decrease indentation level.
      */
     protected function outdent(): void {
-        assert($this->indentLevel >= $this->indentWidth);
-        $this->setIndentLevel($this->indentLevel - $this->indentWidth);
+        assert($this->indentLevel >= 4);
+        $this->indentLevel -= 4;
+        $this->nl = $this->newline . str_repeat(' ', $this->indentLevel);
     }
 
     /**
@@ -568,7 +536,7 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
         $this->initializeModifierChangeMap();
 
         $this->resetState();
-        $this->origTokens = new TokenStream($origTokens, $this->tabWidth);
+        $this->origTokens = new TokenStream($origTokens);
 
         $this->preprocessNodes($stmts);
 
@@ -678,11 +646,9 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
                     return $this->pFallback($fallbackNode, $precedence, $lhsPrecedence);
                 }
 
-                [$printFn, $skipToken, $findToken] = $this->modifierChangeMap[$key];
-                $skipWSPos = $this->origTokens->skipRight($pos, $skipToken);
-                $result .= $this->origTokens->getTokenCode($pos, $skipWSPos, $indentAdjustment);
+                [$printFn, $findToken] = $this->modifierChangeMap[$key];
                 $result .= $this->$printFn($subNode);
-                $pos = $this->origTokens->findRight($skipWSPos, $findToken);
+                $pos = $this->origTokens->findRight($pos, $findToken);
                 continue;
             }
 
@@ -742,7 +708,7 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
                 $result .= $extraLeft;
 
                 $origIndentLevel = $this->indentLevel;
-                $this->setIndentLevel(max($this->origTokens->getIndentationBefore($subStartPos) + $indentAdjustment, 0));
+                $this->setIndentLevel($this->origTokens->getIndentationBefore($subStartPos) + $indentAdjustment);
 
                 // If it's the same node that was previously in this position, it certainly doesn't
                 // need fixup. It's important to check this here, because our fixup checks are more
@@ -845,7 +811,7 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
                 \assert($itemStartPos >= 0 && $itemEndPos >= 0 && $itemStartPos >= $pos);
 
                 $origIndentLevel = $this->indentLevel;
-                $lastElemIndentLevel = max($this->origTokens->getIndentationBefore($itemStartPos) + $indentAdjustment, 0);
+                $lastElemIndentLevel = $this->origTokens->getIndentationBefore($itemStartPos) + $indentAdjustment;
                 $this->setIndentLevel($lastElemIndentLevel);
 
                 $comments = $arrItem->getComments();
@@ -1006,25 +972,9 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
 
             list($findToken, $extraLeft, $extraRight) = $this->emptyListInsertionMap[$mapKey];
             if (null !== $findToken) {
-                // For anon classes skip to the class keyword.
-                $isAnonClassArgs = $mapKey === PrintableNewAnonClassNode::class . '->args';
-                if ($isAnonClassArgs) {
-                    $insertPos = $this->origTokens->findRight($pos, \T_CLASS) + 1;
-                    $result .= $this->origTokens->getTokenCode($pos, $insertPos, $indentAdjustment);
-                    $pos = $insertPos;
-                }
-
-                // If "new Foo" was used without arguments, we need to convert to "new Foo()".
-                if (($mapKey === Expr\New_::class . '->args' || $isAnonClassArgs) &&
-                    !$this->origTokens->haveTokenImmediatelyAfter($pos - 1, '(')
-                ) {
-                    $extraLeft = '(';
-                    $extraRight = ')';
-                } else {
-                    $insertPos = $this->origTokens->findRight($pos, $findToken) + 1;
-                    $result .= $this->origTokens->getTokenCode($pos, $insertPos, $indentAdjustment);
-                    $pos = $insertPos;
-                }
+                $insertPos = $this->origTokens->findRight($pos, $findToken) + 1;
+                $result .= $this->origTokens->getTokenCode($pos, $insertPos, $indentAdjustment);
+                $pos = $insertPos;
             }
 
             $first = true;
@@ -1164,9 +1114,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
      * @return bool Whether parentheses are required
      */
     protected function callLhsRequiresParens(Node $node): bool {
-        if ($node instanceof Expr\New_) {
-            return !$this->phpVersion->supportsNewDereferenceWithoutParentheses();
-        }
         return !($node instanceof Node\Name
             || $node instanceof Expr\Variable
             || $node instanceof Expr\ArrayDimFetch
@@ -1198,9 +1145,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
      * @return bool Whether parentheses are required
      */
     protected function staticDereferenceLhsRequiresParens(Node $node): bool {
-        if ($node instanceof Expr\New_) {
-            return !$this->phpVersion->supportsNewDereferenceWithoutParentheses();
-        }
         return !($node instanceof Expr\Variable
             || $node instanceof Node\Name
             || $node instanceof Expr\ArrayDimFetch
@@ -1224,22 +1168,18 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
      * @return bool Whether parentheses are required
      */
     protected function newOperandRequiresParens(Node $node): bool {
-        while (true) {
-            if ($node instanceof Node\Name || $node instanceof Expr\Variable) {
-                return false;
-            }
-            if ($node instanceof Expr\ArrayDimFetch || $node instanceof Expr\PropertyFetch ||
-                $node instanceof Expr\NullsafePropertyFetch
-            ) {
-                $node = $node->var;
-                continue;
-            }
-            if ($node instanceof Expr\StaticPropertyFetch) {
-                $node = $node->class;
-                continue;
-            }
-            return true;
+        if ($node instanceof Node\Name || $node instanceof Expr\Variable) {
+            return false;
         }
+        if ($node instanceof Expr\ArrayDimFetch || $node instanceof Expr\PropertyFetch ||
+            $node instanceof Expr\NullsafePropertyFetch
+        ) {
+            return $this->newOperandRequiresParens($node->var);
+        }
+        if ($node instanceof Expr\StaticPropertyFetch) {
+            return $this->newOperandRequiresParens($node->class);
+        }
+        return true;
     }
 
     /**
@@ -1255,9 +1195,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
              . ($modifiers & Modifiers::PUBLIC ? 'public ' : '')
              . ($modifiers & Modifiers::PROTECTED ? 'protected ' : '')
              . ($modifiers & Modifiers::PRIVATE ? 'private ' : '')
-             . ($modifiers & Modifiers::PUBLIC_SET ? 'public(set) ' : '')
-             . ($modifiers & Modifiers::PROTECTED_SET ? 'protected(set) ' : '')
-             . ($modifiers & Modifiers::PRIVATE_SET ? 'private(set) ' : '')
              . ($modifiers & Modifiers::STATIC ? 'static ' : '')
              . ($modifiers & Modifiers::READONLY ? 'readonly ' : '');
     }
@@ -1313,7 +1250,7 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
         $this->labelCharMap = [];
         for ($i = 0; $i < 256; $i++) {
             $chr = chr($i);
-            $this->labelCharMap[$chr] = (bool) preg_match('/^[a-zA-Z0-9_\x80-\xff]$/', $chr);
+            $this->labelCharMap[$chr] = $i >= 0x80 || ctype_alnum($chr);
         }
 
         if ($this->phpVersion->allowsDelInIdentifiers()) {
@@ -1404,7 +1341,7 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
             BinaryOp\NotIdentical::class, BinaryOp\Spaceship::class, BinaryOp\BitwiseAnd::class,
             BinaryOp\BitwiseXor::class, BinaryOp\BitwiseOr::class, BinaryOp\BooleanAnd::class,
             BinaryOp\BooleanOr::class, BinaryOp\Coalesce::class, BinaryOp\LogicalAnd::class,
-            BinaryOp\LogicalXor::class, BinaryOp\LogicalOr::class, BinaryOp\Pipe::class,
+            BinaryOp\LogicalXor::class, BinaryOp\LogicalOr::class,
         ];
         foreach ($binaryOps as $binaryOp) {
             $this->fixupMap[$binaryOp] = [
@@ -1580,7 +1517,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
             Stmt\UseUse::class . '->uses' => ', ',
             MatchArm::class . '->conds' => ', ',
             AttributeGroup::class . '->attrs' => ', ',
-            PropertyHook::class . '->params' => ', ',
 
             // statement lists
             Expr\Closure::class . '->stmts' => "\n",
@@ -1618,15 +1554,10 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
             Expr\Closure::class . '->attrGroups' => ' ',
             Expr\ArrowFunction::class . '->attrGroups' => ' ',
             Param::class . '->attrGroups' => ' ',
-            PropertyHook::class . '->attrGroups' => ' ',
-
             Stmt\Switch_::class . '->cases' => "\n",
             Stmt\TraitUse::class . '->adaptations' => "\n",
             Stmt\TryCatch::class . '->stmts' => "\n",
             Stmt\While_::class . '->stmts' => "\n",
-            PropertyHook::class . '->body' => "\n",
-            Stmt\Property::class . '->hooks' => "\n",
-            Param::class . '->hooks' => "\n",
 
             // dummy for top-level context
             'File->stmts' => "\n",
@@ -1659,8 +1590,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
             Stmt\Function_::class . '->params' => ['(', '', ''],
             Stmt\Interface_::class . '->attrGroups' => [null, '', "\n"],
             Stmt\Class_::class . '->attrGroups' => [null, '', "\n"],
-            Stmt\Enum_::class . '->attrGroups' => [null, '', "\n"],
-            Stmt\EnumCase::class . '->attrGroups' => [null, '', "\n"],
             Stmt\ClassConst::class . '->attrGroups' => [null, '', "\n"],
             Stmt\ClassMethod::class . '->attrGroups' => [null, '', "\n"],
             Stmt\Function_::class . '->attrGroups' => [null, '', "\n"],
@@ -1668,7 +1597,6 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
             Stmt\Trait_::class . '->attrGroups' => [null, '', "\n"],
             Expr\ArrowFunction::class . '->attrGroups' => [null, '', ' '],
             Expr\Closure::class . '->attrGroups' => [null, '', ' '],
-            Stmt\Const_::class . '->attrGroups' => [null, '', "\n"],
             PrintableNewAnonClassNode::class . '->attrGroups' => [\T_NEW, ' ', ''],
 
             /* These cannot be empty to start with:
@@ -1707,15 +1635,14 @@ abstract class PrettyPrinterAbstract implements PrettyPrinter {
         }
 
         $this->modifierChangeMap = [
-            Stmt\ClassConst::class . '->flags' => ['pModifiers', \T_WHITESPACE, \T_CONST],
-            Stmt\ClassMethod::class . '->flags' => ['pModifiers', \T_WHITESPACE, \T_FUNCTION],
-            Stmt\Class_::class . '->flags' => ['pModifiers', \T_WHITESPACE, \T_CLASS],
-            Stmt\Property::class . '->flags' => ['pModifiers', \T_WHITESPACE, \T_VARIABLE],
-            PrintableNewAnonClassNode::class . '->flags' => ['pModifiers', \T_NEW, \T_CLASS],
-            Param::class . '->flags' => ['pModifiers', \T_WHITESPACE, \T_VARIABLE],
-            PropertyHook::class . '->flags' => ['pModifiers', \T_WHITESPACE, \T_STRING],
-            Expr\Closure::class . '->static' => ['pStatic', \T_WHITESPACE, \T_FUNCTION],
-            Expr\ArrowFunction::class . '->static' => ['pStatic', \T_WHITESPACE, \T_FN],
+            Stmt\ClassConst::class . '->flags' => ['pModifiers', \T_CONST],
+            Stmt\ClassMethod::class . '->flags' => ['pModifiers', \T_FUNCTION],
+            Stmt\Class_::class . '->flags' => ['pModifiers', \T_CLASS],
+            Stmt\Property::class . '->flags' => ['pModifiers', \T_VARIABLE],
+            PrintableNewAnonClassNode::class . '->flags' => ['pModifiers', \T_CLASS],
+            Param::class . '->flags' => ['pModifiers', \T_VARIABLE],
+            Expr\Closure::class . '->static' => ['pStatic', \T_FUNCTION],
+            Expr\ArrowFunction::class . '->static' => ['pStatic', \T_FN],
             //Stmt\TraitUseAdaptation\Alias::class . '->newModifier' => 0, // TODO
         ];
 

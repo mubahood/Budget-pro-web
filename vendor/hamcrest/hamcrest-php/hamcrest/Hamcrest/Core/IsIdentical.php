@@ -13,21 +13,15 @@ use Hamcrest\Description;
 class IsIdentical extends IsSame
 {
 
-    /**
-     * @var mixed $_value
-     */
     private $_value;
 
-    /**
-     * @param mixed $value
-     */
     public function __construct($value)
     {
         parent::__construct($value);
         $this->_value = $value;
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendValue($this->_value);
     }
@@ -36,9 +30,8 @@ class IsIdentical extends IsSame
      * Tests of the value is identical to $value as tested by the "===" operator.
      *
      * @factory
-     * @param mixed $value
      */
-    public static function identicalTo($value): self
+    public static function identicalTo($value)
     {
         return new self($value);
     }

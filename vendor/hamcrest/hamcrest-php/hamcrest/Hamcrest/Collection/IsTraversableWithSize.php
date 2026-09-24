@@ -39,9 +39,8 @@ class IsTraversableWithSize extends FeatureMatcher
      * Does traversable size satisfy a given matcher?
      *
      * @factory
-     * @param mixed $size
      */
-    public static function traversableWithSize($size): self
+    public static function traversableWithSize($size)
     {
         return new self(Util::wrapValueWithIsEqual($size));
     }

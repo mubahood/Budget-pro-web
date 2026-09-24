@@ -9,14 +9,14 @@ namespace Hamcrest;
 abstract class TypeSafeDiagnosingMatcher extends TypeSafeMatcher
 {
 
-    final public function matchesSafely($actual): bool
+    final public function matchesSafely($item)
     {
-        return $this->matchesSafelyWithDiagnosticDescription($actual, new NullDescription());
+        return $this->matchesSafelyWithDiagnosticDescription($item, new NullDescription());
     }
 
-    final public function describeMismatchSafely($actual, Description $mismatchDescription): void
+    final public function describeMismatchSafely($item, Description $mismatchDescription)
     {
-        $this->matchesSafelyWithDiagnosticDescription($actual, $mismatchDescription);
+        $this->matchesSafelyWithDiagnosticDescription($item, $mismatchDescription);
     }
 
     // -- Protected Methods
@@ -24,7 +24,6 @@ abstract class TypeSafeDiagnosingMatcher extends TypeSafeMatcher
     /**
      * Subclasses should implement these. The item will already have been checked for
      * the specific type.
-     * @param mixed $actual
      */
-    abstract protected function matchesSafelyWithDiagnosticDescription($actual, Description $mismatchDescription): bool;
+    abstract protected function matchesSafelyWithDiagnosticDescription($item, Description $mismatchDescription);
 }

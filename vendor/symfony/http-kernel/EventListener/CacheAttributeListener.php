@@ -13,7 +13,6 @@ namespace Symfony\Component\HttpKernel\EventListener;
 
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
-use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\Cache;
@@ -124,23 +123,10 @@ class CacheAttributeListener implements EventSubscriberInterface
 
         unset($this->lastModified[$request]);
         unset($this->etags[$request]);
-        // Check if the response has a Vary header that should be considered, ignoring cases where
-        // it's only 'Accept-Language' and the request has the '_vary_by_language' attribute
-        $hasVary = ['Accept-Language'] === $response->getVary() ? !$request->attributes->get('_vary_by_language') : $response->hasVary();
-        // Check if cache-control directive was set manually in cacheControl (not auto computed)
-        $hasCacheControlDirective = new class($response->headers) extends HeaderBag {
-            public function __construct(private parent $headerBag)
-            {
-            }
-
-            public function __invoke(string $key): bool
-            {
-                return \array_key_exists($key, $this->headerBag->cacheControl);
-            }
-        };
+        $hasVary = $response->headers->has('Vary');
 
         foreach (array_reverse($attributes) as $cache) {
-            if (null !== $cache->smaxage && !$hasCacheControlDirective('s-maxage')) {
+            if (null !== $cache->smaxage && !$response->headers->hasCacheControlDirective('s-maxage')) {
                 $response->setSharedMaxAge($this->toSeconds($cache->smaxage));
             }
 
@@ -148,19 +134,19 @@ class CacheAttributeListener implements EventSubscriberInterface
                 $response->headers->addCacheControlDirective('must-revalidate');
             }
 
-            if (null !== $cache->maxage && !$hasCacheControlDirective('max-age')) {
+            if (null !== $cache->maxage && !$response->headers->hasCacheControlDirective('max-age')) {
                 $response->setMaxAge($this->toSeconds($cache->maxage));
             }
 
-            if (null !== $cache->maxStale && !$hasCacheControlDirective('max-stale')) {
+            if (null !== $cache->maxStale && !$response->headers->hasCacheControlDirective('max-stale')) {
                 $response->headers->addCacheControlDirective('max-stale', $this->toSeconds($cache->maxStale));
             }
 
-            if (null !== $cache->staleWhileRevalidate && !$hasCacheControlDirective('stale-while-revalidate')) {
+            if (null !== $cache->staleWhileRevalidate && !$response->headers->hasCacheControlDirective('stale-while-revalidate')) {
                 $response->headers->addCacheControlDirective('stale-while-revalidate', $this->toSeconds($cache->staleWhileRevalidate));
             }
 
-            if (null !== $cache->staleIfError && !$hasCacheControlDirective('stale-if-error')) {
+            if (null !== $cache->staleIfError && !$response->headers->hasCacheControlDirective('stale-if-error')) {
                 $response->headers->addCacheControlDirective('stale-if-error', $this->toSeconds($cache->staleIfError));
             }
 
@@ -173,14 +159,12 @@ class CacheAttributeListener implements EventSubscriberInterface
             }
         }
 
-        $hasPublicOrPrivateCacheControlDirective = $hasCacheControlDirective('public') || $hasCacheControlDirective('private');
-
         foreach ($attributes as $cache) {
-            if (true === $cache->public && !$hasPublicOrPrivateCacheControlDirective) {
+            if (true === $cache->public) {
                 $response->setPublic();
             }
 
-            if (false === $cache->public && !$hasPublicOrPrivateCacheControlDirective) {
+            if (false === $cache->public) {
                 $response->setPrivate();
             }
         }

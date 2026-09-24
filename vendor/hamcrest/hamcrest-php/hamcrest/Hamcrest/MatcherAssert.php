@@ -13,7 +13,7 @@ class MatcherAssert
      *
      * @var int
      */
-    private static int $_count = 0;
+    private static $_count = 0;
 
     /**
      * Make an assertion and throw {@link Hamcrest\AssertionError} if it fails.
@@ -35,7 +35,7 @@ class MatcherAssert
      * assertThat($a > $b);
      * </pre>
      */
-    public static function assertThat(/* $args ... */): void
+    public static function assertThat(/* $args ... */)
     {
         $args = func_get_args();
         switch (count($args)) {
@@ -74,7 +74,7 @@ class MatcherAssert
      *
      * @return int
      */
-    public static function getCount(): int
+    public static function getCount()
     {
         return self::$_count;
     }
@@ -82,7 +82,7 @@ class MatcherAssert
     /**
      * Resets the number of assertions performed to zero.
      */
-    public static function resetCount(): void
+    public static function resetCount()
     {
         self::$_count = 0;
     }
@@ -99,7 +99,7 @@ class MatcherAssert
      * @param \Hamcrest\Matcher $matcher applied to <code>$actual</code>
      * @throws AssertionError
      */
-    private static function doAssert($identifier, $actual, Matcher $matcher): void
+    private static function doAssert($identifier, $actual, Matcher $matcher)
     {
         if (!$matcher->matches($actual)) {
             $description = new StringDescription();

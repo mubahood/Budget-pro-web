@@ -1,5 +1,5 @@
 includes:
-    - vendor/larastan/larastan/extension.neon
+    - tools/phpstan/vendor/larastan/larastan/extension.neon
 
 parameters:
     level: 5

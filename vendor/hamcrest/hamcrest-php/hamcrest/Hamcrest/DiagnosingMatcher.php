@@ -11,18 +11,15 @@ namespace Hamcrest;
 abstract class DiagnosingMatcher extends BaseMatcher
 {
 
-    final public function matches($item): bool
+    final public function matches($item)
     {
         return $this->matchesWithDiagnosticDescription($item, new NullDescription());
     }
 
-    public function describeMismatch($item, Description $mismatchDescription): void
+    public function describeMismatch($item, Description $mismatchDescription)
     {
         $this->matchesWithDiagnosticDescription($item, $mismatchDescription);
     }
 
-    /**
-     * @param mixed $item
-     */
-    abstract protected function matchesWithDiagnosticDescription($item, Description $mismatchDescription): bool;
+    abstract protected function matchesWithDiagnosticDescription($item, Description $mismatchDescription);
 }

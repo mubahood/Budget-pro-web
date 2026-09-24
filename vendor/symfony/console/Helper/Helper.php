@@ -26,7 +26,7 @@ abstract class Helper implements HelperInterface
     /**
      * @return void
      */
-    public function setHelperSet(?HelperSet $helperSet = null)
+    public function setHelperSet(HelperSet $helperSet = null)
     {
         if (1 > \func_num_args()) {
             trigger_deprecation('symfony/console', '6.2', 'Calling "%s()" without any arguments is deprecated, pass null explicitly instead.', __METHOD__);
@@ -48,9 +48,7 @@ abstract class Helper implements HelperInterface
         $string ??= '';
 
         if (preg_match('//u', $string)) {
-            $string = preg_replace('/[\p{Cc}\x7F]++/u', '', $string, -1, $count);
-
-            return (new UnicodeString($string))->width(false) + $count;
+            return (new UnicodeString($string))->width(false);
         }
 
         if (false === $encoding = mb_detect_encoding($string, null, true)) {
@@ -82,13 +80,9 @@ abstract class Helper implements HelperInterface
     /**
      * Returns the subset of a string, using mb_substr if it is available.
      */
-    public static function substr(?string $string, int $from, ?int $length = null): string
+    public static function substr(?string $string, int $from, int $length = null): string
     {
         $string ??= '';
-
-        if (preg_match('//u', $string)) {
-            return (new UnicodeString($string))->slice($from, $length);
-        }
 
         if (false === $encoding = mb_detect_encoding($string, null, true)) {
             return substr($string, $from, $length);
@@ -146,18 +140,18 @@ abstract class Helper implements HelperInterface
     public static function formatMemory(int $memory)
     {
         if ($memory >= 1024 * 1024 * 1024) {
-            return \sprintf('%.1f GiB', $memory / 1024 / 1024 / 1024);
+            return sprintf('%.1f GiB', $memory / 1024 / 1024 / 1024);
         }
 
         if ($memory >= 1024 * 1024) {
-            return \sprintf('%.1f MiB', $memory / 1024 / 1024);
+            return sprintf('%.1f MiB', $memory / 1024 / 1024);
         }
 
         if ($memory >= 1024) {
-            return \sprintf('%d KiB', $memory / 1024);
+            return sprintf('%d KiB', $memory / 1024);
         }
 
-        return \sprintf('%d B', $memory);
+        return sprintf('%d B', $memory);
     }
 
     /**

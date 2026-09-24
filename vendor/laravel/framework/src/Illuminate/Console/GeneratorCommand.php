@@ -84,7 +84,6 @@ abstract class GeneratorCommand extends Command implements PromptsForMissingInpu
         'namespace',
         'new',
         'or',
-        'parent',
         'print',
         'private',
         'protected',

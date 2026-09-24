@@ -21,7 +21,7 @@ final class VcsIgnoredFilterIterator extends \FilterIterator
     private string $baseDir;
 
     /**
-     * @var array<string, list<array{0: string, 1: bool, 2: bool}>|null>
+     * @var array<string, array{0: string, 1: string}|null>
      */
     private array $gitignoreFilesCache = [];
 
@@ -35,12 +35,11 @@ final class VcsIgnoredFilterIterator extends \FilterIterator
      */
     public function __construct(\Iterator $iterator, string $baseDir)
     {
-        // paths are compared to the real path of each file, so the base directory needs the same treatment
-        $this->baseDir = $this->normalizePath(realpath($baseDir) ?: $baseDir);
+        $this->baseDir = $this->normalizePath($baseDir);
 
-        foreach ([$this->baseDir, ...$this->parentDirectoriesUpwards($this->baseDir)] as $directory) {
-            if (@is_dir("{$directory}/.git")) {
-                $this->baseDir = $directory;
+        foreach ($this->parentDirectoriesUpwards($this->baseDir) as $parentDirectory) {
+            if (@is_dir("{$parentDirectory}/.git")) {
+                $this->baseDir = $parentDirectory;
                 break;
             }
         }
@@ -59,40 +58,38 @@ final class VcsIgnoredFilterIterator extends \FilterIterator
 
     private function isIgnored(string $fileRealPath): bool
     {
+        if (is_dir($fileRealPath) && !str_ends_with($fileRealPath, '/')) {
+            $fileRealPath .= '/';
+        }
+
         if (isset($this->ignoredPathsCache[$fileRealPath])) {
             return $this->ignoredPathsCache[$fileRealPath];
         }
 
         $ignored = false;
-        $parentDirectories = $this->parentDirectoriesDownwards($fileRealPath);
 
-        if ($parentDirectories && $this->baseDir !== $parentDirectory = $parentDirectories[\count($parentDirectories) - 1]) {
-            // paths inside an ignored directory are ignored and cannot be re-included
-            $ignored = $this->isIgnored($parentDirectory);
-        }
+        foreach ($this->parentDirectoriesDownwards($fileRealPath) as $parentDirectory) {
+            if ($this->isIgnored($parentDirectory)) {
+                // rules in ignored directories are ignored, no need to check further.
+                break;
+            }
 
-        if (!$ignored) {
-            $isDir = is_dir($fileRealPath);
+            $fileRelativePath = substr($fileRealPath, \strlen($parentDirectory) + 1);
 
-            // the last matching rule of the deepest .gitignore file decides
-            foreach (array_reverse($parentDirectories) as $parentDirectory) {
-                if (null === $rules = $this->readGitignoreFile("{$parentDirectory}/.gitignore")) {
-                    continue;
-                }
+            if (null === $regexps = $this->readGitignoreFile("{$parentDirectory}/.gitignore")) {
+                continue;
+            }
 
-                $fileRelativePath = substr($fileRealPath, \strlen($parentDirectory) + 1);
+            [$exclusionRegex, $inclusionRegex] = $regexps;
 
-                foreach ($rules as [$regex, $isNegated, $isDirOnly]) {
-                    if ($isDirOnly && !$isDir) {
-                        continue;
-                    }
+            if (preg_match($exclusionRegex, $fileRelativePath)) {
+                $ignored = true;
 
-                    if (preg_match($regex, $fileRelativePath, $matches) && $matches[0] === $fileRelativePath) {
-                        $ignored = !$isNegated;
+                continue;
+            }
 
-                        break 2;
-                    }
-                }
+            if (preg_match($inclusionRegex, $fileRelativePath)) {
+                $ignored = false;
             }
         }
 
@@ -141,9 +138,7 @@ final class VcsIgnoredFilterIterator extends \FilterIterator
     }
 
     /**
-     * Returns the rules of a .gitignore file, last one first, as [regex, isNegated, isDirOnly] tuples.
-     *
-     * @return list<array{0: string, 1: bool, 2: bool}>|null
+     * @return array{0: string, 1: string}|null
      */
     private function readGitignoreFile(string $path): ?array
     {
@@ -159,37 +154,12 @@ final class VcsIgnoredFilterIterator extends \FilterIterator
             throw new \RuntimeException("The \"ignoreVCSIgnored\" option cannot be used by the Finder as the \"{$path}\" file is not readable.");
         }
 
-        $rules = [];
+        $gitignoreFileContent = file_get_contents($path);
 
-        foreach (preg_split('~\r\n?|\n~', file_get_contents($path)) as $line) {
-            // only a line starting with "#" is a comment, and only trailing spaces are stripped
-            if (str_starts_with($line, '#')) {
-                continue;
-            }
-
-            $line = preg_replace('~(?<!\\\\) +$~', '', $line);
-
-            if ($isNegated = str_starts_with($line, '!')) {
-                $line = substr($line, 1);
-            }
-
-            if ($isDirOnly = str_ends_with($line, '/')) {
-                $line = substr($line, 0, -1);
-            }
-
-            if ('' === $line) {
-                continue;
-            }
-
-            if (str_starts_with($line, '#')) {
-                // the leading "!" is already stripped, so a "#" here starts a pattern, not a comment
-                $line = '\\'.$line;
-            }
-
-            $rules[] = [Gitignore::toRegex($line), $isNegated, $isDirOnly];
-        }
-
-        return $this->gitignoreFilesCache[$path] = array_reverse($rules);
+        return $this->gitignoreFilesCache[$path] = [
+            Gitignore::toRegex($gitignoreFileContent),
+            Gitignore::toRegexMatchingNegatedPatterns($gitignoreFileContent),
+        ];
     }
 
     private function normalizePath(string $path): string

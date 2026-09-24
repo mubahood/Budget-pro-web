@@ -13,25 +13,20 @@ use Hamcrest\Description;
  */
 class IsEqual extends BaseMatcher
 {
-    /**
-     * @var mixed
-     */
+
     private $_item;
 
-    /**
-     * @param mixed $item
-     */
     public function __construct($item)
     {
         $this->_item = $item;
     }
 
-    public function matches($arg): bool
+    public function matches($arg)
     {
         return (($arg == $this->_item) && ($this->_item == $arg));
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendValue($this->_item);
     }
@@ -41,9 +36,8 @@ class IsEqual extends BaseMatcher
      * comparison operator?
      *
      * @factory
-     * @param mixed $item
      */
-    public static function equalTo($item): self
+    public static function equalTo($item)
     {
         return new self($item);
     }

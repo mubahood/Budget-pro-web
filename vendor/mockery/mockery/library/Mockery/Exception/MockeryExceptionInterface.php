@@ -1,17 +1,19 @@
 <?php
 
-declare(strict_types=1);
-
 /**
- * Mockery (https://docs.mockery.io/en/stable/)
+ * Mockery (https://docs.mockery.io/)
  *
  * @copyright https://github.com/mockery/mockery/blob/HEAD/COPYRIGHT.md
  * @license   https://github.com/mockery/mockery/blob/HEAD/LICENSE BSD 3-Clause License
- * @see       https://github.com/mockery/mockery for the canonical source repository
+ * @link      https://github.com/mockery/mockery for the canonical source repository
  */
+
+declare(strict_types=1);
 
 namespace Mockery\Exception;
 
 use Throwable;
 
-interface MockeryExceptionInterface extends Throwable {}
+interface MockeryExceptionInterface extends Throwable
+{
+}

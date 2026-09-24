@@ -1,126 +1,73 @@
 <?php
 
 /**
- * Mockery (https://docs.mockery.io/en/stable/)
+ * Mockery (https://docs.mockery.io/)
  *
  * @copyright https://github.com/mockery/mockery/blob/HEAD/COPYRIGHT.md
  * @license   https://github.com/mockery/mockery/blob/HEAD/LICENSE BSD 3-Clause License
- * @see       https://github.com/mockery/mockery for the canonical source repository
+ * @link      https://github.com/mockery/mockery for the canonical source repository
  */
 
 namespace Mockery\Exception;
 
-use Mockery\Exception;
-use Mockery\LegacyMockInterface;
+use Mockery;
 
-class InvalidOrderException extends Exception
+class InvalidOrderException extends Mockery\Exception
 {
-    /**
-     * @var int|null
-     */
-    protected $actual;
+    protected $method = null;
 
-    /**
-     * @var int
-     */
     protected $expected = 0;
 
-    /**
-     * @var string|null
-     */
-    protected $method;
+    protected $actual = null;
 
-    /**
-     * @var LegacyMockInterface|null
-     */
-    protected $mockObject;
+    protected $mockObject = null;
 
-    /**
-     * @return int|null
-     */
-    public function getActualOrder()
+    public function setMock(Mockery\LegacyMockInterface $mock)
     {
-        return $this->actual;
+        $this->mockObject = $mock;
+        return $this;
     }
 
-    /**
-     * @return int
-     */
-    public function getExpectedOrder()
+    public function setMethodName($name)
     {
-        return $this->expected;
+        $this->method = $name;
+        return $this;
     }
 
-    /**
-     * @return string|null
-     */
-    public function getMethodName()
+    public function setActualOrder($count)
     {
-        return $this->method;
+        $this->actual = $count;
+        return $this;
     }
 
-    /**
-     * @return LegacyMockInterface|null
-     */
+    public function setExpectedOrder($count)
+    {
+        $this->expected = $count;
+        return $this;
+    }
+
     public function getMock()
     {
         return $this->mockObject;
     }
 
-    /**
-     * @return string|null
-     */
+    public function getMethodName()
+    {
+        return $this->method;
+    }
+
+    public function getActualOrder()
+    {
+        return $this->actual;
+    }
+
+    public function getExpectedOrder()
+    {
+        return $this->expected;
+    }
+
     public function getMockName()
     {
-        $mock = $this->getMock();
-
-        if (null === $mock) {
-            return $mock;
-        }
-
-        return $mock->mockery_getName();
-    }
-
-    /**
-     * @param  int  $count
-     * @return self
-     */
-    public function setActualOrder($count)
-    {
-        $this->actual = $count;
-
-        return $this;
-    }
-
-    /**
-     * @param  int  $count
-     * @return self
-     */
-    public function setExpectedOrder($count)
-    {
-        $this->expected = $count;
-
-        return $this;
-    }
-
-    /**
-     * @param  string $name
-     * @return self
-     */
-    public function setMethodName($name)
-    {
-        $this->method = $name;
-
-        return $this;
-    }
-
-    /**
-     * @return self
-     */
-    public function setMock(LegacyMockInterface $mock)
-    {
-        $this->mockObject = $mock;
-
-        return $this;
+        return $this->getMock()->mockery_getName();
     }
 }

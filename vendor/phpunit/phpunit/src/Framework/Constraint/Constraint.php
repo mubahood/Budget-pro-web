@@ -86,7 +86,7 @@ abstract class Constraint implements Countable, SelfDescribing
      *
      * @throws ExpectationFailedException
      */
-    protected function fail(mixed $other, string $description, ?ComparisonFailure $comparisonFailure = null): never
+    protected function fail(mixed $other, string $description, ComparisonFailure $comparisonFailure = null): never
     {
         $failureDescription = sprintf(
             'Failed asserting that %s.',
@@ -255,10 +255,10 @@ abstract class Constraint implements Countable, SelfDescribing
         }
 
         return match ($type) {
-            'array', 'integer', 'object'                                => 'an ' . $type . ' ',
+            'array', 'integer', 'object' => 'an ' . $type . ' ',
             'boolean', 'closed resource', 'float', 'resource', 'string' => 'a ' . $type . ' ',
-            'null'                                                      => 'null ',
-            default                                                     => 'a value of ' . $type . ' ',
+            'null'  => 'null ',
+            default => 'a value of ' . $type . ' ',
         };
     }
 }

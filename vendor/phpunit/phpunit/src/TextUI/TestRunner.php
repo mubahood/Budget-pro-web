@@ -12,14 +12,13 @@ namespace PHPUnit\TextUI;
 use function mt_srand;
 use PHPUnit\Event;
 use PHPUnit\Framework\TestSuite;
+use PHPUnit\Runner\Filter\Factory;
 use PHPUnit\Runner\ResultCache\ResultCache;
 use PHPUnit\Runner\TestSuiteSorter;
 use PHPUnit\TextUI\Configuration\Configuration;
 use Throwable;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class TestRunner
@@ -55,7 +54,7 @@ final class TestRunner
                 );
             }
 
-            (new TestSuiteFilterProcessor)->process($configuration, $suite);
+            (new TestSuiteFilterProcessor(new Factory))->process($configuration, $suite);
 
             Event\Facade::emitter()->testRunnerExecutionStarted(
                 Event\TestSuite\TestSuiteBuilder::from($suite),

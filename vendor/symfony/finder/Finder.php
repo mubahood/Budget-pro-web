@@ -57,10 +57,8 @@ class Finder implements \IteratorAggregate, \Countable
     private bool $reverseSorting = false;
     private \Closure|int|false $sort = false;
     private int $ignore = 0;
-    /** @var list<string> */
     private array $dirs = [];
     private array $dates = [];
-    /** @var list<iterable<SplFileInfo|\SplFileInfo|string>> */
     private array $iterators = [];
     private array $contains = [];
     private array $notContains = [];
@@ -126,7 +124,7 @@ class Finder implements \IteratorAggregate, \Countable
     public function depth(string|int|array $levels): static
     {
         foreach ((array) $levels as $level) {
-            $this->depths[] = new NumberComparator($level);
+            $this->depths[] = new Comparator\NumberComparator($level);
         }
 
         return $this;
@@ -154,7 +152,7 @@ class Finder implements \IteratorAggregate, \Countable
     public function date(string|array $dates): static
     {
         foreach ((array) $dates as $date) {
-            $this->dates[] = new DateComparator($date);
+            $this->dates[] = new Comparator\DateComparator($date);
         }
 
         return $this;
@@ -200,13 +198,11 @@ class Finder implements \IteratorAggregate, \Countable
     }
 
     /**
-     * Adds tests that file contents must match. If multiple patterns are given,
-     * files only need to match at least one of them.
+     * Adds tests that file contents must match.
      *
      * Strings or PCRE patterns can be used:
      *
      *     $finder->contains('Lorem ipsum')
-     *     $finder->contains(['Lorem', 'ipsum']) // matches files containing "Lorem", or "ipsum", or both
      *     $finder->contains('/Lorem ipsum/i')
      *     $finder->contains(['dolor', '/ipsum/i'])
      *
@@ -224,13 +220,11 @@ class Finder implements \IteratorAggregate, \Countable
     }
 
     /**
-     * Adds tests that file contents must not match. If multiple patterns are given,
-     * files are excluded as soon as they match any of them.
+     * Adds tests that file contents must not match.
      *
      * Strings or PCRE patterns can be used:
      *
      *     $finder->notContains('Lorem ipsum')
-     *     $finder->notContains(['Lorem', 'ipsum']) // excludes files containing "Lorem", or "ipsum", or both
      *     $finder->notContains('/Lorem ipsum/i')
      *     $finder->notContains(['lorem', '/dolor/i'])
      *
@@ -313,7 +307,7 @@ class Finder implements \IteratorAggregate, \Countable
     public function size(string|int|array $sizes): static
     {
         foreach ((array) $sizes as $size) {
-            $this->sizes[] = new NumberComparator($size);
+            $this->sizes[] = new Comparator\NumberComparator($size);
         }
 
         return $this;
@@ -444,7 +438,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByExtension(): static
     {
-        $this->sort = SortableIterator::SORT_BY_EXTENSION;
+        $this->sort = Iterator\SortableIterator::SORT_BY_EXTENSION;
 
         return $this;
     }
@@ -460,7 +454,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByName(bool $useNaturalSort = false): static
     {
-        $this->sort = $useNaturalSort ? SortableIterator::SORT_BY_NAME_NATURAL : SortableIterator::SORT_BY_NAME;
+        $this->sort = $useNaturalSort ? Iterator\SortableIterator::SORT_BY_NAME_NATURAL : Iterator\SortableIterator::SORT_BY_NAME;
 
         return $this;
     }
@@ -476,7 +470,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByCaseInsensitiveName(bool $useNaturalSort = false): static
     {
-        $this->sort = $useNaturalSort ? SortableIterator::SORT_BY_NAME_NATURAL_CASE_INSENSITIVE : SortableIterator::SORT_BY_NAME_CASE_INSENSITIVE;
+        $this->sort = $useNaturalSort ? Iterator\SortableIterator::SORT_BY_NAME_NATURAL_CASE_INSENSITIVE : Iterator\SortableIterator::SORT_BY_NAME_CASE_INSENSITIVE;
 
         return $this;
     }
@@ -492,7 +486,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortBySize(): static
     {
-        $this->sort = SortableIterator::SORT_BY_SIZE;
+        $this->sort = Iterator\SortableIterator::SORT_BY_SIZE;
 
         return $this;
     }
@@ -508,7 +502,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByType(): static
     {
-        $this->sort = SortableIterator::SORT_BY_TYPE;
+        $this->sort = Iterator\SortableIterator::SORT_BY_TYPE;
 
         return $this;
     }
@@ -526,7 +520,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByAccessedTime(): static
     {
-        $this->sort = SortableIterator::SORT_BY_ACCESSED_TIME;
+        $this->sort = Iterator\SortableIterator::SORT_BY_ACCESSED_TIME;
 
         return $this;
     }
@@ -558,7 +552,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByChangedTime(): static
     {
-        $this->sort = SortableIterator::SORT_BY_CHANGED_TIME;
+        $this->sort = Iterator\SortableIterator::SORT_BY_CHANGED_TIME;
 
         return $this;
     }
@@ -576,7 +570,7 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function sortByModifiedTime(): static
     {
-        $this->sort = SortableIterator::SORT_BY_MODIFIED_TIME;
+        $this->sort = Iterator\SortableIterator::SORT_BY_MODIFIED_TIME;
 
         return $this;
     }
@@ -652,7 +646,7 @@ class Finder implements \IteratorAggregate, \Countable
                 sort($glob);
                 $resolvedDirs[] = array_map($this->normalizeDir(...), $glob);
             } else {
-                throw new DirectoryNotFoundException(\sprintf('The "%s" directory does not exist.', $dir));
+                throw new DirectoryNotFoundException(sprintf('The "%s" directory does not exist.', $dir));
             }
         }
 
@@ -672,37 +666,31 @@ class Finder implements \IteratorAggregate, \Countable
      */
     public function getIterator(): \Iterator
     {
-        if (!$this->dirs && !$this->iterators) {
+        if (0 === \count($this->dirs) && 0 === \count($this->iterators)) {
             throw new \LogicException('You must call one of in() or append() methods before iterating over a Finder.');
         }
 
-        if (1 === \count($this->dirs) && !$this->iterators) {
+        if (1 === \count($this->dirs) && 0 === \count($this->iterators)) {
             $iterator = $this->searchInDirectory($this->dirs[0]);
-        } else {
-            $iterator = new \AppendIterator();
-            foreach ($this->dirs as $dir) {
-                $iterator->append(new \IteratorIterator(new LazyIterator(fn () => $this->searchInDirectory($dir))));
+
+            if ($this->sort || $this->reverseSorting) {
+                $iterator = (new Iterator\SortableIterator($iterator, $this->sort, $this->reverseSorting))->getIterator();
             }
 
-            foreach ($this->iterators as $it) {
-                $iterator->append(new \IteratorIterator(new LazyIterator(static function () use ($it) {
-                    foreach ($it as $file) {
-                        if (!$file instanceof \SplFileInfo) {
-                            $file = new \SplFileInfo($file);
-                        }
-                        $key = $file->getPathname();
-                        if (!$file instanceof SplFileInfo) {
-                            $file = new SplFileInfo($key, $file->getPath(), $key);
-                        }
+            return $iterator;
+        }
 
-                        yield $key => $file;
-                    }
-                })));
-            }
+        $iterator = new \AppendIterator();
+        foreach ($this->dirs as $dir) {
+            $iterator->append(new \IteratorIterator(new LazyIterator(fn () => $this->searchInDirectory($dir))));
+        }
+
+        foreach ($this->iterators as $it) {
+            $iterator->append($it);
         }
 
         if ($this->sort || $this->reverseSorting) {
-            $iterator = (new SortableIterator($iterator, $this->sort, $this->reverseSorting))->getIterator();
+            $iterator = (new Iterator\SortableIterator($iterator, $this->sort, $this->reverseSorting))->getIterator();
         }
 
         return $iterator;
@@ -713,13 +701,26 @@ class Finder implements \IteratorAggregate, \Countable
      *
      * The set can be another Finder, an Iterator, an IteratorAggregate, or even a plain array.
      *
-     * @param iterable<SplFileInfo|\SplFileInfo|string> $iterator
-     *
      * @return $this
+     *
+     * @throws \InvalidArgumentException when the given argument is not iterable
      */
     public function append(iterable $iterator): static
     {
-        $this->iterators[] = $iterator;
+        if ($iterator instanceof \IteratorAggregate) {
+            $this->iterators[] = $iterator->getIterator();
+        } elseif ($iterator instanceof \Iterator) {
+            $this->iterators[] = $iterator;
+        } elseif (is_iterable($iterator)) {
+            $it = new \ArrayIterator();
+            foreach ($iterator as $file) {
+                $file = $file instanceof \SplFileInfo ? $file : new \SplFileInfo($file);
+                $it[$file->getPathname()] = $file;
+            }
+            $this->iterators[] = $it;
+        } else {
+            throw new \InvalidArgumentException('Finder::append() method wrong argument type.');
+        }
 
         return $this;
     }
@@ -792,13 +793,13 @@ class Finder implements \IteratorAggregate, \Countable
         $iterator = new Iterator\RecursiveDirectoryIterator($dir, $flags, $this->ignoreUnreadableDirs);
 
         if ($exclude) {
-            $iterator = new ExcludeDirectoryFilterIterator($iterator, $exclude);
+            $iterator = new Iterator\ExcludeDirectoryFilterIterator($iterator, $exclude);
         }
 
         $iterator = new \RecursiveIteratorIterator($iterator, \RecursiveIteratorIterator::SELF_FIRST);
 
         if ($minDepth > 0 || $maxDepth < \PHP_INT_MAX) {
-            $iterator = new DepthRangeFilterIterator($iterator, $minDepth, $maxDepth);
+            $iterator = new Iterator\DepthRangeFilterIterator($iterator, $minDepth, $maxDepth);
         }
 
         if ($this->mode) {
@@ -806,23 +807,23 @@ class Finder implements \IteratorAggregate, \Countable
         }
 
         if ($this->names || $this->notNames) {
-            $iterator = new FilenameFilterIterator($iterator, $this->names, $this->notNames);
+            $iterator = new Iterator\FilenameFilterIterator($iterator, $this->names, $this->notNames);
         }
 
         if ($this->contains || $this->notContains) {
-            $iterator = new FilecontentFilterIterator($iterator, $this->contains, $this->notContains);
+            $iterator = new Iterator\FilecontentFilterIterator($iterator, $this->contains, $this->notContains);
         }
 
         if ($this->sizes) {
-            $iterator = new SizeRangeFilterIterator($iterator, $this->sizes);
+            $iterator = new Iterator\SizeRangeFilterIterator($iterator, $this->sizes);
         }
 
         if ($this->dates) {
-            $iterator = new DateRangeFilterIterator($iterator, $this->dates);
+            $iterator = new Iterator\DateRangeFilterIterator($iterator, $this->dates);
         }
 
         if ($this->filters) {
-            $iterator = new CustomFilterIterator($iterator, $this->filters);
+            $iterator = new Iterator\CustomFilterIterator($iterator, $this->filters);
         }
 
         if ($this->paths || $notPaths) {
@@ -839,7 +840,7 @@ class Finder implements \IteratorAggregate, \Countable
     /**
      * Normalizes given directory names by removing trailing slashes.
      *
-     * Excluding: stream wrapper schemes such as ftp:// or s3://
+     * Excluding: (s)ftp:// or ssh2.(s)ftp:// wrapper
      */
     private function normalizeDir(string $dir): string
     {
@@ -849,7 +850,7 @@ class Finder implements \IteratorAggregate, \Countable
 
         $dir = rtrim($dir, '/'.\DIRECTORY_SEPARATOR);
 
-        if (preg_match('#^[a-zA-Z][a-zA-Z0-9.+-]*://#', $dir)) {
+        if (preg_match('#^(ssh2\.)?s?ftp://#', $dir)) {
             $dir .= '/';
         }
 

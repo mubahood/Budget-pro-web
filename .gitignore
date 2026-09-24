@@ -26,3 +26,6 @@ id_rsa.*
 deploy_key*
 # Database backups — contain live production data, never track
 /backups
+# static-analysis toolchain (installed with: composer install -d tools/phpstan)
+/tools/phpstan/vendor/
+/tools/phpstan/composer.lock

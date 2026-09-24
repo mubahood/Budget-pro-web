@@ -25,8 +25,6 @@ use stdClass;
 use Throwable;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class ReturnValueGenerator
@@ -59,59 +57,59 @@ final class ReturnValueGenerator
             $types = [$returnType];
         }
 
-        if (!$intersection) {
-            $lowerTypes = array_map('strtolower', $types);
+        $types = array_map('strtolower', $types);
 
-            if (in_array('', $lowerTypes, true) ||
-                in_array('null', $lowerTypes, true) ||
-                in_array('mixed', $lowerTypes, true) ||
-                in_array('void', $lowerTypes, true)) {
+        if (!$intersection) {
+            if (in_array('', $types, true) ||
+                in_array('null', $types, true) ||
+                in_array('mixed', $types, true) ||
+                in_array('void', $types, true)) {
                 return null;
             }
 
-            if (in_array('true', $lowerTypes, true)) {
+            if (in_array('true', $types, true)) {
                 return true;
             }
 
-            if (in_array('false', $lowerTypes, true) ||
-                in_array('bool', $lowerTypes, true)) {
+            if (in_array('false', $types, true) ||
+                in_array('bool', $types, true)) {
                 return false;
             }
 
-            if (in_array('float', $lowerTypes, true)) {
+            if (in_array('float', $types, true)) {
                 return 0.0;
             }
 
-            if (in_array('int', $lowerTypes, true)) {
+            if (in_array('int', $types, true)) {
                 return 0;
             }
 
-            if (in_array('string', $lowerTypes, true)) {
+            if (in_array('string', $types, true)) {
                 return '';
             }
 
-            if (in_array('array', $lowerTypes, true)) {
+            if (in_array('array', $types, true)) {
                 return [];
             }
 
-            if (in_array('static', $lowerTypes, true)) {
+            if (in_array('static', $types, true)) {
                 return $this->newInstanceOf($stubClassName, $className, $methodName);
             }
 
-            if (in_array('object', $lowerTypes, true)) {
+            if (in_array('object', $types, true)) {
                 return new stdClass;
             }
 
-            if (in_array('callable', $lowerTypes, true) ||
-                in_array('closure', $lowerTypes, true)) {
+            if (in_array('callable', $types, true) ||
+                in_array('closure', $types, true)) {
                 return static function (): void
                 {
                 };
             }
 
-            if (in_array('traversable', $lowerTypes, true) ||
-                in_array('generator', $lowerTypes, true) ||
-                in_array('iterable', $lowerTypes, true)) {
+            if (in_array('traversable', $types, true) ||
+                in_array('generator', $types, true) ||
+                in_array('iterable', $types, true)) {
                 $generator = static function (): \Generator
                 {
                     yield from [];
@@ -184,7 +182,6 @@ final class ReturnValueGenerator
     {
         try {
             return (new ReflectionClass($stubClassName))->newInstanceWithoutConstructor();
-            // @codeCoverageIgnoreStart
         } catch (Throwable $t) {
             throw new RuntimeException(
                 sprintf(
@@ -194,7 +191,6 @@ final class ReturnValueGenerator
                     $t->getMessage(),
                 ),
             );
-            // @codeCoverageIgnoreEnd
         }
     }
 
@@ -209,7 +205,6 @@ final class ReturnValueGenerator
     {
         try {
             return (new Generator)->testDouble($type, false, [], [], '', false);
-            // @codeCoverageIgnoreStart
         } catch (Throwable $t) {
             throw new RuntimeException(
                 sprintf(
@@ -219,7 +214,6 @@ final class ReturnValueGenerator
                     $t->getMessage(),
                 ),
             );
-            // @codeCoverageIgnoreEnd
         }
     }
 
@@ -234,7 +228,6 @@ final class ReturnValueGenerator
     {
         try {
             return (new Generator)->testDoubleForInterfaceIntersection($types, false);
-            // @codeCoverageIgnoreStart
         } catch (Throwable $t) {
             throw new RuntimeException(
                 sprintf(
@@ -244,7 +237,6 @@ final class ReturnValueGenerator
                     $t->getMessage(),
                 ),
             );
-            // @codeCoverageIgnoreEnd
         }
     }
 }

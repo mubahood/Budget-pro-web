@@ -11,9 +11,6 @@ namespace Hamcrest\Text;
 class StringStartsWith extends SubstringMatcher
 {
 
-    /**
-     * @param mixed $substring
-     */
     public function __construct($substring)
     {
         parent::__construct($substring);
@@ -23,21 +20,20 @@ class StringStartsWith extends SubstringMatcher
      * Matches if value is a string that starts with $substring.
      *
      * @factory
-     * @param mixed $substring
      */
-    public static function startsWith($substring): self
+    public static function startsWith($substring)
     {
         return new self($substring);
     }
 
     // -- Protected Methods
 
-    protected function evalSubstringOf(string $string): bool
+    protected function evalSubstringOf($string)
     {
         return (substr($string, 0, strlen($this->_substring)) === $this->_substring);
     }
 
-    protected function relationship(): string
+    protected function relationship()
     {
         return 'starting with';
     }

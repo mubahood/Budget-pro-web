@@ -14,13 +14,10 @@ namespace Symfony\Component\Translation\Test;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\Translation\Dumper\XliffFileDumper;
-use Symfony\Component\Translation\Loader\ArrayLoader;
 use Symfony\Component\Translation\Loader\LoaderInterface;
 use Symfony\Component\Translation\Provider\ProviderInterface;
-use Symfony\Component\Translation\TranslatorBag;
 use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -60,12 +57,12 @@ abstract class ProviderTestCase extends TestCase
 
     protected function getLoader(): LoaderInterface
     {
-        return $this->loader ??= new ArrayLoader();
+        return $this->loader ??= $this->createMock(LoaderInterface::class);
     }
 
     protected function getLogger(): LoggerInterface
     {
-        return $this->logger ??= new NullLogger();
+        return $this->logger ??= $this->createMock(LoggerInterface::class);
     }
 
     protected function getDefaultLocale(): string
@@ -75,11 +72,11 @@ abstract class ProviderTestCase extends TestCase
 
     protected function getXliffFileDumper(): XliffFileDumper
     {
-        return $this->xliffFileDumper ??= new XliffFileDumper();
+        return $this->xliffFileDumper ??= $this->createMock(XliffFileDumper::class);
     }
 
     protected function getTranslatorBag(): TranslatorBagInterface
     {
-        return $this->translatorBag ??= new TranslatorBag();
+        return $this->translatorBag ??= $this->createMock(TranslatorBagInterface::class);
     }
 }

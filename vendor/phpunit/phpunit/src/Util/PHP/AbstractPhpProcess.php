@@ -9,15 +9,14 @@
  */
 namespace PHPUnit\Util\PHP;
 
-use const PHP_BINARY;
 use const PHP_SAPI;
 use function array_keys;
 use function array_merge;
 use function assert;
-use function explode;
+use function escapeshellarg;
+use function file_exists;
 use function file_get_contents;
 use function ini_get_all;
-use function is_file;
 use function restore_error_handler;
 use function set_error_handler;
 use function trim;
@@ -38,8 +37,6 @@ use PHPUnit\TestRunner\TestResult\PassedTests;
 use SebastianBergmann\Environment\Runtime;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 abstract class AbstractPhpProcess
@@ -55,6 +52,10 @@ abstract class AbstractPhpProcess
 
     public static function factory(): self
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            return new WindowsPhpProcess;
+        }
+
         return new DefaultPhpProcess;
     }
 
@@ -140,7 +141,7 @@ abstract class AbstractPhpProcess
 
         $processResult = '';
 
-        if (is_file($processResultFile)) {
+        if (file_exists($processResultFile)) {
             $processResult = file_get_contents($processResultFile);
 
             @unlink($processResultFile);
@@ -155,15 +156,12 @@ abstract class AbstractPhpProcess
 
     /**
      * Returns the command based into the configurations.
-     *
-     * @return string[]
      */
-    public function getCommand(array $settings, ?string $file = null): array
+    public function getCommand(array $settings, string $file = null): string
     {
         $runtime = new Runtime;
 
-        $command   = [];
-        $command[] = PHP_BINARY;
+        $command = $runtime->getBinary();
 
         if ($runtime->hasPCOV()) {
             $settings = array_merge(
@@ -181,29 +179,29 @@ abstract class AbstractPhpProcess
             );
         }
 
-        $command = array_merge($command, $this->settingsToParameters($settings));
+        $command .= $this->settingsToParameters($settings);
 
         if (PHP_SAPI === 'phpdbg') {
-            $command[] = '-qrr';
+            $command .= ' -qrr';
 
             if (!$file) {
-                $command[] = 's=';
+                $command .= 's=';
             }
         }
 
         if ($file) {
-            $command[] = '-f';
-            $command[] = $file;
+            $command .= ' ' . escapeshellarg($file);
         }
 
         if ($this->arguments) {
             if (!$file) {
-                $command[] = '--';
+                $command .= ' --';
             }
+            $command .= ' ' . $this->arguments;
+        }
 
-            foreach (explode(' ', $this->arguments) as $arg) {
-                $command[] = trim($arg);
-            }
+        if ($this->stderrRedirection) {
+            $command .= ' 2>&1';
         }
 
         return $command;
@@ -214,16 +212,12 @@ abstract class AbstractPhpProcess
      */
     abstract public function runJob(string $job, array $settings = []): array;
 
-    /**
-     * @return list<string>
-     */
-    protected function settingsToParameters(array $settings): array
+    protected function settingsToParameters(array $settings): string
     {
-        $buffer = [];
+        $buffer = '';
 
         foreach ($settings as $setting) {
-            $buffer[] = '-d';
-            $buffer[] = $setting;
+            $buffer .= ' -d ' . escapeshellarg($setting);
         }
 
         return $buffer;
@@ -261,11 +255,7 @@ abstract class AbstractPhpProcess
         );
 
         try {
-            $childResult = false;
-
-            if ($stdout !== '') {
-                $childResult = unserialize($stdout);
-            }
+            $childResult = unserialize($stdout);
 
             restore_error_handler();
 
@@ -300,6 +290,10 @@ abstract class AbstractPhpProcess
         }
 
         if ($childResult !== false) {
+            if (!empty($childResult['output'])) {
+                $output = $childResult['output'];
+            }
+
             Facade::instance()->forward($childResult['events']);
             PassedTests::instance()->import($childResult['passedTests']);
 
@@ -313,6 +307,10 @@ abstract class AbstractPhpProcess
                     $childResult['codeCoverage'],
                 );
             }
+        }
+
+        if (!empty($output)) {
+            print $output;
         }
     }
 }

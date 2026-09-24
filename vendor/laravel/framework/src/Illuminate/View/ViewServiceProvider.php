@@ -2,7 +2,6 @@
 
 namespace Illuminate\View;
 
-use Illuminate\Container\Container;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Engines\CompilerEngine;
@@ -136,7 +135,7 @@ class ViewServiceProvider extends ServiceProvider
     public function registerFileEngine($resolver)
     {
         $resolver->register('file', function () {
-            return new FileEngine(Container::getInstance()->make('files'));
+            return new FileEngine($this->app['files']);
         });
     }
 
@@ -149,7 +148,7 @@ class ViewServiceProvider extends ServiceProvider
     public function registerPhpEngine($resolver)
     {
         $resolver->register('php', function () {
-            return new PhpEngine(Container::getInstance()->make('files'));
+            return new PhpEngine($this->app['files']);
         });
     }
 
@@ -162,14 +161,9 @@ class ViewServiceProvider extends ServiceProvider
     public function registerBladeEngine($resolver)
     {
         $resolver->register('blade', function () {
-            $app = Container::getInstance();
+            $compiler = new CompilerEngine($this->app['blade.compiler'], $this->app['files']);
 
-            $compiler = new CompilerEngine(
-                $app->make('blade.compiler'),
-                $app->make('files'),
-            );
-
-            $app->terminating(static function () use ($compiler) {
+            $this->app->terminating(static function () use ($compiler) {
                 $compiler->forgetCompiledOrNotExpired();
             });
 

@@ -27,7 +27,7 @@ class IsDouble extends IsTypeOf
      *
      * @factory floatValue
      */
-    public static function doubleValue(): self
+    public static function doubleValue()
     {
         return new self;
     }

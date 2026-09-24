@@ -70,8 +70,6 @@ abstract class AbstractUid implements \JsonSerializable, \Stringable
     }
 
     /**
-     * @param string $uid A valid RFC 9562/4122 uid
-     *
      * @throws \InvalidArgumentException When the passed value is not valid
      */
     public static function fromRfc4122(string $uid): static
@@ -95,7 +93,7 @@ abstract class AbstractUid implements \JsonSerializable, \Stringable
      */
     public function toBase58(): string
     {
-        return strtr(\sprintf('%022s', BinaryUtil::toBase($this->toBinary(), BinaryUtil::BASE58)), '0', '1');
+        return strtr(sprintf('%022s', BinaryUtil::toBase($this->toBinary(), BinaryUtil::BASE58)), '0', '1');
     }
 
     /**
@@ -108,7 +106,7 @@ abstract class AbstractUid implements \JsonSerializable, \Stringable
     public function toBase32(): string
     {
         $uid = bin2hex($this->toBinary());
-        $uid = \sprintf('%02s%04s%04s%04s%04s%04s%04s',
+        $uid = sprintf('%02s%04s%04s%04s%04s%04s%04s',
             base_convert(substr($uid, 0, 2), 16, 32),
             base_convert(substr($uid, 2, 5), 16, 32),
             base_convert(substr($uid, 7, 5), 16, 32),
@@ -122,9 +120,9 @@ abstract class AbstractUid implements \JsonSerializable, \Stringable
     }
 
     /**
-     * Returns the identifier as a RFC 9562/4122 case insensitive string.
+     * Returns the identifier as a RFC4122 case insensitive string.
      *
-     * @see https://datatracker.ietf.org/doc/html/rfc9562/#section-4
+     * @see https://tools.ietf.org/html/rfc4122#section-3
      *
      * @example 09748193-048a-4bfb-b825-8528cf74fdc1 (len=36)
      */

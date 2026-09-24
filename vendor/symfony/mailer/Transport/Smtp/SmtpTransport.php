@@ -14,11 +14,9 @@ namespace Symfony\Component\Mailer\Transport\Smtp;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\Envelope;
-use Symfony\Component\Mailer\Exception\InvalidArgumentException;
 use Symfony\Component\Mailer\Exception\LogicException;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
-use Symfony\Component\Mailer\Exception\UnexpectedResponseException;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Symfony\Component\Mailer\Transport\Smtp\Stream\AbstractStream;
@@ -40,9 +38,10 @@ class SmtpTransport extends AbstractTransport
     private int $pingThreshold = 100;
     private float $lastMessageTime = 0;
     private AbstractStream $stream;
+    private string $mtaResult = '';
     private string $domain = '[127.0.0.1]';
 
-    public function __construct(?AbstractStream $stream = null, ?EventDispatcherInterface $dispatcher = null, ?LoggerInterface $logger = null)
+    public function __construct(AbstractStream $stream = null, EventDispatcherInterface $dispatcher = null, LoggerInterface $logger = null)
     {
         parent::__construct($dispatcher, $logger);
 
@@ -108,10 +107,6 @@ class SmtpTransport extends AbstractTransport
      */
     public function setLocalDomain(string $domain): static
     {
-        if (preg_match('/[\x00-\x1F\x7F]/', $domain)) {
-            throw new InvalidArgumentException('The local domain name must not contain control characters.');
-        }
-
         if ('' !== $domain && '[' !== $domain[0]) {
             if (filter_var($domain, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV4)) {
                 $domain = '['.$domain.']';
@@ -136,31 +131,24 @@ class SmtpTransport extends AbstractTransport
         return $this->domain;
     }
 
-    public function send(RawMessage $message, ?Envelope $envelope = null): ?SentMessage
+    public function send(RawMessage $message, Envelope $envelope = null): ?SentMessage
     {
         try {
             $message = parent::send($message, $envelope);
         } catch (TransportExceptionInterface $e) {
             if ($this->started) {
-                if ($e instanceof UnexpectedResponseException && 421 !== $e->getCode()) {
-                    // The server replied with an unexpected code: the connection is
-                    // still in sync, so it can be reused after resetting the session.
-                    try {
-                        $this->executeCommand("RSET\r\n", [250]);
-                    } catch (TransportExceptionInterface) {
-                        // ignore this exception as it probably means that the server error was final
-                    }
-                } else {
-                    // A 421 means the server is closing the channel, and any other
-                    // failure (timeout, broken pipe, ...) may have left an
-                    // unread reply in the socket buffer. Reusing the connection would
-                    // desync every following command, so close it and reconnect on the
-                    // next message.
-                    $this->stop();
+                try {
+                    $this->executeCommand("RSET\r\n", [250]);
+                } catch (TransportExceptionInterface) {
+                    // ignore this exception as it probably means that the server error was final
                 }
             }
 
             throw $e;
+        }
+
+        if ($this->mtaResult && $messageId = $this->parseMessageId($this->mtaResult)) {
+            $message->setMessageId($messageId);
         }
 
         $this->checkRestartThreshold();
@@ -170,13 +158,24 @@ class SmtpTransport extends AbstractTransport
 
     protected function parseMessageId(string $mtaResult): string
     {
-        return preg_match('/^250 (?:\S+ )?Ok:?+ (?:queued as |id=)?+(?P<id>[A-Z0-9._-]++)/im', $mtaResult, $matches) ? $matches['id'] : '';
+        $regexps = [
+            '/250 Ok (?P<id>[0-9a-f-]+)\r?$/mis',
+            '/250 Ok:? queued as (?P<id>[A-Z0-9]+)\r?$/mis',
+        ];
+        $matches = [];
+        foreach ($regexps as $regexp) {
+            if (preg_match($regexp, $mtaResult, $matches)) {
+                return $matches['id'];
+            }
+        }
+
+        return '';
     }
 
     public function __toString(): string
     {
         if ($this->stream instanceof SocketStream) {
-            $name = \sprintf('smtp%s://%s', ($tls = $this->stream->isTLS()) ? 's' : '', $this->stream->getHost());
+            $name = sprintf('smtp%s://%s', ($tls = $this->stream->isTLS()) ? 's' : '', $this->stream->getHost());
             $port = $this->stream->getPort();
             if (!(25 === $port || ($tls && 465 === $port))) {
                 $name .= ':'.$port;
@@ -210,11 +209,11 @@ class SmtpTransport extends AbstractTransport
             $this->ping();
         }
 
-        try {
-            if (!$this->started) {
-                $this->start();
-            }
+        if (!$this->started) {
+            $this->start();
+        }
 
+        try {
             $envelope = $message->getEnvelope();
             $this->doMailFromCommand($envelope->getSender()->getEncodedAddress());
             foreach ($envelope->getRecipients() as $recipient) {
@@ -232,16 +231,12 @@ class SmtpTransport extends AbstractTransport
             } catch (\Exception $e) {
                 $this->stream->terminate();
                 $this->started = false;
-                $this->getLogger()->debug(\sprintf('Email transport "%s" stopped', __CLASS__));
+                $this->getLogger()->debug(sprintf('Email transport "%s" stopped', __CLASS__));
                 throw $e;
             }
-            $mtaResult = $this->executeCommand("\r\n.\r\n", [250]);
+            $this->mtaResult = $this->executeCommand("\r\n.\r\n", [250]);
             $message->appendDebug($this->stream->getDebug());
             $this->lastMessageTime = microtime(true);
-
-            if ($mtaResult && $messageId = $this->parseMessageId($mtaResult)) {
-                $message->setMessageId($messageId);
-            }
         } catch (TransportExceptionInterface $e) {
             $e->appendDebug($this->stream->getDebug());
             $this->lastMessageTime = 0;
@@ -256,17 +251,17 @@ class SmtpTransport extends AbstractTransport
      */
     protected function doHeloCommand(): void
     {
-        $this->executeCommand(\sprintf("HELO %s\r\n", $this->domain), [250]);
+        $this->executeCommand(sprintf("HELO %s\r\n", $this->domain), [250]);
     }
 
     private function doMailFromCommand(string $address): void
     {
-        $this->executeCommand(\sprintf("MAIL FROM:<%s>\r\n", $address), [250]);
+        $this->executeCommand(sprintf("MAIL FROM:<%s>\r\n", $address), [250]);
     }
 
     private function doRcptToCommand(string $address): void
     {
-        $this->executeCommand(\sprintf("RCPT TO:<%s>\r\n", $address), [250, 251, 252]);
+        $this->executeCommand(sprintf("RCPT TO:<%s>\r\n", $address), [250, 251, 252]);
     }
 
     public function start(): void
@@ -275,23 +270,15 @@ class SmtpTransport extends AbstractTransport
             return;
         }
 
-        $this->getLogger()->debug(\sprintf('Email transport "%s" starting', __CLASS__));
+        $this->getLogger()->debug(sprintf('Email transport "%s" starting', __CLASS__));
 
         $this->stream->initialize();
-
-        try {
-            $this->assertResponseCode($this->getFullResponse(), [220]);
-            $this->doHeloCommand();
-        } catch (TransportExceptionInterface $e) {
-            $this->stream->terminate();
-
-            throw $e;
-        }
-
+        $this->assertResponseCode($this->getFullResponse(), [220]);
+        $this->doHeloCommand();
         $this->started = true;
         $this->lastMessageTime = 0;
 
-        $this->getLogger()->debug(\sprintf('Email transport "%s" started', __CLASS__));
+        $this->getLogger()->debug(sprintf('Email transport "%s" started', __CLASS__));
     }
 
     /**
@@ -307,7 +294,7 @@ class SmtpTransport extends AbstractTransport
             return;
         }
 
-        $this->getLogger()->debug(\sprintf('Email transport "%s" stopping', __CLASS__));
+        $this->getLogger()->debug(sprintf('Email transport "%s" stopping', __CLASS__));
 
         try {
             $this->executeCommand("QUIT\r\n", [221]);
@@ -315,7 +302,7 @@ class SmtpTransport extends AbstractTransport
         } finally {
             $this->stream->terminate();
             $this->started = false;
-            $this->getLogger()->debug(\sprintf('Email transport "%s" stopped', __CLASS__));
+            $this->getLogger()->debug(sprintf('Email transport "%s" stopped', __CLASS__));
         }
     }
 
@@ -327,12 +314,6 @@ class SmtpTransport extends AbstractTransport
 
         try {
             $this->executeCommand("NOOP\r\n", [250]);
-
-            if ($this->stream->hasPendingData()) {
-                // The server queued another reply, typically a 421 closing the channel.
-                // The next command would read it as its own reply, so reconnect instead.
-                $this->stop();
-            }
         } catch (TransportExceptionInterface) {
             $this->stop();
         }
@@ -351,10 +332,10 @@ class SmtpTransport extends AbstractTransport
         $valid = \in_array($code, $codes);
 
         if (!$valid || !$response) {
-            $codeStr = $code ? \sprintf('code "%s"', $code) : 'empty code';
-            $responseStr = $response ? \sprintf(', with message "%s"', trim($response)) : '';
+            $codeStr = $code ? sprintf('code "%s"', $code) : 'empty code';
+            $responseStr = $response ? sprintf(', with message "%s"', trim($response)) : '';
 
-            throw new UnexpectedResponseException(\sprintf('Expected response code "%s" but got ', implode('/', $codes)).$codeStr.$responseStr.'.', $code ?: 0);
+            throw new TransportException(sprintf('Expected response code "%s" but got ', implode('/', $codes)).$codeStr.$responseStr.'.', $code ?: 0);
         }
     }
 
@@ -383,7 +364,7 @@ class SmtpTransport extends AbstractTransport
 
         $this->stop();
         if (0 < $sleep = $this->restartThresholdSleep) {
-            $this->getLogger()->debug(\sprintf('Email transport "%s" sleeps for %d seconds after stopping', __CLASS__, $sleep));
+            $this->getLogger()->debug(sprintf('Email transport "%s" sleeps for %d seconds after stopping', __CLASS__, $sleep));
 
             sleep($sleep);
         }
@@ -391,12 +372,15 @@ class SmtpTransport extends AbstractTransport
         $this->restartCounter = 0;
     }
 
-    public function __serialize(): array
+    public function __sleep(): array
     {
         throw new \BadMethodCallException('Cannot serialize '.__CLASS__);
     }
 
-    public function __unserialize(array $data): void
+    /**
+     * @return void
+     */
+    public function __wakeup()
     {
         throw new \BadMethodCallException('Cannot unserialize '.__CLASS__);
     }

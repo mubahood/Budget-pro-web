@@ -17,7 +17,7 @@ class IsScalar extends IsTypeOf
         parent::__construct('scalar');
     }
 
-    public function matches($item): bool
+    public function matches($item)
     {
         return is_scalar($item);
     }
@@ -27,7 +27,7 @@ class IsScalar extends IsTypeOf
      *
      * @factory
      */
-    public static function scalarValue(): self
+    public static function scalarValue()
     {
         return new self;
     }

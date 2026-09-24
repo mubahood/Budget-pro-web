@@ -25,6 +25,8 @@ class WildfireFormatter extends NormalizerFormatter
 {
     /**
      * @param string|null $dateFormat The format of the timestamp: one supported by DateTime::format
+     *
+     * @throws \RuntimeException If the function json_encode does not exist
      */
     public function __construct(?string $dateFormat = null)
     {
@@ -71,19 +73,19 @@ class WildfireFormatter extends NormalizerFormatter
 
         $message = ['message' => $record->message];
         $handleError = false;
-        if (\count($record->context) > 0) {
+        if (count($record->context) > 0) {
             $message['context'] = $this->normalize($record->context);
             $handleError = true;
         }
-        if (\count($record->extra) > 0) {
+        if (count($record->extra) > 0) {
             $message['extra'] = $this->normalize($record->extra);
             $handleError = true;
         }
-        if (\count($message) === 1) {
+        if (count($message) === 1) {
             $message = reset($message);
         }
 
-        if (is_array($message) && isset($message['context']) && \is_array($message['context']) && isset($message['context']['table'])) {
+        if (is_array($message) && isset($message['context']['table'])) {
             $type  = 'TABLE';
             $label = $record->channel .': '. $record->message;
             $message = $message['context']['table'];
@@ -106,7 +108,7 @@ class WildfireFormatter extends NormalizerFormatter
         // The message itself is a serialization of the above JSON object + it's length
         return sprintf(
             '%d|%s|',
-            \strlen($json),
+            strlen($json),
             $json
         );
     }
@@ -128,7 +130,7 @@ class WildfireFormatter extends NormalizerFormatter
      */
     protected function normalize(mixed $data, int $depth = 0): mixed
     {
-        if (\is_object($data) && !$data instanceof \DateTimeInterface) {
+        if (is_object($data) && !$data instanceof \DateTimeInterface) {
             return $data;
         }
 

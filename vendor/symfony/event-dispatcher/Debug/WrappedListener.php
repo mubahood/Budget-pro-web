@@ -26,20 +26,21 @@ final class WrappedListener
     private string $name;
     private bool $called = false;
     private bool $stoppedPropagation = false;
+    private Stopwatch $stopwatch;
+    private ?EventDispatcherInterface $dispatcher;
     private string $pretty;
     private string $callableRef;
     private ClassStub|string $stub;
+    private ?int $priority = null;
     private static bool $hasClassStub;
 
-    public function __construct(
-        callable|array $listener,
-        ?string $name,
-        private Stopwatch $stopwatch,
-        private ?EventDispatcherInterface $dispatcher = null,
-        private ?int $priority = null,
-    ) {
+    public function __construct(callable|array $listener, ?string $name, Stopwatch $stopwatch, EventDispatcherInterface $dispatcher = null, int $priority = null)
+    {
         $this->listener = $listener;
         $this->optimizedListener = $listener instanceof \Closure ? $listener : (\is_callable($listener) ? $listener(...) : null);
+        $this->stopwatch = $stopwatch;
+        $this->dispatcher = $dispatcher;
+        $this->priority = $priority;
 
         if (\is_array($listener)) {
             [$this->name, $this->callableRef] = $this->parseListener($listener);
@@ -47,7 +48,7 @@ final class WrappedListener
             $this->callableRef .= '::'.$listener[1];
         } elseif ($listener instanceof \Closure) {
             $r = new \ReflectionFunction($listener);
-            if ($r->isAnonymous()) {
+            if (str_contains($r->name, '{closure}')) {
                 $this->pretty = $this->name = 'closure';
             } elseif ($class = $r->getClosureCalledClass()) {
                 $this->name = $class->name;

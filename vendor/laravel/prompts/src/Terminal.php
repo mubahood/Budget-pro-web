@@ -2,7 +2,6 @@
 
 namespace Laravel\Prompts;
 
-use ReflectionClass;
 use RuntimeException;
 use Symfony\Component\Console\Terminal as SymfonyTerminal;
 
@@ -14,17 +13,14 @@ class Terminal
     protected ?string $initialTtyMode;
 
     /**
-     * The Symfony Terminal instance.
+     * The number of columns in the terminal.
      */
-    protected SymfonyTerminal $terminal;
+    protected int $cols;
 
     /**
-     * Create a new Terminal instance.
+     * The number of lines in the terminal.
      */
-    public function __construct()
-    {
-        $this->terminal = new SymfonyTerminal;
-    }
+    protected int $lines;
 
     /**
      * Read a line from the terminal.
@@ -63,7 +59,7 @@ class Terminal
      */
     public function cols(): int
     {
-        return $this->terminal->getWidth();
+        return $this->cols ??= (new SymfonyTerminal())->getWidth();
     }
 
     /**
@@ -71,17 +67,7 @@ class Terminal
      */
     public function lines(): int
     {
-        return $this->terminal->getHeight();
-    }
-
-    /**
-     * (Re)initialize the terminal dimensions.
-     */
-    public function initDimensions(): void
-    {
-        (new ReflectionClass($this->terminal))
-            ->getMethod('initDimensions')
-            ->invoke($this->terminal);
+        return $this->lines ??= (new SymfonyTerminal())->getHeight();
     }
 
     /**

@@ -15,7 +15,7 @@ use Hamcrest\Util;
 class IsCollectionContaining extends TypeSafeMatcher
 {
 
-    private Matcher $_elementMatcher;
+    private $_elementMatcher;
 
     public function __construct(Matcher $elementMatcher)
     {
@@ -24,7 +24,7 @@ class IsCollectionContaining extends TypeSafeMatcher
         $this->_elementMatcher = $elementMatcher;
     }
 
-    protected function matchesSafely($items): bool
+    protected function matchesSafely($items)
     {
         foreach ($items as $item) {
             if ($this->_elementMatcher->matches($item)) {
@@ -35,12 +35,12 @@ class IsCollectionContaining extends TypeSafeMatcher
         return false;
     }
 
-    protected function describeMismatchSafely($items, Description $mismatchDescription): void
+    protected function describeMismatchSafely($items, Description $mismatchDescription)
     {
         $mismatchDescription->appendText('was ')->appendValue($items);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description
                 ->appendText('a collection containing ')
@@ -60,7 +60,7 @@ class IsCollectionContaining extends TypeSafeMatcher
      *
      * @factory ...
      */
-    public static function hasItem(): self
+    public static function hasItem()
     {
         $args = func_get_args();
         $firstArg = array_shift($args);
@@ -79,7 +79,7 @@ class IsCollectionContaining extends TypeSafeMatcher
      *
      * @factory ...
      */
-    public static function hasItems(/* args... */): AllOf
+    public static function hasItems(/* args... */)
     {
         $args = func_get_args();
         $matchers = array();

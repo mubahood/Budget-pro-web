@@ -21,7 +21,6 @@ use InvalidArgumentException;
 use Elasticsearch\Common\Exceptions\RuntimeException as ElasticsearchRuntimeException;
 use Elasticsearch\Client;
 use Monolog\LogRecord;
-use Monolog\Utils;
 use Elastic\Elasticsearch\Exception\InvalidArgumentException as ElasticInvalidArgumentException;
 use Elastic\Elasticsearch\Client as Client8;
 
@@ -115,7 +114,7 @@ class ElasticsearchHandler extends AbstractProcessingHandler
      */
     public function setFormatter(FormatterInterface $formatter): HandlerInterface
     {
-        if (Utils::unwrapFormatter($formatter) instanceof ElasticsearchFormatter) {
+        if ($formatter instanceof ElasticsearchFormatter) {
             return parent::setFormatter($formatter);
         }
 
@@ -210,11 +209,7 @@ class ElasticsearchHandler extends AbstractProcessingHandler
             return new ElasticInvalidArgumentException('Elasticsearch failed to index one or more records.');
         }
 
-        if (class_exists(ElasticsearchRuntimeException::class)) {
-            return new ElasticsearchRuntimeException('Elasticsearch failed to index one or more records.');
-        }
-
-        throw new \LogicException('Unsupported elastic search client version');
+        return new ElasticsearchRuntimeException('Elasticsearch failed to index one or more records.');
     }
 
     /**
@@ -230,10 +225,6 @@ class ElasticsearchHandler extends AbstractProcessingHandler
             return new ElasticInvalidArgumentException($error['type'] . ': ' . $error['reason'], 0, $previous);
         }
 
-        if (class_exists(ElasticsearchRuntimeException::class)) {
-            return new ElasticsearchRuntimeException($error['type'].': '.$error['reason'], 0, $previous);
-        }
-
-        throw new \LogicException('Unsupported elastic search client version');
+        return new ElasticsearchRuntimeException($error['type'] . ': ' . $error['reason'], 0, $previous);
     }
 }

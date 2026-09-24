@@ -27,7 +27,9 @@ jobs:
           extensions: mbstring, pdo_mysql, gd, zip, bcmath, pcntl, posix
           coverage: none
       - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          composer install -d tools/phpstan --no-interaction --prefer-dist --no-progress
       - name: Prepare environment
         run: |
           cp .env.example .env
@@ -38,7 +40,7 @@ jobs:
       - name: Code style
         run: vendor/bin/pint --test
       - name: Static analysis
-        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+        run: tools/phpstan/vendor/bin/phpstan analyse --memory-limit=1G --no-progress
       - name: Tests
         run: php artisan test --parallel --processes=4
 

@@ -10,7 +10,7 @@ use Hamcrest\Matcher;
 use Hamcrest\Util;
 
 /**
- * A Matcher that checks the output of the <code>toString()</code> or <code>__toString()</code> method.
+ * Matches if array size satisfies a nested matcher.
  */
 class HasToString extends FeatureMatcher
 {
@@ -26,7 +26,7 @@ class HasToString extends FeatureMatcher
         );
     }
 
-    public function matchesSafelyWithDiagnosticDescription($actual, Description $mismatchDescription): bool
+    public function matchesSafelyWithDiagnosticDescription($actual, Description $mismatchDescription)
     {
         if (method_exists($actual, 'toString') || method_exists($actual, '__toString')) {
             return parent::matchesSafelyWithDiagnosticDescription($actual, $mismatchDescription);
@@ -45,13 +45,11 @@ class HasToString extends FeatureMatcher
     }
 
     /**
-     * Creates a matcher that matches any examined object whose <code>toString</code> or
-     * <code>__toString()</code> method returns a value equalTo the specified string.
+     * Does array size satisfy a given matcher?
      *
      * @factory
-     * @param mixed $matcher
      */
-    public static function hasToString($matcher): self
+    public static function hasToString($matcher)
     {
         return new self(Util::wrapValueWithIsEqual($matcher));
     }

@@ -19,9 +19,9 @@ interface Description
      *
      * @param string $text
      *
-     * @return static
+     * @return \Hamcrest\Description
      */
-    public function appendText(string $text): self;
+    public function appendText($text);
 
     /**
      * Appends the description of a {@link Hamcrest\SelfDescribing} value to
@@ -29,18 +29,18 @@ interface Description
      *
      * @param \Hamcrest\SelfDescribing $value
      *
-     * @return static
+     * @return \Hamcrest\Description
      */
     public function appendDescriptionOf(SelfDescribing $value);
 
     /**
-     * Appends an arbitrary value to the description.
+     * Appends an arbitary value to the description.
      *
      * @param mixed $value
      *
-     * @return static
+     * @return \Hamcrest\Description
      */
-    public function appendValue($value): self;
+    public function appendValue($value);
 
     /**
      * Appends a list of values to the description.
@@ -48,11 +48,11 @@ interface Description
      * @param string $start
      * @param string $separator
      * @param string $end
-     * @param iterable<mixed> $values
+     * @param array|\IteratorAggregate|\Iterator $values
      *
-     * @return static
+     * @return \Hamcrest\Description
      */
-    public function appendValueList(string $start, string $separator, string $end, iterable $values): self;
+    public function appendValueList($start, $separator, $end, $values);
 
     /**
      * Appends a list of {@link Hamcrest\SelfDescribing} objects to the
@@ -61,9 +61,10 @@ interface Description
      * @param string $start
      * @param string $separator
      * @param string $end
-     * @param iterable<SelfDescribing> $values
+     * @param array|\\IteratorAggregate|\\Iterator $values
+     *   must be instances of {@link Hamcrest\SelfDescribing}
      *
-     * @return static
+     * @return \Hamcrest\Description
      */
-    public function appendList(string $start, string $separator, string $end, iterable $values): self;
+    public function appendList($start, $separator, $end, $values);
 }

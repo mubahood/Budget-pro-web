@@ -5,7 +5,6 @@ namespace Hamcrest\Arrays;
  Copyright (c) 2009 hamcrest.org
  */
 use Hamcrest\Description;
-use Hamcrest\Matcher;
 use Hamcrest\TypeSafeDiagnosingMatcher;
 use Hamcrest\Util;
 
@@ -15,14 +14,8 @@ use Hamcrest\Util;
 class IsArrayContainingInAnyOrder extends TypeSafeDiagnosingMatcher
 {
 
-    /**
-     * @var array<Matcher>
-     */
-    private array $_elementMatchers;
+    private $_elementMatchers;
 
-    /**
-     * @param array<Matcher> $elementMatchers
-     */
     public function __construct(array $elementMatchers)
     {
         parent::__construct(self::TYPE_ARRAY);
@@ -32,7 +25,7 @@ class IsArrayContainingInAnyOrder extends TypeSafeDiagnosingMatcher
         $this->_elementMatchers = $elementMatchers;
     }
 
-    protected function matchesSafelyWithDiagnosticDescription($array, Description $mismatchDescription): bool
+    protected function matchesSafelyWithDiagnosticDescription($array, Description $mismatchDescription)
     {
         $matching = new MatchingOnce($this->_elementMatchers, $mismatchDescription);
 
@@ -45,7 +38,7 @@ class IsArrayContainingInAnyOrder extends TypeSafeDiagnosingMatcher
         return $matching->isFinished($array);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendList('[', ', ', ']', $this->_elementMatchers)
                                 ->appendText(' in any order')
@@ -57,7 +50,7 @@ class IsArrayContainingInAnyOrder extends TypeSafeDiagnosingMatcher
      *
      * @factory containsInAnyOrder ...
      */
-    public static function arrayContainingInAnyOrder(/* args... */): self
+    public static function arrayContainingInAnyOrder(/* args... */)
     {
         $args = func_get_args();
 

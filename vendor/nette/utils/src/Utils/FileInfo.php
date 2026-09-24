@@ -1,14 +1,15 @@
-<?php declare(strict_types=1);
+<?php
 
 /**
  * This file is part of the Nette Framework (https://nette.org)
  * Copyright (c) 2004 David Grudl (https://davidgrudl.com)
  */
 
+declare(strict_types=1);
+
 namespace Nette\Utils;
 
 use Nette;
-use const DIRECTORY_SEPARATOR;
 
 
 /**
@@ -17,12 +18,14 @@ use const DIRECTORY_SEPARATOR;
  */
 final class FileInfo extends \SplFileInfo
 {
-	public function __construct(
-		string $file,
-		private readonly string $relativePath = '',
-	) {
+	private string $relativePath;
+
+
+	public function __construct(string $file, string $relativePath = '')
+	{
 		parent::__construct($file);
-		$this->setInfoClass(self::class);
+		$this->setInfoClass(static::class);
+		$this->relativePath = $relativePath;
 	}
 
 

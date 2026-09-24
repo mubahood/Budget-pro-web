@@ -31,60 +31,29 @@ final class Str
      * @param string      $input
      * @param string|null $encoding
      *
-     * @return \GrahamCampbell\ResultType\Result<string, string>
+     * @return \GrahamCampbell\ResultType\Result<string,string>
      */
-    public static function utf8(string $input, ?string $encoding = null)
+    public static function utf8(string $input, string $encoding = null)
     {
-        if ($encoding !== null && !self::isValidEncoding($encoding)) {
+        if ($encoding !== null && !\in_array($encoding, \mb_list_encodings(), true)) {
+            /** @var \GrahamCampbell\ResultType\Result<string,string> */
             return Error::create(
                 \sprintf('Illegal character encoding [%s] specified.', $encoding)
             );
         }
-
         $converted = $encoding === null ?
             @\mb_convert_encoding($input, 'UTF-8') :
             @\mb_convert_encoding($input, 'UTF-8', $encoding);
-
-        if (!is_string($converted)) {
-            return Error::create(
-                \sprintf('Conversion from encoding [%s] failed.', $encoding ?? 'NULL')
-            );
-        }
-
         /**
          * this is for support UTF-8 with BOM encoding
          * @see https://en.wikipedia.org/wiki/Byte_order_mark
          * @see https://github.com/vlucas/phpdotenv/issues/500
          */
-        if (\substr($converted, 0, 3) === "\xEF\xBB\xBF") {
+        if (\substr($converted, 0, 3) == "\xEF\xBB\xBF") {
             $converted = \substr($converted, 3);
         }
-
+        /** @var \GrahamCampbell\ResultType\Result<string,string> */
         return Success::create($converted);
-    }
-
-    /**
-     * Is the given character encoding valid?
-     *
-     * @param string $encoding
-     *
-     * @return bool
-     */
-    private static function isValidEncoding(string $encoding)
-    {
-        foreach (\mb_list_encodings() as $candidate) {
-            if (\strcasecmp($candidate, $encoding) === 0) {
-                return true;
-            }
-
-            foreach (@\mb_encoding_aliases($candidate) as $alias) {
-                if (\strcasecmp($alias, $encoding) === 0) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -93,11 +62,11 @@ final class Str
      * @param string $haystack
      * @param string $needle
      *
-     * @return \PhpOption\Option<int<0, max>>
+     * @return \PhpOption\Option<int>
      */
     public static function pos(string $haystack, string $needle)
     {
-        /** @var \PhpOption\Option<int<0, max>> */
+        /** @var \PhpOption\Option<int> */
         return Option::fromValue(\mb_strpos($haystack, $needle, 0, 'UTF-8'), false);
     }
 
@@ -110,7 +79,7 @@ final class Str
      *
      * @return string
      */
-    public static function substr(string $input, int $start, ?int $length = null)
+    public static function substr(string $input, int $start, int $length = null)
     {
         return \mb_substr($input, $start, $length, 'UTF-8');
     }

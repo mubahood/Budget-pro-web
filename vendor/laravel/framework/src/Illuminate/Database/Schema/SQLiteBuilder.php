@@ -34,17 +34,16 @@ class SQLiteBuilder extends Builder
     /**
      * Get the tables for the database.
      *
-     * @param  bool  $withSize
      * @return array
      */
-    public function getTables($withSize = true)
+    public function getTables()
     {
-        if ($withSize) {
-            try {
-                $withSize = $this->connection->scalar($this->grammar->compileDbstatExists());
-            } catch (QueryException $e) {
-                $withSize = false;
-            }
+        $withSize = false;
+
+        try {
+            $withSize = $this->connection->scalar($this->grammar->compileDbstatExists());
+        } catch (QueryException $e) {
+            //
         }
 
         return $this->connection->getPostProcessor()->processTables(

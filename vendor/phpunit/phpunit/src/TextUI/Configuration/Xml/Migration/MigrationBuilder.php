@@ -12,8 +12,6 @@ namespace PHPUnit\TextUI\XmlConfiguration;
 use function version_compare;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class MigrationBuilder
@@ -40,7 +38,7 @@ final class MigrationBuilder
             ConvertLogTypes::class,
         ],
 
-        '9.6' => [
+        '9.5' => [
             RemoveListeners::class,
             RemoveTestSuiteLoaderAttributes::class,
             RemoveCacheResultFileAttribute::class,
@@ -63,12 +61,11 @@ final class MigrationBuilder
         '10.0' => [
             MoveCoverageDirectoriesToSource::class,
         ],
-
-        '10.4' => [
-            RemoveBeStrictAboutTodoAnnotatedTestsAttribute::class,
-        ],
     ];
 
+    /**
+     * @throws MigrationBuilderException
+     */
     public function build(string $fromVersion): array
     {
         $stack = [new UpdateSchemaLocation];

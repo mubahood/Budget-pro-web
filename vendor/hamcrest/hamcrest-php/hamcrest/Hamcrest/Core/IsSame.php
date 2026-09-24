@@ -14,25 +14,19 @@ use Hamcrest\Description;
 class IsSame extends BaseMatcher
 {
 
-    /**
-     * @var mixed object
-     */
     private $_object;
 
-    /**
-     * @param mixed $object
-     */
     public function __construct($object)
     {
         $this->_object = $object;
     }
 
-    public function matches($object): bool
+    public function matches($object)
     {
         return ($object === $this->_object) && ($this->_object === $object);
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('sameInstance(')
                                 ->appendValue($this->_object)
@@ -50,7 +44,7 @@ class IsSame extends BaseMatcher
      * @return \Hamcrest\Core\IsSame
      * @factory
      */
-    public static function sameInstance($object): self
+    public static function sameInstance($object)
     {
         return new self($object);
     }

@@ -22,20 +22,17 @@ class HasXPath extends DiagnosingMatcher
      *
      * @var string
      */
-    private string $_xpath;
+    private $_xpath;
 
     /**
      * Optional matcher to apply to the XPath expression result
      * or the content of the returned nodes.
      *
-     * @var ?Matcher
+     * @var Matcher
      */
-    private ?Matcher $_matcher;
+    private $_matcher;
 
-    /**
-     * @param string $xpath
-     */
-    public function __construct(string $xpath, ?Matcher $matcher = null)
+    public function __construct($xpath, Matcher $matcher = null)
     {
         $this->_xpath = $xpath;
         $this->_matcher = $matcher;
@@ -48,11 +45,11 @@ class HasXPath extends DiagnosingMatcher
      * @param Description $mismatchDescription
      * @return bool
      */
-    protected function matchesWithDiagnosticDescription($actual, Description $mismatchDescription): bool
+    protected function matchesWithDiagnosticDescription($actual, Description $mismatchDescription)
     {
         if (is_string($actual)) {
             $actual = $this->createDocument($actual);
-        } elseif (!$actual instanceof \DOMNode) { // @phpstan-ignore instanceof.alwaysTrue (unless actual is a native union type, we want to check this)
+        } elseif (!$actual instanceof \DOMNode) {
             $mismatchDescription->appendText('was ')->appendValue($actual);
 
             return false;
@@ -117,7 +114,7 @@ class HasXPath extends DiagnosingMatcher
      * @param Description $mismatchDescription
      * @return bool
      */
-    protected function matchesContent(\DOMNodeList $nodes, Description $mismatchDescription): bool
+    protected function matchesContent(\DOMNodeList $nodes, Description $mismatchDescription)
     {
         if ($nodes->length == 0) {
             $mismatchDescription->appendText('XPath returned no results');
@@ -148,7 +145,7 @@ class HasXPath extends DiagnosingMatcher
      * @param Description $mismatchDescription
      * @return bool
      */
-    protected function matchesExpression($result, Description $mismatchDescription): bool
+    protected function matchesExpression($result, Description $mismatchDescription)
     {
         if ($this->_matcher === null) {
             if ($result) {
@@ -167,7 +164,7 @@ class HasXPath extends DiagnosingMatcher
         return false;
     }
 
-    public function describeTo(Description $description): void
+    public function describeTo(Description $description)
     {
         $description->appendText('XML or HTML document with XPath "')
                                 ->appendText($this->_xpath)
@@ -184,10 +181,8 @@ class HasXPath extends DiagnosingMatcher
      * if it's an integer.
      *
      * @factory
-     * @param string $xpath
-     * @param null|Matcher|int|mixed $matcher
      */
-    public static function hasXPath(string $xpath, $matcher = null): self
+    public static function hasXPath($xpath, $matcher = null)
     {
         if ($matcher === null || $matcher instanceof Matcher) {
             return new self($xpath, $matcher);

@@ -13,20 +13,20 @@ namespace Hamcrest;
 abstract class FeatureMatcher extends TypeSafeDiagnosingMatcher
 {
 
-    private Matcher $_subMatcher;
-    private string $_featureDescription;
-    private string $_featureName;
+    private $_subMatcher;
+    private $_featureDescription;
+    private $_featureName;
 
     /**
      * Constructor.
      *
-     * @param self::TYPE_* $type
-     * @param ?string $subtype
+     * @param string $type
+     * @param string $subtype
      * @param \Hamcrest\Matcher $subMatcher The matcher to apply to the feature
      * @param string $featureDescription Descriptive text to use in describeTo
      * @param string $featureName Identifying text for mismatch message
      */
-    public function __construct(int $type, ?string $subtype, Matcher $subMatcher, string $featureDescription, string $featureName)
+    public function __construct($type, $subtype, Matcher $subMatcher, $featureDescription, $featureName)
     {
         parent::__construct($type, $subtype);
 
@@ -44,7 +44,7 @@ abstract class FeatureMatcher extends TypeSafeDiagnosingMatcher
      */
     abstract protected function featureValueOf($actual);
 
-    public function matchesSafelyWithDiagnosticDescription($actual, Description $mismatchDescription): bool
+    public function matchesSafelyWithDiagnosticDescription($actual, Description $mismatchDescription)
     {
         $featureValue = $this->featureValueOf($actual);
 
@@ -58,7 +58,7 @@ abstract class FeatureMatcher extends TypeSafeDiagnosingMatcher
         return true;
     }
 
-    final public function describeTo(Description $description): void
+    final public function describeTo(Description $description)
     {
         $description->appendText($this->_featureDescription)->appendText(' ')
                                 ->appendDescriptionOf($this->_subMatcher)

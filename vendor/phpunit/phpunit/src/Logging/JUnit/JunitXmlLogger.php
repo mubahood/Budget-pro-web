@@ -9,7 +9,6 @@
  */
 namespace PHPUnit\Logging\JUnit;
 
-use const PHP_EOL;
 use function assert;
 use function basename;
 use function is_int;
@@ -31,7 +30,6 @@ use PHPUnit\Event\Test\Finished;
 use PHPUnit\Event\Test\MarkedIncomplete;
 use PHPUnit\Event\Test\PreparationStarted;
 use PHPUnit\Event\Test\Prepared;
-use PHPUnit\Event\Test\PrintedUnexpectedOutput;
 use PHPUnit\Event\Test\Skipped;
 use PHPUnit\Event\TestSuite\Started;
 use PHPUnit\Event\UnknownSubscriberTypeException;
@@ -39,8 +37,6 @@ use PHPUnit\TextUI\Output\Printer;
 use PHPUnit\Util\Xml;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class JunitXmlLogger
@@ -88,7 +84,6 @@ final class JunitXmlLogger
     private ?HRTime $time                = null;
     private bool $prepared               = false;
     private bool $preparationFailed      = false;
-    private ?string $unexpectedOutput    = null;
 
     /**
      * @throws EventFacadeIsSealedException
@@ -202,17 +197,12 @@ final class JunitXmlLogger
         $this->prepared = true;
     }
 
-    public function testPrintedUnexpectedOutput(PrintedUnexpectedOutput $event): void
-    {
-        $this->unexpectedOutput = $event->output();
-    }
-
     /**
      * @throws InvalidArgumentException
      */
     public function testFinished(Finished $event): void
     {
-        if (!$this->prepared || $this->preparationFailed) {
+        if ($this->preparationFailed) {
             return;
         }
 
@@ -277,15 +267,6 @@ final class JunitXmlLogger
             sprintf('%F', $time),
         );
 
-        if ($this->unexpectedOutput !== null) {
-            $systemOut = $this->document->createElement(
-                'system-out',
-                Xml::prepareString($this->unexpectedOutput),
-            );
-
-            $this->currentTestCase->appendChild($systemOut);
-        }
-
         $this->testSuites[$this->testSuiteLevel]->appendChild(
             $this->currentTestCase,
         );
@@ -293,10 +274,9 @@ final class JunitXmlLogger
         $this->testSuiteTests[$this->testSuiteLevel]++;
         $this->testSuiteTimes[$this->testSuiteLevel] += $time;
 
-        $this->currentTestCase  = null;
-        $this->time             = null;
-        $this->prepared         = false;
-        $this->unexpectedOutput = null;
+        $this->currentTestCase = null;
+        $this->time            = null;
+        $this->prepared        = false;
     }
 
     /**
@@ -311,7 +291,6 @@ final class JunitXmlLogger
             new TestPreparationStartedSubscriber($this),
             new TestPreparationFailedSubscriber($this),
             new TestPreparedSubscriber($this),
-            new TestPrintedUnexpectedOutputSubscriber($this),
             new TestFinishedSubscriber($this),
             new TestErroredSubscriber($this),
             new TestFailedSubscriber($this),

@@ -10,7 +10,6 @@
 namespace PHPUnit\Framework\MockObject\Generator;
 
 use const PHP_EOL;
-use const PHP_VERSION;
 use const PREG_OFFSET_CAPTURE;
 use const WSDL_CACHE_NONE;
 use function array_merge;
@@ -41,7 +40,6 @@ use function strlen;
 use function strpos;
 use function substr;
 use function trait_exists;
-use function version_compare;
 use Exception;
 use Iterator;
 use IteratorAggregate;
@@ -64,8 +62,6 @@ use Throwable;
 use Traversable;
 
 /**
- * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
- *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class Generator
@@ -73,9 +69,20 @@ final class Generator
     use TemplateLoader;
 
     /**
-     * @var array<non-empty-string, true>
+     * @var array
      */
-    private static $excludedMethodNames = [];
+    private const EXCLUDED_METHOD_NAMES = [
+        '__CLASS__'       => true,
+        '__DIR__'         => true,
+        '__FILE__'        => true,
+        '__FUNCTION__'    => true,
+        '__LINE__'        => true,
+        '__METHOD__'      => true,
+        '__NAMESPACE__'   => true,
+        '__TRAIT__'       => true,
+        '__clone'         => true,
+        '__halt_compiler' => true,
+    ];
 
     /**
      * @psalm-var array<non-empty-string, MockClass>
@@ -85,18 +92,18 @@ final class Generator
     /**
      * Returns a test double for the specified class.
      *
+     * @throws ClassAlreadyExistsException
      * @throws ClassIsEnumerationException
      * @throws ClassIsFinalException
      * @throws ClassIsReadonlyException
      * @throws DuplicateMethodException
      * @throws InvalidMethodNameException
-     * @throws NameAlreadyInUseException
      * @throws OriginalConstructorInvocationRequiredException
      * @throws ReflectionException
      * @throws RuntimeException
      * @throws UnknownTypeException
      */
-    public function testDouble(string $type, bool $mockObject, ?array $methods = [], array $arguments = [], string $mockClassName = '', bool $callOriginalConstructor = true, bool $callOriginalClone = true, bool $callAutoload = true, bool $cloneArguments = true, bool $callOriginalMethods = false, ?object $proxyTarget = null, bool $allowMockingUnknownTypes = true, bool $returnValueGeneration = true): MockObject|Stub
+    public function testDouble(string $type, bool $mockObject, ?array $methods = [], array $arguments = [], string $mockClassName = '', bool $callOriginalConstructor = true, bool $callOriginalClone = true, bool $callAutoload = true, bool $cloneArguments = true, bool $callOriginalMethods = false, object $proxyTarget = null, bool $allowMockingUnknownTypes = true, bool $returnValueGeneration = true): MockObject|Stub
     {
         if ($type === Traversable::class) {
             $type = Iterator::class;
@@ -107,7 +114,7 @@ final class Generator
         }
 
         $this->ensureValidMethods($methods);
-        $this->ensureNameForTestDoubleClassIsAvailable($mockClassName);
+        $this->ensureMockedClassDoesNotAlreadyExist($mockClassName);
 
         if (!$callOriginalConstructor && $callOriginalMethods) {
             throw new OriginalConstructorInvocationRequiredException;
@@ -212,13 +219,13 @@ final class Generator
      *
      * Concrete methods to mock can be specified with the $mockedMethods parameter.
      *
+     * @throws ClassAlreadyExistsException
      * @throws ClassIsEnumerationException
      * @throws ClassIsFinalException
      * @throws ClassIsReadonlyException
      * @throws DuplicateMethodException
      * @throws InvalidArgumentException
      * @throws InvalidMethodNameException
-     * @throws NameAlreadyInUseException
      * @throws OriginalConstructorInvocationRequiredException
      * @throws ReflectionException
      * @throws RuntimeException
@@ -227,7 +234,7 @@ final class Generator
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5241
      */
-    public function mockObjectForAbstractClass(string $originalClassName, array $arguments = [], string $mockClassName = '', bool $callOriginalConstructor = true, bool $callOriginalClone = true, bool $callAutoload = true, ?array $mockedMethods = null, bool $cloneArguments = true): MockObject
+    public function mockObjectForAbstractClass(string $originalClassName, array $arguments = [], string $mockClassName = '', bool $callOriginalConstructor = true, bool $callOriginalClone = true, bool $callAutoload = true, array $mockedMethods = null, bool $cloneArguments = true): MockObject
     {
         if (class_exists($originalClassName, $callAutoload) ||
             interface_exists($originalClassName, $callAutoload)) {
@@ -272,13 +279,13 @@ final class Generator
      *
      * @psalm-param trait-string $traitName
      *
+     * @throws ClassAlreadyExistsException
      * @throws ClassIsEnumerationException
      * @throws ClassIsFinalException
      * @throws ClassIsReadonlyException
      * @throws DuplicateMethodException
      * @throws InvalidArgumentException
      * @throws InvalidMethodNameException
-     * @throws NameAlreadyInUseException
      * @throws OriginalConstructorInvocationRequiredException
      * @throws ReflectionException
      * @throws RuntimeException
@@ -288,7 +295,7 @@ final class Generator
      *
      * @deprecated https://github.com/sebastianbergmann/phpunit/issues/5243
      */
-    public function mockObjectForTrait(string $traitName, array $arguments = [], string $mockClassName = '', bool $callOriginalConstructor = true, bool $callOriginalClone = true, bool $callAutoload = true, ?array $mockedMethods = null, bool $cloneArguments = true): MockObject
+    public function mockObjectForTrait(string $traitName, array $arguments = [], string $mockClassName = '', bool $callOriginalConstructor = true, bool $callOriginalClone = true, bool $callAutoload = true, array $mockedMethods = null, bool $cloneArguments = true): MockObject
     {
         if (!trait_exists($traitName, $callAutoload)) {
             throw new UnknownTraitException($traitName);
@@ -371,7 +378,7 @@ final class Generator
      *
      * @see https://github.com/sebastianbergmann/phpunit/issues/5476
      */
-    public function generate(string $type, bool $mockObject, ?array $methods = null, string $mockClassName = '', bool $callOriginalClone = true, bool $callAutoload = true, bool $cloneArguments = true, bool $callOriginalMethods = false): MockClass
+    public function generate(string $type, bool $mockObject, array $methods = null, string $mockClassName = '', bool $callOriginalClone = true, bool $callAutoload = true, bool $cloneArguments = true, bool $callOriginalMethods = false): MockClass
     {
         if ($mockClassName !== '') {
             return $this->generateCodeForTestDoubleClass(
@@ -554,7 +561,7 @@ final class Generator
      * @throws ReflectionException
      * @throws RuntimeException
      */
-    private function getObject(MockType $mockClass, string $type = '', bool $callOriginalConstructor = false, array $arguments = [], bool $callOriginalMethods = false, ?object $proxyTarget = null, bool $returnValueGeneration = true): object
+    private function getObject(MockType $mockClass, string $type = '', bool $callOriginalConstructor = false, array $arguments = [], bool $callOriginalMethods = false, object $proxyTarget = null, bool $returnValueGeneration = true): object
     {
         $className = $mockClass->generate();
         $object    = $this->instantiate($className, $callOriginalConstructor, $arguments);
@@ -880,27 +887,7 @@ final class Generator
 
     private function isMethodNameExcluded(string $name): bool
     {
-        if (self::$excludedMethodNames === []) {
-            self::$excludedMethodNames = [
-                '__CLASS__'       => true,
-                '__DIR__'         => true,
-                '__FILE__'        => true,
-                '__FUNCTION__'    => true,
-                '__LINE__'        => true,
-                '__METHOD__'      => true,
-                '__NAMESPACE__'   => true,
-                '__TRAIT__'       => true,
-                '__clone'         => true,
-                '__halt_compiler' => true,
-            ];
-
-            if (version_compare(PHP_VERSION, '8.5', '>=')) {
-                self::$excludedMethodNames['__sleep']  = true;
-                self::$excludedMethodNames['__wakeup'] = true;
-            }
-        }
-
-        return isset(self::$excludedMethodNames[$name]);
+        return isset(self::EXCLUDED_METHOD_NAMES[$name]);
     }
 
     /**
@@ -935,19 +922,17 @@ final class Generator
     }
 
     /**
-     * @throws NameAlreadyInUseException
+     * @throws ClassAlreadyExistsException
      * @throws ReflectionException
      */
-    private function ensureNameForTestDoubleClassIsAvailable(string $className): void
+    private function ensureMockedClassDoesNotAlreadyExist(string $mockClassName): void
     {
-        if ($className === '') {
-            return;
-        }
+        if ($mockClassName !== '' && class_exists($mockClassName, false)) {
+            $reflector = $this->reflectClass($mockClassName);
 
-        if (class_exists($className, false) ||
-            interface_exists($className, false) ||
-            trait_exists($className, false)) {
-            throw new NameAlreadyInUseException($className);
+            if (!$reflector->implementsInterface(MockObject::class)) {
+                throw new ClassAlreadyExistsException($mockClassName);
+            }
         }
     }
 
@@ -1046,9 +1031,9 @@ final class Generator
     /**
      * @psalm-param class-string $classOrInterfaceName
      *
-     * @throws ReflectionException
-     *
      * @psalm-return list<string>
+     *
+     * @throws ReflectionException
      */
     private function namesOfMethodsIn(string $classOrInterfaceName): array
     {
@@ -1067,9 +1052,9 @@ final class Generator
     /**
      * @psalm-param class-string $interfaceName
      *
-     * @throws ReflectionException
-     *
      * @psalm-return list<MockMethod>
+     *
+     * @throws ReflectionException
      */
     private function interfaceMethods(string $interfaceName, bool $cloneArguments): array
     {

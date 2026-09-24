@@ -120,10 +120,6 @@ class Email extends Message
      */
     public function from(Address|string ...$addresses): static
     {
-        if (!$addresses) {
-            throw new LogicException('"from()" must be called with at least one address.');
-        }
-
         return $this->setListAddressHeaderBody('From', $addresses);
     }
 
@@ -246,7 +242,7 @@ class Email extends Message
             $priority = 1;
         }
 
-        return $this->setHeaderBody('Text', 'X-Priority', \sprintf('%d (%s)', $priority, self::PRIORITY_MAP[$priority]));
+        return $this->setHeaderBody('Text', 'X-Priority', sprintf('%d (%s)', $priority, self::PRIORITY_MAP[$priority]));
     }
 
     /**
@@ -270,7 +266,7 @@ class Email extends Message
     public function text($body, string $charset = 'utf-8'): static
     {
         if (null !== $body && !\is_string($body) && !\is_resource($body)) {
-            throw new \TypeError(\sprintf('The body must be a string, a resource or null (got "%s").', get_debug_type($body)));
+            throw new \TypeError(sprintf('The body must be a string, a resource or null (got "%s").', get_debug_type($body)));
         }
 
         $this->cachedBody = null;
@@ -301,7 +297,7 @@ class Email extends Message
     public function html($body, string $charset = 'utf-8'): static
     {
         if (null !== $body && !\is_string($body) && !\is_resource($body)) {
-            throw new \TypeError(\sprintf('The body must be a string, a resource or null (got "%s").', get_debug_type($body)));
+            throw new \TypeError(sprintf('The body must be a string, a resource or null (got "%s").', get_debug_type($body)));
         }
 
         $this->cachedBody = null;
@@ -329,7 +325,7 @@ class Email extends Message
      *
      * @return $this
      */
-    public function attach($body, ?string $name = null, ?string $contentType = null): static
+    public function attach($body, string $name = null, string $contentType = null): static
     {
         return $this->addPart(new DataPart($body, $name, $contentType));
     }
@@ -337,7 +333,7 @@ class Email extends Message
     /**
      * @return $this
      */
-    public function attachFromPath(string $path, ?string $name = null, ?string $contentType = null): static
+    public function attachFromPath(string $path, string $name = null, string $contentType = null): static
     {
         return $this->addPart(new DataPart(new File($path), $name, $contentType));
     }
@@ -347,7 +343,7 @@ class Email extends Message
      *
      * @return $this
      */
-    public function embed($body, ?string $name = null, ?string $contentType = null): static
+    public function embed($body, string $name = null, string $contentType = null): static
     {
         return $this->addPart((new DataPart($body, $name, $contentType))->asInline());
     }
@@ -355,7 +351,7 @@ class Email extends Message
     /**
      * @return $this
      */
-    public function embedFromPath(string $path, ?string $name = null, ?string $contentType = null): static
+    public function embedFromPath(string $path, string $name = null, string $contentType = null): static
     {
         return $this->addPart((new DataPart(new File($path), $name, $contentType))->asInline());
     }
@@ -416,7 +412,7 @@ class Email extends Message
 
     private function ensureBodyValid(): void
     {
-        if (null === $this->text && null === $this->html && !$this->attachments && null === parent::getBody()) {
+        if (null === $this->text && null === $this->html && !$this->attachments) {
             throw new LogicException('A message must have a text or an HTML part or attachments.');
         }
     }
@@ -497,7 +493,6 @@ class Email extends Message
         }
 
         $otherParts = $relatedParts = [];
-        $cidReplacements = [];
         foreach ($this->attachments as $part) {
             foreach ($names as $name) {
                 if ($name !== $part->getName() && (!$part->hasContentId() || $name !== $part->getContentId())) {
@@ -507,19 +502,16 @@ class Email extends Message
                     continue 2;
                 }
 
-                $cidReplacements['cid:'.$name] = 'cid:'.$part->getContentId();
+                if ($name !== $part->getContentId()) {
+                    $html = str_replace('cid:'.$name, 'cid:'.$part->getContentId(), $html, $count);
+                }
                 $relatedParts[$name] = $part;
-                $part->setName($part->getName() ?? $part->getContentId())->asInline();
+                $part->setName($part->getContentId())->asInline();
 
                 continue 2;
             }
 
             $otherParts[] = $part;
-        }
-        if ($cidReplacements) {
-            // all references are replaced at once as strtr() matches the longest name first and
-            // never replaces inside already substituted text, unlike successive str_replace() calls
-            $html = strtr($html, $cidReplacements);
         }
         if (null !== $htmlPart) {
             $htmlPart = new TextPart($html, $this->htmlCharset, 'html');
@@ -588,10 +580,6 @@ class Email extends Message
      */
     public function __unserialize(array $data): void
     {
-        if (($data[1] ?? null) instanceof \Stringable || ($data[3] ?? null) instanceof \Stringable) {
-            throw new \BadMethodCallException('Cannot unserialize '.self::class);
-        }
-
         [$this->text, $this->textCharset, $this->html, $this->htmlCharset, $this->attachments, $parentData] = $data;
 
         parent::__unserialize($parentData);

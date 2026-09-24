@@ -25,7 +25,7 @@ class IsArray extends IsTypeOf
      *
      * @factory
      */
-    public static function arrayValue(): self
+    public static function arrayValue()
     {
         return new self;
     }
