@@ -6,9 +6,9 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
@@ -82,6 +82,10 @@ class Handler extends ExceptionHandler
      */
     protected function mapApiException(Throwable $e): array
     {
+        if ($e instanceof \App\Exceptions\BusinessRuleException) {
+            return [422, $e->getMessage(), $e->toErrors()];
+        }
+
         if ($e instanceof ValidationException) {
             return [422, 'The given data was invalid.', $e->errors()];
         }

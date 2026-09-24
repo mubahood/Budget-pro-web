@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (pint, phpstan, phpunit)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: budget_pro_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_mysql, gd, zip, bcmath, pcntl, posix
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/; s/^DB_DATABASE=.*/DB_DATABASE=budget_pro_test/; s/^DB_USERNAME=.*/DB_USERNAME=root/; s/^DB_PASSWORD=.*/DB_PASSWORD=root/' .env
+          php artisan migrate --force
+          php artisan db:seed --force
+      - name: Code style
+        run: vendor/bin/pint --test
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+      - name: Tests
+        run: php artisan test --parallel --processes=4
+
+  mobile:
+    name: Mobile (flutter analyze + test)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('mobile/pubspec.yaml') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+        working-directory: mobile
+      - run: flutter analyze
+        working-directory: mobile
+      - run: flutter test
+        working-directory: mobile

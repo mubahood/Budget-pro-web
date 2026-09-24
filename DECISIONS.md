@@ -34,3 +34,12 @@ its Appendix H open questions (H1–H10). Every later decision made while execut
 
 ## Execution log (appended as decisions are made while implementing the plan)
 
+- **E1** (2026-09-24, P0-7) Ledger income is posted per payment. A stand-alone `Sale` stock movement with no `SaleRecord` (legacy quick-sale/mobile paths) still posts its own income row (`source_type = stock_record`) so the ledger stays complete until those paths are retired in §B10.
+- **E2** (P0-4) Reversing an *inbound* movement (undoing a receipt after the goods were sold) obeys the product's negative-stock policy like any other outbound movement; reversing an outbound movement always succeeds.
+- **E3** (P0-8) Receipt/invoice numbers are assigned when a sale is finalised inside the checkout transaction; a rolled-back checkout may leave a gap in the sequence. Gaps are acceptable, duplicates are not (per-company unique index). The columns are nullable so a draft header can exist for a few milliseconds.
+- **E4** (P0-9) Report summaries are cash-basis: revenue = ledger income (payments), expenses = ledger expenses + cost of goods sold of non-voided sales.
+- **E5** (P0-12) Forecasting/auto-reorder stay in the codebase behind `saas.features.inventory_automation` (platform flag, default off) rather than being deleted; Phase 4 rebuilds them on the new stock ledger.
+- **E6** (P0-14) Subscription checkout is allowed for the company owner only; companies with no `owner_id` on record fall back to users holding the Company Owner/admin role so legacy tenants can still pay.
+- **E7** (P0-15) `BillingTest::test_lapsed_tenant_can_reach_checkout_but_not_product` now lapses the tenant by 30 days: a 1-day lapse is inside the 7-day grace decided in H5 and is correctly allowed through.
+- **E8** (P0-6) Admin "delete" on a sale voids it and on a stock movement is refused with guidance to reverse; nothing in the shop ledger is hard-deleted, and system-posted ledger rows cannot be edited or deleted (`ledger_locked`).
+- **E9** (P0-11) Low-stock threshold: `stock_items.min_stock` per product, else `saas.low_stock_threshold` (env `SAAS_LOW_STOCK_THRESHOLD`, default 10). Default currency for companies without one: `saas.default_currency` (env, default UGX) — never a literal in controllers or views.

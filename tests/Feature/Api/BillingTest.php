@@ -150,13 +150,15 @@ class BillingTest extends ApiTestCase
     {
         $t = $this->registerTenant(['currency' => 'UGX']);
 
-        // Force the subscription to be expired.
+        // Force the subscription to be expired *beyond the grace period*. DECISIONS.md H5 gives a
+        // lapsed tenant 7 days of grace (read-only web, devices keep selling), so a 1-day lapse is
+        // still allowed through; this test is about the hard-locked state.
         $sub = Subscription::where('company_id', $t['company_id'])->first();
         $sub->status = 'expired';
-        $sub->trial_ends_at = now()->subDay();
-        $sub->ends_at = now()->subDay();
+        $sub->trial_ends_at = now()->subDays(30);
+        $sub->ends_at = now()->subDays(30);
         $sub->save();
-        Company::where('id', $t['company_id'])->update(['license_expire' => now()->subDay()]);
+        Company::where('id', $t['company_id'])->update(['license_expire' => now()->subDays(30)]);
 
         // Product endpoint is gated (402).
         $this->getJson('/api/v1/dashboard', $this->auth($t['token']))->assertStatus(402);
@@ -165,5 +167,50 @@ class BillingTest extends ApiTestCase
         $this->getJson('/api/v1/subscription', $this->auth($t['token']))->assertOk();
         $plan = \App\Models\Plan::where('slug', 'business')->first();
         $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']))->assertOk();
+    }
+
+    public function test_non_owner_cannot_checkout(): void
+    {
+        $t = $this->registerTenant(['currency' => 'UGX']);
+        $worker = \App\Models\User::factory()->create(['company_id' => $t['company_id'], 'email' => 'worker_'.uniqid().'@example.com', 'password' => bcrypt('secret123')]);
+        $token = $worker->createToken('test')->plainTextToken;
+        $plan = \App\Models\Plan::where('slug', 'business')->first();
+
+        $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($token))->assertStatus(403);
+        $this->assertSame([], $this->flw->lastPayload, 'no payment was initiated');
+    }
+
+    public function test_payment_callback_verifies_and_activates(): void
+    {
+        $t = $this->registerTenant(['currency' => 'UGX']);
+        $plan = \App\Models\Plan::where('slug', 'business')->first();
+        $txRef = $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']))->json('data.tx_ref');
+        $this->flw->willVerify($txRef, 185000, 'UGX');
+
+        $this->get('/payment/callback?status=successful&tx_ref='.$txRef.'&transaction_id=999001')
+            ->assertOk()->assertSee('Payment confirmed')->assertSee('Return to the app');
+
+        $this->assertSame('paid', SubscriptionInvoice::where('provider_invoice_id', $txRef)->value('status'));
+        $this->assertSame('active', Subscription::where('company_id', $t['company_id'])->value('status'));
+
+        // Revisiting is idempotent.
+        $this->get('/payment/callback?status=successful&tx_ref='.$txRef.'&transaction_id=999001')->assertOk()->assertSee('Payment confirmed');
+        $this->assertSame(1, SubscriptionInvoice::where('company_id', $t['company_id'])->where('status', 'paid')->count());
+    }
+
+    public function test_payment_callback_handles_cancelled_and_unknown(): void
+    {
+        $t = $this->registerTenant(['currency' => 'UGX']);
+        $plan = \App\Models\Plan::where('slug', 'business')->first();
+        $txRef = $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']))->json('data.tx_ref');
+
+        $this->get('/payment/callback?status=cancelled&tx_ref='.$txRef)->assertOk()->assertSee('Payment cancelled');
+        $this->assertSame('pending', SubscriptionInvoice::where('provider_invoice_id', $txRef)->value('status'));
+
+        // Unverifiable "successful" redirect activates nothing.
+        $this->get('/payment/callback?status=successful&tx_ref='.$txRef.'&transaction_id=1')->assertOk()->assertSee('Payment received');
+        $this->assertSame('pending', SubscriptionInvoice::where('provider_invoice_id', $txRef)->value('status'));
+
+        $this->get('/payment/callback?status=successful&tx_ref=BPRO-NOPE&transaction_id=1')->assertStatus(404)->assertSee('Payment not found');
     }
 }

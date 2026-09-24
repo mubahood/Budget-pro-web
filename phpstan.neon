@@ -1,0 +1,32 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - app/Services
+        - app/Support
+        - app/Exceptions
+        - app/Http/Controllers/Api/V1
+        - app/Http/Controllers/PaymentCallbackController.php
+        - app/Http/Middleware
+        - app/Http/Requests
+        - app/Models/StockRecord.php
+        - app/Models/SaleRecord.php
+        - app/Models/SaleRecordItem.php
+        - app/Models/Payment.php
+        - app/Models/FinancialRecord.php
+        - app/Models/FinancialCategory.php
+        - app/Models/FinancialPeriod.php
+        - app/Models/StockItem.php
+        - app/Models/Company.php
+        - app/Scopes
+    excludePaths:
+        - app/Services/AutoReorderService.php
+        - app/Services/InventoryForecastService.php
+    ignoreErrors:
+        - '#Access to an undefined property App\\Models\\[A-Za-z]+::\$[A-Za-z_]+\.#'
+        - '#Access to an undefined property Illuminate\\Database\\Eloquent\\Model::\$[A-Za-z_]+\.#'
+        - '#Access to an undefined property Illuminate\\Contracts\\Auth\\Authenticatable::\$[A-Za-z_]+\.#'
+        - '#Laravel\\Sanctum\\Contracts\\HasAbilities#'
+    reportUnmatchedIgnoredErrors: false

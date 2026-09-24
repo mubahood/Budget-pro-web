@@ -62,9 +62,7 @@ final class TraceableCommand extends Command implements SignalableCommandInterfa
         parent::__construct($command->getName());
 
         // init below enables calling {@see parent::run()}
-        [$code, $processTitle, $ignoreValidationErrors] = \Closure::bind(function () {
-            return [$this->code, $this->processTitle, $this->ignoreValidationErrors];
-        }, $command, Command::class)();
+        [$code, $processTitle, $ignoreValidationErrors] = \Closure::bind(fn () => [$this->code, $this->processTitle, $this->ignoreValidationErrors], $command, Command::class)();
 
         if (\is_callable($code)) {
             $this->setCode($code);
@@ -134,7 +132,7 @@ final class TraceableCommand extends Command implements SignalableCommandInterfa
         parent::ignoreValidationErrors();
     }
 
-    public function setApplication(Application $application = null): void
+    public function setApplication(?Application $application = null): void
     {
         $this->command->setApplication($application);
     }
@@ -209,14 +207,14 @@ final class TraceableCommand extends Command implements SignalableCommandInterfa
         return $this->command->getNativeDefinition();
     }
 
-    public function addArgument(string $name, int $mode = null, string $description = '', mixed $default = null, array|\Closure $suggestedValues = []): static
+    public function addArgument(string $name, ?int $mode = null, string $description = '', mixed $default = null, array|\Closure $suggestedValues = []): static
     {
         $this->command->addArgument($name, $mode, $description, $default, $suggestedValues);
 
         return $this;
     }
 
-    public function addOption(string $name, string|array $shortcut = null, int $mode = null, string $description = '', mixed $default = null, array|\Closure $suggestedValues = []): static
+    public function addOption(string $name, string|array|null $shortcut = null, ?int $mode = null, string $description = '', mixed $default = null, array|\Closure $suggestedValues = []): static
     {
         $this->command->addOption($name, $shortcut, $mode, $description, $default, $suggestedValues);
 
@@ -283,7 +281,7 @@ final class TraceableCommand extends Command implements SignalableCommandInterfa
         $event = $this->stopwatch->start($this->getName(), 'command');
 
         try {
-            $this->exitCode = parent::run($input, $output);
+            $this->exitCode = $this->command->run($input, $output);
         } finally {
             $event->stop();
 

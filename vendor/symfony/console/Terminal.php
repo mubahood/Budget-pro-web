@@ -128,7 +128,7 @@ class Terminal
             return false;
         }
 
-        return self::$stty = (bool) shell_exec('stty 2> '.('\\' === \DIRECTORY_SEPARATOR ? 'NUL' : '/dev/null'));
+        return self::$stty = (bool) @shell_exec('stty 2> '.('\\' === \DIRECTORY_SEPARATOR ? 'NUL' : '/dev/null'));
     }
 
     private static function initDimensions(): void
@@ -217,8 +217,7 @@ class Terminal
 
         $cp = \function_exists('sapi_windows_cp_set') ? sapi_windows_cp_get() : 0;
 
-        $process = proc_open($command, $descriptorspec, $pipes, null, null, ['suppress_errors' => true]);
-        if (!\is_resource($process)) {
+        if (!$process = @proc_open($command, $descriptorspec, $pipes, null, null, ['suppress_errors' => true])) {
             return null;
         }
 

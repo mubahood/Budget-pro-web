@@ -3,7 +3,7 @@
 DeepCopy helps you create deep copies (clones) of your objects. It is designed to handle cycles in the association graph.
 
 [![Total Downloads](https://poser.pugx.org/myclabs/deep-copy/downloads.svg)](https://packagist.org/packages/myclabs/deep-copy)
-[![Integrate](https://github.com/myclabs/DeepCopy/workflows/ci/badge.svg?branch=1.x)](https://github.com/myclabs/DeepCopy/actions)
+[![Integrate](https://github.com/myclabs/DeepCopy/actions/workflows/ci.yaml/badge.svg?branch=1.x)](https://github.com/myclabs/DeepCopy/actions/workflows/ci.yaml)
 
 ## Table of Contents
 
@@ -87,7 +87,7 @@ Now you're in for a big mess :(
 ## How it works
 
 DeepCopy recursively traverses all the object's properties and clones them. To avoid cloning the same object twice it
-keeps a hash map of all instances and thus preserves the object graph.
+keeps a map of source objects to their copies and thus preserves the object graph.
 
 To use it:
 

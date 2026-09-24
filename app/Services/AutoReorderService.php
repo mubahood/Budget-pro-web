@@ -280,12 +280,19 @@ class AutoReorderService
     /**
      * Get historical demand data
      */
-    protected function getHistoricalDemand($stockItemId, $days)
+    protected function getHistoricalDemand($stockItemId, $days): array
     {
-        // This would typically query stock movement history
-        // For now, return empty array as placeholder
-        // TODO: Implement based on your stock movement tracking
-        return [];
+        // Daily quantities sold, read from the stock ledger (Sale movements, reversals netted out).
+        $rows = \Illuminate\Support\Facades\DB::table('stock_records')
+            ->selectRaw('DATE(`date`) AS day, SUM(ABS(quantity_delta) * IF(is_reversal, -1, 1)) AS sold')
+            ->where('stock_item_id', $stockItemId)
+            ->where('type', 'Sale')
+            ->where('date', '>=', now()->subDays((int) $days)->startOfDay())
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get();
+
+        return $rows->map(fn ($r) => max(0.0, (float) $r->sold))->all();
     }
 
     /**

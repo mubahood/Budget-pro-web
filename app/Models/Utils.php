@@ -18,7 +18,7 @@ class Utils
         if ($t == null) {
             return $t;
         }
-        $c->setTimezone('Africa/Nairobi');
+        $c->setTimezone(config('saas.display_timezone'));
 
         return $c->format('D d-m-Y');
     }
@@ -45,7 +45,7 @@ class Utils
         if ($t == null) {
             return $t;
         }
-        $c->setTimezone('Africa/Nairobi');
+        $c->setTimezone(config('saas.display_timezone'));
 
         return $c->format('d M, Y');
     }
@@ -53,7 +53,7 @@ class Utils
     public static function my_date_time($t)
     {
         $c = Carbon::parse($t);
-        $c->setTimezone('Africa/Nairobi');
+        $c->setTimezone(config('saas.display_timezone'));
         if ($t == null) {
             return $t;
         }
@@ -342,94 +342,26 @@ current_quantity
         }
     }
 
-    //public static function importRecs
-    public static function importRecs()
-    {
-        return;
-        $path = public_path('storage/files/budget.csv');
-        //check if file exists
-        if (! file_exists($path)) {
-            throw new \Exception('File not found');
-        }
-
-        set_time_limit(-1);
-        $isFirst = true;
-        $items = [];
-        $csv = new SplFileObject($path);
-        $csv->setFlags(SplFileObject::READ_CSV);
-        $u = Admin::user();
-        $cat = BudgetItemCategory::where('name', 'Hom Renovation')->first();
-        if ($cat == null) {
-            exit('Cat not found.');
-        }
-        foreach ($csv as $line) {
-            if ($isFirst) {
-                $isFirst = false;
-
-                continue;
-            }
-            $cat_name = $line[0];
-            if ($cat->name != $cat_name) {
-                continue;
-            }
-            $name = trim($line[1]);
-            $ex = BudgetItem::where([
-                'name' => $name,
-                'budget_item_category_id' => $cat->id,
-            ])->first();
-            if ($ex != null) {
-                echo "<br>Skipped $name because already exists.";
-
-                continue;
-            }
-            $item = new BudgetItem();
-            $item->name = $name;
-            $item->unit_price = ((int) ($line[2]));
-            $item->quantity = ((int) $line[3]);
-            $item->target_amount = $item->unit_price * $item->quantity;
-            $item->invested_amount = ((int) $line[5]);
-            $item->approved = 'No';
-            $item->budget_program_id = $cat->budget_program_id;
-            $item->budget_item_category_id = $cat->id;
-            $item->company_id = $cat->company_id;
-            $item->created_by_id = $u->id;
-            $item->changed_by_id = $u->id;
-            $item->save();
-            echo $item->id.'. saved '.$item->name.'<br>';
-        }
-        //die("done");
-    }
-
     //mail sender
     public static function mail_sender($data)
     {
-        return;
-        //check if .env APP_URL is contains localhost and return
-        if (strpos(env('APP_URL'), 'localhost') !== false) {
+        if (! config('saas.mail_enabled')) {
+            \Illuminate\Support\Facades\Log::info('Mail suppressed (saas.mail_enabled is off)', ['to' => $data['email'] ?? null, 'subject' => $data['subject'] ?? null]);
+
             return;
         }
 
-        /* die(view('mails/mail-1',
-        [
-            'body' => $data['body'],
-            'title' => $data['subject']
-        ])); */
-        try {
-            Mail::send(
-                'mails/mail-1',
-                [
-                    'body' => $data['body'],
-                    'title' => $data['subject'],
-                ],
-                function ($m) use ($data) {
-                    $m->to($data['email'], $data['name'])
-                        ->subject($data['subject']);
-                    $m->from(env('MAIL_FROM_ADDRESS'), $data['subject']);
-                }
-            );
-        } catch (\Throwable $th) {
-            $msg = 'failed';
-            throw $th;
-        }
+        Mail::send(
+            'mails/mail-1',
+            [
+                'body' => $data['body'],
+                'title' => $data['subject'],
+            ],
+            function ($m) use ($data) {
+                $m->to($data['email'], $data['name'])
+                    ->subject($data['subject']);
+                $m->from(config('mail.from.address'), config('mail.from.name'));
+            }
+        );
     }
 }

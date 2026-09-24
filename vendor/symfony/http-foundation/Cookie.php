@@ -39,6 +39,9 @@ class Cookie
     private const RESERVED_CHARS_FROM = ['=', ',', ';', ' ', "\t", "\r", "\n", "\v", "\f"];
     private const RESERVED_CHARS_TO = ['%3D', '%2C', '%3B', '%20', '%09', '%0D', '%0A', '%0B', '%0C'];
 
+    // same list as above minus "=", which PHP allows in the path and domain attributes
+    private const RESERVED_ATTR_CHARS_LIST = ",; \t\r\n\v\f";
+
     /**
      * Creates cookie from raw header string.
      */
@@ -77,7 +80,7 @@ class Cookie
      * @param self::SAMESITE_*|''|null $sameSite
      * @param bool                     $partitioned
      */
-    public static function create(string $name, string $value = null, int|string|\DateTimeInterface $expire = 0, ?string $path = '/', string $domain = null, bool $secure = null, bool $httpOnly = true, bool $raw = false, ?string $sameSite = self::SAMESITE_LAX /* , bool $partitioned = false */): self
+    public static function create(string $name, ?string $value = null, int|string|\DateTimeInterface $expire = 0, ?string $path = '/', ?string $domain = null, ?bool $secure = null, bool $httpOnly = true, bool $raw = false, ?string $sameSite = self::SAMESITE_LAX /* , bool $partitioned = false */): self
     {
         $partitioned = 9 < \func_num_args() ? func_get_arg(9) : false;
 
@@ -97,16 +100,19 @@ class Cookie
      *
      * @throws \InvalidArgumentException
      */
-    public function __construct(string $name, string $value = null, int|string|\DateTimeInterface $expire = 0, ?string $path = '/', string $domain = null, bool $secure = null, bool $httpOnly = true, bool $raw = false, ?string $sameSite = self::SAMESITE_LAX, bool $partitioned = false)
+    public function __construct(string $name, ?string $value = null, int|string|\DateTimeInterface $expire = 0, ?string $path = '/', ?string $domain = null, ?bool $secure = null, bool $httpOnly = true, bool $raw = false, ?string $sameSite = self::SAMESITE_LAX, bool $partitioned = false)
     {
         // from PHP source code
         if ($raw && false !== strpbrk($name, self::RESERVED_CHARS_LIST)) {
-            throw new \InvalidArgumentException(sprintf('The cookie name "%s" contains invalid characters.', $name));
+            throw new \InvalidArgumentException(\sprintf('The cookie name "%s" contains invalid characters.', $name));
         }
 
         if (empty($name)) {
             throw new \InvalidArgumentException('The cookie name cannot be empty.');
         }
+
+        self::validateAttribute('path', $path);
+        self::validateAttribute('domain', $domain);
 
         $this->name = $name;
         $this->value = $value;
@@ -136,6 +142,8 @@ class Cookie
      */
     public function withDomain(?string $domain): static
     {
+        self::validateAttribute('domain', $domain);
+
         $cookie = clone $this;
         $cookie->domain = $domain;
 
@@ -173,10 +181,22 @@ class Cookie
     }
 
     /**
+     * Rejects the characters that PHP's setcookie() also rejects in the path and domain attributes.
+     */
+    private static function validateAttribute(string $attribute, ?string $value): void
+    {
+        if (null !== $value && false !== strpbrk($value, self::RESERVED_ATTR_CHARS_LIST)) {
+            throw new \InvalidArgumentException(\sprintf('The cookie %s "%s" contains invalid characters.', $attribute, $value));
+        }
+    }
+
+    /**
      * Creates a cookie copy with a new path on the server in which the cookie will be available on.
      */
     public function withPath(string $path): static
     {
+        self::validateAttribute('path', $path);
+
         $cookie = clone $this;
         $cookie->path = '' === $path ? '/' : $path;
 
@@ -211,7 +231,7 @@ class Cookie
     public function withRaw(bool $raw = true): static
     {
         if ($raw && false !== strpbrk($this->name, self::RESERVED_CHARS_LIST)) {
-            throw new \InvalidArgumentException(sprintf('The cookie name "%s" contains invalid characters.', $this->name));
+            throw new \InvalidArgumentException(\sprintf('The cookie name "%s" contains invalid characters.', $this->name));
         }
 
         $cookie = clone $this;

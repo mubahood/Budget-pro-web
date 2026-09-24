@@ -1,7 +1,5 @@
 <?php
 
-use App\Http\Controllers\ApiController;
-use App\Http\Controllers\MobileApiController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\BudgetItemCategoryController;
@@ -20,10 +18,12 @@ use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
 use App\Http\Controllers\Api\V1\TrackingController;
+use App\Http\Controllers\Api\V1\UploadController;
+use App\Http\Controllers\ApiController;
+use App\Http\Controllers\MobileApiController;
 use App\PingPin\Http\Controllers\Api\V1\AuthController as PingPinAuthController;
 use App\PingPin\Http\Controllers\Api\V1\BillingController as PingPinBillingController;
 use App\PingPin\Http\Controllers\Api\V1\OrganisationController;
-use App\Http\Controllers\Api\V1\UploadController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -182,11 +182,15 @@ Route::prefix('v1')->group(function () {
         apiCrud('stock-sub-categories', StockSubCategoryController::class);
         apiCrud('stock-items', StockItemController::class);
         Route::get('stock-items/by-barcode/{code}', [StockItemController::class, 'byBarcode']);
+        Route::get('stock-records/types', [StockRecordController::class, 'types']);
         apiCrud('stock-records', StockRecordController::class);
+        Route::post('stock-records/{id}/reverse', [StockRecordController::class, 'reverse']);
 
         // Sales / POS
         apiCrud('sales', SaleController::class);
         Route::post('sales/checkout', [SaleController::class, 'checkout']);
+        Route::post('sales/{id}/payments', [SaleController::class, 'addPayment']);
+        Route::post('sales/{id}/void', [SaleController::class, 'void']);
 
         // Finance
         apiCrud('financial-categories', FinancialCategoryController::class);

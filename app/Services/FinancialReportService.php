@@ -97,6 +97,7 @@ class FinancialReportService
                 WHERE sr.company_id = ?
                 AND sr.sale_date >= ?
                 AND sr.sale_date <= ?
+            AND sr.voided_at IS NULL
             ', [$companyId, $startDate, $endDate]);
 
             // Get current inventory value
@@ -144,6 +145,7 @@ class FinancialReportService
             LEFT JOIN sale_records sr ON sri.sale_record_id = sr.id 
                 AND sr.sale_date >= ? 
                 AND sr.sale_date <= ?
+            AND sr.voided_at IS NULL
             WHERE sc.company_id = ?
             GROUP BY sc.id, sc.name
             HAVING total_sales > 0
@@ -176,6 +178,7 @@ class FinancialReportService
             LEFT JOIN sale_records sr ON sri.sale_record_id = sr.id 
                 AND sr.sale_date >= ? 
                 AND sr.sale_date <= ?
+            AND sr.voided_at IS NULL
             WHERE si.company_id = ?
             GROUP BY si.id, si.name, si.sku, si.buying_price, si.selling_price, 
                      si.original_quantity, si.current_quantity, sc.name
@@ -205,6 +208,7 @@ class FinancialReportService
             WHERE si.company_id = ?
             AND sr.sale_date >= ?
             AND sr.sale_date <= ?
+            AND sr.voided_at IS NULL
             GROUP BY si.id, si.name, si.sku, si.image
             HAVING revenue > 0
             ORDER BY revenue DESC
@@ -223,8 +227,10 @@ class FinancialReportService
         return [
             'financial' => $financial,
             'inventory' => $inventory,
-            'overall_profit' => $financial['profit'] + $inventory['inventory_total_earned_profit'],
-            'total_revenue' => $financial['total_income'] + $inventory['inventory_total_selling_price'],
+            // Cash-basis: sales already sit in the ledger as Income (one row per payment), so revenue is the
+            // ledger income alone; cost of goods sold is added to expenses. Nothing is counted twice.
+            'overall_profit' => $financial['profit'] - $inventory['inventory_total_cost'],
+            'total_revenue' => $financial['total_income'],
             'total_expenses' => $financial['total_expense'] + $inventory['inventory_total_cost'],
         ];
     }

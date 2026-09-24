@@ -16,6 +16,33 @@ return [
     'default_plan' => env('SAAS_DEFAULT_PLAN', 'trial'),
 
     /*
+    | Days after a subscription/licence lapses during which the tenant keeps
+    | read-only web access and devices keep selling + syncing (DECISIONS.md H5).
+    */
+    'grace_days' => env('SAAS_GRACE_DAYS', 7),
+
+    // Outbound email (notifications) — off until a mailer is configured on the host.
+    'mail_enabled' => (bool) env('SAAS_MAIL_ENABLED', false),
+
+    // Timezone used when formatting dates for people (per-company timezones arrive in Phase 1).
+    'display_timezone' => env('SAAS_DISPLAY_TIMEZONE', 'Africa/Kampala'),
+
+    // Deep link the payment result page offers to return to the mobile app (null hides the button).
+    'mobile_deep_link' => env('MOBILE_DEEP_LINK', 'budgetpro://billing'),
+
+    // Platform-wide feature flags (per-tenant flags live in companies.features, Phase 1+).
+    'features' => [
+        // Inventory forecasting + auto-reorder rules: unfinished modules, rebuilt in Phase 4 (P0-12).
+        'inventory_automation' => (bool) env('FEATURE_INVENTORY_AUTOMATION', false),
+    ],
+
+    // Currency used when a company has none set (companies choose their own at onboarding).
+    'default_currency' => env('SAAS_DEFAULT_CURRENCY', 'UGX'),
+
+    // Default low-stock threshold when a product has no min_stock of its own.
+    'low_stock_threshold' => (float) env('SAAS_LOW_STOCK_THRESHOLD', 10),
+
+    /*
     |--------------------------------------------------------------------------
     | API pagination
     |--------------------------------------------------------------------------

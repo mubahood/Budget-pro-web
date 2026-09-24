@@ -32,10 +32,18 @@ abstract class AbstractSessionHandler implements \SessionHandlerInterface, \Sess
     {
         $this->sessionName = $sessionName;
         if (!headers_sent() && !\ini_get('session.cache_limiter') && '0' !== \ini_get('session.cache_limiter')) {
-            header(sprintf('Cache-Control: max-age=%d, private, must-revalidate', 60 * (int) \ini_get('session.cache_expire')));
+            header(\sprintf('Cache-Control: max-age=%d, private, must-revalidate', 60 * (int) \ini_get('session.cache_expire')));
         }
 
         return true;
+    }
+
+    /**
+     * @return string
+     */
+    public function create_sid()
+    {
+        return session_create_id() ?: throw new \RuntimeException('Unable to create a session ID.');
     }
 
     abstract protected function doRead(#[\SensitiveParameter] string $sessionId): string;
@@ -72,6 +80,16 @@ abstract class AbstractSessionHandler implements \SessionHandlerInterface, \Sess
         return $data;
     }
 
+    public function updateTimestamp(#[\SensitiveParameter] string $sessionId, string $data): bool
+    {
+        $this->igbinaryEmptyData ??= \function_exists('igbinary_serialize') ? igbinary_serialize([]) : '';
+        if ('' === $data || $this->igbinaryEmptyData === $data) {
+            return $this->destroy($sessionId);
+        }
+
+        return true;
+    }
+
     public function write(#[\SensitiveParameter] string $sessionId, string $data): bool
     {
         // see https://github.com/igbinary/igbinary/issues/146
@@ -88,7 +106,7 @@ abstract class AbstractSessionHandler implements \SessionHandlerInterface, \Sess
     {
         if (!headers_sent() && filter_var(\ini_get('session.use_cookies'), \FILTER_VALIDATE_BOOL)) {
             if (!isset($this->sessionName)) {
-                throw new \LogicException(sprintf('Session name cannot be empty, did you forget to call "parent::open()" in "%s"?.', static::class));
+                throw new \LogicException(\sprintf('Session name cannot be empty, did you forget to call "parent::open()" in "%s"?.', static::class));
             }
             $cookie = SessionUtils::popSessionCookie($this->sessionName, $sessionId);
 

@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\User;
 use App\Models\Utils;
+use App\Services\Onboarding\RegistrationService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\DB;
@@ -370,117 +371,25 @@ class ApiController extends BaseController
 
     public function register(Request $r)
     {
-        if ($r->first_name == null) {
-            Utils::error('First name is required.');
+        // Legacy mobile endpoint: same RegistrationService as /api/v1 and the web form (P0-13),
+        // same response shape the shipped app expects.
+        $validator = \Validator::make($r->all(), RegistrationService::rules(), RegistrationService::messages());
+        if ($validator->fails()) {
+            Utils::error($validator->errors()->first());
         }
-        if ($r->last_name == null) {
-            Utils::error('Last name is required.');
-        }
-        if ($r->email == null) {
-            Utils::error('Email is required.');
-        }
-        if (! filter_var($r->email, FILTER_VALIDATE_EMAIL)) {
-            Utils::error('Email is invalid.');
-        }
-
-        $u = User::where('email', $r->email)->first();
-        if ($u != null) {
-            Utils::error('Email is already registered.');
-        }
-        if ($r->password == null) {
-            Utils::error('Password is required.');
-        }
-
-        if ($r->company_name == null) {
-            Utils::error('Company name is required.');
-        }
-        if ($r->currency == null) {
-            Utils::error('Currency is required.');
-        }
-
-        $new_user = new User();
-        $new_user->first_name = $r->first_name;
-        $new_user->last_name = $r->last_name;
-        $new_user->username = $r->email;
-        $new_user->email = $r->email;
-        $new_user->password = password_hash($r->password, PASSWORD_DEFAULT);
-        $new_user->name = $r->first_name.' '.$r->last_name;
-        $new_user->phone_number = $r->phone_number;
-        $new_user->company_id = 1;
-        $new_user->status = 'Active';
 
         try {
-            $new_user->save();
-        } catch (\Exception $e) {
+            ['user' => $registered_user, 'company' => $registered_company] = app(RegistrationService::class)
+                ->register($validator->validated(), RegistrationService::PRODUCT_BUDGET, 'legacy-api');
+        } catch (\App\Exceptions\BusinessRuleException $e) {
             Utils::error($e->getMessage());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Legacy registration failed', ['error' => $e->getMessage()]);
+            Utils::error('Registration failed. Please try again.');
         }
 
-        $registered_user = User::find($new_user->id);
-        if ($registered_user == null) {
-            Utils::error('Failed to register user.');
-        }
-
-        $company = new Company();
-        $company->owner_id = $registered_user->id;
-        $company->name = $r->company_name;
-        $company->email = $r->email;
-        $company->phone_number = $r->phone_number;
-        $company->status = 'Active';
-        $company->currency = $r->currency;
-        $company->license_expire = date('Y-m-d', strtotime('+1 year'));
-
-        try {
-            $company->save();
-        } catch (\Exception $e) {
-            Utils::error($e->getMessage());
-        }
-
-        $registered_company = Company::find($company->id);
-        if ($registered_company == null) {
-            Utils::error('Failed to register company.');
-        }
-
-        DB::table('admin_role_users')->insert([
-            'user_id' => $registered_user->id,
-            'role_id' => 2,
-        ]);
-
-        // A default active financial period is required before the app can
-        // record stock/sales/finance data (StockItem, StockRecord and
-        // FinancialRecord all require one). Web registration already does
-        // this; the legacy API registration did not, which silently blocked
-        // every mobile-registered company from using Stock/Finance features.
-        try {
-            \App\Models\FinancialPeriod::withoutGlobalScopes()
-                ->where('company_id', $registered_company->id)
-                ->where('status', 'Active')
-                ->firstOr(function () use ($registered_company) {
-                    $period = new \App\Models\FinancialPeriod();
-                    $period->company_id = $registered_company->id;
-                    $period->name = 'FY '.date('Y');
-                    $period->start_date = now()->startOfYear();
-                    $period->end_date = now()->endOfYear();
-                    $period->status = 'Active';
-                    $period->description = 'Default financial year created during registration';
-                    $period->total_investment = 0;
-                    $period->total_sales = 0;
-                    $period->total_profit = 0;
-                    $period->total_expenses = 0;
-                    $period->saveQuietly();
-                });
-        } catch (\Exception $e) {
-            // Non-fatal: registration should still succeed even if this fails.
-            \Illuminate\Support\Facades\Log::warning('Failed to create default financial period on legacy register', [
-                'company_id' => $registered_company->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        $registered_user->refresh();
-
-        // Additive, same rationale as login(): lets the already-shipped
-        // mobile client authenticate to /api/v1 (poultry sync, etc.)
-        // without any change to its registration request.
+        // Additive, same rationale as login(): lets the already-shipped mobile client
+        // authenticate to /api/v1 (poultry sync, etc.) without any change to its request.
         $token = $registered_user->createToken((string) ($r->input('device_name') ?: $r->userAgent() ?: 'api-token'))->plainTextToken;
 
         Utils::success([
@@ -602,6 +511,7 @@ class ApiController extends BaseController
             $stockRecord->type = 'Sale';
             $stockRecord->created_by_id = $u->id;
             $stockRecord->description = $r->description ?? 'Quick sale recorded';
+            $stockRecord->selling_price = $salePrice; // the price the customer actually paid, not the list price
             $stockRecord->save();
 
             $stockItem->refresh();

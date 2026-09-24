@@ -2,8 +2,11 @@
 
 namespace App\Admin\Controllers;
 
+use App\Exceptions\BusinessRuleException;
 use App\Models\SaleRecord;
 use App\Models\User;
+use App\Services\Shop\SaleService;
+use App\Support\Money;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -24,6 +27,35 @@ class SaleRecordController extends TenantAdminController
      *
      * @return Grid
      */
+    /** Sales are never deleted: the grid's delete button voids the sale (stock + ledger reversed). */
+    public function destroy($id)
+    {
+        try {
+            $this->void($id);
+        } catch (BusinessRuleException $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()]);
+        }
+
+        return response()->json(['status' => true, 'message' => 'Sale voided; stock and ledger reversed.']);
+    }
+
+    public function void($id)
+    {
+        $u = Admin::user();
+        $sale = SaleRecord::withoutGlobalScopes()->where('company_id', $u->company_id)->find($id);
+        if ($sale === null) {
+            abort(404);
+        }
+        (new SaleService())->void($sale, request('reason', 'Voided from admin'), (int) $u->id);
+
+        if (request()->wantsJson()) {
+            return response()->json(['status' => true, 'message' => 'Sale voided.']);
+        }
+        admin_success('Sale voided', 'Stock and ledger entries were reversed.');
+
+        return redirect(admin_url('sale-records'));
+    }
+
     protected function grid()
     {
         $grid = new Grid(new SaleRecord());
@@ -163,7 +195,7 @@ class SaleRecordController extends TenantAdminController
 
         $grid->column('total_amount', __('Total Amount'))
             ->display(function ($total_amount) {
-                return '<strong>UGX '.number_format((float) $total_amount, 0).'</strong>';
+                return '<strong>'.Money::symbol().' '.number_format((float) $total_amount, 0).'</strong>';
             })
             ->sortable();
 
@@ -172,7 +204,7 @@ class SaleRecordController extends TenantAdminController
                 // Ensure we're working with the actual value
                 $value = $amount_paid ?? 0;
 
-                return 'UGX '.number_format((float) $value, 0);
+                return Money::symbol().' '.number_format((float) $value, 0);
             })
             ->sortable();
 
@@ -180,7 +212,7 @@ class SaleRecordController extends TenantAdminController
             ->display(function ($balance) {
                 $color = $balance > 0 ? 'danger' : 'success';
 
-                return '<span class="label label-'.$color.'">UGX '.number_format((float) $balance, 0).'</span>';
+                return '<span class="label label-'.$color.'">'.Money::symbol().' '.number_format((float) $balance, 0).'</span>';
             })
             ->sortable();
 
@@ -288,13 +320,13 @@ class SaleRecordController extends TenantAdminController
 
         $show->divider();
         $show->field('total_amount', __('Total Amount'))->as(function ($total_amount) {
-            return 'UGX '.number_format((float) $total_amount, 2);
+            return Money::symbol().' '.number_format((float) $total_amount, 2);
         });
         $show->field('amount_paid', __('Amount Paid'))->as(function ($amount_paid) {
-            return 'UGX '.number_format((float) $amount_paid, 2);
+            return Money::symbol().' '.number_format((float) $amount_paid, 2);
         });
         $show->field('balance', __('Balance'))->as(function ($balance) {
-            return 'UGX '.number_format((float) $balance, 2);
+            return Money::symbol().' '.number_format((float) $balance, 2);
         });
         $show->field('payment_method', __('Payment Method'));
         $show->field('payment_status', __('Payment Status'));
@@ -318,10 +350,10 @@ class SaleRecordController extends TenantAdminController
             $items->column('item_sku', __('SKU'));
             $items->column('quantity', __('Quantity'));
             $items->column('unit_price', __('Unit Price'))->display(function ($unit_price) {
-                return 'UGX '.number_format((float) $unit_price, 2);
+                return Money::symbol().' '.number_format((float) $unit_price, 2);
             });
             $items->column('subtotal', __('Subtotal'))->display(function ($subtotal) {
-                return 'UGX '.number_format((float) $subtotal, 2);
+                return Money::symbol().' '.number_format((float) $subtotal, 2);
             });
         });
 
@@ -415,8 +447,8 @@ class SaleRecordController extends TenantAdminController
                         $html .= '<td>'.htmlspecialchars($item->item_name).'</td>';
                         $html .= '<td>'.htmlspecialchars($item->item_sku).'</td>';
                         $html .= '<td class="text-right">'.number_format($item->quantity, 2).'</td>';
-                        $html .= '<td class="text-right">UGX '.number_format($item->unit_price, 0).'</td>';
-                        $html .= '<td class="text-right"><strong>UGX '.number_format($item->subtotal, 0).'</strong></td>';
+                        $html .= '<td class="text-right">'.Money::symbol().' '.number_format($item->unit_price, 0).'</td>';
+                        $html .= '<td class="text-right"><strong>'.Money::symbol().' '.number_format($item->subtotal, 0).'</strong></td>';
                         $html .= '</tr>';
                     }
 
@@ -455,7 +487,7 @@ class SaleRecordController extends TenantAdminController
                         $category = $item->category_name ? '['.$item->category_name.'] ' : '';
                         $sku = $item->sku ? ' ('.$item->sku.')' : '';
                         $stock = ' | Stock: '.number_format($item->current_quantity, 2);
-                        $price = ' | Price: UGX '.number_format($item->selling_price, 0);
+                        $price = ' | Price: '.Money::symbol().' '.number_format($item->selling_price, 0);
 
                         return [$item->id => $category.$item->name.$sku.$stock.$price];
                     });
@@ -507,144 +539,81 @@ class SaleRecordController extends TenantAdminController
             ->rows(3)
             ->rules('nullable');
 
-        // Pre-validation before saving
+        // Pre-validation before saving (create mode only: items are immutable after checkout).
         $form->saving(function (Form $form) use ($u) {
-            // Check if this is an edit (model has id)
-            $isEdit = $form->model()->id ? true : false;
-
-            if ($isEdit) {
-                // In EDIT mode: Items cannot be changed, skip item validation
-                // Only allow updating customer info, payment details, status, notes
-
-                // Recalculate balance and payment status when amount_paid changes
-                if (isset($form->amount_paid) && isset($form->total_amount)) {
-                    $amountPaid = floatval($form->amount_paid);
-                    $totalAmount = floatval($form->total_amount);
-
-                    // Calculate balance
-                    $form->balance = $totalAmount - $amountPaid;
-
-                    // Update payment status based on payment
-                    if ($form->balance <= 0) {
-                        $form->payment_status = 'Paid';
-                    } elseif ($amountPaid > 0) {
-                        $form->payment_status = 'Partial';
-                    } else {
-                        $form->payment_status = 'Unpaid';
-                    }
-                }
-
+            if ($form->model()->id) {
+                // Edit mode: customer/notes edits; an increased amount_paid records a payment via the model hook.
                 return;
             }
 
-            // In CREATE mode: Validate items
-            if (empty($form->saleRecordItems) || count($form->saleRecordItems) == 0) {
-                throw new \Exception('Please add at least one item to the sale.');
+            $items = is_array($form->saleRecordItems) ? array_filter($form->saleRecordItems, fn ($i) => ! empty($i['stock_item_id']) && ! isset($i[Form::REMOVE_FLAG_NAME])) : [];
+            if (count($items) === 0) {
+                admin_error('No items', 'Please add at least one item to the sale.');
+
+                return back()->withInput();
             }
 
-            // Collect all stock item IDs for batch query
-            $stockItemIds = array_filter(array_column($form->saleRecordItems, 'stock_item_id'));
-
-            if (empty($stockItemIds)) {
-                throw new \Exception('Please select at least one valid stock item.');
-            }
-
-            // Fetch all stock items in a single optimized query for validation
             $stockItems = DB::table('stock_items')
-                ->select('id', 'name', 'sku', 'current_quantity', 'selling_price')
+                ->select('id', 'name', 'current_quantity', 'allow_negative_stock')
                 ->where('company_id', $u->company_id)
-                ->whereIn('id', $stockItemIds)
-                ->get()
-                ->keyBy('id');
+                ->whereIn('id', array_column($items, 'stock_item_id'))
+                ->get()->keyBy('id');
 
-            // Pre-validate stock availability
             $errors = [];
-
-            foreach ($form->saleRecordItems as $index => $item) {
-                if (empty($item['stock_item_id']) || empty($item['quantity'])) {
-                    continue;
-                }
-
+            foreach ($items as $index => $item) {
                 $stockItem = $stockItems->get($item['stock_item_id']);
-
                 if (! $stockItem) {
                     $errors[] = 'Item #'.($index + 1).': Invalid stock item selected.';
 
                     continue;
                 }
-
-                // Validate sufficient stock
-                $quantity = floatval($item['quantity']);
-                if ($stockItem->current_quantity < $quantity) {
-                    $errors[] = "{$stockItem->name}: Insufficient stock. Available: ".number_format($stockItem->current_quantity, 2).', Requested: '.number_format($quantity, 2);
-                }
-
+                $quantity = (float) ($item['quantity'] ?? 0);
                 if ($quantity <= 0) {
                     $errors[] = "{$stockItem->name}: Quantity must be greater than zero.";
                 }
+                if (! $stockItem->allow_negative_stock && (float) $stockItem->current_quantity < $quantity) {
+                    $errors[] = "{$stockItem->name}: Insufficient stock. Available: ".number_format((float) $stockItem->current_quantity, 2).', Requested: '.number_format($quantity, 2);
+                }
             }
-
-            // Throw all validation errors at once
             if (! empty($errors)) {
-                throw new \Exception("Stock Validation Failed:\n".implode("\n", $errors));
+                admin_error('Stock validation failed', implode('<br>', $errors));
+
+                return back()->withInput();
             }
         });
 
-        // Post-processing: Compute everything after save
+        // Post-processing: stock, totals, numbering, payments and ledger through SaleService.
         $form->saved(function (Form $form) {
             $saleRecord = $form->model();
 
-            // Only process on CREATE, not on EDIT
-            // In edit mode, items are not changed so no need to reprocess
-            $isEdit = $saleRecord->wasRecentlyCreated === false && $saleRecord->exists;
-
-            if ($isEdit) {
-                // Recalculate balance and payment status for inline edits
-                $totalAmount = floatval($saleRecord->total_amount);
-                $amountPaid = floatval($saleRecord->amount_paid);
-                $newBalance = $totalAmount - $amountPaid;
-
-                // Determine payment status
-                if ($newBalance <= 0) {
-                    $newPaymentStatus = 'Paid';
-                } elseif ($amountPaid > 0) {
-                    $newPaymentStatus = 'Partial';
-                } else {
-                    $newPaymentStatus = 'Unpaid';
-                }
-
-                // Update if values changed
-                if ($saleRecord->balance != $newBalance || $saleRecord->payment_status != $newPaymentStatus) {
-                    $saleRecord->balance = $newBalance;
-                    $saleRecord->payment_status = $newPaymentStatus;
-                    $saleRecord->saveQuietly(); // Save without triggering events
-                }
-
-                // Skip processing on edit since items can't be changed
+            if (! $saleRecord->wasRecentlyCreated) {
                 admin_success('Sale Updated', 'Sale record updated successfully (items unchanged).');
 
                 return;
             }
 
-            // Call the comprehensive processing method for NEW sales
             $result = $saleRecord->processAndCompute();
 
             if (! $result['success']) {
-                // Log error and show admin notification
-                admin_error('Sale Processing Error', $result['message']);
-                throw new \Exception($result['message']);
+                // The header/lines were persisted by the form but never processed (no stock or ledger effect):
+                // remove the unprocessed draft so nothing half-done is left behind.
+                DB::table('sale_record_items')->where('sale_record_id', $saleRecord->id)->delete();
+                DB::table('sale_records')->where('id', $saleRecord->id)->whereNull('processed_at')->delete();
+                admin_error('Sale not recorded', $result['message']);
+
+                return redirect(admin_url('sale-records/create'))->withInput();
             }
 
-            // Show success message with details
             $data = $result['data'];
+            $cur = Money::symbol();
             admin_success(
                 'Sale Completed Successfully',
                 "Receipt: {$data['receipt_number']}<br>".
-                'Total: UGX '.number_format($data['total_amount'], 2).'<br>'.
-                'Paid: UGX '.number_format($data['amount_paid'], 2).'<br>'.
-                'Balance: UGX '.number_format($data['balance'], 2).'<br>'.
+                "Total: {$cur} ".number_format($data['total_amount'], 2).'<br>'.
+                "Paid: {$cur} ".number_format($data['amount_paid'], 2).'<br>'.
+                "Balance: {$cur} ".number_format($data['balance'], 2).'<br>'.
                 "Items: {$data['items_processed']}<br>".
-                'Profit: UGX '.number_format($data['total_profit'], 2)
+                "Profit: {$cur} ".number_format($data['total_profit'], 2)
             );
         });
 

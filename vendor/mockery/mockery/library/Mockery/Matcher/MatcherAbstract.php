@@ -1,11 +1,11 @@
 <?php
 
 /**
- * Mockery (https://docs.mockery.io/)
+ * Mockery (https://docs.mockery.io/en/stable/)
  *
  * @copyright https://github.com/mockery/mockery/blob/HEAD/COPYRIGHT.md
  * @license   https://github.com/mockery/mockery/blob/HEAD/LICENSE BSD 3-Clause License
- * @link      https://github.com/mockery/mockery for the canonical source repository
+ * @see       https://github.com/mockery/mockery for the canonical source repository
  */
 
 namespace Mockery\Matcher;
@@ -21,7 +21,7 @@ abstract class MatcherAbstract implements MatcherInterface
      *
      * @var mixed
      */
-    protected $_expected = null;
+    protected $_expected;
 
     /**
      * Set the expected value

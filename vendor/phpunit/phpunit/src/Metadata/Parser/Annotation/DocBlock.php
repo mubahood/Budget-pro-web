@@ -34,6 +34,8 @@ use ReflectionMethod;
  * allowing us to ask meaningful questions about a specific
  * reflection symbol.
  *
+ * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
+ *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class DocBlock
@@ -51,14 +53,14 @@ final class DocBlock
     private readonly array $symbolAnnotations;
 
     /**
-     * @psalm-var null|(array{
+     * @psalm-var null|(array<
+     *   string,
+     *   array<int|string, string>|array{constraint: string}|array{version: string, operator: string}|string
+     * >&array{
      *   __OFFSET: array<string, int>&array{__FILE: string},
      *   setting?: array<string, string>,
      *   extension_versions?: array<string, array{version: string, operator: string}>
-     * }&array<
-     *   string,
-     *   string|array{version: string, operator: string}|array{constraint: string}|array<int|string, string>
-     * >)
+     * })
      */
     private ?array $parsedRequirements = null;
     private readonly int $startLine;
@@ -112,6 +114,8 @@ final class DocBlock
     }
 
     /**
+     * @throws InvalidVersionRequirementException
+     *
      * @psalm-return array{
      *   __OFFSET: array<string, int>&array{__FILE: string},
      *   setting?: array<string, string>,

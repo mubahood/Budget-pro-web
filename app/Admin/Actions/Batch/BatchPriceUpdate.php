@@ -53,9 +53,9 @@ class BatchPriceUpdate extends BatchAction
             ->options([
                 'percentage_increase' => 'Increase by Percentage (%)',
                 'percentage_decrease' => 'Decrease by Percentage (%)',
-                'fixed_increase' => 'Increase by Fixed Amount (UGX)',
-                'fixed_decrease' => 'Decrease by Fixed Amount (UGX)',
-                'set_price' => 'Set to Specific Price (UGX)',
+                'fixed_increase' => 'Increase by Fixed Amount ('.\App\Support\Money::symbol().')',
+                'fixed_decrease' => 'Decrease by Fixed Amount ('.\App\Support\Money::symbol().')',
+                'set_price' => 'Set to Specific Price ('.\App\Support\Money::symbol().')',
             ])
             ->rules('required')
             ->default('percentage_increase');

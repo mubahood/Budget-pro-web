@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
 use App\Models\FinancialPeriod;
 use App\Models\SaleRecord;
@@ -11,6 +12,7 @@ use App\Models\StockItem;
 use App\Models\StockRecord;
 use App\Models\StockSubCategory;
 use App\Models\User;
+use App\Services\Shop\SaleService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
@@ -210,11 +212,10 @@ class SaleRecordStockDeductionTest extends TestCase
     }
 
     /**
-     * Test sale deletion restores stock correctly
+     * Sales are never deleted (audit trail): voiding reverses the stock movement exactly once.
      */
-    public function test_sale_deletion_restores_stock_once()
+    public function test_voiding_a_sale_restores_stock_once()
     {
-        // Create and process a sale
         $saleRecord = SaleRecord::create([
             'company_id' => $this->company->id,
             'financial_period_id' => $this->financialPeriod->id,
@@ -234,16 +235,25 @@ class SaleRecordStockDeductionTest extends TestCase
         ]);
 
         $saleRecord->processAndCompute();
-
-        // Stock should be 90 after sale
         $this->assertEquals(90, $this->stockItem->fresh()->current_quantity);
 
-        // Delete the sale record
-        $saleRecord->delete();
+        // Hard delete is refused.
+        try {
+            $saleRecord->delete();
+            $this->fail('Deleting a sale must be refused');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('delete_not_allowed', $e->errorCode());
+        }
+        $this->assertEquals(90, $this->stockItem->fresh()->current_quantity);
 
-        // Stock should be restored to 100
-        $this->assertEquals(100, $this->stockItem->fresh()->current_quantity,
-            'Stock was not properly restored after deletion');
+        // Void reverses the movement once; voiding again is a no-op.
+        (new SaleService())->void($saleRecord->fresh(), 'test', $this->user->id);
+        $this->assertEquals(100, $this->stockItem->fresh()->current_quantity, 'Stock was not restored by the void');
+        (new SaleService())->void($saleRecord->fresh(), 'test again', $this->user->id);
+        $this->assertEquals(100, $this->stockItem->fresh()->current_quantity, 'Voiding twice must not double-restore');
+
+        $this->assertNotNull($saleRecord->fresh()->voided_at);
+        $this->assertEquals(2, StockRecord::where('sale_record_id', $saleRecord->id)->count(), 'original + contra movement are both kept');
     }
 
     /**
@@ -285,7 +295,7 @@ class SaleRecordStockDeductionTest extends TestCase
      */
     public function test_manual_stock_quantity_change_is_prevented()
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(BusinessRuleException::class);
         $this->expectExceptionMessage('Current quantity cannot be changed manually');
 
         // Try to manually change stock quantity

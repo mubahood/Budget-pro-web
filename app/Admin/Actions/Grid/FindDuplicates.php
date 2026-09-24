@@ -94,7 +94,7 @@ class FindDuplicates extends RowAction
             $html .= '<div><strong>Name:</strong> '.e($model->name).'</div>';
             $html .= '<div><strong>SKU:</strong> '.e($model->sku).'</div>';
             $html .= '<div><strong>Barcode:</strong> '.e($model->barcode ?? 'N/A').'</div>';
-            $html .= '<div><strong>Price:</strong> UGX '.number_format($model->selling_price).'</div>';
+            $html .= '<div><strong>Price:</strong> '.\App\Support\Money::format($model->selling_price, 0, (int) $model->company_id).'</div>';
             $html .= '</div>';
 
             // Exact name duplicates
@@ -158,7 +158,7 @@ class FindDuplicates extends RowAction
             $html .= '<td>'.e($item->sku).'</td>';
             $html .= '<td>'.e($item->barcode ?? '-').'</td>';
             $html .= '<td>'.number_format($item->current_quantity).'</td>';
-            $html .= '<td>UGX '.number_format($item->selling_price).'</td>';
+            $html .= '<td>'.\App\Support\Money::format($item->selling_price, 0, (int) $item->company_id).'</td>';
             $html .= '<td>';
             $html .= '<a href="'.admin_url('stock-items/'.$item->id.'/edit').'" target="_blank" class="btn btn-xs btn-primary">View</a>';
             $html .= '</td>';

@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Browser return URL after hosted checkout (public; the transaction is re-verified server-side).
+Route::get('payment/callback', \App\Http\Controllers\PaymentCallbackController::class)->name('payment.callback');
+
 // Registration (public)
 Route::get('auth/register', [AuthController::class, 'getRegister'])->name('admin.register');
 Route::post('auth/register', [AuthController::class, 'postRegister'])->name('admin.register.post');

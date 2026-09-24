@@ -29,7 +29,7 @@ class DataPart extends TextPart
     /**
      * @param resource|string|File $body Use a File instance to defer loading the file until rendering
      */
-    public function __construct($body, string $filename = null, string $contentType = null, string $encoding = null)
+    public function __construct($body, ?string $filename = null, ?string $contentType = null, ?string $encoding = null)
     {
         if ($body instanceof File && !$filename) {
             $filename = $body->getFilename();
@@ -47,7 +47,7 @@ class DataPart extends TextPart
         $this->setDisposition('attachment');
     }
 
-    public static function fromPath(string $path, string $name = null, string $contentType = null): self
+    public static function fromPath(string $path, ?string $name = null, ?string $contentType = null): self
     {
         return new self(new File($path), $name, $contentType);
     }
@@ -66,7 +66,7 @@ class DataPart extends TextPart
     public function setContentId(string $cid): static
     {
         if (!str_contains($cid, '@')) {
-            throw new InvalidArgumentException(sprintf('Invalid cid "%s".', $cid));
+            throw new InvalidArgumentException(\sprintf('Invalid cid "%s".', $cid));
         }
 
         $this->cid = $cid;
@@ -141,7 +141,7 @@ class DataPart extends TextPart
         }
         $this->_headers = $this->getHeaders();
 
-        return ['_headers', '_parent', 'filename', 'mediaType'];
+        return ['_headers', '_parent', 'filename', 'mediaType', 'cid'];
     }
 
     /**

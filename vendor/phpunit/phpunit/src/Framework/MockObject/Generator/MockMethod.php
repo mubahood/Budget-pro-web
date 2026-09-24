@@ -17,8 +17,10 @@ use function is_string;
 use function preg_match;
 use function preg_replace;
 use function sprintf;
+use function str_contains;
 use function strlen;
 use function strpos;
+use function strtolower;
 use function substr;
 use function substr_count;
 use function trim;
@@ -30,6 +32,8 @@ use SebastianBergmann\Type\Type;
 use SebastianBergmann\Type\UnknownType;
 
 /**
+ * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
+ *
  * @internal This class is not covered by the backward compatibility promise for PHPUnit
  */
 final class MockMethod
@@ -186,7 +190,7 @@ final class MockMethod
         $deprecation  = $this->deprecation;
         $returnResult = '';
 
-        if (!$this->returnType->isNever() && !$this->returnType->isVoid()) {
+        if (!$this->returnType->isNever() && !$this->returnType->isVoid() && !$this->mustNotReturnValue()) {
             $returnResult = <<<'EOT'
 
 
@@ -209,13 +213,21 @@ EOT;
 
         $template = $this->loadTemplate($templateFile);
 
+        $argumentsCount = 0;
+
+        if (str_contains($this->argumentsForCall, '...')) {
+            $argumentsCount = null;
+        } elseif (!empty($this->argumentsForCall)) {
+            $argumentsCount = substr_count($this->argumentsForCall, ',') + 1;
+        }
+
         $template->setVar(
             [
                 'arguments_decl'     => $this->argumentsForDeclaration,
                 'arguments_call'     => $this->argumentsForCall,
                 'return_declaration' => !empty($this->returnType->asString()) ? (': ' . $this->returnType->asString()) : '',
                 'return_type'        => $this->returnType->asString(),
-                'arguments_count'    => !empty($this->argumentsForCall) ? substr_count($this->argumentsForCall, ',') + 1 : 0,
+                'arguments_count'    => $argumentsCount,
                 'class_name'         => $this->className,
                 'method_name'        => $this->methodName,
                 'modifier'           => $this->modifier,
@@ -248,6 +260,16 @@ EOT;
     public function numberOfParameters(): int
     {
         return $this->numberOfParameters;
+    }
+
+    /**
+     * @see https://wiki.php.net/rfc/deprecate-return-value-from-construct
+     */
+    private function mustNotReturnValue(): bool
+    {
+        $methodName = strtolower($this->methodName);
+
+        return $methodName === '__construct' || $methodName === '__destruct';
     }
 
     /**

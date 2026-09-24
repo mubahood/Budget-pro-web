@@ -2,17 +2,15 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
 use App\Http\Requests\Api\RegisterRequest;
 use App\Http\Resources\CompanyResource;
 use App\Http\Resources\UserResource;
 use App\Models\Company;
-use App\Models\CompanyMember;
-use App\Models\FinancialPeriod;
-use App\Models\Plan;
-use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Onboarding\RegistrationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,73 +27,16 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request)
     {
-        $data = $request->validated();
-
         try {
-            $result = DB::transaction(function () use ($data) {
-                // 1. Create the owner user (company_id backfilled by the Company::created hook).
-                $user = new User();
-                $user->first_name = $data['first_name'];
-                $user->last_name = $data['last_name'];
-                $user->name = trim($data['first_name'].' '.$data['last_name']);
-                $user->username = $data['email'];
-                $user->email = $data['email'];
-                $user->phone_number = $data['phone_number'] ?? null;
-                $user->password = Hash::make($data['password']);
-                $user->status = 'Active';
-                $user->save();
-
-                // 2. Create the company (its created hook sets owner->company_id,
-                //    assigns the owner role, and seeds account categories).
-                $company = new Company();
-                $company->owner_id = $user->id;
-                $company->name = $data['company_name'];
-                $company->email = $data['email'];
-                $company->phone_number = $data['phone_number'] ?? null;
-                $company->status = 'Active';
-                $company->currency = $data['currency'];
-                $company->license_expire = now()->addDays((int) config('saas.trial_days', 14));
-                $company->save();
-
-                // 2b. Ping Pin's multi-member organisation model (company_members)
-                //     needs an owner row for every company, not just the ones that
-                //     existed when that table was introduced (those were backfilled
-                //     by the migration itself) — every NEW signup needs one too.
-                CompanyMember::create([
-                    'company_id' => $company->id,
-                    'user_id' => $user->id,
-                    'role' => 'owner',
-                    'status' => 'active',
-                    'joined_at' => now(),
-                ]);
-
-                // 3. Start a trial subscription on the default plan.
-                $plan = Plan::where('slug', config('saas.default_plan', 'trial'))->first();
-                Subscription::create([
-                    'company_id' => $company->id,
-                    'plan_id' => $plan?->id,
-                    'status' => 'trialing',
-                    'starts_at' => now(),
-                    'trial_ends_at' => now()->addDays((int) config('saas.trial_days', 14)),
-                    'ends_at' => now()->addDays((int) config('saas.trial_days', 14)),
-                    'provider' => 'trial',
-                ]);
-
-                // 4. Create a default active financial period for the current year.
-                $this->createDefaultFinancialPeriod($company->id);
-
-                // 5. Re-fetch the user so company_id reflects the hook's back-fill.
-                $user->refresh();
-
-                return [$user, $company];
-            });
+            ['user' => $user, 'company' => $company] = app(RegistrationService::class)
+                ->register($request->validated(), RegistrationService::PRODUCT_BUDGET, 'api');
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
         } catch (\Throwable $e) {
             Log::error('API registration failed', ['error' => $e->getMessage()]);
 
             return $this->error('Registration failed. Please try again.', 500);
         }
-
-        [$user, $company] = $result;
 
         $token = $user->createToken($this->deviceName($request))->plainTextToken;
 
@@ -219,30 +160,5 @@ class AuthController extends Controller
     private function deviceName(Request $request): string
     {
         return (string) ($request->input('device_name') ?: $request->userAgent() ?: 'api-token');
-    }
-
-    private function createDefaultFinancialPeriod(int $companyId): void
-    {
-        $exists = FinancialPeriod::withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('status', 'Active')
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
-        $period = new FinancialPeriod();
-        $period->company_id = $companyId;
-        $period->name = 'FY '.date('Y');
-        $period->start_date = now()->startOfYear();
-        $period->end_date = now()->endOfYear();
-        $period->status = 'Active';
-        $period->description = 'Default financial year created during registration';
-        $period->total_investment = 0;
-        $period->total_sales = 0;
-        $period->total_profit = 0;
-        $period->total_expenses = 0;
-        $period->saveQuietly();
     }
 }

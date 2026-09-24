@@ -31,13 +31,13 @@ class AdminAccess
 
     /** Everything a tenant user may open in the admin panel (laravel-admin http_path syntax). */
     public const TENANT_PATHS = [
-        '/', '/auth/setting', '/auth/logout',
+        '/', '/auth/setting', '/auth/logout', '/subscription-expired',
         '/companies-edit*', '/employees*',
         '/stock-categories*', '/stock-sub-categories*', '/stock-items*', '/stock-records*', '/sale-records*',
         '/financial-periods*', '/financial-categories*', '/financial-records*', '/financial-reports*',
         '/budget-programs*', '/budget-item-categories*', '/budget-items*', '/contribution-records*',
         '/handover-records*', '/data-exports*',
-        '/purchase-orders*', '/inventory-forecasts*', '/auto-reorder-rules*',
+        '/purchase-orders*',
         '/poultry-*',
         '/tracked-devices*', '/device-locations*', '/device-commands*', '/tracking-map*',
         '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search',

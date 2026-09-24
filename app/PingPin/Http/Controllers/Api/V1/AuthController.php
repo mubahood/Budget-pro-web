@@ -2,15 +2,14 @@
 
 namespace App\PingPin\Http\Controllers\Api\V1;
 
+use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyMember;
-use App\Models\PingPinPlan;
-use App\Models\PingPinSubscription;
 use App\Models\User;
+use App\Services\Onboarding\RegistrationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
@@ -41,58 +40,11 @@ class AuthController extends Controller
             'currency' => 'nullable|string|max:8',
         ]);
 
-        if (empty($data['email']) && empty($data['phone_number'])) {
-            return $this->error('Provide an email or phone number.', 422);
-        }
-
-        if (! empty($data['phone_number']) && User::where('phone_number', $data['phone_number'])->exists()) {
-            return $this->error('This phone number is already registered.', 422);
-        }
-
         try {
-            [$user, $company] = DB::transaction(function () use ($data) {
-                $user = new User();
-                $user->name = $data['name'];
-                $user->username = $data['email'] ?? $data['phone_number'];
-                $user->email = $data['email'] ?? null;
-                $user->phone_number = $data['phone_number'] ?? null;
-                $user->password = Hash::make($data['password']);
-                $user->status = 'Active';
-                $user->save();
-
-                $company = new Company();
-                $company->owner_id = $user->id;
-                $company->name = $data['organisation_name'] ?? ($data['name']."'s Organisation");
-                $company->email = $data['email'] ?? null;
-                $company->phone_number = $data['phone_number'] ?? null;
-                $company->status = 'Active';
-                $company->currency = $data['currency'] ?? 'UGX';
-                $company->save();
-
-                CompanyMember::create([
-                    'company_id' => $company->id,
-                    'user_id' => $user->id,
-                    'role' => 'owner',
-                    'status' => 'active',
-                    'joined_at' => now(),
-                ]);
-
-                $trialPlan = PingPinPlan::where('slug', 'trial')->first();
-                $trialDays = $trialPlan?->trial_days ?? 14;
-                PingPinSubscription::create([
-                    'company_id' => $company->id,
-                    'plan_id' => $trialPlan?->id,
-                    'status' => 'trialing',
-                    'starts_at' => now(),
-                    'trial_ends_at' => now()->addDays($trialDays),
-                    'ends_at' => now()->addDays($trialDays),
-                    'provider' => 'trial',
-                ]);
-
-                $user->refresh();
-
-                return [$user, $company];
-            });
+            ['user' => $user, 'company' => $company] = app(RegistrationService::class)
+                ->register($data, RegistrationService::PRODUCT_PINGPIN, 'pingpin');
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
         } catch (\Throwable $e) {
             Log::error('PingPin registration failed', ['error' => $e->getMessage()]);
 

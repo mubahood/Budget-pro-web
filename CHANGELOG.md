@@ -15,6 +15,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P0-1** Tenant admin roles no longer hold the `*` permission: an explicit `tenant.workspace` allow-list replaces it, Billing/Admin/Ping Pin-Plans menus are pinned to platform admins, and a `PlatformAdminOnly` middleware hard-denies `/subscriptions`, `/plans`, `/companies`, `/auth/users|roles|permissions|menu|logs` and the code generators for non-platform users. (`AdminRolesSeeder`, migration `scope_tenant_admin_permissions`)
 - **P0-2** `CompanyScope` is now live under the `admin` guard (it only ever looked at the unused `web` guard), so every admin `findOrFail()` is tenant-safe; `TenantAdminController` turns cross-tenant deletes into clean 404s; `DataExport` gained the scope; the `bcrypt('admin')` default password is gone (a user without a password is a `BusinessRuleException`); the Team (employees) screen now requires a password and a role, never shows credentials, and checks the company on every read/write.
 
+- **P0-3** Subscription grace period (DECISIONS H5): a lapsed tenant keeps 7 days of read-only web access (`EnsureWebAccess`, `/subscription-expired`), the API answers with `X-Subscription-State: grace` instead of 402, and `BusinessRuleException` carries a machine-readable `errors.code` on every 422.
+- **P0-14** `/payment/callback` exists: the browser return URL re-verifies the Flutterwave transaction and activates the subscription through the shared `SubscriptionFulfillment` service (also used by the webhook and the verify endpoint); subscription checkout is owner-only (403 otherwise).
+
+#### Shop maths (P0-4 … P0-11)
+- Stock is event-sourced: every `StockRecord` carries a signed `quantity_delta`; the product's `current_quantity` is updated with an atomic, row-locked `UPDATE … + delta` inside the movement's transaction, so parallel checkouts can never oversell (20-parallel test in `tests/Feature/Shop/ConcurrentCheckoutTest`). Inbound types (Stock In, Purchase, Return, Adjustment In) now really add stock.
+- Movements and sales are never edited or deleted: reversals (`POST stock-records/{id}/reverse`) and voids (`POST sales/{id}/void`) write contra rows; the admin delete buttons now void/reverse.
+- `SaleService::checkout` is the single checkout path (API, admin POS, legacy): one transaction for header, lines, movements, payments and ledger; products locked in id order; idempotent on `client_uuid`; line + header discounts allocated pro-rata and reflected in movement revenue/profit; cash over-tender becomes `change_given`, never income.
+- Money is posted to the ledger per **payment** (`payments` table, `financial_records.source_type/source_id`): credit sales post nothing until paid, partial payments post as they arrive, marking a sale "Paid" records a real payment, lowering `amount_paid` directly is refused.
+- Receipt/invoice numbers are per-company yearly sequences (`RCP-2026-000001`, `number_sequences`, row-locked); the global UNIQUE indexes were replaced by per-company ones.
+- The financial period is derived from the business date (`FinancialPeriod::resolveFor`), closed periods refuse writes, and the database guarantees a single Active period per company (generated `active_flag` + unique index).
+- `FinancialCategory` duplicates are a 422 (`duplicate_category`) instead of a silent `return false`; categories gained `type`/`status`; `financial_records.amount` is a real DECIMAL.
+- Dashboards/reports no longer double count: sales income is read from the ledger only (`HomeController`, `FinancialReportService` cash-basis summary), voided sales are excluded, and low stock uses the per-product `min_stock` threshold (`saas.low_stock_threshold` default). Quick sale saves the price actually charged.
+- Quantities are `DECIMAL(15,3)` end-to-end (kg/litre sales); currency labels come from the company (`Money::symbol()`), no more hardcoded UGX.
+
+#### Onboarding
+- **P0-12** Inventory forecasting and auto-reorder rules are hidden behind `saas.features.inventory_automation` (default off) until their Phase 4 rebuild; their menu entries are removed and the shadowed `auto-reorder-rules/trigger` route is fixed.
+- **P0-13** One `RegistrationService` behind the web form, `/api/v1/auth/register`, the legacy `/api/auth/register` and Ping Pin signup: owner + role, company, membership, trial subscription, default period and account categories in one transaction, with one shared rule set. Phone-only signups keep their phone as username (the `User` hook no longer clobbers it).
+
 ---
 
 ## [2.0.0] - 2025-12-09

@@ -13,25 +13,24 @@ use PHPUnit\Framework\MockObject\Builder\InvocationMocker as InvocationMockerBui
 use PHPUnit\Framework\MockObject\Rule\InvocationOrder;
 
 /**
+ * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
+ *
  * @internal This trait is not covered by the backward compatibility promise for PHPUnit
  */
 trait MockObjectApi
 {
     private object $__phpunit_originalObject;
 
-    /** @noinspection MagicMethodsValidityInspection */
     public function __phpunit_hasMatchers(): bool
     {
         return $this->__phpunit_getInvocationHandler()->hasMatchers();
     }
 
-    /** @noinspection MagicMethodsValidityInspection */
     public function __phpunit_setOriginalObject(object $originalObject): void
     {
         $this->__phpunit_originalObject = $originalObject;
     }
 
-    /** @noinspection MagicMethodsValidityInspection */
     public function __phpunit_verify(bool $unsetInvocationMocker = true): void
     {
         $this->__phpunit_getInvocationHandler()->verify();

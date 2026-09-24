@@ -241,7 +241,7 @@ class Response
     public function __toString(): string
     {
         return
-            sprintf('HTTP/%s %s %s', $this->version, $this->statusCode, $this->statusText)."\r\n".
+            \sprintf('HTTP/%s %s %s', $this->version, $this->statusCode, $this->statusText)."\r\n".
             $this->headers."\r\n".
             $this->getContent();
     }
@@ -355,22 +355,20 @@ class Response
             $replace = false;
 
             // As recommended by RFC 8297, PHP automatically copies headers from previous 103 responses, we need to deal with that if headers changed
-            if (103 === $statusCode) {
-                $previousValues = $this->sentHeaders[$name] ?? null;
-                if ($previousValues === $values) {
-                    // Header already sent in a previous response, it will be automatically copied in this response by PHP
-                    continue;
-                }
-
-                $replace = 0 === strcasecmp($name, 'Content-Type');
-
-                if (null !== $previousValues && array_diff($previousValues, $values)) {
-                    header_remove($name);
-                    $previousValues = null;
-                }
-
-                $newValues = null === $previousValues ? $values : array_diff($values, $previousValues);
+            $previousValues = $this->sentHeaders[$name] ?? null;
+            if ($previousValues === $values) {
+                // Header already sent in a previous response, it will be automatically copied in this response by PHP
+                continue;
             }
+
+            $replace = 0 === strcasecmp($name, 'Content-Type');
+
+            if (null !== $previousValues && array_diff($previousValues, $values)) {
+                header_remove($name);
+                $previousValues = null;
+            }
+
+            $newValues = null === $previousValues ? $values : array_diff($values, $previousValues);
 
             foreach ($newValues as $value) {
                 header($name.': '.$value, $replace, $this->statusCode);
@@ -395,7 +393,7 @@ class Response
         $statusCode ??= $this->statusCode;
 
         // status
-        header(sprintf('HTTP/%s %s %s', $this->version, $statusCode, $this->statusText), true, $statusCode);
+        header(\sprintf('HTTP/%s %s %s', $this->version, $statusCode, $this->statusText), true, $statusCode);
 
         return $this;
     }
@@ -497,11 +495,11 @@ class Response
      *
      * @final
      */
-    public function setStatusCode(int $code, string $text = null): static
+    public function setStatusCode(int $code, ?string $text = null): static
     {
         $this->statusCode = $code;
         if ($this->isInvalid()) {
-            throw new \InvalidArgumentException(sprintf('The HTTP status code "%s" is not valid.', $code));
+            throw new \InvalidArgumentException(\sprintf('The HTTP status code "%s" is not valid.', $code));
         }
 
         if (null === $text) {
@@ -762,7 +760,7 @@ class Response
      *
      * @final
      */
-    public function setExpires(\DateTimeInterface $date = null): static
+    public function setExpires(?\DateTimeInterface $date = null): static
     {
         if (1 > \func_num_args()) {
             trigger_deprecation('symfony/http-foundation', '6.2', 'Calling "%s()" without any arguments is deprecated, pass null explicitly instead.', __METHOD__);
@@ -943,7 +941,7 @@ class Response
      *
      * @final
      */
-    public function setLastModified(\DateTimeInterface $date = null): static
+    public function setLastModified(?\DateTimeInterface $date = null): static
     {
         if (1 > \func_num_args()) {
             trigger_deprecation('symfony/http-foundation', '6.2', 'Calling "%s()" without any arguments is deprecated, pass null explicitly instead.', __METHOD__);
@@ -981,7 +979,7 @@ class Response
      *
      * @final
      */
-    public function setEtag(string $etag = null, bool $weak = false): static
+    public function setEtag(?string $etag = null, bool $weak = false): static
     {
         if (1 > \func_num_args()) {
             trigger_deprecation('symfony/http-foundation', '6.2', 'Calling "%s()" without any arguments is deprecated, pass null explicitly instead.', __METHOD__);
@@ -993,7 +991,7 @@ class Response
                 $etag = '"'.$etag.'"';
             }
 
-            $this->headers->set('ETag', (true === $weak ? 'W/' : '').$etag);
+            $this->headers->set('ETag', ($weak ? 'W/' : '').$etag);
         }
 
         return $this;
@@ -1013,7 +1011,7 @@ class Response
     public function setCache(array $options): static
     {
         if ($diff = array_diff(array_keys($options), array_keys(self::HTTP_RESPONSE_CACHE_CONTROL_DIRECTIVES))) {
-            throw new \InvalidArgumentException(sprintf('Response does not support the following options: "%s".', implode('", "', $diff)));
+            throw new \InvalidArgumentException(\sprintf('Response does not support the following options: "%s".', implode('", "', $diff)));
         }
 
         if (isset($options['etag'])) {
@@ -1284,7 +1282,7 @@ class Response
      *
      * @final
      */
-    public function isRedirect(string $location = null): bool
+    public function isRedirect(?string $location = null): bool
     {
         return \in_array($this->statusCode, [201, 301, 302, 303, 307, 308]) && (null === $location ?: $location == $this->headers->get('Location'));
     }
@@ -1346,7 +1344,7 @@ class Response
      */
     protected function ensureIEOverSSLCompatibility(Request $request): void
     {
-        if (false !== stripos($this->headers->get('Content-Disposition') ?? '', 'attachment') && 1 == preg_match('/MSIE (.*?);/i', $request->server->get('HTTP_USER_AGENT') ?? '', $match) && true === $request->isSecure()) {
+        if (false !== stripos($this->headers->get('Content-Disposition') ?? '', 'attachment') && 1 == preg_match('/MSIE (.*?);/i', $request->server->get('HTTP_USER_AGENT') ?? '', $match) && $request->isSecure()) {
             if ((int) preg_replace('/(MSIE )(.*?);/', '$2', $match[0]) < 9) {
                 $this->headers->remove('Cache-Control');
             }

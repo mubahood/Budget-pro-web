@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Exceptions\BusinessRuleException;
 use App\Jobs\UpdateFinancialCategoryAggregates;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
@@ -34,7 +36,8 @@ class FinancialRecord extends Model
         'updated_at' => 'datetime',
         'date' => 'datetime',
         'amount' => 'decimal:2',
-        'quantity' => 'decimal:2',
+        'quantity' => 'decimal:3',
+        'is_reversal' => 'boolean',
     ];
 
     protected $fillable = [
@@ -51,6 +54,11 @@ class FinancialRecord extends Model
         'date',
         'financial_period_id',
         'created_by_id',
+        'source_type',
+        'source_id',
+        'is_reversal',
+        'reverses_id',
+        'currency',
     ];
 
     //boot
@@ -59,18 +67,29 @@ class FinancialRecord extends Model
         parent::boot();
 
         //creating
-        static::creating(function ($model) {
-            $user = User::find($model->created_by_id);
-            if ($user == null) {
-                throw new \Exception('Invalid User');
+        static::creating(function (FinancialRecord $model) {
+            $user = $model->created_by_id ? User::withoutGlobalScopes()->find($model->created_by_id) : null;
+            if ($user === null) {
+                throw BusinessRuleException::make('invalid_user', 'Invalid user for this financial record.');
             }
-            $financial_period = Utils::getActiveFinancialPeriod($user->company_id);
-
-            if ($financial_period == null) {
-                throw new \Exception('Financial Period is not active. Please activate the financial period.');
+            // Manual entries are stamped with the creator's company; system entries (payments,
+            // stock movements) already carry the tenant and must not be re-stamped.
+            if (empty($model->company_id)) {
+                $model->company_id = $user->company_id;
             }
-            $model->financial_period_id = $financial_period->id;
-            $model->company_id = $user->company_id;
+            $amount = (float) $model->amount;
+            if ($amount == 0.0 || ($amount < 0 && ! $model->is_reversal)) {
+                throw BusinessRuleException::make('invalid_amount', 'Amount must be greater than zero.');
+            }
+            if (empty($model->date)) {
+                $model->date = now();
+            }
+            if (empty($model->currency)) {
+                $model->currency = Company::withoutGlobalScopes()->find($model->company_id)?->currency;
+            }
+            // Period is derived from the business date (P0-10), never from "whatever is active today".
+            $period = FinancialPeriod::resolveFor((int) $model->company_id, \Illuminate\Support\Carbon::parse($model->date));
+            $model->financial_period_id = $period->id;
         });
 
         // Created - log after successful creation
@@ -84,16 +103,16 @@ class FinancialRecord extends Model
         });
 
         // Updating - validate before updates
-        static::updating(function ($model) {
-            // Validate financial period is still active
-            $financial_period = FinancialPeriod::find($model->financial_period_id);
-            if ($financial_period == null || $financial_period->status != 'Active') {
-                throw new \Exception('Cannot update record. Financial Period is not active.');
+        static::updating(function (FinancialRecord $model) {
+            if (! empty($model->source_type) && $model->isDirty(['amount', 'type', 'financial_category_id', 'date', 'source_type', 'source_id', 'company_id'])) {
+                throw BusinessRuleException::make('ledger_locked', 'This ledger entry was posted by the system (sale/payment). Reverse the payment instead of editing it.');
             }
-
-            // Validate amount
-            if ($model->amount <= 0) {
-                throw new \Exception('Invalid amount. Must be greater than 0.');
+            $period = FinancialPeriod::withoutGlobalScopes()->find($model->financial_period_id);
+            if ($period !== null && $period->status === 'Closed') {
+                throw BusinessRuleException::make('period_closed', 'Cannot update a record in a closed financial period.');
+            }
+            if ((float) $model->amount <= 0 && ! $model->is_reversal) {
+                throw BusinessRuleException::make('invalid_amount', 'Amount must be greater than zero.');
             }
 
             return true;
@@ -109,9 +128,14 @@ class FinancialRecord extends Model
             }
         });
 
-        static::deleting(function ($model) {
-            $model->financial_category()->dissociate();
-            $model->save();
+        static::deleting(function (FinancialRecord $model) {
+            if (! empty($model->source_type)) {
+                throw BusinessRuleException::make('ledger_locked', 'System-posted ledger entries cannot be deleted. Reverse the payment or void the sale instead.');
+            }
+            $period = FinancialPeriod::withoutGlobalScopes()->find($model->financial_period_id);
+            if ($period !== null && $period->status === 'Closed') {
+                throw BusinessRuleException::make('period_closed', 'Cannot delete a record in a closed financial period.');
+            }
         });
 
         // Deleted - update aggregates after deletion
@@ -139,27 +163,27 @@ class FinancialRecord extends Model
     }
 
     //belongs financial_category
-    public function financial_category()
+    public function financial_category(): BelongsTo
     {
         return $this->belongsTo(FinancialCategory::class);
     }
 
-    public function financialPeriod()
+    public function financialPeriod(): BelongsTo
     {
         return $this->belongsTo(FinancialPeriod::class, 'financial_period_id');
     }
 
-    public function createdBy()
+    public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_id');
     }
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    public function company()
+    public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class, 'company_id');
     }

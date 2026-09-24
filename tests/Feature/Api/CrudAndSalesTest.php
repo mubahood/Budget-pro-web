@@ -64,7 +64,7 @@ class CrudAndSalesTest extends ApiTestCase
 
         // Stock deducted 100 -> 97
         $this->getJson("/api/v1/stock-items/{$item}", $h)
-            ->assertOk()->assertJsonPath('data.current_quantity', '97.00');
+            ->assertOk()->assertJsonPath('data.current_quantity', '97.000');
     }
 
     public function test_checkout_rejects_insufficient_stock(): void
@@ -83,7 +83,7 @@ class CrudAndSalesTest extends ApiTestCase
         ], $h)->assertStatus(422);
 
         // Stock unchanged after a failed checkout.
-        $this->getJson("/api/v1/stock-items/{$item}", $h)->assertJsonPath('data.current_quantity', '2.00');
+        $this->getJson("/api/v1/stock-items/{$item}", $h)->assertJsonPath('data.current_quantity', '2.000');
     }
 
     public function test_budget_item_target_is_computed(): void

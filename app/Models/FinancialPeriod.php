@@ -2,10 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Financial Period Model
@@ -22,10 +27,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $description
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- *
  * @property-read Company $company
- *
- * @package App\Models
  */
 class FinancialPeriod extends Model
 {
@@ -54,6 +56,8 @@ class FinancialPeriod extends Model
         'end_date',
         'status',
         'description',
+        'closed_at',
+        'closed_by_id',
     ];
 
     /**
@@ -64,6 +68,7 @@ class FinancialPeriod extends Model
         'updated_at' => 'datetime',
         'start_date' => 'date',
         'end_date' => 'date',
+        'closed_at' => 'datetime',
     ];
 
     /**
@@ -76,70 +81,121 @@ class FinancialPeriod extends Model
     {
         parent::boot();
 
-        static::creating(function ($model) {
-            // Validate no other active financial period exists
-            $active_financial_period = FinancialPeriod::where([
-                'company_id' => $model->company_id,
-                'status' => 'Active',
-            ])->first();
-            if ($active_financial_period != null && $model->status == 'Active') {
-                throw new \Exception('There is an active financial period. Please close it first.');
+        static::saving(function (FinancialPeriod $model) {
+            if (! empty($model->getAttribute('start_date')) && ! empty($model->getAttribute('end_date')) && Carbon::parse($model->end_date)->lt(Carbon::parse($model->start_date))) {
+                throw BusinessRuleException::make('invalid_period_range', 'The period end date must be on or after the start date.');
+            }
+            if ($model->status === 'Closed' && empty($model->closed_at)) {
+                $model->closed_at = now();
+                $model->closed_by_id = $model->closed_by_id ?? auth()->id();
+            }
+            if ($model->status !== 'Closed') {
+                $model->closed_at = null;
+                $model->closed_by_id = null;
             }
         });
 
-        static::updating(function ($model) {
-            //active financial period
-            $active_financial_period = FinancialPeriod::where([
-                'company_id' => $model->company_id,
-                'status' => 'Active',
-            ])->first();
-            if ($model->status == 'Active') {
-                if ($active_financial_period != null && $active_financial_period->id != $model->id) {
-                    throw new \Exception('There is an active financial period. Please close it first.');
-                }
+        // Activating a period deactivates the previous one — the generated `active_flag`
+        // unique index guarantees a single Active row per company even under races.
+        static::saved(function (FinancialPeriod $model) {
+            if ($model->status === 'Active') {
+                DB::table('financial_periods')
+                    ->where('company_id', $model->company_id)
+                    ->where('id', '!=', $model->id)
+                    ->where('status', 'Active')
+                    ->update(['status' => 'Inactive', 'updated_at' => now()]);
             }
         });
+    }
+
+    /** Insert with the right conflict semantics: activating while another is Active demotes it first. */
+    public function save(array $options = [])
+    {
+        return DB::transaction(function () use ($options) {
+            if ($this->status === 'Active' && $this->company_id) {
+                DB::table('financial_periods')
+                    ->where('company_id', $this->company_id)
+                    ->when($this->exists, fn ($q) => $q->where('id', '!=', $this->id))
+                    ->where('status', 'Active')
+                    ->update(['status' => 'Inactive', 'updated_at' => now()]);
+            }
+
+            return parent::save($options);
+        });
+    }
+
+    /**
+     * The period a business date belongs to (P0-10): the period whose range
+     * contains the date, preferring Active; falls back to the Active period.
+     * Closed periods are refused.
+     */
+    public static function resolveFor(int $companyId, Carbon $date): self
+    {
+        $period = static::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereDate('start_date', '<=', $date->toDateString())
+            ->whereDate('end_date', '>=', $date->toDateString())
+            ->orderByRaw("status = 'Active' DESC")
+            ->orderByDesc('id')
+            ->first();
+
+        if ($period === null) {
+            $period = static::withoutGlobalScopes()->where('company_id', $companyId)->where('status', 'Active')->first();
+        }
+        if ($period === null) {
+            throw BusinessRuleException::make('no_active_period', 'No active financial period. Please create/activate one first.');
+        }
+        if ($period->status === 'Closed') {
+            throw BusinessRuleException::make('period_closed', 'The financial period for '.$date->toDateString().' is closed.', ['period_id' => $period->id]);
+        }
+
+        return $period;
+    }
+
+    public function isClosed(): bool
+    {
+        return $this->status === 'Closed';
     }
 
     /**
      * Relationships
      */
-    public function company()
+    public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class, 'company_id');
     }
 
-    public function stockItems()
+    public function stockItems(): HasMany
     {
         return $this->hasMany(StockItem::class, 'financial_period_id');
     }
 
-    public function stockRecords()
+    public function stockRecords(): HasMany
     {
         return $this->hasMany(StockRecord::class, 'financial_period_id');
     }
 
-    public function financialRecords()
+    public function financialRecords(): HasMany
     {
         return $this->hasMany(FinancialRecord::class, 'financial_period_id');
     }
 
-    public function budgetItems()
+    public function budgetItems(): HasMany
     {
         return $this->hasMany(BudgetItem::class, 'financial_period_id');
     }
 
-    public function budgetPrograms()
+    public function budgetPrograms(): HasMany
     {
         return $this->hasMany(BudgetProgram::class, 'financial_period_id');
     }
 
-    public function contributionRecords()
+    public function contributionRecords(): HasMany
     {
         return $this->hasMany(ContributionRecord::class, 'financial_period_id');
     }
 
-    public function createdBy()
+    public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_id');
     }

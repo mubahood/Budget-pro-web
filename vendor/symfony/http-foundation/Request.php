@@ -11,6 +11,7 @@
 
 namespace Symfony\Component\HttpFoundation;
 
+use Symfony\Component\HttpFoundation\Exception\BadRequestException;
 use Symfony\Component\HttpFoundation\Exception\ConflictingHeadersException;
 use Symfony\Component\HttpFoundation\Exception\JsonException;
 use Symfony\Component\HttpFoundation\Exception\SessionNotFoundException;
@@ -216,6 +217,16 @@ class Request
 
     private static int $trustedHeaderSet = -1;
 
+    /**
+     * @var array<string, true>
+     */
+    private static array $trustedHostsLiterals = [];
+
+    /**
+     * @var string[]
+     */
+    private static array $trustedHostsRegexps = [];
+
     private const FORWARDED_PARAMS = [
         self::HEADER_X_FORWARDED_FOR => 'for',
         self::HEADER_X_FORWARDED_HOST => 'host',
@@ -326,6 +337,8 @@ class Request
      * @param array                $files      The request files ($_FILES)
      * @param array                $server     The server parameters ($_SERVER)
      * @param string|resource|null $content    The raw body data
+     *
+     * @throws BadRequestException When the URI is invalid
      */
     public static function create(string $uri, string $method = 'GET', array $parameters = [], array $cookies = [], array $files = [], array $server = [], $content = null): static
     {
@@ -348,11 +361,31 @@ class Request
         $server['PATH_INFO'] = '';
         $server['REQUEST_METHOD'] = strtoupper($method);
 
-        $components = parse_url($uri);
-        if (false === $components) {
-            trigger_deprecation('symfony/http-foundation', '6.3', 'Calling "%s()" with an invalid URI is deprecated.', __METHOD__);
-            $components = [];
+        if (($i = strcspn($uri, ':/?#')) && ':' === ($uri[$i] ?? null) && (strspn($uri, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-.') !== $i || strcspn($uri, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'))) {
+            throw new BadRequestException('Invalid URI: Scheme is malformed.');
         }
+        if (false === $components = parse_url(\strlen($uri) !== strcspn($uri, '?#') ? $uri : $uri.'#')) {
+            throw new BadRequestException('Invalid URI.');
+        }
+
+        $part = ($components['user'] ?? '').':'.($components['pass'] ?? '');
+
+        if (':' !== $part && \strlen($part) !== strcspn($part, '[]')) {
+            throw new BadRequestException('Invalid URI: Userinfo is malformed.');
+        }
+        if (($part = $components['host'] ?? '') && !self::isHostValid($part)) {
+            throw new BadRequestException('Invalid URI: Host is malformed.');
+        }
+        if (false !== ($i = strpos($uri, '\\')) && $i < strcspn($uri, '?#')) {
+            throw new BadRequestException('Invalid URI: A URI cannot contain a backslash.');
+        }
+        if (\strlen($uri) !== strcspn($uri, "\r\n\t")) {
+            throw new BadRequestException('Invalid URI: A URI cannot contain CR/LF/TAB characters.');
+        }
+        if ('' !== $uri && (\ord($uri[0]) <= 32 || \ord($uri[-1]) <= 32)) {
+            throw new BadRequestException('Invalid URI: A URI must not start nor end with ASCII control characters or spaces.');
+        }
+
         if (isset($components['host'])) {
             $server['SERVER_NAME'] = $components['host'];
             $server['HTTP_HOST'] = $components['host'];
@@ -381,8 +414,16 @@ class Request
             $server['PHP_AUTH_PW'] = $components['pass'];
         }
 
-        if (!isset($components['path'])) {
+        if ('' === $path = $components['path'] ?? '') {
             $components['path'] = '/';
+        } elseif (!isset($components['scheme']) && !isset($components['host']) && '/' !== $path[0]) {
+            if (false !== $pos = strpos($path, '/')) {
+                $path = substr($path, 0, $pos);
+            }
+
+            if (str_contains($path, ':')) {
+                throw new BadRequestException('Invalid URI: Path is malformed.');
+            }
         }
 
         switch (strtoupper($method)) {
@@ -448,7 +489,7 @@ class Request
      * @param array|null $files      The FILES parameters
      * @param array|null $server     The SERVER parameters
      */
-    public function duplicate(array $query = null, array $request = null, array $attributes = null, array $cookies = null, array $files = null, array $server = null): static
+    public function duplicate(?array $query = null, ?array $request = null, ?array $attributes = null, ?array $cookies = null, ?array $files = null, ?array $server = null): static
     {
         $dup = clone $this;
         if (null !== $query) {
@@ -525,7 +566,7 @@ class Request
         }
 
         return
-            sprintf('%s %s %s', $this->getMethod(), $this->getRequestUri(), $this->server->get('SERVER_PROTOCOL'))."\r\n".
+            \sprintf('%s %s %s', $this->getMethod(), $this->getRequestUri(), $this->server->get('SERVER_PROTOCOL'))."\r\n".
             $this->headers.
             $cookieHeader."\r\n".
             $content;
@@ -583,7 +624,7 @@ class Request
      */
     public static function setTrustedProxies(array $proxies, int $trustedHeaderSet)
     {
-        self::$trustedProxies = array_reduce($proxies, function ($proxies, $proxy) {
+        self::$trustedProxies = array_reduce($proxies, static function ($proxies, $proxy) {
             if ('REMOTE_ADDR' !== $proxy) {
                 $proxies[] = $proxy;
             } elseif (isset($_SERVER['REMOTE_ADDR'])) {
@@ -626,9 +667,20 @@ class Request
      */
     public static function setTrustedHosts(array $hostPatterns)
     {
-        self::$trustedHostPatterns = array_map(fn ($hostPattern) => sprintf('{%s}i', $hostPattern), $hostPatterns);
-        // we need to reset trusted hosts on trusted host patterns change
-        self::$trustedHosts = [];
+        self::$trustedHostPatterns = array_map(static fn ($hostPattern) => \sprintf('{%s}i', $hostPattern), $hostPatterns);
+        self::$trustedHostsLiterals = [];
+        $regexpPatterns = [];
+
+        foreach ($hostPatterns as $hostPattern) {
+            // constant patterns are matched by a hash lookup in getHost(), where the host is lowercase and free of newlines
+            if (preg_match('{^\^((?:[a-z0-9_:-]|\\\\[^a-z0-9])++)\$$}Di', $hostPattern, $m)) {
+                self::$trustedHostsLiterals[strtolower(preg_replace('{\\\\(.)}s', '$1', $m[1]))] = true;
+            } else {
+                $regexpPatterns[] = $hostPattern;
+            }
+        }
+
+        self::$trustedHostsRegexps = self::compileHostPatterns($regexpPatterns);
     }
 
     /**
@@ -805,10 +857,6 @@ class Request
      * being the original client, and each successive proxy that passed the request
      * adding the IP address where it received the request from.
      *
-     * If your reverse proxy uses a different header name than "X-Forwarded-For",
-     * ("Client-Ip" for instance), configure it via the $trustedHeaderSet
-     * argument of the Request::setTrustedProxies() method instead.
-     *
      * @see getClientIps()
      * @see https://wikipedia.org/wiki/X-Forwarded-For
      */
@@ -834,7 +882,7 @@ class Request
      *
      * Suppose this request is instantiated from /mysite on localhost:
      *
-     *  * http://localhost/mysite              returns an empty string
+     *  * http://localhost/mysite              returns '/'
      *  * http://localhost/mysite/about        returns '/about'
      *  * http://localhost/mysite/enco%20ded   returns '/enco%20ded'
      *  * http://localhost/mysite/about?var=1  returns '/about'
@@ -1139,29 +1187,25 @@ class Request
         // host is lowercase as per RFC 952/2181
         $host = strtolower(preg_replace('/:\d+$/', '', trim($host)));
 
-        // as the host can come from the user (HTTP_HOST and depending on the configuration, SERVER_NAME too can come from the user)
-        // check that it does not contain forbidden characters (see RFC 952 and RFC 2181)
-        // use preg_replace() instead of preg_match() to prevent DoS attacks with long host names
-        if ($host && '' !== preg_replace('/(?:^\[)?[a-zA-Z0-9-:\]_]+\.?/', '', $host)) {
+        // the host can come from the user (HTTP_HOST and depending on the configuration, SERVER_NAME too can come from the user)
+        if ($host && !self::isHostValid($host)) {
             if (!$this->isHostValid) {
                 return '';
             }
             $this->isHostValid = false;
 
-            throw new SuspiciousOperationException(sprintf('Invalid Host "%s".', $host));
+            throw new SuspiciousOperationException(\sprintf('Invalid Host "%s".', $host));
         }
 
-        if (\count(self::$trustedHostPatterns) > 0) {
+        if (self::$trustedHostsLiterals || self::$trustedHostsRegexps) {
             // to avoid host header injection attacks, you should provide a list of trusted host patterns
 
-            if (\in_array($host, self::$trustedHosts)) {
+            if (isset(self::$trustedHostsLiterals[$host])) {
                 return $host;
             }
 
-            foreach (self::$trustedHostPatterns as $pattern) {
-                if (preg_match($pattern, $host)) {
-                    self::$trustedHosts[] = $host;
-
+            foreach (self::$trustedHostsRegexps as $regexp) {
+                if (preg_match($regexp, $host)) {
                     return $host;
                 }
             }
@@ -1171,7 +1215,7 @@ class Request
             }
             $this->isHostValid = false;
 
-            throw new SuspiciousOperationException(sprintf('Untrusted Host "%s".', $host));
+            throw new SuspiciousOperationException(\sprintf('Untrusted Host "%s".', $host));
         }
 
         return $host;
@@ -1230,7 +1274,7 @@ class Request
         }
 
         if (!preg_match('/^[A-Z]++$/D', $method)) {
-            throw new SuspiciousOperationException(sprintf('Invalid method override "%s".', $method));
+            throw new SuspiciousOperationException('Invalid HTTP method override.');
         }
 
         return $this->method = $method;
@@ -1286,13 +1330,20 @@ class Request
             static::initializeFormats();
         }
 
+        $exactFormat = null;
+        $canonicalFormat = null;
+
         foreach (static::$formats as $format => $mimeTypes) {
-            if (\in_array($mimeType, (array) $mimeTypes)) {
-                return $format;
+            if (\in_array($mimeType, $mimeTypes, true)) {
+                $exactFormat = $format;
             }
-            if (null !== $canonicalMimeType && \in_array($canonicalMimeType, (array) $mimeTypes)) {
-                return $format;
+            if (null !== $canonicalMimeType && \in_array($canonicalMimeType, $mimeTypes, true)) {
+                $canonicalFormat = $format;
             }
+        }
+
+        if ($format = $exactFormat ?? $canonicalFormat) {
+            return $format;
         }
 
         return null;
@@ -1311,7 +1362,7 @@ class Request
             static::initializeFormats();
         }
 
-        static::$formats[$format] = \is_array($mimeTypes) ? $mimeTypes : [$mimeTypes];
+        static::$formats[$format ?? ''] = (array) $mimeTypes;
     }
 
     /**
@@ -1454,7 +1505,7 @@ class Request
     public function getProtocolVersion(): ?string
     {
         if ($this->isFromTrustedProxy()) {
-            preg_match('~^(HTTP/)?([1-9]\.[0-9]) ~', $this->headers->get('Via') ?? '', $matches);
+            preg_match('~^(HTTP/)?([1-9]\.[0-9])\b~', $this->headers->get('Via') ?? '', $matches);
 
             if ($matches) {
                 return 'HTTP/'.$matches[2];
@@ -1533,7 +1584,7 @@ class Request
         }
 
         if (!\is_array($content)) {
-            throw new JsonException(sprintf('JSON content was expected to decode to an array, "%s" returned.', get_debug_type($content)));
+            throw new JsonException(\sprintf('JSON content was expected to decode to an array, "%s" returned.', get_debug_type($content)));
         }
 
         return new InputBag($content);
@@ -1559,7 +1610,7 @@ class Request
         }
 
         if (!\is_array($content)) {
-            throw new JsonException(sprintf('JSON content was expected to decode to an array, "%s" returned.', get_debug_type($content)));
+            throw new JsonException(\sprintf('JSON content was expected to decode to an array, "%s" returned.', get_debug_type($content)));
         }
 
         return $content;
@@ -1606,7 +1657,7 @@ class Request
      *
      * @param string[] $locales An array of ordered available locales
      */
-    public function getPreferredLanguage(array $locales = null): ?string
+    public function getPreferredLanguage(?array $locales = null): ?string
     {
         $preferredLanguages = $this->getLanguages();
 
@@ -1905,9 +1956,8 @@ class Request
         }
 
         $pathInfo = substr($requestUri, \strlen($baseUrl));
-        if (false === $pathInfo || '' === $pathInfo) {
-            // If substr() returns false then PATH_INFO is set to an empty string
-            return '/';
+        if (false === $pathInfo || '' === $pathInfo || '/' !== $pathInfo[0]) {
+            return '/'.$pathInfo;
         }
 
         return $pathInfo;
@@ -1966,7 +2016,7 @@ class Request
 
         $len = \strlen($prefix);
 
-        if (preg_match(sprintf('#^(%%[[:xdigit:]]{2}|.){%d}#', $len), $string, $match)) {
+        if (preg_match(\sprintf('#^(%%[[:xdigit:]]{2}|.){%d}#', $len), $string, $match)) {
             return $match[0];
         }
 
@@ -2004,7 +2054,7 @@ class Request
      * getPort(), isSecure(), getHost(), getClientIps(), getBaseUrl() etc. Thus, we try to cache the results for
      * best performance.
      */
-    private function getTrustedValues(int $type, string $ip = null): array
+    private function getTrustedValues(int $type, ?string $ip = null): array
     {
         $cacheKey = $type."\0".((self::$trustedHeaderSet & $type) ? $this->headers->get(self::TRUSTED_HEADERS[$type]) : '');
         $cacheKey .= "\0".$ip."\0".$this->headers->get(self::TRUSTED_HEADERS[self::HEADER_FORWARDED]);
@@ -2058,7 +2108,7 @@ class Request
         }
         $this->isForwardedValid = false;
 
-        throw new ConflictingHeadersException(sprintf('The request has both a trusted "%s" header and a trusted "%s" header, conflicting with each other. You should either configure your proxy to remove one of them, or configure your project to distrust the offending one.', self::TRUSTED_HEADERS[self::HEADER_FORWARDED], self::TRUSTED_HEADERS[$type]));
+        throw new ConflictingHeadersException(\sprintf('The request has both a trusted "%s" header and a trusted "%s" header, conflicting with each other. You should either configure your proxy to remove one of them, or configure your project to distrust the offending one.', self::TRUSTED_HEADERS[self::HEADER_FORWARDED], self::TRUSTED_HEADERS[$type]));
     }
 
     private function normalizeAndFilterClientIps(array $clientIps, string $ip): array
@@ -2115,5 +2165,49 @@ class Request
         }
 
         return $this->isIisRewrite;
+    }
+
+    /**
+     * See https://url.spec.whatwg.org/.
+     */
+    private static function isHostValid(string $host): bool
+    {
+        if ('[' === $host[0]) {
+            return ']' === $host[-1] && filter_var(substr($host, 1, -1), \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV6);
+        }
+
+        if (preg_match('/\.[0-9]++\.?$/D', $host)) {
+            return null !== filter_var($host, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV4 | \FILTER_NULL_ON_FAILURE);
+        }
+
+        // use preg_replace() instead of preg_match() to prevent DoS attacks with long host names
+        return '' === preg_replace('/[-a-zA-Z0-9_]++\.?/', '', $host);
+    }
+
+    /**
+     * Combines host patterns into as few regexps as PCRE can compile.
+     *
+     * @return string[]
+     */
+    private static function compileHostPatterns(array $hostPatterns): array
+    {
+        if (!$hostPatterns) {
+            return [];
+        }
+
+        // the branch reset group keeps capturing groups, back references and inline modifiers local to each pattern
+        $regexp = \sprintf('{(?|(?:%s))}i', implode(')|(?:', $hostPatterns));
+
+        if (1 === \count($hostPatterns) || false !== @preg_match($regexp, '')) {
+            return [$regexp];
+        }
+
+        // the combined pattern exceeds the maximum size PCRE accepts, split it in half
+        $half = intdiv(\count($hostPatterns), 2);
+
+        return array_merge(
+            self::compileHostPatterns(\array_slice($hostPatterns, 0, $half)),
+            self::compileHostPatterns(\array_slice($hostPatterns, $half))
+        );
     }
 }

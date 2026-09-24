@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -32,19 +35,37 @@ class FinancialCategory extends Model
         'updated_at' => 'datetime',
     ];
 
+    protected $fillable = ['company_id', 'name', 'type', 'status', 'created_by_id', 'description'];
+
     //boot
     protected static function boot()
     {
         parent::boot();
 
-        static::creating(function ($model) {
-            //check if company has a financial category with the same name
-            $financial_category = FinancialCategory::where([
-                ['company_id', '=', $model->company_id],
-                ['name', '=', $model->name],
-            ])->first();
-            if ($financial_category != null) {
-                return false;
+        static::saving(function (FinancialCategory $model) {
+            $model->name = trim((string) $model->name);
+            if ($model->name === '') {
+                throw BusinessRuleException::make('name_required', 'Category name is required.');
+            }
+            if (empty($model->company_id)) {
+                $model->company_id = auth()->user()?->company_id;
+            }
+            if (empty($model->type)) {
+                $model->type = in_array(strtolower($model->name), ['sales', 'income', 'other income'], true) ? 'Income' : 'Expense';
+            }
+            if (! in_array($model->type, ['Income', 'Expense'], true)) {
+                throw BusinessRuleException::make('invalid_type', 'Category type must be Income or Expense.');
+            }
+            if (empty($model->status)) {
+                $model->status = 'Active';
+            }
+            $dup = static::withoutGlobalScopes()
+                ->where('company_id', $model->company_id)
+                ->whereRaw('LOWER(name) = ?', [strtolower($model->name)])
+                ->when($model->exists, fn ($q) => $q->where('id', '!=', $model->id))
+                ->exists();
+            if ($dup) {
+                throw BusinessRuleException::make('duplicate_category', 'A category named "'.$model->name.'" already exists.');
             }
         });
     }
@@ -52,17 +73,17 @@ class FinancialCategory extends Model
     /**
      * Relationships
      */
-    public function company()
+    public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class, 'company_id');
     }
 
-    public function financialRecords()
+    public function financialRecords(): HasMany
     {
         return $this->hasMany(FinancialRecord::class, 'financial_category_id');
     }
 
-    public function createdBy()
+    public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_id');
     }

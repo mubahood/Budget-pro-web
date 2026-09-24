@@ -44,8 +44,8 @@ class Store implements StoreInterface
     public function __construct(string $root, array $options = [])
     {
         $this->root = $root;
-        if (!is_dir($this->root) && !@mkdir($this->root, 0777, true) && !is_dir($this->root)) {
-            throw new \RuntimeException(sprintf('Unable to create the store directory (%s).', $this->root));
+        if (!is_dir($this->root) && !@mkdir($this->root, 0o777, true) && !is_dir($this->root)) {
+            throw new \RuntimeException(\sprintf('Unable to create the store directory (%s).', $this->root));
         }
         $this->keyCache = new \SplObjectStorage();
         $this->options = array_merge([
@@ -80,7 +80,7 @@ class Store implements StoreInterface
 
         if (!isset($this->locks[$key])) {
             $path = $this->getPath($key);
-            if (!is_dir(\dirname($path)) && false === @mkdir(\dirname($path), 0777, true) && !is_dir(\dirname($path))) {
+            if (!is_dir(\dirname($path)) && !@mkdir(\dirname($path), 0o777, true) && !is_dir(\dirname($path))) {
                 return $path;
             }
             $h = fopen($path, 'c');
@@ -197,27 +197,29 @@ class Store implements StoreInterface
             }
         // Everything seems ok, omit writing content to disk
         } else {
+            // Responses that cannot provide their content, like BinaryFileResponse or
+            // StreamedResponse, have no entity to store, so no entry is written
+            if (false === $content = $response->getContent()) {
+                return $key;
+            }
+
             $digest = $this->generateContentDigest($response);
             $response->headers->set('X-Content-Digest', $digest);
 
-            if (!$this->save($digest, $response->getContent(), false)) {
+            if (!$this->save($digest, $content, false)) {
                 throw new \RuntimeException('Unable to store the entity.');
             }
 
             if (!$response->headers->has('Transfer-Encoding')) {
-                $response->headers->set('Content-Length', \strlen($response->getContent()));
+                $response->headers->set('Content-Length', \strlen($content));
             }
         }
 
         // read existing cache entries, remove non-varying, and add this one to the list
         $entries = [];
-        $vary = $response->headers->get('vary');
+        $vary = implode(', ', $response->headers->all('vary'));
         foreach ($this->getMetadata($key) as $entry) {
-            if (!isset($entry[1]['vary'][0])) {
-                $entry[1]['vary'] = [''];
-            }
-
-            if ($entry[1]['vary'][0] != $vary || !$this->requestsMatch($vary ?? '', $entry[0], $storedEnv)) {
+            if (!$this->requestsMatch($vary ?? '', $entry[0], $storedEnv)) {
                 $entries[] = $entry;
             }
         }
@@ -285,7 +287,7 @@ class Store implements StoreInterface
      */
     private function requestsMatch(?string $vary, array $env1, array $env2): bool
     {
-        if (empty($vary)) {
+        if ('' === ($vary ?? '')) {
             return true;
         }
 
@@ -312,7 +314,7 @@ class Store implements StoreInterface
             return [];
         }
 
-        return unserialize($entries) ?: [];
+        return unserialize($entries, ['allowed_classes' => false]) ?: [];
     }
 
     /**
@@ -386,7 +388,7 @@ class Store implements StoreInterface
                 return false;
             }
         } else {
-            if (!is_dir(\dirname($path)) && false === @mkdir(\dirname($path), 0777, true) && !is_dir(\dirname($path))) {
+            if (!is_dir(\dirname($path)) && !@mkdir(\dirname($path), 0o777, true) && !is_dir(\dirname($path))) {
                 return false;
             }
 
@@ -405,14 +407,14 @@ class Store implements StoreInterface
                 return false;
             }
 
-            if (false === @rename($tmpFile, $path)) {
+            if (!@rename($tmpFile, $path)) {
                 @unlink($tmpFile);
 
                 return false;
             }
         }
 
-        @chmod($path, 0666 & ~umask());
+        @chmod($path, 0o666 & ~umask());
 
         return true;
     }
@@ -474,7 +476,7 @@ class Store implements StoreInterface
     /**
      * Restores a Response from the HTTP headers and body.
      */
-    private function restoreResponse(array $headers, string $path = null): ?Response
+    private function restoreResponse(array $headers, ?string $path = null): ?Response
     {
         $status = $headers['X-Status'][0];
         unset($headers['X-Status']);

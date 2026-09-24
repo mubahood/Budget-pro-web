@@ -32,6 +32,15 @@ class EnsureActiveSubscription
             ], 403);
         }
 
+        // Grace window (DECISIONS.md H5): devices keep selling and syncing; the
+        // client is told so it can show the renewal banner.
+        if (! $company->hasActiveAccess() && $company->isInGracePeriod()) {
+            $response = $next($request);
+            $response->headers->set('X-Subscription-State', 'grace');
+
+            return $response;
+        }
+
         if (! $company->hasActiveAccess()) {
             return response()->json([
                 'code' => 0,

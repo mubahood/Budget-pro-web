@@ -24,7 +24,7 @@ class PrintLabels extends BatchAction
                     'name' => $model->name,
                     'sku' => $model->sku,
                     'barcode' => $model->barcode ?? 'N/A',
-                    'price' => 'UGX '.number_format($model->selling_price),
+                    'price' => \App\Support\Money::format($model->selling_price, 0, (int) $model->company_id),
                     'category' => $model->stock_sub_category->name ?? 'N/A',
                 ];
             }

@@ -31,7 +31,7 @@ class InputStream implements \IteratorAggregate
      *
      * @return void
      */
-    public function onEmpty(callable $onEmpty = null)
+    public function onEmpty(?callable $onEmpty = null)
     {
         $this->onEmpty = null !== $onEmpty ? $onEmpty(...) : null;
     }
@@ -50,7 +50,7 @@ class InputStream implements \IteratorAggregate
             return;
         }
         if ($this->isClosed()) {
-            throw new RuntimeException(sprintf('"%s" is closed.', static::class));
+            throw new RuntimeException(\sprintf('"%s" is closed.', static::class));
         }
         $this->input[] = ProcessUtils::validateInput(__METHOD__, $input);
     }

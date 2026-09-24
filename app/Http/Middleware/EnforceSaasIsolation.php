@@ -9,72 +9,64 @@ use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * SAAS Enforcement Middleware
+ * Web tenancy guard (runs in the `web` middleware group).
  *
- * This middleware provides an additional layer of security by:
- * 1. Ensuring authenticated users always have a valid company_id
- * 2. Validating that company_id in requests matches authenticated user's company
- * 3. Preventing company_id tampering in form submissions
- * 4. Logging suspicious activity when company_id mismatch is detected
+ *  1. A session user without a company_id is logged out (platform admins excepted).
+ *  2. A `company_id` in a form submission that doesn't match the user's company is
+ *     overridden and logged (platform admins may work across companies).
+ *  3. Writes without a `company_id` get the user's one injected.
+ *
+ * P0-3: previously only consulted the default `web` guard, which the admin
+ * panel never uses, and relied on a `user_type` column that doesn't exist -- so
+ * it was inert. It now looks at the `admin` guard first.
  */
 class EnforceSaasIsolation
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
     public function handle(Request $request, Closure $next): Response
     {
-        // Only enforce for authenticated requests
-        if (Auth::check()) {
-            $user = Auth::user();
+        [$guard, $user] = $this->sessionUser();
 
-            // Security Check 1: User must have a company_id
-            if (empty($user->company_id)) {
-                // Log critical security issue
-                Log::critical('User without company_id attempted to access system', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'ip' => $request->ip(),
-                    'url' => $request->fullUrl(),
-                ]);
+        if ($user === null) {
+            return $next($request);
+        }
 
-                // Logout user and redirect to login
-                Auth::logout();
+        $isPlatformAdmin = PlatformAdminOnly::isPlatformAdmin($user);
 
-                return redirect('/admin/auth/login')
-                    ->with('error', 'Your account is not associated with any company. Please contact administrator.');
-            }
+        if (empty($user->company_id) && ! $isPlatformAdmin) {
+            Log::critical('User without company_id attempted to access the web app', [
+                'user_id' => $user->id, 'email' => $user->email, 'ip' => $request->ip(), 'url' => $request->fullUrl(),
+            ]);
 
-            // Security Check 2: If request contains company_id, it must match user's company
-            // This prevents tampering with form submissions or API requests
-            if ($request->has('company_id')) {
-                $requestCompanyId = $request->input('company_id');
+            Auth::guard($guard)->logout();
 
-                // Allow super admins to work across companies
-                if ($user->user_type !== 'admin' && $requestCompanyId != $user->company_id) {
-                    Log::warning('Company ID mismatch detected - potential security breach attempt', [
-                        'user_id' => $user->id,
-                        'user_company_id' => $user->company_id,
-                        'requested_company_id' => $requestCompanyId,
-                        'ip' => $request->ip(),
-                        'url' => $request->fullUrl(),
-                        'method' => $request->method(),
-                    ]);
+            return redirect(admin_base_path('auth/login'))
+                ->with('error', 'Your account is not linked to any company. Please contact support.');
+        }
 
-                    // Override the company_id in request to user's company
-                    $request->merge(['company_id' => $user->company_id]);
-                }
-            }
+        if ($request->has('company_id') && ! $isPlatformAdmin && (int) $request->input('company_id') !== (int) $user->company_id) {
+            Log::warning('Company ID mismatch in web request overridden', [
+                'user_id' => $user->id, 'user_company_id' => $user->company_id,
+                'requested_company_id' => $request->input('company_id'), 'url' => $request->fullUrl(), 'method' => $request->method(),
+            ]);
+            $request->merge(['company_id' => $user->company_id]);
+        }
 
-            // Security Check 3: Inject company_id into all requests that don't have it
-            // This ensures forms without hidden company_id fields still work correctly
-            if (! $request->has('company_id') && in_array($request->method(), ['POST', 'PUT', 'PATCH'])) {
-                $request->merge(['company_id' => $user->company_id]);
-            }
+        if (! $request->has('company_id') && ! $isPlatformAdmin && in_array($request->method(), ['POST', 'PUT', 'PATCH'], true)) {
+            $request->merge(['company_id' => $user->company_id]);
         }
 
         return $next($request);
+    }
+
+    /** @return array{0: string, 1: mixed} guard name and user (user may be null) */
+    private function sessionUser(): array
+    {
+        foreach (['admin', 'web'] as $guard) {
+            if (Auth::guard($guard)->check()) {
+                return [$guard, Auth::guard($guard)->user()];
+            }
+        }
+
+        return ['web', null];
     }
 }

@@ -2,11 +2,14 @@
 
 namespace App\Admin\Controllers;
 
+use App\Exceptions\BusinessRuleException;
 use App\Models\StockCategory;
 use App\Models\StockItem;
 use App\Models\StockRecord;
 use App\Models\StockSubCategory;
 use App\Models\User;
+use App\Services\Shop\StockService;
+use App\Support\Money;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -26,6 +29,29 @@ class StockRecordController extends TenantAdminController
      *
      * @return Grid
      */
+    /** Movements are append-only: delete is refused with guidance. */
+    public function destroy($id)
+    {
+        return response()->json(['status' => false, 'message' => 'Stock movements cannot be deleted. Use Reverse instead — a contra movement is recorded and the audit trail is kept.']);
+    }
+
+    public function reverse($id)
+    {
+        $u = Admin::user();
+        $record = StockRecord::withoutGlobalScopes()->where('company_id', $u->company_id)->find($id);
+        if ($record === null) {
+            abort(404);
+        }
+        try {
+            (new StockService())->reverse($record, request('reason', 'Reversed from admin'), (int) $u->id);
+            admin_success('Movement reversed', 'A contra movement was recorded and stock was restored.');
+        } catch (BusinessRuleException $e) {
+            admin_error('Cannot reverse', $e->getMessage());
+        }
+
+        return redirect(admin_url('stock-records'));
+    }
+
     protected function grid()
     {
         $grid = new Grid(new StockRecord());
@@ -93,6 +119,11 @@ class StockRecordController extends TenantAdminController
 
         // Actions - View and Delete only (records are immutable)
         $grid->actions(function ($actions) {
+            $row = $actions->row;
+            if (! $row->is_reversal) {
+                $url = admin_url('stock-records/'.$actions->getKey().'/reverse');
+                $actions->append('<a href="javascript:void(0)" class="btn btn-xs btn-warning" onclick="if(confirm(\'Reverse this movement? A contra movement will be recorded.\')){var f=document.createElement(\'form\');f.method=\'POST\';f.action=\''.$url.'\';f.innerHTML=\'<input type=hidden name=_token value=\''.csrf_token().'\'>\';document.body.appendChild(f);f.submit();}"><i class="fa fa-undo"></i> Reverse</a>');
+            }
             $actions->disableEdit(); // Stock records cannot be edited (audit trail)
             $actions->disableView(); // We'll use Show page instead
             // Keep delete enabled (restores stock quantity)
@@ -123,7 +154,7 @@ class StockRecordController extends TenantAdminController
                 $stockStatus = '';
                 if ($item->current_quantity <= 0) {
                     $stockStatus = ' <span class="label label-danger">Out of Stock</span>';
-                } elseif ($item->current_quantity < 10) {
+                } elseif ((float) $item->current_quantity <= (float) ($item->min_stock ?? config('saas.low_stock_threshold'))) {
                     $stockStatus = ' <span class="label label-warning">Low: '.number_format($item->current_quantity, 2).'</span>';
                 }
 
@@ -324,17 +355,17 @@ class StockRecordController extends TenantAdminController
 
         $show->field('measurement_unit', __('Unit of Measurement'));
 
-        $show->field('selling_price', __('Unit Selling Price (UGX)'))
+        $show->field('selling_price', __('Unit Selling Price ('.Money::symbol().')'))
             ->as(function ($selling_price) {
-                return 'UGX '.number_format((float) $selling_price, 2);
+                return Money::symbol().' '.number_format((float) $selling_price, 2);
             });
 
-        $show->field('total_sales', __('Total Transaction Value (UGX)'))
+        $show->field('total_sales', __('Total Transaction Value ('.Money::symbol().')'))
             ->as(function ($total_sales) {
-                return 'UGX '.number_format((float) $total_sales, 2);
+                return Money::symbol().' '.number_format((float) $total_sales, 2);
             });
 
-        $show->field('profit', __('Profit/Loss (UGX)'))
+        $show->field('profit', __('Profit/Loss ('.Money::symbol().')'))
             ->as(function ($profit) {
                 if ($this->type !== 'Sale') {
                     return 'N/A (Not a sale)';
@@ -343,7 +374,7 @@ class StockRecordController extends TenantAdminController
                 $profitValue = (float) $profit;
                 $indicator = $profitValue >= 0 ? '✓ Profit' : '✗ Loss';
 
-                return $indicator.': UGX '.number_format(abs($profitValue), 2);
+                return $indicator.': '.Money::symbol().' '.number_format(abs($profitValue), 2);
             });
 
         // Additional Information
@@ -399,7 +430,7 @@ class StockRecordController extends TenantAdminController
             $form->html('<div class="alert alert-danger">
                 <i class="fa fa-lock"></i>
                 <strong>Warning:</strong> Stock records are IMMUTABLE and cannot be edited to maintain audit trail integrity.
-                <br>To correct this transaction, please delete it (stock will be restored automatically) and create a new record.
+                <br>To correct this transaction, use <strong>Reverse</strong> on the list: a contra movement is recorded and both rows are kept.
             </div>');
 
             $form->tools(function (Form\Tools $tools) {
@@ -462,12 +493,16 @@ class StockRecordController extends TenantAdminController
 
         $form->radio('type', __('Transaction Type'))
             ->options([
-                'Sale' => 'Sale (Revenue)',
-                'Damage' => 'Damage (Write-off)',
-                'Expired' => 'Expired (Disposal)',
-                'Lost' => 'Lost (Missing)',
-                'Internal Use' => 'Internal Use (Consumption)',
-                'Other' => 'Other',
+                'Sale' => 'Sale (stock out, revenue)',
+                'Stock In' => 'Stock In (purchase / restock)',
+                'Return' => 'Customer Return (stock in)',
+                'Adjustment In' => 'Adjustment In (count correction +)',
+                'Adjustment Out' => 'Adjustment Out (count correction −)',
+                'Damage' => 'Damage (write-off)',
+                'Expired' => 'Expired (disposal)',
+                'Lost' => 'Lost (missing)',
+                'Internal Use' => 'Internal Use (consumption)',
+                'Other' => 'Other (stock out)',
             ])
             ->rules('required')
             ->required()
@@ -482,8 +517,8 @@ class StockRecordController extends TenantAdminController
 
         $form->divider('Pricing Information (For Sales Only)');
 
-        $form->currency('selling_price', __('Unit Selling Price (UGX)'))
-            ->symbol('UGX')
+        $form->currency('selling_price', __('Unit Selling Price ('.Money::symbol().')'))
+            ->symbol(Money::symbol())
             ->rules('nullable|numeric|min:0')
             ->help('Enter the selling price per unit (defaults to item selling price if left empty)');
 
@@ -493,7 +528,7 @@ class StockRecordController extends TenantAdminController
             <ul>
                 <li>Total Value = Quantity × Unit Price</li>
                 <li>Profit = Total Value - (Cost Price × Quantity)</li>
-                <li>Stock will be automatically reduced by the quantity entered</li>
+                <li>Stock In, Return and Adjustment In <strong>add</strong> stock; every other type <strong>removes</strong> it</li>
             </ul>
         </div>');
 
@@ -526,8 +561,8 @@ class StockRecordController extends TenantAdminController
                 return back()->withInput();
             }
 
-            // Validate sufficient stock
-            if ($stock_item->current_quantity < $quantity) {
+            // Validate sufficient stock (outbound movements only; products may opt into negative stock)
+            if (! StockService::isInbound((string) $type) && ! $stock_item->allow_negative_stock && $stock_item->current_quantity < $quantity) {
                 $available = number_format($stock_item->current_quantity, 2);
                 $requested = number_format($quantity, 2);
                 admin_error(
@@ -539,7 +574,7 @@ class StockRecordController extends TenantAdminController
             }
 
             // Validate transaction type
-            $validTypes = ['Sale', 'Damage', 'Expired', 'Lost', 'Internal Use', 'Other'];
+            $validTypes = StockService::types();
             if (! in_array($type, $validTypes)) {
                 admin_error('Error', 'Invalid transaction type selected.');
 
@@ -566,7 +601,7 @@ class StockRecordController extends TenantAdminController
 
             admin_success(
                 'Success',
-                "Stock record created successfully!<br>Transaction: {$type}<br>Item: {$itemName}<br>Quantity: {$quantity}<br>Stock has been updated automatically."
+                "Stock record created successfully!<br>Transaction: {$type}<br>Item: {$itemName}<br>Quantity: {$quantity}<br>Stock has been updated automatically (".(StockService::isInbound((string) $type) ? 'added' : 'removed').').'
             );
 
             return redirect(admin_url('stock-records'));

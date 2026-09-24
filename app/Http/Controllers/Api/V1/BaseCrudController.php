@@ -48,6 +48,7 @@ abstract class BaseCrudController extends Controller
 
     /** Relations eager-loaded on list/show. */
     protected array $listWith = [];
+
     protected array $showWith = [];
 
     /** Column used as the label in options()/search() dropdown responses. */
@@ -147,7 +148,7 @@ abstract class BaseCrudController extends Controller
         try {
             $model->save();
         } catch (BusinessRuleException $e) {
-            return $this->error($e->getMessage(), 422);
+            return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
         $fresh = $this->findOwned($request, $model->getKey(), $this->showWith) ?? $model;
@@ -170,7 +171,7 @@ abstract class BaseCrudController extends Controller
         try {
             $model->save();
         } catch (BusinessRuleException $e) {
-            return $this->error($e->getMessage(), 422);
+            return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
         $fresh = $this->findOwned($request, $model->getKey(), $this->showWith) ?? $model;

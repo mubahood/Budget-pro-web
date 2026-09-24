@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -28,8 +31,6 @@ use Illuminate\Database\Eloquent\Model;
  * @property \Illuminate\Support\Carbon|null $license_expire
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- *
- * @package App\Models
  */
 class Company extends Model
 {
@@ -74,7 +75,7 @@ class Company extends Model
         parent::boot();
 
         // Update owner's company_id when company is updated
-        static::updated(function ($company) {
+        static::updated(function (Company $company) {
             if (empty($company->owner_id)) {
                 return; // No owner set, skip
             }
@@ -84,6 +85,7 @@ class Company extends Model
                     'company_id' => $company->id,
                     'owner_id' => $company->owner_id,
                 ]);
+
                 return; // Don't crash company edit if owner record is missing
             }
             $owner->company_id = $company->id;
@@ -91,7 +93,7 @@ class Company extends Model
         });
 
         // Set up company on creation
-        static::created(function ($company) {
+        static::created(function (Company $company) {
             if (empty($company->owner_id)) {
                 return; // No owner set, skip
             }
@@ -101,6 +103,7 @@ class Company extends Model
                     'company_id' => $company->id,
                     'owner_id' => $company->owner_id,
                 ]);
+
                 return; // Don't crash registration if owner record has issue
             }
             $owner->company_id = $company->id;
@@ -114,7 +117,7 @@ class Company extends Model
     /**
      * The user who owns / administers this company.
      */
-    public function owner()
+    public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
     }
@@ -122,7 +125,7 @@ class Company extends Model
     /**
      * All users (employees) belonging to this company.
      */
-    public function users()
+    public function users(): HasMany
     {
         return $this->hasMany(User::class, 'company_id');
     }
@@ -132,7 +135,7 @@ class Company extends Model
      * alongside the legacy owner_id/users() relations above, not replacing
      * them. See PLAN.md §2 / DECISIONS.md D1.
      */
-    public function members()
+    public function members(): HasMany
     {
         return $this->hasMany(CompanyMember::class);
     }
@@ -145,7 +148,7 @@ class Company extends Model
     /**
      * The company's current subscription (most recent).
      */
-    public function subscription()
+    public function subscription(): HasOne
     {
         return $this->hasOne(Subscription::class)->latestOfMany();
     }
@@ -153,7 +156,7 @@ class Company extends Model
     /**
      * All subscriptions this company has had.
      */
-    public function subscriptions()
+    public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
     }
@@ -163,12 +166,12 @@ class Company extends Model
      * can have a budget-pro subscription, a Ping Pin subscription, both, or
      * neither; the two are never conflated.
      */
-    public function pingPinSubscription()
+    public function pingPinSubscription(): HasOne
     {
         return $this->hasOne(PingPinSubscription::class)->latestOfMany();
     }
 
-    public function pingPinSubscriptions()
+    public function pingPinSubscriptions(): HasMany
     {
         return $this->hasMany(PingPinSubscription::class);
     }
@@ -205,6 +208,52 @@ class Company extends Model
         }
 
         return true;
+    }
+
+    /**
+     * When the current access (subscription or legacy licence) ended / will end.
+     */
+    public function accessEndedAt(): ?\Illuminate\Support\Carbon
+    {
+        $subscription = $this->subscription;
+
+        if ($subscription !== null) {
+            if ($subscription->status === 'trialing') {
+                return $subscription->trial_ends_at ?? $subscription->ends_at;
+            }
+
+            return $subscription->ends_at;
+        }
+
+        return $this->license_expire?->copy()->endOfDay();
+    }
+
+    /**
+     * Lapsed, but still inside the grace window (config saas.grace_days).
+     * Web is read-only, devices keep selling and syncing (DECISIONS.md H5).
+     */
+    public function isInGracePeriod(): bool
+    {
+        if ($this->hasActiveAccess() || strtolower((string) $this->status) === 'inactive') {
+            return false;
+        }
+
+        $ended = $this->accessEndedAt();
+
+        return $ended !== null && $ended->copy()->addDays((int) config('saas.grace_days', 7))->isFuture();
+    }
+
+    /** One of: active | grace | expired | inactive. */
+    public function accessState(): string
+    {
+        if (strtolower((string) $this->status) === 'inactive') {
+            return 'inactive';
+        }
+        if ($this->hasActiveAccess()) {
+            return 'active';
+        }
+
+        return $this->isInGracePeriod() ? 'grace' : 'expired';
     }
 
     /**
@@ -295,7 +344,7 @@ class Company extends Model
      * Prepare default account categories for a new company.
      * Creates standard income and expense categories.
      *
-     * @param int $company_id The ID of the company
+     * @param  int  $company_id  The ID of the company
      * @return void
      */
     public static function prepare_account_categories($company_id)

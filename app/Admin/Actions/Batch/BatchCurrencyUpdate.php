@@ -7,6 +7,7 @@ use Encore\Admin\Facades\Admin;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BatchCurrencyUpdate extends BatchAction
 {
@@ -25,6 +26,8 @@ class BatchCurrencyUpdate extends BatchAction
         $updated = 0;
         $errors = [];
 
+        $base = \App\Support\Money::symbol();
+
         DB::beginTransaction();
 
         try {
@@ -33,11 +36,11 @@ class BatchCurrencyUpdate extends BatchAction
                 $oldSelling = $product->selling_price;
 
                 if ($updateType === 'convert_to') {
-                    // Convert FROM UGX TO target currency
+                    // Convert FROM the company currency TO the target currency
                     $newBuying = $oldBuying * $rate;
                     $newSelling = $oldSelling * $rate;
                 } else {
-                    // Convert FROM target currency TO UGX
+                    // Convert FROM the target currency TO the company currency
                     $newBuying = $oldBuying / $rate;
                     $newSelling = $oldSelling / $rate;
                 }
@@ -47,25 +50,12 @@ class BatchCurrencyUpdate extends BatchAction
                 $product->selling_price = $newSelling;
                 $product->save();
 
-                // Create audit log
-                \App\Models\StockRecord::create([
-                    'company_id' => $product->company_id,
-                    'created_by_id' => Admin::user()->id,
-                    'stock_item_id' => $product->id,
-                    'stock_sub_category_id' => $product->stock_sub_category_id,
-                    'quantity' => 0,
-                    'type' => 'Price Change',
-                    'description' => sprintf(
-                        'Currency conversion: %s to %s (Rate: %s). Buying: %.2f → %.2f, Selling: %.2f → %.2f',
-                        $updateType === 'convert_to' ? 'UGX' : strtoupper($currency),
-                        $updateType === 'convert_to' ? strtoupper($currency) : 'UGX',
-                        number_format($rate, 4),
-                        $oldBuying,
-                        $newBuying,
-                        $oldSelling,
-                        $newSelling
-                    ),
-                    'created_at' => now(),
+                // Price changes are not stock movements: the StockItem AuditLogger records the old/new prices.
+                Log::info('Batch currency conversion applied', [
+                    'stock_item_id' => $product->id, 'company_id' => $product->company_id, 'by' => Admin::user()->id,
+                    'from' => $updateType === 'convert_to' ? $base : strtoupper($currency),
+                    'to' => $updateType === 'convert_to' ? strtoupper($currency) : $base,
+                    'rate' => $rate, 'buying' => [$oldBuying, $newBuying], 'selling' => [$oldSelling, $newSelling],
                 ]);
 
                 $updated++;
@@ -77,8 +67,8 @@ class BatchCurrencyUpdate extends BatchAction
                 sprintf(
                     'Successfully updated %d product(s) from %s to %s using rate %.4f',
                     $updated,
-                    $updateType === 'convert_to' ? 'UGX' : strtoupper($currency),
-                    $updateType === 'convert_to' ? strtoupper($currency) : 'UGX',
+                    $updateType === 'convert_to' ? $base : strtoupper($currency),
+                    $updateType === 'convert_to' ? strtoupper($currency) : $base,
                     $rate
                 )
             )->refresh();
@@ -94,8 +84,8 @@ class BatchCurrencyUpdate extends BatchAction
     {
         $this->radio('update_type', 'Conversion Direction')
             ->options([
-                'convert_to' => 'Convert FROM UGX TO foreign currency',
-                'convert_from' => 'Convert FROM foreign currency TO UGX',
+                'convert_to' => 'Convert FROM '.\App\Support\Money::symbol().' TO foreign currency',
+                'convert_from' => 'Convert FROM foreign currency TO '.\App\Support\Money::symbol(),
             ])
             ->default('convert_to')
             ->required()
@@ -125,7 +115,7 @@ class BatchCurrencyUpdate extends BatchAction
             ->rules('required|numeric|min:0.0001')
             ->attribute(['type' => 'number', 'step' => '0.0001', 'min' => '0.0001'])
             ->placeholder('e.g., 3700 for USD, 28 for KES')
-            ->help('Enter the exchange rate (e.g., 1 UGX = 0.00027 USD means rate is 0.00027)')
+            ->help('Enter the exchange rate (e.g., 1 '.\App\Support\Money::symbol().' = 0.00027 USD means rate is 0.00027)')
             ->required();
 
         $this->html('
@@ -134,12 +124,11 @@ class BatchCurrencyUpdate extends BatchAction
             </div>
             
             <div class="alert alert-info">
-                <i class="fa fa-info-circle"></i> <strong>Common Exchange Rates (UGX to Foreign):</strong><br>
-                <ul style="margin: 10px 0 0 20px;">
-                    <li>1 UGX = 0.00027 USD (or 1 USD = 3,700 UGX)</li>
-                    <li>1 UGX = 0.00025 EUR (or 1 EUR = 4,000 UGX)</li>
-                    <li>1 UGX = 0.00021 GBP (or 1 GBP = 4,700 UGX)</li>
-                    <li>1 UGX = 0.035 KES (or 1 KES = 28 UGX)</li>
+                <i class="fa fa-info-circle"></i> <strong>How the rate works:</strong><br>
+                <ul>
+                    <li>Rate = how much of the foreign currency one unit of your company currency buys.</li>
+                    <li>Converting <em>to</em> a foreign currency multiplies prices by the rate; converting <em>from</em> it divides.</li>
+                    <li>Check today\'s rate with your bank or mobile money provider before running a batch conversion.</li>
                 </ul>
                 <small><em>Note: These are approximate rates. Please verify with current market rates.</em></small>
             </div>

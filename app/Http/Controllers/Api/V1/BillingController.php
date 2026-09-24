@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Plan;
 use App\Models\SubscriptionInvoice;
+use App\Services\Billing\SubscriptionFulfillment;
 use App\Services\FlutterwaveService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
@@ -98,6 +99,9 @@ class BillingController extends Controller
         /** @var Company $company */
         $company = $request->attributes->get('company') ?? Company::find($request->user()->company_id);
         $user = $request->user();
+        if (! $this->canManageBilling($company, $user)) {
+            return $this->forbidden('Only the company owner can change the subscription.');
+        }
         $plan = Plan::findOrFail($data['plan_id']);
 
         $isUganda = $company->isUgandaBilling();
@@ -147,7 +151,7 @@ class BillingController extends Controller
             ],
         ]);
 
-        if (! ($result['success'] ?? false)) {
+        if (! $result['success']) {
             $invoice->status = 'failed';
             $invoice->save();
 
@@ -190,7 +194,7 @@ class BillingController extends Controller
 
         $verification = $this->flutterwave->verifyTransaction($data['transaction_id']);
 
-        if (! ($verification['success'] ?? false)) {
+        if (! $verification['success']) {
             return $this->error($verification['message'] ?? 'Payment could not be verified.', 422);
         }
 
@@ -239,7 +243,7 @@ class BillingController extends Controller
 
         // Never trust the webhook body alone — re-verify with the API.
         $verification = $this->flutterwave->verifyTransaction($transactionId);
-        if (! ($verification['success'] ?? false)) {
+        if (! $verification['success']) {
             return response()->json(['status' => 'unverified'], 200);
         }
 
@@ -256,51 +260,23 @@ class BillingController extends Controller
         return response()->json(['status' => 'ok'], 200);
     }
 
-    /**
-     * Mark an invoice paid and activate the subscription. Idempotent and
-     * transactional: the invoice row is locked and re-checked to prevent a
-     * webhook + verify race from activating twice.
-     */
     private function fulfill(SubscriptionInvoice $invoice, array $flwData): void
     {
-        DB::transaction(function () use ($invoice, $flwData) {
-            /** @var SubscriptionInvoice $locked */
-            $locked = SubscriptionInvoice::whereKey($invoice->id)->lockForUpdate()->first();
+        app(SubscriptionFulfillment::class)->fulfill($invoice, $flwData);
+    }
 
-            if ($locked === null || $locked->status === 'paid') {
-                return; // already fulfilled by the other channel
-            }
+    /** Billing is owner-only (P0-14). Companies without an owner on record fall back to the Company Owner role. */
+    private function canManageBilling(Company $company, $user): bool
+    {
+        if (! empty($company->owner_id)) {
+            return (int) $company->owner_id === (int) $user->id;
+        }
 
-            $company = Company::find($locked->company_id);
-            $planId = (int) data_get($locked->meta, 'plan_id');
-            $plan = Plan::find($planId);
-
-            if ($company === null || $plan === null) {
-                Log::error('Flutterwave fulfill: missing company/plan', ['invoice' => $locked->id]);
-
-                return;
-            }
-
-            $subscription = $company->activateSubscription($plan, 'flutterwave', (string) ($flwData['id'] ?? ''));
-
-            $locked->status = 'paid';
-            $locked->subscription_id = $subscription->id;
-            $locked->paid_at = now();
-            $locked->period_start = $subscription->starts_at;
-            $locked->period_end = $subscription->ends_at;
-            $locked->meta = array_merge($locked->meta ?? [], [
-                'flw_transaction_id' => $flwData['id'] ?? null,
-                'flw_flw_ref' => $flwData['flw_ref'] ?? null,
-                'payment_type' => $flwData['payment_type'] ?? null,
-            ]);
-            $locked->save();
-
-            Log::info('Subscription activated via Flutterwave', [
-                'company_id' => $company->id,
-                'plan_id' => $plan->id,
-                'invoice_id' => $locked->id,
-            ]);
-        });
+        return DB::table('admin_role_users')
+            ->join('admin_roles', 'admin_roles.id', '=', 'admin_role_users.role_id')
+            ->where('admin_role_users.user_id', $user->id)
+            ->whereIn('admin_roles.slug', ['company', 'admin'])
+            ->exists();
     }
 
     private function subscriptionPayload(Company $company): array

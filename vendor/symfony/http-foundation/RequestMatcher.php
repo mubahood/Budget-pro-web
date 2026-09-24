@@ -51,7 +51,7 @@ class RequestMatcher implements RequestMatcherInterface
      * @param string|string[]|null $ips
      * @param string|string[]|null $schemes
      */
-    public function __construct(string $path = null, string $host = null, string|array $methods = null, string|array $ips = null, array $attributes = [], string|array $schemes = null, int $port = null)
+    public function __construct(?string $path = null, ?string $host = null, string|array|null $methods = null, string|array|null $ips = null, array $attributes = [], string|array|null $schemes = null, ?int $port = null)
     {
         $this->matchPath($path);
         $this->matchHost($host);
@@ -177,7 +177,7 @@ class RequestMatcher implements RequestMatcherInterface
             }
         }
 
-        if (null !== $this->path && !preg_match('{'.$this->path.'}', rawurldecode($request->getPathInfo()))) {
+        if (null !== $this->path && !preg_match('{'.$this->path.'}s', rawurldecode($request->getPathInfo()))) {
             return false;
         }
 

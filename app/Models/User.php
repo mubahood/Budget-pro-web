@@ -30,10 +30,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $remember_token
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- *
  * @property-read Company|null $company
- *
- * @package App\Models
  */
 class User extends Administrator
 {
@@ -74,7 +71,11 @@ class User extends Administrator
             if ($name != null && strlen($name) > 0) {
                 $model->name = $name;
             }
-            $model->username = $model->email;
+            // Username defaults to the email (or phone for phone-only Ping Pin accounts) but is
+            // never clobbered when one was given explicitly (P0-13).
+            if (empty($model->username)) {
+                $model->username = $model->email ?: $model->phone_number;
+            }
 
             // Never silently create a login with a guessable password (P0-2).
             if ($model->password == null || strlen($model->password) < 3) {
@@ -97,7 +98,10 @@ class User extends Administrator
             if ($name != null && strlen($name) > 0) {
                 $model->name = $name;
             }
-            $model->username = $model->email;
+            // Follow an email change only when the username was the old email (or is empty).
+            if ($model->isDirty('email') && (empty($model->username) || $model->username === $model->getOriginal('email'))) {
+                $model->username = $model->email ?: $model->phone_number;
+            }
 
             return $model;
         });
@@ -116,7 +120,7 @@ class User extends Administrator
      * Ensure that company owners have the Company Owner role (ID 2)
      * This runs automatically on user creation and updates
      */
-    protected static function ensureCompanyOwnerRole($user)
+    public static function ensureCompanyOwnerRole($user)
     {
         // Skip if user doesn't have a company_id yet
         if (empty($user->company_id)) {

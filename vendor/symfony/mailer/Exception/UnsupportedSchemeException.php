@@ -78,7 +78,7 @@ class UnsupportedSchemeException extends LogicException
         ],
     ];
 
-    public function __construct(Dsn $dsn, string $name = null, array $supported = [])
+    public function __construct(Dsn $dsn, ?string $name = null, array $supported = [])
     {
         $provider = $dsn->getScheme();
         if (false !== $pos = strpos($provider, '+')) {
@@ -86,14 +86,14 @@ class UnsupportedSchemeException extends LogicException
         }
         $package = self::SCHEME_TO_PACKAGE_MAP[$provider] ?? null;
         if ($package && !class_exists($package['class'])) {
-            parent::__construct(sprintf('Unable to send emails via "%s" as the bridge is not installed. Try running "composer require %s".', $provider, $package['package']));
+            parent::__construct(\sprintf('Unable to send emails via "%s" as the bridge is not installed. Try running "composer require %s".', $provider, $package['package']));
 
             return;
         }
 
-        $message = sprintf('The "%s" scheme is not supported', $dsn->getScheme());
+        $message = \sprintf('The "%s" scheme is not supported', $dsn->getScheme());
         if ($name && $supported) {
-            $message .= sprintf('; supported schemes for mailer "%s" are: "%s"', $name, implode('", "', $supported));
+            $message .= \sprintf('; supported schemes for mailer "%s" are: "%s"', $name, implode('", "', $supported));
         }
 
         parent::__construct($message.'.');

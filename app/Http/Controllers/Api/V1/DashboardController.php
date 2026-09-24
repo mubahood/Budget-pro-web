@@ -18,7 +18,7 @@ class DashboardController extends Controller
 
         $inventory = [
             'stock_item_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->count(),
-            'low_stock_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->where('current_quantity', '<', 10)->count(),
+            'low_stock_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->whereRaw('current_quantity <= COALESCE(min_stock, ?)', [(float) config('saas.low_stock_threshold')])->count(),
             'out_of_stock_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->where('current_quantity', '<=', 0)->count(),
         ];
 

@@ -12,6 +12,7 @@
 namespace Symfony\Component\Mime\Header;
 
 use Symfony\Component\Mime\Encoder\QpMimeHeaderEncoder;
+use Symfony\Component\Mime\Exception\RfcComplianceException;
 
 /**
  * An abstract base MIME Header.
@@ -31,6 +32,10 @@ abstract class AbstractHeader implements HeaderInterface
 
     public function __construct(string $name)
     {
+        if (!preg_match('/^[\x21-\x7E]++$/D', $name)) {
+            throw new RfcComplianceException(sprintf('The header name "%s" contains characters that are not allowed in a header name.', $name));
+        }
+
         $this->name = $name;
     }
 
@@ -160,7 +165,7 @@ abstract class AbstractHeader implements HeaderInterface
 
     protected function tokenNeedsEncoding(string $token): bool
     {
-        return (bool) preg_match('~[\x00-\x08\x10-\x19\x7F-\xFF\r\n]~', $token);
+        return preg_match('~[\x00-\x08\x0A-\x1F\x7F-\xFF]~', $token);
     }
 
     /**
@@ -186,6 +191,21 @@ abstract class AbstractHeader implements HeaderInterface
         }
         if ('' !== $encodedToken) {
             $tokens[] = $encodedToken;
+        }
+
+        $i = 1;
+        while (isset($tokens[$i + 1])) {
+            // whitespace-only token(s) between 2 encoded tokens; a gap of N spaces yields N - 1 of them
+            $j = $i;
+            while (preg_match('~^[\t ]+$~', $tokens[$j] ?? '')) {
+                ++$j;
+            }
+            if ($j > $i && isset($tokens[$j]) && $this->tokenNeedsEncoding($tokens[$i - 1]) && $this->tokenNeedsEncoding($tokens[$j])) {
+                $tokens[$i - 1] .= implode('', \array_slice($tokens, $i, 1 + $j - $i));
+                array_splice($tokens, $i, 1 + $j - $i);
+            } else {
+                ++$i;
+            }
         }
 
         return $tokens;
@@ -237,7 +257,7 @@ abstract class AbstractHeader implements HeaderInterface
     /**
      * Generate a list of all tokens in the final header.
      */
-    protected function toTokens(string $string = null): array
+    protected function toTokens(?string $string = null): array
     {
         $string ??= $this->getBodyAsString();
 

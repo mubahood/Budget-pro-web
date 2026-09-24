@@ -2,574 +2,274 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
+use App\Services\Shop\PaymentService;
+use App\Services\Shop\SaleService;
 use App\Traits\AuditLogger;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Sale header. All money/stock effects go through SaleService (checkout, void)
+ * and PaymentService (payments -> ledger). `amount_paid`, `balance` and
+ * `payment_status` are derived from payment rows; setting them directly on a
+ * processed sale records the matching payment instead of faking "Paid".
+ */
 class SaleRecord extends Model
 {
     use AuditLogger, HasFactory;
 
-    /**
-     * The "booted" method of the model.
-     */
+    /** Runtime-only: SaleService assigns numbers itself inside finalize(). */
+    public bool $skipNumbering = false;
+
+    /** Runtime-only: extra payment to post after this save (set in updating). */
+    protected float $pendingPaymentAmount = 0.0;
+
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
     }
 
-    /**
-     * The relationships that should always be loaded.
-     * Note: Commented out to prevent conflicts with grid optimization
-     * Relationships are loaded as needed in controllers
-     */
-    // protected $with = ['saleRecordItems', 'company', 'createdBy'];
-
-    /**
-     * The attributes that should be cast.
-     */
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'sale_date' => 'date',
+        'processed_at' => 'datetime',
+        'voided_at' => 'datetime',
+        'subtotal' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'amount_paid' => 'decimal:2',
         'balance' => 'decimal:2',
+        'change_given' => 'decimal:2',
     ];
 
-    /**
-     * The attributes that are mass assignable.
-     */
     protected $fillable = [
-        'company_id',
-        'financial_period_id',
-        'created_by_id',
-        'sale_date',
-        'customer_name',
-        'customer_phone',
-        'customer_address',
-        'total_amount',
-        'amount_paid',
-        'balance',
-        'payment_method',
-        'payment_status',
-        'status',
-        'receipt_number',
-        'receipt_pdf_url',
-        'receipt_pdf_is_generated',
-        'invoice_number',
-        'invoice_pdf_url',
-        'invoice_pdf_is_generated',
-        'notes',
+        'client_uuid', 'company_id', 'financial_period_id', 'created_by_id', 'sale_date', 'customer_name', 'customer_phone',
+        'customer_address', 'subtotal', 'discount_amount', 'discount_reason', 'total_amount', 'amount_paid', 'balance',
+        'change_given', 'currency', 'payment_method', 'payment_status', 'status', 'receipt_number', 'receipt_pdf_url',
+        'receipt_pdf_is_generated', 'invoice_number', 'invoice_pdf_url', 'invoice_pdf_is_generated', 'notes',
     ];
 
-    /**
-     * Boot the model.
-     */
     protected static function boot()
     {
         parent::boot();
 
-        // Before creating a sale record
-        static::creating(function ($saleRecord) {
-            try {
-                // Generate unique receipt and invoice numbers
-                if (empty($saleRecord->receipt_number)) {
-                    $saleRecord->receipt_number = $saleRecord->generateUniqueReceiptNumber();
-                }
-
-                if (empty($saleRecord->invoice_number)) {
-                    $saleRecord->invoice_number = $saleRecord->generateUniqueInvoiceNumber();
-                }
-
-                // Auto-set created_by_id if not set
-                if (empty($saleRecord->created_by_id)) {
-                    $saleRecord->created_by_id = Auth::id();
-                }
-
-                // Validate financial period
-                if (! empty($saleRecord->financial_period_id)) {
-                    $financialPeriod = \App\Models\FinancialPeriod::find($saleRecord->financial_period_id);
-                    if (! $financialPeriod) {
-                        throw new \Exception('Invalid financial period.');
-                    }
-                    if ($financialPeriod->status != 'Active') {
-                        throw new \Exception('Financial period is not active.');
-                    }
-                }
-
-            } catch (\Exception $e) {
-                Log::error('SaleRecord creating error: '.$e->getMessage());
-                throw $e;
+        static::creating(function (SaleRecord $sale) {
+            if (empty($sale->created_by_id)) {
+                $sale->created_by_id = Auth::id();
             }
-        });
-
-        // After creating a sale record
-        // Note: Processing is now handled by the explicit processAndCompute() method
-        // called from the controller's saved() hook to ensure all items are saved first
-        static::created(function ($saleRecord) {
-            try {
-                // Log the creation
-                Log::info('SaleRecord created', [
-                    'id' => $saleRecord->id,
-                    'receipt_number' => $saleRecord->receipt_number,
-                    'company_id' => $saleRecord->company_id,
-                ]);
-
-                // Processing will be done by processAndCompute() method
-                // This ensures proper transaction handling and error recovery
-
-            } catch (\Exception $e) {
-                Log::error('SaleRecord created event error: '.$e->getMessage());
+            if (empty($sale->company_id) && $sale->created_by_id) {
+                $sale->company_id = User::withoutGlobalScopes()->find($sale->created_by_id)?->company_id;
             }
-        });
-
-        // Before updating a sale record
-        static::updating(function ($saleRecord) {
-            try {
-                // CRITICAL FIX: If payment_status is being set to "Paid", auto-complete the payment
-                if ($saleRecord->isDirty('payment_status') && $saleRecord->payment_status == 'Paid') {
-                    // When marking as "Paid", automatically set amount_paid = total_amount and balance = 0
-                    $saleRecord->amount_paid = $saleRecord->total_amount;
-                    $saleRecord->balance = 0;
-
-                    Log::info('SaleRecord: Payment status set to Paid, auto-completing payment', [
-                        'id' => $saleRecord->id,
-                        'total_amount' => $saleRecord->total_amount,
-                        'amount_paid' => $saleRecord->amount_paid,
-                        'balance' => $saleRecord->balance,
-                    ]);
-
-                    return; // Skip further calculations
-                }
-
-                // If amount_paid changed, recalculate balance and payment_status
-                if ($saleRecord->isDirty('amount_paid')) {
-                    $totalAmount = floatval($saleRecord->total_amount);
-                    $amountPaid = floatval($saleRecord->amount_paid);
-
-                    // Calculate balance
-                    $saleRecord->balance = $totalAmount - $amountPaid;
-
-                    // Auto-update payment status based on the payment amount
-                    if ($saleRecord->balance <= 0) {
-                        $saleRecord->payment_status = 'Paid';
-                    } elseif ($amountPaid > 0) {
-                        $saleRecord->payment_status = 'Partial';
-                    } else {
-                        $saleRecord->payment_status = 'Unpaid';
-                    }
-
-                    Log::info('SaleRecord: Amount paid changed, recalculating', [
-                        'id' => $saleRecord->id,
-                        'total_amount' => $totalAmount,
-                        'amount_paid' => $amountPaid,
-                        'balance' => $saleRecord->balance,
-                        'payment_status' => $saleRecord->payment_status,
-                    ]);
-                }
-
-            } catch (\Exception $e) {
-                Log::error('SaleRecord updating event error: '.$e->getMessage());
+            if (empty($sale->company_id)) {
+                throw BusinessRuleException::make('company_required', 'A sale must belong to a company.');
             }
-        });
-
-        // Before deleting a sale record
-        static::deleting(function ($saleRecord) {
-            try {
-                // Delete stock records and sale items
-                // Stock quantities will be AUTOMATICALLY restored by StockRecord::deleting() event
-                if ($saleRecord->saleRecordItems) {
-                    foreach ($saleRecord->saleRecordItems as $item) {
-                        // Delete associated stock record (this will auto-restore stock quantity)
-                        if ($item->stock_record_id) {
-                            $stockRecord = \App\Models\StockRecord::find($item->stock_record_id);
-                            if ($stockRecord) {
-                                $stockRecord->delete(); // StockRecord::deleting() will restore the quantity
-                            }
-                        }
-
-                        // Delete the sale record item
-                        $item->delete();
-                    }
-                }
-
-                Log::info('SaleRecord deleting: Cleaned up items and stock records', [
-                    'sale_record_id' => $saleRecord->id,
-                    'receipt_number' => $saleRecord->receipt_number,
-                ]);
-
-            } catch (\Exception $e) {
-                Log::error('SaleRecord deleting error: '.$e->getMessage());
-                throw $e;
+            if (empty($sale->sale_date)) {
+                $sale->sale_date = now();
             }
-        });
-    }
+            if (empty($sale->status)) {
+                $sale->status = 'Completed';
+            }
+            if (empty($sale->currency)) {
+                $sale->currency = Company::withoutGlobalScopes()->find($sale->company_id)?->currency;
+            }
 
-    /**
-     * Generate unique receipt number.
-     * Format: RCP-{CompanyCode}-{YYYYMMDD}-{Sequence}
-     */
-    public function generateUniqueReceiptNumber()
-    {
-        $company = \App\Models\Company::find($this->company_id);
-        $companyCode = $company ? strtoupper(substr($company->name, 0, 3)) : 'COM';
-        $date = date('Ymd', strtotime($this->sale_date ?? now()));
-
-        $maxAttempts = 10;
-        for ($i = 1; $i <= $maxAttempts; $i++) {
-            // Get the last receipt number for today
-            $lastReceipt = self::where('company_id', $this->company_id)
-                ->where('receipt_number', 'LIKE', "RCP-{$companyCode}-{$date}-%")
-                ->orderBy('receipt_number', 'DESC')
-                ->first();
-
-            if ($lastReceipt && preg_match('/-(\d+)$/', $lastReceipt->receipt_number, $matches)) {
-                $sequence = intval($matches[1]) + 1;
+            if (! empty($sale->financial_period_id)) {
+                $period = FinancialPeriod::withoutGlobalScopes()->find($sale->financial_period_id);
+                if ($period === null || (int) $period->company_id !== (int) $sale->company_id) {
+                    throw BusinessRuleException::make('invalid_period', 'Invalid financial period.');
+                }
+                if ($period->status === 'Closed') {
+                    throw BusinessRuleException::make('period_closed', 'The selected financial period is closed.', ['period_id' => $period->id]);
+                }
             } else {
-                $sequence = 1;
+                $sale->financial_period_id = FinancialPeriod::resolveFor((int) $sale->company_id, Carbon::parse($sale->sale_date))->id;
             }
 
-            $receiptNumber = sprintf('RCP-%s-%s-%04d', $companyCode, $date, $sequence);
-
-            // Check if this receipt number already exists
-            $exists = self::where('receipt_number', $receiptNumber)->exists();
-            if (! $exists) {
-                return $receiptNumber;
+            if (! $sale->skipNumbering) {
+                if (empty($sale->receipt_number)) {
+                    $sale->receipt_number = \App\Services\Shop\NumberSequencer::next((int) $sale->company_id, 'receipt', Carbon::parse($sale->sale_date));
+                }
+                if (empty($sale->invoice_number)) {
+                    $sale->invoice_number = \App\Services\Shop\NumberSequencer::next((int) $sale->company_id, 'invoice', Carbon::parse($sale->sale_date));
+                }
             }
-        }
+        });
 
-        // If all attempts failed, use a UUID suffix
-        return sprintf('RCP-%s-%s-%s', $companyCode, $date, substr(uniqid(), -4));
+        static::updating(function (SaleRecord $sale) {
+            if ($sale->voided_at !== null && ! $sale->isDirty('voided_at') && $sale->isDirty(['amount_paid', 'payment_status', 'total_amount'])) {
+                throw BusinessRuleException::make('sale_voided', 'A voided sale cannot be modified.');
+            }
+            if ($sale->processed_at === null) {
+                return; // unprocessed header (admin form before items are saved) — SaleService will finalise it
+            }
+            foreach (['total_amount', 'subtotal', 'company_id', 'financial_period_id'] as $locked) {
+                if ($sale->isDirty($locked)) {
+                    throw BusinessRuleException::make('immutable_sale', 'Sale totals cannot be edited. Void the sale and record a new one.', ['field' => $locked]);
+                }
+            }
+
+            $originalPaid = round((float) $sale->getOriginal('amount_paid'), 2);
+            $target = null;
+            if ($sale->isDirty('amount_paid')) {
+                $target = round((float) $sale->amount_paid, 2);
+            } elseif ($sale->isDirty('payment_status') && $sale->payment_status === 'Paid') {
+                $target = round((float) $sale->total_amount, 2);
+            }
+
+            if ($target !== null) {
+                $diff = round($target - $originalPaid, 2);
+                if ($diff < 0) {
+                    throw BusinessRuleException::make('use_payment_reversal', 'Amount paid cannot be reduced directly. Reverse the payment instead.');
+                }
+                $sale->pendingPaymentAmount = $diff;
+            }
+            // Derived columns always come from the payment rows.
+            $sale->amount_paid = $sale->getOriginal('amount_paid');
+            $sale->balance = $sale->getOriginal('balance');
+            $sale->payment_status = $sale->getOriginal('payment_status');
+        });
+
+        // `saved` (not `updated`): after the derived columns are reset the row may have nothing left to
+        // write, and Eloquent only fires `updated` when it actually issued an UPDATE.
+        static::saved(function (SaleRecord $sale) {
+            if ($sale->pendingPaymentAmount > 0) {
+                $amount = $sale->pendingPaymentAmount;
+                $sale->pendingPaymentAmount = 0.0;
+                (new PaymentService())->record($sale, ['amount' => $amount, 'method' => $sale->payment_method, 'received_by_id' => Auth::id() ?? $sale->created_by_id]);
+                $sale->refresh();
+            }
+        });
+
+        static::deleting(function (SaleRecord $sale) {
+            throw BusinessRuleException::make('delete_not_allowed', 'Sales cannot be deleted. Void the sale instead so stock and ledger stay consistent.');
+        });
     }
 
     /**
-     * Generate unique invoice number.
-     * Format: INV-{CompanyCode}-{YYYYMMDD}-{Sequence}
-     */
-    public function generateUniqueInvoiceNumber()
-    {
-        $company = \App\Models\Company::find($this->company_id);
-        $companyCode = $company ? strtoupper(substr($company->name, 0, 3)) : 'COM';
-        $date = date('Ymd', strtotime($this->sale_date ?? now()));
-
-        $maxAttempts = 10;
-        for ($i = 1; $i <= $maxAttempts; $i++) {
-            // Get the last invoice number for today
-            $lastInvoice = self::where('company_id', $this->company_id)
-                ->where('invoice_number', 'LIKE', "INV-{$companyCode}-{$date}-%")
-                ->orderBy('invoice_number', 'DESC')
-                ->first();
-
-            if ($lastInvoice && preg_match('/-(\d+)$/', $lastInvoice->invoice_number, $matches)) {
-                $sequence = intval($matches[1]) + 1;
-            } else {
-                $sequence = 1;
-            }
-
-            $invoiceNumber = sprintf('INV-%s-%s-%04d', $companyCode, $date, $sequence);
-
-            // Check if this invoice number already exists
-            $exists = self::where('invoice_number', $invoiceNumber)->exists();
-            if (! $exists) {
-                return $invoiceNumber;
-            }
-        }
-
-        // If all attempts failed, use a UUID suffix
-        return sprintf('INV-%s-%s-%s', $companyCode, $date, substr(uniqid(), -4));
-    }
-
-    /**
-     * Calculate total amount from sale items.
-     */
-    public function calculateTotals()
-    {
-        if ($this->saleRecordItems) {
-            $this->total_amount = $this->saleRecordItems->sum('subtotal');
-            $this->balance = $this->total_amount - ($this->amount_paid ?? 0);
-
-            // Update payment status
-            if ($this->balance <= 0) {
-                $this->payment_status = 'Paid';
-            } elseif ($this->amount_paid > 0) {
-                $this->payment_status = 'Partial';
-            } else {
-                $this->payment_status = 'Unpaid';
-            }
-        }
-    }
-
-    /**
-     * Process and compute everything for a sale record.
-     * This is the main method called after form submission to:
-     * 1. Validate all items and stock availability
-     * 2. Calculate all amounts, profits, and totals
-     * 3. Reduce stock quantities
-     * 4. Create stock records for audit trail
-     * 5. Update payment status
-     * 6. Generate receipt and invoice numbers
+     * Backward-compatible entry point used by the admin form and older code:
+     * applies stock, totals, numbering and payments to a persisted header + lines.
      *
-     * @return array ['success' => bool, 'message' => string, 'data' => array]
+     * @return array{success: bool, message: string, data: array|null}
      */
-    public function processAndCompute()
+    public function processAndCompute(): array
     {
-        DB::beginTransaction();
-
         try {
-            // Step 1: Validate financial period
-            if (! empty($this->financial_period_id)) {
-                $financialPeriod = \App\Models\FinancialPeriod::find($this->financial_period_id);
-                if (! $financialPeriod) {
-                    throw new \Exception('Invalid financial period selected.');
-                }
-                if ($financialPeriod->status != 'Active') {
-                    throw new \Exception('The selected financial period is not active. Please select an active period.');
-                }
-            }
-
-            // Step 2: Validate sale record items exist
-            if (! $this->saleRecordItems || $this->saleRecordItems->count() == 0) {
-                throw new \Exception('Sale must have at least one item. Please add items before saving.');
-            }
-
-            // Step 3: Reload sale items to ensure we have fresh data
-            $this->load('saleRecordItems');
-
-            $processedItems = [];
-            $totalAmount = 0;
-            $totalProfit = 0;
-            $errors = [];
-
-            // Step 4: Process each sale item
-            foreach ($this->saleRecordItems as $index => $item) {
-                // Fetch stock item fresh from database to avoid cached/stale data
-                $stockItem = \App\Models\StockItem::find($item->stock_item_id);
-
-                if (! $stockItem) {
-                    $errors[] = 'Item #'.($index + 1).': Stock item not found or has been deleted.';
-
-                    continue;
-                }
-
-                // Validate stock availability
-                if ($stockItem->current_quantity < $item->quantity) {
-                    $errors[] = "{$stockItem->name}: Insufficient Stock. Available: ".number_format($stockItem->current_quantity, 2).', Requested: '.number_format($item->quantity, 2);
-
-                    continue; //new
-                }
-
-                // Step 5: Update stock item details (snapshot at time of sale)
-                $item->item_name = $stockItem->name;
-                $item->item_sku = $stockItem->sku ?? '';
-                $item->unit_cost = $stockItem->buying_price ?? 0;
-
-                // Use stock selling price if unit price is zero
-                if (empty($item->unit_price) || $item->unit_price <= 0) {
-                    $item->unit_price = $stockItem->selling_price;
-                }
-
-                // Step 6: Calculate item financials
-                $item->subtotal = $item->quantity * $item->unit_price;
-                $item->profit = $item->subtotal - ($item->unit_cost * $item->quantity);
-                $item->save();
-
-                // Step 7: Record old quantity for reporting (DO NOT MANUALLY REDUCE STOCK!)
-                // Stock quantity will be automatically reduced by StockRecord::created() event
-                $oldQuantity = $stockItem->current_quantity;
-
-                // Step 8: Create stock record for audit trail (this will auto-reduce stock)
-                $stockRecord = new \App\Models\StockRecord();
-                $stockRecord->sale_record_id = $this->id;  // Link to this sale
-                $stockRecord->company_id = $this->company_id;
-                $stockRecord->stock_item_id = $stockItem->id;
-                $stockRecord->stock_category_id = $stockItem->stock_category_id;
-                $stockRecord->stock_sub_category_id = $stockItem->stock_sub_category_id;
-                $stockRecord->financial_period_id = $this->financial_period_id;
-                $stockRecord->created_by_id = $this->created_by_id;
-                $stockRecord->sku = $item->item_sku;
-                $stockRecord->name = $item->item_name;
-                $stockRecord->measurement_unit = $stockItem->measurement_unit ?? 'pieces';
-                $stockRecord->description = 'Sale #'.$this->receipt_number.' - '.($this->customer_name ?? 'Walk-in Customer');
-                $stockRecord->type = 'Sale';
-                $stockRecord->quantity = $item->quantity;
-                $stockRecord->selling_price = $item->unit_price;
-                $stockRecord->buying_price = $item->unit_cost;
-                $stockRecord->total_sales = $item->subtotal;
-                $stockRecord->profit = $item->profit;
-                $stockRecord->date = $this->sale_date;
-                $stockRecord->save();
-
-                // Step 9: Link stock record to sale item
-                $item->stock_record_id = $stockRecord->id;
-                $item->save();
-
-                // Accumulate totals
-                $totalAmount += $item->subtotal;
-                $totalProfit += $item->profit;
-
-                $processedItems[] = [
-                    'item_name' => $item->item_name,
-                    'quantity' => $item->quantity,
-                    'unit_price' => $item->unit_price,
-                    'subtotal' => $item->subtotal,
-                    'profit' => $item->profit,
-                    'old_stock' => $oldQuantity,
-                    'new_stock' => $stockItem->current_quantity,
-                    'stock_record_id' => $stockRecord->id,
-                ];
-            }
-
-            // Step 10: Check for validation errors
-            if (! empty($errors)) {
-                throw new \Exception("Validation errors:\n".implode("\n", $errors));
-            }
-
-            // Step 11: Update sale record totals
-            $this->total_amount = $totalAmount;
-            $this->balance = $totalAmount - ($this->amount_paid ?? 0);
-
-            // Step 12: Update payment status based on balance
-            if ($this->balance <= 0) {
-                $this->payment_status = 'Paid';
-                $this->balance = 0; // Ensure balance doesn't go negative
-            } elseif ($this->amount_paid > 0 && $this->amount_paid < $totalAmount) {
-                $this->payment_status = 'Partial';
-            } else {
-                $this->payment_status = 'Unpaid';
-            }
-
-            // Step 13: Generate receipt and invoice numbers if not already set
-            if (empty($this->receipt_number)) {
-                $this->receipt_number = $this->generateUniqueReceiptNumber();
-            }
-
-            if (empty($this->invoice_number)) {
-                $this->invoice_number = $this->generateUniqueInvoiceNumber();
-            }
-
-            // Step 14: Save the updated sale record
-            $this->save();
-
-            // Step 15: Commit transaction
-            DB::commit();
-
-            // Step 16: Log success
-            Log::info('SaleRecord processed successfully', [
-                'sale_record_id' => $this->id,
-                'receipt_number' => $this->receipt_number,
-                'total_amount' => $totalAmount,
-                'total_profit' => $totalProfit,
-                'items_count' => count($processedItems),
-            ]);
+            $sale = (new SaleService())->processExistingSale($this);
+            $this->refresh();
+            $sale->loadMissing('saleRecordItems');
 
             return [
                 'success' => true,
                 'message' => 'Sale record processed successfully',
                 'data' => [
-                    'sale_record_id' => $this->id,
-                    'receipt_number' => $this->receipt_number,
-                    'invoice_number' => $this->invoice_number,
-                    'total_amount' => $totalAmount,
-                    'amount_paid' => $this->amount_paid,
-                    'balance' => $this->balance,
-                    'payment_status' => $this->payment_status,
-                    'total_profit' => $totalProfit,
-                    'items_processed' => count($processedItems),
-                    'items' => $processedItems,
+                    'sale_record_id' => $sale->id,
+                    'receipt_number' => $sale->receipt_number,
+                    'invoice_number' => $sale->invoice_number,
+                    'total_amount' => (float) $sale->total_amount,
+                    'amount_paid' => (float) $sale->amount_paid,
+                    'balance' => (float) $sale->balance,
+                    'payment_status' => $sale->payment_status,
+                    'total_profit' => (float) $sale->saleRecordItems->sum('profit'),
+                    'items_processed' => $sale->saleRecordItems->count(),
+                    'items' => $sale->saleRecordItems->map(fn ($i) => [
+                        'item_name' => $i->item_name, 'quantity' => (float) $i->quantity, 'unit_price' => (float) $i->unit_price,
+                        'subtotal' => (float) $i->subtotal, 'profit' => (float) $i->profit, 'stock_record_id' => $i->stock_record_id,
+                    ])->all(),
                 ],
             ];
+        } catch (BusinessRuleException $e) {
+            Log::warning('SaleRecord processing rejected', ['sale_record_id' => $this->id, 'code' => $e->errorCode(), 'error' => $e->getMessage()]);
 
-        } catch (\Exception $e) {
-            // Rollback transaction on any error
-            DB::rollBack();
-
-            Log::error('SaleRecord processing failed', [
-                'sale_record_id' => $this->id ?? 'NEW',
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return [
-                'success' => false,
-                'message' => 'Failed to process sale: '.$e->getMessage(),
-                'data' => null,
-            ];
+            return ['success' => false, 'message' => 'Failed to process sale: '.$e->getMessage(), 'data' => null, 'code' => $e->errorCode()];
         }
     }
 
-    /**
-     * Validate stock availability before processing.
-     * Can be called before processAndCompute() for pre-validation.
-     *
-     * @return array ['valid' => bool, 'errors' => array]
-     */
-    public function validateStockAvailability()
+    /** Pre-check used by the admin form before committing. */
+    public function validateStockAvailability(): array
     {
         $errors = [];
-
-        if (! $this->saleRecordItems || $this->saleRecordItems->count() == 0) {
-            return [
-                'valid' => false,
-                'errors' => ['No items added to the sale. Please add at least one item.'],
-            ];
+        $this->loadMissing('saleRecordItems');
+        if ($this->saleRecordItems->isEmpty()) {
+            return ['valid' => false, 'errors' => ['No items added to the sale. Please add at least one item.']];
         }
-
-        $this->load('saleRecordItems.stockItem');
-
         foreach ($this->saleRecordItems as $index => $item) {
-            $stockItem = $item->stockItem;
-
-            if (! $stockItem) {
+            $stockItem = StockItem::withoutGlobalScopes()->find($item->stock_item_id);
+            if ($stockItem === null) {
                 $errors[] = 'Item #'.($index + 1).': Stock item not found.';
 
                 continue;
             }
-
-            if ($stockItem->current_quantity < $item->quantity) {
-                $errors[] = "{$stockItem->name}: Insufficient stock. Available: ".number_format($stockItem->current_quantity, 2).', Requested: '.number_format($item->quantity, 2);
-            }
-
-            if ($item->quantity <= 0) {
+            if ((float) $item->quantity <= 0) {
                 $errors[] = "{$stockItem->name}: Quantity must be greater than zero.";
+            }
+            if (! $stockItem->allow_negative_stock && (float) $stockItem->current_quantity < (float) $item->quantity) {
+                $errors[] = "{$stockItem->name}: Insufficient stock. Available: ".number_format((float) $stockItem->current_quantity, 2).', Requested: '.number_format((float) $item->quantity, 2);
             }
         }
 
-        return [
-            'valid' => empty($errors),
-            'errors' => $errors,
-        ];
+        return ['valid' => empty($errors), 'errors' => $errors];
     }
 
-    /**
-     * Relationships
-     */
-    public function company()
+    public function isVoided(): bool
     {
-        return $this->belongsTo(\App\Models\Company::class);
+        return $this->voided_at !== null;
     }
 
-    public function financialPeriod()
+    public function getTotalProfitAttribute(): float
     {
-        return $this->belongsTo(\App\Models\FinancialPeriod::class);
+        return round((float) $this->saleRecordItems()->sum('profit'), 2);
     }
 
-    public function createdBy()
+    public function company(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'created_by_id');
+        return $this->belongsTo(Company::class);
     }
 
-    public function saleRecordItems()
+    public function financialPeriod(): BelongsTo
+    {
+        return $this->belongsTo(FinancialPeriod::class);
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by_id');
+    }
+
+    public function saleRecordItems(): HasMany
     {
         return $this->hasMany(SaleRecordItem::class);
     }
 
-    public function stockRecords()
+    public function stockRecords(): HasMany
     {
-        return $this->hasMany(\App\Models\StockRecord::class);
+        return $this->hasMany(StockRecord::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'sale_record_id');
+    }
+
+    public function scopeVoided($query)
+    {
+        return $query->whereNotNull('voided_at');
+    }
+
+    public function scopeNotVoided($query)
+    {
+        return $query->whereNull('voided_at');
     }
 }

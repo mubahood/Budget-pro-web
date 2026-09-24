@@ -10,14 +10,20 @@ use Illuminate\Validation\Rule;
 class StockItemController extends BaseCrudController
 {
     protected string $modelClass = StockItem::class;
+
     protected string $resourceName = 'Stock item';
 
     // current_quantity is derived from original_quantity by the model and immutable after create.
-    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity'];
+    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity', 'min_stock', 'allow_negative_stock'];
+
     protected array $searchable = ['name', 'sku', 'barcode'];
+
     protected array $sortable = ['id', 'name', 'sku', 'selling_price', 'current_quantity', 'created_at', 'updated_at'];
+
     protected array $filterable = ['stock_sub_category_id', 'stock_category_id'];
+
     protected array $listWith = ['stockSubCategory', 'stockCategory'];
+
     protected array $showWith = ['stockSubCategory', 'stockCategory', 'createdBy'];
 
     protected function rules(Request $request, ?Model $existing): array
@@ -37,6 +43,8 @@ class StockItemController extends BaseCrudController
             'buying_price' => ['nullable', 'numeric', 'min:0'],
             'selling_price' => [$existing ? 'sometimes' : 'required', 'numeric', 'min:0'],
             'original_quantity' => ['nullable', 'numeric', 'min:0'],
+            'min_stock' => ['nullable', 'numeric', 'min:0'],
+            'allow_negative_stock' => ['nullable', 'boolean'],
         ];
     }
 
@@ -61,6 +69,6 @@ class StockItemController extends BaseCrudController
 
     protected function optionLabel(Model $model): string
     {
-        return trim(($model->sku ? $model->sku.' — ' : '').$model->name);
+        return trim(($model->getAttribute('sku') ? $model->getAttribute('sku').' — ' : '').$model->getAttribute('name'));
     }
 }

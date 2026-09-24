@@ -10,6 +10,8 @@
 namespace PHPUnit\Framework\MockObject;
 
 /**
+ * @no-named-arguments Parameter names are not covered by the backward compatibility promise for PHPUnit
+ *
  * @internal This trait is not covered by the backward compatibility promise for PHPUnit
  */
 trait StubApi
@@ -21,19 +23,16 @@ trait StubApi
     private bool $__phpunit_returnValueGeneration          = true;
     private ?InvocationHandler $__phpunit_invocationMocker = null;
 
-    /** @noinspection MagicMethodsValidityInspection */
     public static function __phpunit_initConfigurableMethods(ConfigurableMethod ...$configurableMethods): void
     {
         static::$__phpunit_configurableMethods = $configurableMethods;
     }
 
-    /** @noinspection MagicMethodsValidityInspection */
     public function __phpunit_setReturnValueGeneration(bool $returnValueGeneration): void
     {
         $this->__phpunit_returnValueGeneration = $returnValueGeneration;
     }
 
-    /** @noinspection MagicMethodsValidityInspection */
     public function __phpunit_getInvocationHandler(): InvocationHandler
     {
         if ($this->__phpunit_invocationMocker === null) {

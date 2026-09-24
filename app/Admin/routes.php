@@ -12,12 +12,14 @@ Route::group([
 ], function (Router $router) {
 
     $router->get('/', 'HomeController@index')->name('home');
+    $router->get('subscription-expired', 'BillingController@expired');
     $router->resource('stock-categories', StockCategoryController::class);
     $router->resource('stock-sub-categories', StockSubCategoryController::class);
     $router->resource('financial-periods', FinancialPeriodController::class);
     $router->resource('employees', EmployeesController::class);
     $router->resource('stock-items', StockItemController::class);
     $router->resource('stock-records', StockRecordController::class);
+    $router->post('stock-records/{id}/reverse', 'StockRecordController@reverse');
     $router->resource('companies-edit', CompanyEditController::class);
     $router->resource('financial-categories', FinancialCategoryController::class);
     $router->resource('financial-reports', FinancialReportController::class);
@@ -29,12 +31,17 @@ Route::group([
     $router->resource('budget-items', BudgetItemController::class);
     $router->resource('data-exports', DataExportController::class);
     $router->resource('purchase-orders', PurchaseOrderController::class);
-    $router->resource('inventory-forecasts', InventoryForecastController::class);
-    $router->get('inventory-forecasts-generate', 'InventoryForecastController@generate');
-    $router->post('inventory-forecasts-generate', 'InventoryForecastController@processGenerate');
-    $router->resource('auto-reorder-rules', AutoReorderRuleController::class);
-    $router->get('auto-reorder-rules/trigger', 'AutoReorderRuleController@trigger');
+    // P0-12: forecasting + auto-reorder are unfinished (Phase 4 rebuild); hidden unless the flag is on.
+    // The trigger route is declared before the resource so it is no longer shadowed by {auto_reorder_rule}.
+    if (config('saas.features.inventory_automation')) {
+        $router->get('inventory-forecasts-generate', 'InventoryForecastController@generate');
+        $router->post('inventory-forecasts-generate', 'InventoryForecastController@processGenerate');
+        $router->resource('inventory-forecasts', InventoryForecastController::class);
+        $router->get('auto-reorder-rules/trigger', 'AutoReorderRuleController@trigger');
+        $router->resource('auto-reorder-rules', AutoReorderRuleController::class);
+    }
     $router->resource('sale-records', SaleRecordController::class);
+    $router->post('sale-records/{id}/void', 'SaleRecordController@void');
     $router->resource('poultry-farm-types', PoultryFarmTypeController::class);
     $router->resource('poultry-production-guide-tasks', PoultryProductionGuideTaskController::class);
     $router->resource('poultry-batches', PoultryBatchController::class);

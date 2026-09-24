@@ -21,6 +21,7 @@ class HomeController extends Controller
         // Guard against null company (deleted/missing company)
         if ($company === null) {
             admin_error('Company Not Found', 'Your account is not linked to a valid company. Please contact support.');
+
             return $content
                 ->title('Dashboard')
                 ->description('Company configuration required')
@@ -205,17 +206,17 @@ class HomeController extends Controller
      */
     private function getFinancialOverview($companyId)
     {
-        // Get sales revenue from sale_records
-        $salesRevenue = DB::select('
-            SELECT COALESCE(SUM(amount_paid), 0) as sales_income
-            FROM sale_records
-            WHERE company_id = ?
-        ', [$companyId]);
+        // The ledger is the single source of truth: sale payments are posted there as Income
+        // (source_type payment/stock_record), so sales are counted once, never from sale_records too.
+        $salesRevenue = DB::select("
+            SELECT COALESCE(SUM(amount), 0) as sales_income
+            FROM financial_records
+            WHERE company_id = ? AND type = 'Income' AND source_type IN ('payment', 'stock_record')
+        ", [$companyId]);
 
-        // Get other financial records
         $financial = DB::select("
             SELECT 
-                COALESCE(SUM(CASE WHEN type = 'Income' THEN amount ELSE 0 END), 0) as other_income,
+                COALESCE(SUM(CASE WHEN type = 'Income' AND source_type IS NULL THEN amount ELSE 0 END), 0) as other_income,
                 COALESCE(SUM(CASE WHEN type = 'Expense' THEN amount ELSE 0 END), 0) as total_expense
             FROM financial_records
             WHERE company_id = ?

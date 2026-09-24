@@ -11,6 +11,7 @@
 
 namespace Symfony\Component\VarDumper\Dumper;
 
+use Symfony\Component\ErrorHandler\ErrorRenderer\FileLinkFormatter;
 use Symfony\Component\VarDumper\Cloner\Cursor;
 use Symfony\Component\VarDumper\Cloner\Stub;
 
@@ -52,7 +53,7 @@ class CliDumper extends AbstractDumper
         "\r" => '\r',
         "\033" => '\e',
     ];
-    protected static $unicodeCharsRx = "/[\u{00A0}\u{00AD}\u{034F}\u{061C}\u{115F}\u{1160}\u{17B4}\u{17B5}\u{180E}\u{2000}-\u{200F}\u{202F}\u{205F}\u{2060}-\u{2064}\u{206A}-\u{206F}\u{3000}\u{2800}\u{3164}\u{FEFF}\u{FFA0}\u{1D159}\u{1D173}-\u{1D17A}]/u";
+    protected static $unicodeCharsRx = "/[\u{0080}-\u{009F}\u{00A0}\u{00AD}\u{034F}\u{061C}\u{115F}\u{1160}\u{17B4}\u{17B5}\u{180E}\u{2000}-\u{200F}\u{202F}\u{205F}\u{2060}-\u{2064}\u{206A}-\u{206F}\u{3000}\u{2800}\u{3164}\u{FEFF}\u{FFA0}\u{1D159}\u{1D173}-\u{1D17A}]/u";
 
     protected $collapseNextHash = false;
     protected $expandNextHash = false;
@@ -63,7 +64,7 @@ class CliDumper extends AbstractDumper
 
     private bool $handlesHrefGracefully;
 
-    public function __construct($output = null, string $charset = null, int $flags = 0)
+    public function __construct($output = null, ?string $charset = null, int $flags = 0)
     {
         parent::__construct($output, $charset, $flags);
 
@@ -82,7 +83,7 @@ class CliDumper extends AbstractDumper
             ]);
         }
 
-        $this->displayOptions['fileLinkFormat'] = \ini_get('xdebug.file_link_format') ?: get_cfg_var('xdebug.file_link_format') ?: 'file://%f#L%l';
+        $this->displayOptions['fileLinkFormat'] = class_exists(FileLinkFormatter::class) ? new FileLinkFormatter() : (\ini_get('xdebug.file_link_format') ?: get_cfg_var('xdebug.file_link_format') ?: 'file://%f#L%l');
     }
 
     /**
@@ -478,18 +479,18 @@ class CliDumper extends AbstractDumper
         $map = static::$controlCharsMap;
         $startCchr = $this->colors ? "\033[m\033[{$this->styles['default']}m" : '';
         $endCchr = $this->colors ? "\033[m\033[{$this->styles[$style]}m" : '';
-        $value = preg_replace_callback(static::$controlCharsRx, function ($c) use ($map, $startCchr, $endCchr) {
+        $value = preg_replace_callback(static::$controlCharsRx, static function ($c) use ($map, $startCchr, $endCchr) {
             $s = $startCchr;
             $c = $c[$i = 0];
             do {
-                $s .= $map[$c[$i]] ?? sprintf('\x%02X', \ord($c[$i]));
+                $s .= $map[$c[$i]] ?? \sprintf('\x%02X', \ord($c[$i]));
             } while (isset($c[++$i]));
 
             return $s.$endCchr;
         }, $value, -1, $cchrCount);
 
         if (!($attr['binary'] ?? false)) {
-            $value = preg_replace_callback(static::$unicodeCharsRx, function ($c) use (&$cchrCount, $startCchr, $endCchr) {
+            $value = preg_replace_callback(static::$unicodeCharsRx, static function ($c) use (&$cchrCount, $startCchr, $endCchr) {
                 ++$cchrCount;
 
                 return $startCchr.'\u{'.strtoupper(dechex(mb_ord($c[0]))).'}'.$endCchr;
@@ -536,7 +537,7 @@ class CliDumper extends AbstractDumper
     protected function supportsColors(): bool
     {
         if ($this->outputStream !== static::$defaultOutput) {
-            return $this->hasColorSupport($this->outputStream);
+            return $this->hasColorSupport($this->getColorSupportStream());
         }
         if (isset(static::$defaultColors)) {
             return static::$defaultColors;
@@ -566,10 +567,7 @@ class CliDumper extends AbstractDumper
             }
         }
 
-        $h = stream_get_meta_data($this->outputStream) + ['wrapper_type' => null];
-        $h = 'Output' === $h['stream_type'] && 'PHP' === $h['wrapper_type'] ? fopen('php://stdout', 'w') : $this->outputStream;
-
-        return static::$defaultColors = $this->hasColorSupport($h);
+        return static::$defaultColors = $this->hasColorSupport($this->getColorSupportStream());
     }
 
     /**
@@ -577,8 +575,12 @@ class CliDumper extends AbstractDumper
      */
     protected function dumpLine(int $depth, bool $endOfValue = false)
     {
+        if (null === $this->colors) {
+            $this->colors = $this->supportsColors();
+        }
+
         if ($this->colors) {
-            $this->line = sprintf("\033[%sm%s\033[m", $this->styles['default'], $this->line);
+            $this->line = \sprintf("\033[%sm%s\033[m", $this->styles['default'], $this->line);
         }
         parent::dumpLine($depth);
     }
@@ -604,6 +606,20 @@ class CliDumper extends AbstractDumper
     }
 
     /**
+     * Returns the stream to probe for color support: on the CLI, php://output is backed by STDOUT.
+     */
+    private function getColorSupportStream(): mixed
+    {
+        if (!\defined('STDOUT') || !\is_resource($this->outputStream) || 'stream' !== get_resource_type($this->outputStream)) {
+            return $this->outputStream;
+        }
+
+        $h = stream_get_meta_data($this->outputStream) + ['wrapper_type' => null];
+
+        return 'Output' === $h['stream_type'] && 'PHP' === $h['wrapper_type'] ? \STDOUT : $this->outputStream;
+    }
+
+    /**
      * Returns true if the stream supports colorization.
      *
      * Reference: Composer\XdebugHandler\Process::supportsColor
@@ -616,23 +632,34 @@ class CliDumper extends AbstractDumper
         }
 
         // Follow https://no-color.org/
-        if (isset($_SERVER['NO_COLOR']) || false !== getenv('NO_COLOR')) {
+        if ('' !== (($_SERVER['NO_COLOR'] ?? getenv('NO_COLOR'))[0] ?? '')) {
             return false;
         }
 
-        if ('Hyper' === getenv('TERM_PROGRAM')) {
+        // Detect msysgit/mingw and assume this is a tty because detection
+        // does not work correctly, see https://github.com/composer/composer/issues/9690
+        if (!@stream_isatty($stream) && !\in_array(strtoupper((string) getenv('MSYSTEM')), ['MINGW32', 'MINGW64'], true)) {
+            return false;
+        }
+
+        if ('\\' === \DIRECTORY_SEPARATOR && @sapi_windows_vt100_support($stream)) {
             return true;
         }
 
-        if (\DIRECTORY_SEPARATOR === '\\') {
-            return (\function_exists('sapi_windows_vt100_support')
-                && @sapi_windows_vt100_support($stream))
-                || false !== getenv('ANSICON')
-                || 'ON' === getenv('ConEmuANSI')
-                || 'xterm' === getenv('TERM');
+        if ('Hyper' === getenv('TERM_PROGRAM')
+            || false !== getenv('COLORTERM')
+            || false !== getenv('ANSICON')
+            || 'ON' === getenv('ConEmuANSI')
+        ) {
+            return true;
         }
 
-        return stream_isatty($stream);
+        if ('dumb' === $term = (string) getenv('TERM')) {
+            return false;
+        }
+
+        // See https://github.com/chalk/supports-color/blob/d4f413efaf8da045c5ab440ed418ef02dbb28bf1/index.js#L157
+        return preg_match('/^((screen|xterm|vt100|vt220|putty|rxvt|ansi|cygwin|linux).*)|(.*-256(color)?(-bce)?)$/', $term);
     }
 
     /**
@@ -650,7 +677,7 @@ class CliDumper extends AbstractDumper
             || 'Hyper' === getenv('TERM_PROGRAM');
 
         if (!$result) {
-            $version = sprintf(
+            $version = \sprintf(
                 '%s.%s.%s',
                 PHP_WINDOWS_VERSION_MAJOR,
                 PHP_WINDOWS_VERSION_MINOR,
