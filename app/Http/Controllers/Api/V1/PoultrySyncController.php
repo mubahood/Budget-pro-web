@@ -55,7 +55,7 @@ class PoultrySyncController extends Controller
     public function pull(Request $request)
     {
         $table = (string) $request->query('table');
-        $since = (int) $request->query('since', 0);
+        $since = (int) $request->query('since', '0');
 
         if (isset(self::REFERENCE_MODELS[$table])) {
             [$rows, $newCursor] = self::REFERENCE_MODELS[$table]::syncPull($since);
