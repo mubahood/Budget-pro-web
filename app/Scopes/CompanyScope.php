@@ -8,65 +8,75 @@ use Illuminate\Database\Eloquent\Scope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Tenant isolation for every model that carries a company_id.
+ *
+ * Resolves the current user from the session guards (`web`, then `admin`) so
+ * the scope is live inside the laravel-admin panel too — previously it only
+ * looked at the default `web` guard, which the admin panel never uses, so every
+ * admin `findOrFail($id)` was an IDOR (P0-2). The API is deliberately NOT
+ * covered here: `BaseCrudController` scopes explicitly with
+ * `withoutGlobalScopes()->where(company_id)`, and Ping Pin's multi-organisation
+ * membership must not be filtered by a single company_id.
+ */
 class CompanyScope implements Scope
 {
-    /**
-     * Apply the scope to a given Eloquent query builder.
-     *
-     * @return void
-     */
+    /** Guards consulted, in order. Never `sanctum` (see class docblock). */
+    public const GUARDS = ['web', 'admin'];
+
+    /** @var array<string,bool> table => has company_id column */
+    private static array $columnCache = [];
+
     public function apply(Builder $builder, Model $model)
     {
-        // Only apply company scope if user is authenticated
-        if (! Auth::check()) {
+        $companyId = self::currentCompanyId();
+        if ($companyId === null) {
             return;
         }
 
-        $user = Auth::user();
-
-        // Skip scope if user doesn't have a company_id
-        if (! $user->company_id) {
-            return;
-        }
-
-        // Check if the model has company_id column
         if (! $this->hasCompanyIdColumn($model)) {
             return;
         }
 
-        // Apply the company filter
-        $builder->where($model->getTable().'.company_id', '=', $user->company_id);
+        $builder->where($model->getTable().'.company_id', '=', $companyId);
     }
 
-    /**
-     * Check if the model has a company_id column
-     *
-     * @return bool
-     */
-    protected function hasCompanyIdColumn(Model $model)
+    /** The authenticated session user's company_id, or null when unauthenticated / no company. */
+    public static function currentCompanyId(): ?int
     {
-        // Get the table name
+        foreach (self::GUARDS as $guard) {
+            $user = Auth::guard($guard)->user();
+            if ($user !== null) {
+                return $user->company_id ? (int) $user->company_id : null;
+            }
+        }
+
+        return null;
+    }
+
+    protected function hasCompanyIdColumn(Model $model): bool
+    {
         $table = $model->getTable();
 
-        // Check if company_id exists in fillable or other attributes
-        $columns = Schema::getColumnListing($table);
+        if (! array_key_exists($table, self::$columnCache)) {
+            self::$columnCache[$table] = in_array('company_id', Schema::getColumnListing($table), true);
+        }
 
-        return in_array('company_id', $columns);
+        return self::$columnCache[$table];
     }
 
-    /**
-     * Extend the query builder with functions to bypass the scope.
-     *
-     * @return void
-     */
+    /** For tests / schema changes at runtime. */
+    public static function flushColumnCache(): void
+    {
+        self::$columnCache = [];
+    }
+
     public function extend(Builder $builder)
     {
-        // Add a method to get all records without company scope
         $builder->macro('withoutCompanyScope', function (Builder $builder) {
             return $builder->withoutGlobalScope($this);
         });
 
-        // Add a method to filter by specific company
         $builder->macro('forCompany', function (Builder $builder, $companyId) {
             $model = $builder->getModel();
 
@@ -74,7 +84,6 @@ class CompanyScope implements Scope
                 ->where($model->getTable().'.company_id', '=', $companyId);
         });
 
-        // Add a method to get records from all companies
         $builder->macro('allCompanies', function (Builder $builder) {
             return $builder->withoutGlobalScope($this);
         });

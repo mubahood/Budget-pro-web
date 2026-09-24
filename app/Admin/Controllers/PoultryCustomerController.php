@@ -3,7 +3,6 @@
 namespace App\Admin\Controllers;
 
 use App\Models\PoultryCustomer;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -16,7 +15,7 @@ use Encore\Admin\Show;
  * applies CompanyScope automatically for reads; writes still explicitly
  * stamp company_id here, matching every other tenant-scoped controller).
  */
-class PoultryCustomerController extends AdminController
+class PoultryCustomerController extends TenantAdminController
 {
     protected $title = 'Customers';
 

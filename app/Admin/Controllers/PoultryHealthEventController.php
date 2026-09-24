@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\PoultryBatch;
 use App\Models\PoultryHealthEvent;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -16,7 +15,7 @@ use Encore\Admin\Show;
  * form structure and company scoping (PoultryHealthEvent::booted() applies
  * CompanyScope automatically for reads).
  */
-class PoultryHealthEventController extends AdminController
+class PoultryHealthEventController extends TenantAdminController
 {
     protected $title = 'Health Events';
 

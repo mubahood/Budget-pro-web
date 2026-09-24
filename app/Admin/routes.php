@@ -12,7 +12,6 @@ Route::group([
 ], function (Router $router) {
 
     $router->get('/', 'HomeController@index')->name('home');
-    $router->resource('companies', CompanyController::class);
     $router->resource('stock-categories', StockCategoryController::class);
     $router->resource('stock-sub-categories', StockSubCategoryController::class);
     $router->resource('financial-periods', FinancialPeriodController::class);
@@ -20,8 +19,6 @@ Route::group([
     $router->resource('stock-items', StockItemController::class);
     $router->resource('stock-records', StockRecordController::class);
     $router->resource('companies-edit', CompanyEditController::class);
-    $router->resource('gens', CodeGenController::class);
-    $router->resource('gen', GenGenController::class);
     $router->resource('financial-categories', FinancialCategoryController::class);
     $router->resource('financial-reports', FinancialReportController::class);
     $router->resource('financial-records', FinancialRecordController::class);
@@ -59,9 +56,15 @@ Route::group([
     $router->get('tracking-map', 'DeviceLocationController@fleetMap');
     $router->get('tracking-map/{deviceId}', 'DeviceLocationController@deviceTrail');
 
-    $router->resource('pingpin-plans', PingPinPlanController::class);
-
-    $router->resource('plans', PlanController::class);
-    $router->resource('subscriptions', SubscriptionController::class);
+    // Platform-administration screens: never for tenant users (P0-1). The
+    // permission tables also exclude them; this is the explicit second lock.
+    $router->middleware('admin.platform:all')->group(function (Router $router) {
+        $router->resource('companies', CompanyController::class);
+        $router->resource('gens', CodeGenController::class);
+        $router->resource('gen', GenGenController::class);
+        $router->resource('pingpin-plans', PingPinPlanController::class);
+        $router->resource('plans', PlanController::class);
+        $router->resource('subscriptions', SubscriptionController::class);
+    });
 
 });

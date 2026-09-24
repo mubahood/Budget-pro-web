@@ -71,6 +71,7 @@ class Kernel extends HttpKernel
         'force.json' => \App\Http\Middleware\ForceJsonResponse::class,
         'api.tenant' => \App\Http\Middleware\EnsureApiTenant::class, // API: user has active company
         'api.subscription' => \App\Http\Middleware\EnsureActiveSubscription::class, // API: plan/license valid
+        'admin.platform' => \App\Http\Middleware\PlatformAdminOnly::class, // Admin panel: platform-only screens (P0-1)
         'pingpin.member' => \App\PingPin\Http\Middleware\EnsurePingPinMembership::class, // Ping Pin: fail-closed org membership (see class docblock)
     ];
 }

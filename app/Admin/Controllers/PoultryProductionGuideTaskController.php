@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\PoultryFarmType;
 use App\Models\PoultryProductionGuideTask;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
@@ -15,7 +14,7 @@ use Encore\Admin\Show;
  * grouped/filterable by farm type per §9.3 ("no need for anything fancier
  * than what FinancialCategoryController already does").
  */
-class PoultryProductionGuideTaskController extends AdminController
+class PoultryProductionGuideTaskController extends TenantAdminController
 {
     protected $title = 'Production Guide Tasks';
 

@@ -3,13 +3,12 @@
 namespace App\Admin\Controllers;
 
 use App\Models\DataExport;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
-class DataExportController extends AdminController
+class DataExportController extends TenantAdminController
 {
     /**
      * Title for current resource.

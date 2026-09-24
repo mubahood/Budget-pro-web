@@ -3,7 +3,6 @@
 namespace App\Admin\Controllers;
 
 use App\Models\PoultryFarmType;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
@@ -14,7 +13,7 @@ use Encore\Admin\Show;
  * per-company scoping that doesn't apply here (every farm sees the same
  * types).
  */
-class PoultryFarmTypeController extends AdminController
+class PoultryFarmTypeController extends TenantAdminController
 {
     protected $title = 'Farm Types';
 

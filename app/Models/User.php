@@ -76,8 +76,9 @@ class User extends Administrator
             }
             $model->username = $model->email;
 
+            // Never silently create a login with a guessable password (P0-2).
             if ($model->password == null || strlen($model->password) < 3) {
-                $model->password = bcrypt('admin');
+                throw new \App\Exceptions\BusinessRuleException('A password is required to create a user account.');
             }
 
             return $model;

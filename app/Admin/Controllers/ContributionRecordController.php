@@ -4,13 +4,12 @@ namespace App\Admin\Controllers;
 
 use App\Admin\Actions\Batch\BatchFixContributions;
 use App\Models\ContributionRecord;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
-class ContributionRecordController extends AdminController
+class ContributionRecordController extends TenantAdminController
 {
     /**
      * Title for current resource.

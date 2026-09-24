@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
+
+### Phase 0 — Stop the bleeding
+
+#### Security
+- **P0-1** Tenant admin roles no longer hold the `*` permission: an explicit `tenant.workspace` allow-list replaces it, Billing/Admin/Ping Pin-Plans menus are pinned to platform admins, and a `PlatformAdminOnly` middleware hard-denies `/subscriptions`, `/plans`, `/companies`, `/auth/users|roles|permissions|menu|logs` and the code generators for non-platform users. (`AdminRolesSeeder`, migration `scope_tenant_admin_permissions`)
+- **P0-2** `CompanyScope` is now live under the `admin` guard (it only ever looked at the unused `web` guard), so every admin `findOrFail()` is tenant-safe; `TenantAdminController` turns cross-tenant deletes into clean 404s; `DataExport` gained the scope; the `bcrypt('admin')` default password is gone (a user without a password is a `BusinessRuleException`); the Team (employees) screen now requires a password and a role, never shows credentials, and checks the company on every read/write.
+
+---
+
 ## [2.0.0] - 2025-12-09
 
 ### 🎉 Initial Envato Market Release

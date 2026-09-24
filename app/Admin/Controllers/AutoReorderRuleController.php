@@ -6,13 +6,12 @@ use App\Models\AutoReorderRule;
 use App\Models\Company;
 use App\Models\StockItem;
 use App\Services\AutoReorderService;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 use Illuminate\Http\Request;
 
-class AutoReorderRuleController extends AdminController
+class AutoReorderRuleController extends TenantAdminController
 {
     /**
      * Title for current resource.

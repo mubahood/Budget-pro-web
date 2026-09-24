@@ -5,7 +5,6 @@ namespace App\Admin\Controllers;
 use App\Models\PoultryBatch;
 use App\Models\PoultryFeedStock;
 use App\Models\PoultryFeedType;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -18,7 +17,7 @@ use Encore\Admin\Show;
  * (PoultryFeedStock::booted() applies CompanyScope automatically for reads;
  * writes stamp company_id here).
  */
-class PoultryFeedStockController extends AdminController
+class PoultryFeedStockController extends TenantAdminController
 {
     protected $title = 'Feed Stock';
 

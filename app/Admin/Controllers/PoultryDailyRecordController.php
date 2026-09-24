@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\PoultryBatch;
 use App\Models\PoultryDailyRecord;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -17,7 +16,7 @@ use Encore\Admin\Show;
  * applies CompanyScope automatically for reads; writes still explicitly
  * stamp company_id here, matching every other tenant-scoped controller).
  */
-class PoultryDailyRecordController extends AdminController
+class PoultryDailyRecordController extends TenantAdminController
 {
     protected $title = 'Daily Records';
 

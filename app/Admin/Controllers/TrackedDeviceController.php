@@ -6,7 +6,6 @@ use App\Models\DeviceCommand;
 use App\Models\DeviceConfig;
 use App\Models\PingPinDeviceCapability;
 use App\Models\TrackedDevice;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -19,7 +18,7 @@ use Illuminate\Http\RedirectResponse;
  * the related DeviceConfig row, edited inline here rather than as a
  * separate admin resource — there's exactly one config per device.
  */
-class TrackedDeviceController extends AdminController
+class TrackedDeviceController extends TenantAdminController
 {
     protected $title = 'Devices';
 

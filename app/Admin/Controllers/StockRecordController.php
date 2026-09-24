@@ -7,13 +7,12 @@ use App\Models\StockItem;
 use App\Models\StockRecord;
 use App\Models\StockSubCategory;
 use App\Models\User;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
-class StockRecordController extends AdminController
+class StockRecordController extends TenantAdminController
 {
     /**
      * Title for current resource.

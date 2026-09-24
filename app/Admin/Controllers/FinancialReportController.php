@@ -3,12 +3,11 @@
 namespace App\Admin\Controllers;
 
 use App\Models\FinancialReport;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
-class FinancialReportController extends AdminController
+class FinancialReportController extends TenantAdminController
 {
     /**
      * Title for current resource.

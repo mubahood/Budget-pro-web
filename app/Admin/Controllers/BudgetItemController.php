@@ -5,13 +5,12 @@ namespace App\Admin\Controllers;
 use App\Admin\Actions\Batch\BatchFixBudgetItems;
 use App\Models\BudgetItem;
 use App\Models\BudgetItemCategory;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
-class BudgetItemController extends AdminController
+class BudgetItemController extends TenantAdminController
 {
     /**
      * Title for current resource.

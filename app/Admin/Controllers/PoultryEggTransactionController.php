@@ -3,7 +3,6 @@
 namespace App\Admin\Controllers;
 
 use App\Models\PoultryEggTransaction;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -16,7 +15,7 @@ use Encore\Admin\Show;
  * of complexity, tenant-scoped like PoultryBatchController (PoultryEggTransaction::
  * booted() applies CompanyScope automatically for reads).
  */
-class PoultryEggTransactionController extends AdminController
+class PoultryEggTransactionController extends TenantAdminController
 {
     protected $title = 'Egg Transactions';
 

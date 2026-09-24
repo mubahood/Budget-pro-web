@@ -4,14 +4,13 @@ namespace App\Admin\Controllers;
 
 use App\Models\SaleRecord;
 use App\Models\User;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 use Illuminate\Support\Facades\DB;
 
-class SaleRecordController extends AdminController
+class SaleRecordController extends TenantAdminController
 {
     /**
      * Title for current resource.

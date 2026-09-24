@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\DeviceCommand;
 use App\Models\TrackedDevice;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
@@ -15,7 +14,7 @@ use Encore\Admin\Show;
  * Read-only: creating a command is done via the "Locate Now" button, not
  * a generic form, so there's no ambiguity about what commands mean.
  */
-class DeviceCommandController extends AdminController
+class DeviceCommandController extends TenantAdminController
 {
     protected $title = 'Remote Commands';
 

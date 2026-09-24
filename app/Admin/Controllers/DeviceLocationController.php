@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\DeviceLocation;
 use App\Models\TrackedDevice;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
@@ -17,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  * TrackedDeviceController's own detail page already shows a "last 50"
  * sub-grid per device; this is the full, filterable, cross-device view.
  */
-class DeviceLocationController extends AdminController
+class DeviceLocationController extends TenantAdminController
 {
     protected $title = 'Location History';
 

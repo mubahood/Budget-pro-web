@@ -4,14 +4,13 @@ namespace App\Admin\Controllers;
 
 use App\Models\StockCategory;
 use App\Models\StockSubCategory;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 use Illuminate\Support\Str;
 
-class StockSubCategoryController extends AdminController
+class StockSubCategoryController extends TenantAdminController
 {
     /**
      * Title for current resource.

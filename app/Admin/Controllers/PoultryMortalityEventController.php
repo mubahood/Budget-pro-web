@@ -4,7 +4,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\PoultryBatch;
 use App\Models\PoultryMortalityEvent;
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -16,7 +15,7 @@ use Encore\Admin\Show;
  * structure and company scoping (PoultryMortalityEvent::booted() applies
  * CompanyScope automatically for reads).
  */
-class PoultryMortalityEventController extends AdminController
+class PoultryMortalityEventController extends TenantAdminController
 {
     protected $title = 'Mortality Events';
 

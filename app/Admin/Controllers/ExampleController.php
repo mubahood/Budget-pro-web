@@ -2,12 +2,11 @@
 
 namespace App\Admin\Controllers;
 
-use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 
-class ExampleController extends AdminController
+class ExampleController extends TenantAdminController
 {
     /**
      * Title for current resource.
