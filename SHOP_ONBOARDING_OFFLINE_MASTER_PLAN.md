@@ -1057,26 +1057,26 @@ Each phase ends with a demo from the user's side and a green CI run.
 ### Phase 0 — Stop the bleeding (2 weeks) · **must ship first**
 
 Backend
-- [ ] P0-1 Scope admin permissions: `*` only for platform admins; `admin_role_menu` rows; role+company checks on Subscriptions/Plans/Users/Roles screens (§1.4, C9)
-- [ ] P0-2 Policies on every admin `detail/edit/destroy` (kill IDOR); `EmployeesController` rewrite (password/invite required, role required, no hash display, company check)
-- [ ] P0-3 Fix `EnforceSaasIsolation` (admin guard; drop `user_type`); web admin enforces `hasActiveAccess` with grace
-- [ ] P0-4 Movements move stock for every type; remove "enough stock" check on inbound; add `POST /stock-movements` inbound + adjust (A2.1)
-- [ ] P0-5 Locked, atomic, single-transaction checkout via `SaleService`; deterministic lock order (A2.2)
-- [ ] P0-6 Idempotency-Key on checkout/payments/movements (A2.3)
-- [ ] P0-7 Discounts and real prices into movements + ledger; ledger per payment with real method; contra rows on void/delete (A2.4–6)
-- [ ] P0-8 Numbering: per-company sequences, `(company_id, number)` unique, fix cross-tenant collisions (Appendix D server part)
-- [ ] P0-9 `BusinessRuleException` + error codes across shop models → 422 (A2.9)
-- [ ] P0-10 Fix `FinancialCategory` (type/status columns, unique, 422), one-active-period constraint, period from `occurred_at`
-- [ ] P0-11 Remove dashboard/report income double count
-- [ ] P0-12 Hide/disable AutoReorder + Forecast UI and shadowed route until Phase 4 (A7)
-- [ ] P0-13 Unify signup into `RegistrationService` (web/API/legacy/Ping Pin) + fix `username` overwrite; one `RegisterRequest` (C1)
-- [ ] P0-14 Implement `/payment/callback`; owner-only checkout
-- [ ] P0-15 Tests for every P0 item (A11); CI pipeline running them
+- [x] P0-1 Scope admin permissions: `*` only for platform admins; `admin_role_menu` rows; role+company checks on Subscriptions/Plans/Users/Roles screens (§1.4, C9)
+- [x] P0-2 Policies on every admin `detail/edit/destroy` (kill IDOR); `EmployeesController` rewrite (password/invite required, role required, no hash display, company check)
+- [x] P0-3 Fix `EnforceSaasIsolation` (admin guard; drop `user_type`); web admin enforces `hasActiveAccess` with grace
+- [x] P0-4 Movements move stock for every type; remove "enough stock" check on inbound; add `POST /stock-movements` inbound + adjust (A2.1)
+- [x] P0-5 Locked, atomic, single-transaction checkout via `SaleService`; deterministic lock order (A2.2)
+- [x] P0-6 Idempotency-Key on checkout/payments/movements (A2.3)
+- [x] P0-7 Discounts and real prices into movements + ledger; ledger per payment with real method; contra rows on void/delete (A2.4–6)
+- [x] P0-8 Numbering: per-company sequences, `(company_id, number)` unique, fix cross-tenant collisions (Appendix D server part)
+- [x] P0-9 `BusinessRuleException` + error codes across shop models → 422 (A2.9)
+- [x] P0-10 Fix `FinancialCategory` (type/status columns, unique, 422), one-active-period constraint, period from `occurred_at`
+- [x] P0-11 Remove dashboard/report income double count
+- [x] P0-12 Hide/disable AutoReorder + Forecast UI and shadowed route until Phase 4 (A7)
+- [x] P0-13 Unify signup into `RegistrationService` (web/API/legacy/Ping Pin) + fix `username` overwrite; one `RegisterRequest` (C1)
+- [x] P0-14 Implement `/payment/callback`; owner-only checkout
+- [x] P0-15 Tests for every P0 item (A11); CI pipeline running them
 
 Mobile
-- [ ] P0-16 Tokens → `flutter_secure_storage`; logout wipes tenant data; `company_id` on poultry tables
-- [ ] P0-17 Fix cache wipe-outside-transaction, SQL-injection-prone search, string quantity sort, `int_parse` truncation, `first_name` field bug, loader try/finally, unhandled sync errors
-- [ ] P0-18 Poultry engine quick fixes: wire keys for the 4 unmapped tables (or exclude them), `markSynced` version check, demo seed never pushes, persist `lastSyncAt`
+- [x] P0-16 Tokens → `flutter_secure_storage`; logout wipes tenant data; `company_id` on poultry tables
+- [x] P0-17 Fix cache wipe-outside-transaction, SQL-injection-prone search, string quantity sort, `int_parse` truncation, `first_name` field bug, loader try/finally, unhandled sync errors
+- [x] P0-18 Poultry engine quick fixes: wire keys for the 4 unmapped tables (or exclude them), `markSynced` version check, demo seed never pushes, persist `lastSyncAt`
 
 ### Phase 1 — Offline foundation (4 weeks)
 

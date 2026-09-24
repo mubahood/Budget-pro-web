@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P0-12** Inventory forecasting and auto-reorder rules are hidden behind `saas.features.inventory_automation` (default off) until their Phase 4 rebuild; their menu entries are removed and the shadowed `auto-reorder-rules/trigger` route is fixed.
 - **P0-13** One `RegistrationService` behind the web form, `/api/v1/auth/register`, the legacy `/api/auth/register` and Ping Pin signup: owner + role, company, membership, trial subscription, default period and account categories in one transaction, with one shared rule set. Phone-only signups keep their phone as username (the `User` hook no longer clobbers it).
 
+#### Mobile app (budget-pro-mobo, commit ece7b27)
+- **P0-16** The API token lives in the platform keystore (`flutter_secure_storage`), never in sqlite or logs; logout wipes every cached tenant table and the token in one transaction (with an "N unsynced records" warning), and logging into a different company wipes the previous tenant's data first; poultry rows carry `company_id` and every local read is tenant-scoped.
+- **P0-17** Cache refreshes validate the response and replace rows inside one transaction (13 models); search keywords are escaped for `LIKE`; quantity/sales sorts and totals are numeric and decimal-safe (`Utils.double_parse`); loaders close in `try/finally` on all 12 create screens; background syncs are guarded per table/row and the app runs under `runZonedGuarded` + `FlutterError.onError`.
+- **P0-18** `markSynced` only cleans rows untouched since the push; tasks/task reports/price history/audit are explicit local-only tables (never pushed, never "pending"); demo farm data is marked clean and skipped by the pusher; last sync time persists in `poultry_meta`; pulled rows are filtered to known columns with tolerant clock parsing. 50 Flutter tests green.
+
 ---
 
 ## [2.0.0] - 2025-12-09
