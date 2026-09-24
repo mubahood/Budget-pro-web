@@ -1081,21 +1081,21 @@ Mobile
 ### Phase 1 — Offline foundation (4 weeks)
 
 Backend
-- [ ] P1-1 Sync columns + `server_seq` + backfill on all shop/budget tables (Appendix B.0)
-- [ ] P1-2 `DeviceRegistration` + `POST /devices/register` (prefix assignment)
-- [ ] P1-3 `POST /sync/push` (batches, transactions, domain services, idempotent), `GET /sync/pull` (seq cursor, paging), `POST /sync/bootstrap` (Appendix A)
-- [ ] P1-4 `StockService::apply()` event-sourced movements with negative-stock policy + conflict items (B4)
-- [ ] P1-5 `sync_conflicts` table + `GET /sync/conflicts` + resolve endpoints
-- [ ] P1-6 Entitlement snapshot in `auth/me`; grace policy at sync time (A10/C8)
-- [ ] P1-7 `SyncTest` suite (B11) incl. seq-cursor and skew tests; poultry migrated onto v2 (keep v1 endpoints one release)
+- [x] P1-1 Sync columns + `server_seq` + backfill on all shop/budget tables (Appendix B.0)
+- [x] P1-2 `DeviceRegistration` + `POST /devices/register` (prefix assignment)
+- [x] P1-3 `POST /sync/push` (batches, transactions, domain services, idempotent), `GET /sync/pull` (seq cursor, paging), `POST /sync/bootstrap` (Appendix A)
+- [x] P1-4 `StockService::apply()` event-sourced movements with negative-stock policy + conflict items (B4)
+- [x] P1-5 `sync_conflicts` table + `GET /sync/conflicts` + resolve endpoints
+- [x] P1-6 Entitlement snapshot in `auth/me`; grace policy at sync time (A10/C8)
+- [x] P1-7 `SyncTest` suite (B11) incl. seq-cursor and skew tests; poultry migrated onto v2 (keep v1 endpoints one release)
 
 Mobile
-- [ ] P1-8 `lib/sync/` engine extracted & generalised (B2): `SyncDb` migrations, `SyncStore` transactions, `Outbox` batches, transport v2, paging pull, triggers (`connectivity_plus`, `workmanager`), status controller, conflict inbox screen, `TenantGuard`
-- [ ] P1-9 Local shop schema (Appendix C) + bootstrap on upgrade (B10) + FTS product search
-- [ ] P1-10 File upload queue with compression (B8)
-- [ ] P1-11 PIN unlock + offline auth + 401 handling (B8/C6)
-- [ ] P1-12 Retire engines A and B; shop screens read local only
-- [ ] P1-13 Engine tests incl. two-device simulation and kill-mid-batch (B11)
+- [x] P1-8 `lib/sync/` engine extracted & generalised (B2): `SyncDb` migrations, `SyncStore` transactions, `Outbox` batches, transport v2, paging pull, triggers (`connectivity_plus`, `workmanager`), status controller, conflict inbox screen, `TenantGuard`
+- [x] P1-9 Local shop schema (Appendix C) + bootstrap on upgrade (B10) + FTS product search
+- [x] P1-10 File upload queue with compression (B8)
+- [x] P1-11 PIN unlock + offline auth + 401 handling (B8/C6)
+- [x] P1-12 Retire engines A and B; shop screens read local only
+- [x] P1-13 Engine tests incl. two-device simulation and kill-mid-batch (B11)
 
 ### Phase 2 — Real POS & inventory, offline (4 weeks)
 

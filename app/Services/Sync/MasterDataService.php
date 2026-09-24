@@ -105,6 +105,17 @@ class MasterDataService
                 $model->setAttribute('created_by_id', $userId);
             }
         }
+        // Who-did-it columns default to the pushing user; a supplied user id must be a teammate.
+        $pushUser = (int) ($op['_user_id'] ?? 0);
+        foreach ($config['user_fields'] ?? [] as $column) {
+            $given = (int) $model->getAttribute($column);
+            if ($given > 0 && ! \App\Models\User::withoutGlobalScopes()->where('id', $given)->where('company_id', $companyId)->exists()) {
+                return ['status' => 'rejected', 'code' => 'validation', 'message' => 'User '.$given.' is not part of this company.'];
+            }
+            if ($given <= 0 && $pushUser > 0 && ($existing === null || $column === 'chaned_by_id' || $column === 'changed_by_id')) {
+                $model->setAttribute($column, $pushUser);
+            }
+        }
         if ($clientUpdatedAt > 0) {
             $model->client_updated_at = $clientUpdatedAt;
         }

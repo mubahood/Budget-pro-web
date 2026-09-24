@@ -46,7 +46,7 @@ class SyncRegistry
 
     public const KIND_REFERENCE = 'reference';
 
-    /** @return array<string, array{model: class-string, kind: string, fields?: string[], refs?: array<string, array{model: class-string, column: string}>, derived?: bool, handler?: string}> */
+    /** @return array<string, array{model: class-string, kind: string, fields?: string[], refs?: array<string, array{model: class-string, column: string}>, derived?: bool, handler?: string, user_fields?: string[]}> */
     public static function tables(): array
     {
         return [
@@ -66,13 +66,16 @@ class SyncRegistry
             'stock_movements' => ['model' => StockRecord::class, 'kind' => self::KIND_EVENT, 'handler' => 'movement',
                 'refs' => ['product_uuid' => ['model' => StockItem::class, 'column' => 'stock_item_id'], 'sale_uuid' => ['model' => SaleRecord::class, 'column' => 'sale_record_id'], 'category_uuid' => ['model' => StockCategory::class, 'column' => 'stock_category_id'], 'sub_category_uuid' => ['model' => StockSubCategory::class, 'column' => 'stock_sub_category_id'], 'period_uuid' => ['model' => FinancialPeriod::class, 'column' => 'financial_period_id']]],
             'financial_records' => ['model' => FinancialRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['amount', 'quantity', 'type', 'payment_method', 'recipient', 'description', 'receipt', 'date'],
+                'user_fields' => ['created_by_id', 'user_id'],
                 'refs' => ['category_uuid' => ['model' => FinancialCategory::class, 'column' => 'financial_category_id'], 'period_uuid' => ['model' => FinancialPeriod::class, 'column' => 'financial_period_id']]],
             'budget_programs' => ['model' => BudgetProgram::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'status', 'deadline', 'rsvp', 'title', 'bottom', 'groups', 'is_active', 'is_default', 'logo']],
             'budget_item_categories' => ['model' => BudgetItemCategory::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'target_amount'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
             'budget_items' => ['model' => BudgetItem::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'unit_price', 'quantity', 'approved', 'details', 'priority', 'invested_amount'],
+                'user_fields' => ['created_by_id', 'changed_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'], 'category_uuid' => ['model' => BudgetItemCategory::class, 'column' => 'budget_item_category_id']]],
-            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid'],
+            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id'],
+                'user_fields' => ['treasurer_id', 'chaned_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
             // Poultry: same wire keys as the v1 endpoints; push semantics live in PoultrySyncable.
             'farm_types' => ['model' => PoultryFarmType::class, 'kind' => self::KIND_REFERENCE],

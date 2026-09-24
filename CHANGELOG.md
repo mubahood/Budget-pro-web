@@ -49,6 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P1-5** `sync_conflicts` inbox: `GET /sync/conflicts`, resolve with mine / server / merged / counted / ignore.
 - **P1-6** Entitlement snapshot in `auth/me` and device registration; sync stays open during grace, batches are `held` after it and applied automatically on renewal.
 - **P1-7** `SyncTest` (16 tests): replay, batch atomicity, 1,000 same-timestamp rows paged with no skips, tenant isolation, tombstones, missing parent, skewed-clock LWW + inbox resolution, oversell flagging, hold/renew, grace, revoked device, poultry through v2 (v1 endpoints kept).
+- `POST /files` (A.6): multipart upload keyed by client uuid (idempotent, tenant folder); `SyncMasterTablesTest` proves every offline-writable master table (catalogue, budget, pledges, finance) is accepted through `/sync/push`; sync-created rows default their user columns (treasurer, created/changed by) to the pushing user.
+
+#### Mobile (budget-pro-mobo)
+- **P1-8** New `lib/sync/` engine: versioned `SyncDb` schema, `SyncRepo` (every user action = local rows + outbox ops in one transaction; pending edits coalesce), ordered outbox batches with dead-lettering, `SyncEngine` (device registration, push → bootstrap/paged pull by `server_seq` → participants → conflict mirror), triggers (reconnect, resume, 15-min foreground, 5 s after writes, WorkManager background), sync chip + "Sync & data" screen with the conflict inbox (keep mine / keep server / count stock), tenant guard (company bound to outbox; different company wipes first).
+- **P1-9** The 13 local tables keep the names/columns the screens already query and gain sync columns; first launch after upgrade rebuilds the caches and bootstraps; product search uses an FTS index (escaped LIKE fallback).
+- **P1-10** Photo queue: images compressed to 1280 px JPEG, uploaded on Wi-Fi (mobile data opt-in), the resulting path saved on the row through the outbox.
+- **P1-11** Offline PIN unlock (salted SHA-256, keystore salt, escalating lockout), 401 → re-login without wiping the outbox, tokens from older app versions migrated into secure storage.
+- **P1-12** Engine A (OfflineStore/SyncEngine/SyncResources) deleted; the 13 legacy model caches now read local only and write through the repo; all 11 create screens work offline; stock records support Stock In; the poultry engine moved to protocol v2 (paged, seq cursor; v1 endpoints kept a release); farm expenses post to the local ledger; demo-farm expenses never reach the real ledger.
+- **P1-13** Engine tests against an in-memory server: outbox ordering, crash between row and op, in-flight edit race, 1,900-row paging, dirty rows never overwritten, tombstones, two-device same-field conflict, two-device offline oversell reconciliation (Σ movements == server quantity on both phones), missing-parent retry, held batches, photo queue, provisional numbers, FTS + injection-safe search. 65 Flutter tests green; debug APK builds.
 
 ---
 

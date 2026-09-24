@@ -244,6 +244,9 @@ loop while `has_more`. Tombstones arrive with `is_deleted: 1`. Admin/web edits b
 `GET /sync/conflicts?state=open|resolved|all`; `POST /sync/conflicts/{id}/resolve { choice: mine|server|merged|counted|ignore, data?, counted_quantity? }`.
 `counted` on a `stock_exception` records one adjustment to the counted quantity.
 
+### `POST /files`
+Multipart `{ uuid, purpose: product_image|receipt|avatar|logo|adjustment_photo|document|other, file (jpg/png/webp/pdf ≤ 8 MB) }` → `{ file_uuid, path, url }`. Re-uploading the same uuid returns the stored file (idempotent).
+
 ### Entitlements
 `GET /auth/me` and device registration return `entitlements: { state: active|grace|expired|inactive, plan, ends_at, grace_until, limits, features, negative_stock_policy, currency, server_time }`.
 

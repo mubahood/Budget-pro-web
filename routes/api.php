@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\CompanyController;
 use App\Http\Controllers\Api\V1\ContributionRecordController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FinancialCategoryController;
 use App\Http\Controllers\Api\V1\FinancialPeriodController;
 use App\Http\Controllers\Api\V1\FinancialRecordController;
@@ -185,6 +186,7 @@ Route::prefix('v1')->group(function () {
         Route::post('sync/bootstrap', [SyncController::class, 'bootstrap']);
         Route::get('sync/conflicts', [SyncController::class, 'conflicts']);
         Route::post('sync/conflicts/{id}/resolve', [SyncController::class, 'resolve'])->whereNumber('id');
+        Route::post('files', [FileController::class, 'store']);
     });
 
     Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription'])->group(function () {
