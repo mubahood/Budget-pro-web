@@ -55,7 +55,7 @@ class PaymentService
 
             $ledger = $this->postIncome($sale, $payment);
             $payment->financial_record_id = $ledger->id;
-            $payment->saveQuietly();
+            $payment->saveQuietlySynced();
 
             $this->syncSaleTotals($sale);
 
@@ -95,7 +95,7 @@ class PaymentService
                 if ($original) {
                     $ledger = $this->postContra($original, $contra, $reason);
                     $contra->financial_record_id = $ledger->id;
-                    $contra->saveQuietly();
+                    $contra->saveQuietlySynced();
                 }
             }
 
@@ -120,7 +120,7 @@ class PaymentService
         $sale->change_given = max(0, round($paid - $total, 2));
         $sale->balance = max(0, round($total - $paid, 2));
         $sale->payment_status = $sale->balance <= 0 ? 'Paid' : ($sale->amount_paid > 0 ? 'Partial' : 'Unpaid');
-        $sale->saveQuietly();
+        $sale->saveQuietlySynced();
     }
 
     private function postIncome(SaleRecord $sale, Payment $payment): FinancialRecord

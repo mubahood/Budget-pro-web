@@ -38,6 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P0-17** Cache refreshes validate the response and replace rows inside one transaction (13 models); search keywords are escaped for `LIKE`; quantity/sales sorts and totals are numeric and decimal-safe (`Utils.double_parse`); loaders close in `try/finally` on all 12 create screens; background syncs are guarded per table/row and the app runs under `runZonedGuarded` + `FlutterError.onError`.
 - **P0-18** `markSynced` only cleans rows untouched since the push; tasks/task reports/price history/audit are explicit local-only tables (never pushed, never "pending"); demo farm data is marked clean and skipped by the pusher; last sync time persists in `poultry_meta`; pulled rows are filtered to known columns with tolerant clock parsing. 50 Flutter tests green.
 
+
+### Phase 1 — Offline foundation
+
+#### Backend
+- **P1-1** Standard sync columns (`uuid`, `server_seq`, `client_created_at/updated_at`, `version`, `is_deleted`, `created_by_uuid`, `device_id`) on all shop, finance and budget tables with backfill and `(company_id, uuid)` unique; poultry tables gain `server_seq`. One global `sync_sequence`; the `Syncable` trait bumps seq/version on every write incl. admin edits and turns deletes into tombstones.
+- **P1-2** `devices` + `POST /devices/register` (stable `D1…` prefix per device), device list and revoke.
+- **P1-3** `POST /sync/push` (per-batch transactions through `SaleService`/`PaymentService`/`StockService`, idempotent by `batch_uuid`, insert-if-absent events, rejected batches roll back), `GET /sync/pull` (seq cursor, paging, multi-table), `POST /sync/bootstrap`.
+- **P1-4** Offline stock policy: completed offline sales are never rejected — applied with `allow_negative`, flagged `stock_exception`, conflict card created; push returns authoritative `current_quantity` for touched products.
+- **P1-5** `sync_conflicts` inbox: `GET /sync/conflicts`, resolve with mine / server / merged / counted / ignore.
+- **P1-6** Entitlement snapshot in `auth/me` and device registration; sync stays open during grace, batches are `held` after it and applied automatically on renewal.
+- **P1-7** `SyncTest` (16 tests): replay, batch atomicity, 1,000 same-timestamp rows paged with no skips, tenant isolation, tombstones, missing parent, skewed-clock LWW + inbox resolution, oversell flagging, hold/renew, grace, revoked device, poultry through v2 (v1 endpoints kept).
+
 ---
 
 ## [2.0.0] - 2025-12-09

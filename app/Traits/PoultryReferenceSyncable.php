@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Support\Sync\SyncSequence;
 use Illuminate\Support\Str;
 
 /**
@@ -31,6 +32,7 @@ trait PoultryReferenceSyncable
         static::saving(function ($model) {
             $model->version = $model->exists ? (((int) $model->getOriginal('version')) ?: 0) + 1 : 1;
             $model->client_updated_at = (int) round(microtime(true) * 1000);
+            $model->server_seq = SyncSequence::next();
         });
     }
 
@@ -51,6 +53,22 @@ trait PoultryReferenceSyncable
         }
 
         return [$wire, $cursor];
+    }
+
+    /** v2 pull for reference data (not company-scoped). */
+    public static function syncPullBySeq(int $sinceSeq, int $limit = 500): array
+    {
+        $rows = static::query()->where('server_seq', '>', $sinceSeq)->orderBy('server_seq')->limit($limit + 1)->get();
+        $hasMore = $rows->count() > $limit;
+        $rows = $rows->take($limit);
+        $wire = [];
+        $next = $sinceSeq;
+        foreach ($rows as $row) {
+            $wire[] = $row->toSyncArray() + ['server_seq' => (int) $row->server_seq];
+            $next = max($next, (int) $row->server_seq);
+        }
+
+        return [$wire, $next, $hasMore];
     }
 
     public function toSyncArray(): array

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class ContributionRecord extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /**
      * The "booted" method of the model.
@@ -108,7 +109,7 @@ class ContributionRecord extends Model
                 $data->treasurer_id = $loggedUser->id;
                 $treasurer = $loggedUser;
             } else {
-                throw new BusinessRuleException('Treasurer/User not found for ID: ' . $data->treasurer_id);
+                throw new BusinessRuleException('Treasurer/User not found for ID: '.$data->treasurer_id);
             }
         }
 
@@ -193,7 +194,7 @@ class ContributionRecord extends Model
                 BudgetProgram::recalculateFromChildren((int) $data->budget_program_id);
             }
         } catch (\Throwable $th) {
-            Log::error('ContributionRecord::finalizer cascade to program failed: ' . $th->getMessage());
+            Log::error('ContributionRecord::finalizer cascade to program failed: '.$th->getMessage());
         }
 
         return $data;

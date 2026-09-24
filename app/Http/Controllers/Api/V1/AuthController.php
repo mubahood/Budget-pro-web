@@ -10,6 +10,7 @@ use App\Http\Resources\CompanyResource;
 use App\Http\Resources\UserResource;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Billing\Entitlements;
 use App\Services\Onboarding\RegistrationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
@@ -128,6 +129,8 @@ class AuthController extends Controller
                 'ends_at' => optional($subscription->ends_at)->toIso8601String(),
                 'is_active' => $subscription->isActive(),
             ] : null,
+            // Snapshot the device caches for offline limit/grace decisions (P1-6).
+            'entitlements' => $company ? Entitlements::for($company) : null,
         ], 'Profile loaded.');
     }
 

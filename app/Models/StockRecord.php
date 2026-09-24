@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Services\Shop\StockService;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\DB;
  */
 class StockRecord extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /** Runtime-only: permit the movement to take stock below zero. */
     public bool $allowNegative = false;
@@ -142,6 +143,9 @@ class StockRecord extends Model
             // Atomic cache update; the row is still locked by the creating hook.
             DB::table('stock_items')->where('id', $model->stock_item_id)->update([
                 'current_quantity' => DB::raw('current_quantity + ('.(float) $model->quantity_delta.')'),
+                'server_seq' => \App\Support\Sync\SyncSequence::next(), // devices pull the new on-hand figure
+                'version' => DB::raw('version + 1'),
+                'client_updated_at' => \App\Support\Sync\SyncSequence::nowMs(),
                 'updated_at' => now(),
             ]);
 

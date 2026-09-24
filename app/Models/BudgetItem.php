@@ -6,6 +6,7 @@ use App\Exceptions\BusinessRuleException;
 use App\Jobs\SendBudgetItemNotification;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class BudgetItem extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /**
      * The "booted" method of the model.
@@ -104,7 +105,7 @@ class BudgetItem extends Model
         if ($authUser !== null) {
             $loggedUser = $authUser;
         }
-        if ($loggedUser === null && !empty($data->created_by_id)) {
+        if ($loggedUser === null && ! empty($data->created_by_id)) {
             $loggedUser = User::find($data->created_by_id);
         }
         if ($loggedUser === null) {
@@ -157,9 +158,9 @@ class BudgetItem extends Model
         DB::table((new self())->getTable())
             ->where('id', $data->id)
             ->update([
-                'balance'         => $balance,
+                'balance' => $balance,
                 'percentage_done' => $percentage_done,
-                'is_complete'     => $is_complete,
+                'is_complete' => $is_complete,
             ]);
 
         $cat = BudgetItemCategory::find($data->budget_item_category_id);
@@ -168,10 +169,10 @@ class BudgetItem extends Model
             try {
                 $cat->updateSelf();
             } catch (\Throwable $th) {
-                Log::error('BudgetItem::finalizer - category update failed for category #' . $data->budget_item_category_id . ': ' . $th->getMessage());
+                Log::error('BudgetItem::finalizer - category update failed for category #'.$data->budget_item_category_id.': '.$th->getMessage());
             }
         } else {
-            Log::warning('BudgetItem::finalizer - orphaned item #' . $data->id . ' has no valid category #' . $data->budget_item_category_id);
+            Log::warning('BudgetItem::finalizer - orphaned item #'.$data->id.' has no valid category #'.$data->budget_item_category_id);
         }
 
         // Dispatch email notification job (async)

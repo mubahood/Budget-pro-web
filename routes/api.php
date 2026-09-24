@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\BudgetProgramController;
 use App\Http\Controllers\Api\V1\CompanyController;
 use App\Http\Controllers\Api\V1\ContributionRecordController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\FinancialCategoryController;
 use App\Http\Controllers\Api\V1\FinancialPeriodController;
 use App\Http\Controllers\Api\V1\FinancialRecordController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Api\V1\StockCategoryController;
 use App\Http\Controllers\Api\V1\StockItemController;
 use App\Http\Controllers\Api\V1\StockRecordController;
 use App\Http\Controllers\Api\V1\StockSubCategoryController;
+use App\Http\Controllers\Api\V1\SyncController;
 use App\Http\Controllers\Api\V1\TrackingController;
 use App\Http\Controllers\Api\V1\UploadController;
 use App\Http\Controllers\ApiController;
@@ -172,6 +174,19 @@ Route::prefix('v1')->group(function () {
     });
 
     // ── Authenticated + active subscription: the product surface ──
+    // Offline sync v2 (plan Appendix A). Deliberately outside api.subscription: a lapsed
+    // tenant's devices keep syncing; batches are held (not lost) once the grace ends.
+    Route::middleware(['auth:sanctum', 'api.tenant'])->group(function () {
+        Route::post('devices/register', [DeviceController::class, 'register']);
+        Route::get('devices', [DeviceController::class, 'index']);
+        Route::post('devices/{id}/revoke', [DeviceController::class, 'revoke'])->whereNumber('id');
+        Route::post('sync/push', [SyncController::class, 'push']);
+        Route::get('sync/pull', [SyncController::class, 'pull']);
+        Route::post('sync/bootstrap', [SyncController::class, 'bootstrap']);
+        Route::get('sync/conflicts', [SyncController::class, 'conflicts']);
+        Route::post('sync/conflicts/{id}/resolve', [SyncController::class, 'resolve'])->whereNumber('id');
+    });
+
     Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription'])->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index']);
 

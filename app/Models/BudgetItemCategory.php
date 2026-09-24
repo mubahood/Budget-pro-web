@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class BudgetItemCategory extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /**
      * The "booted" method of the model.
@@ -103,11 +104,11 @@ class BudgetItemCategory extends Model
         DB::table((new self())->getTable())
             ->where('id', $this->id)
             ->update([
-                'target_amount'   => $target_amount,
+                'target_amount' => $target_amount,
                 'invested_amount' => $invested_amount,
-                'balance'         => $balance,
+                'balance' => $balance,
                 'percentage_done' => $percentage_done,
-                'is_complete'     => $is_complete,
+                'is_complete' => $is_complete,
             ]);
 
         // Cascade up to parent BudgetProgram
@@ -116,7 +117,7 @@ class BudgetItemCategory extends Model
                 BudgetProgram::recalculateFromChildren($this->budget_program_id);
             }
         } catch (\Throwable $th) {
-            Log::error('BudgetItemCategory::updateSelf cascade to program failed: ' . $th->getMessage());
+            Log::error('BudgetItemCategory::updateSelf cascade to program failed: '.$th->getMessage());
         }
     }
 

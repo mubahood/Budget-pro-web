@@ -183,6 +183,70 @@ to `{your-domain}/api/v1/webhooks/flutterwave` with the same secret hash.
 
 Plan features/limits are exposed on `GET /api/v1/auth/me` under `subscription.plan`.
 
+
+## Shop: sales, payments, stock movements (Phase 0)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/sales/checkout` (alias `POST /sales`) | `{ client_uuid?, items:[{stock_item_id, quantity, unit_price?, discount_amount?}], payments?:[{method, amount, reference?}], amount_paid?, discount_amount?, discount_reason?, sale_date?, customer_* }` → 201; same `client_uuid` again → 200 replay. Errors: 422 `insufficient_stock`, `period_closed`, `no_active_period`, `empty_sale` |
+| POST | `/sales/{id}/payments` | `{ amount, method?, reference?, client_uuid? }` → posts one ledger Income row per payment |
+| POST | `/sales/{id}/void` | `{ reason? }` → contra movements + contra payments; idempotent |
+| DELETE | `/sales/{id}` | always 422 `delete_not_allowed` (use void) |
+| GET | `/stock-records/types` | `{ inbound:[...], outbound:[...] }` |
+| POST | `/stock-records` | `{ stock_item_id, type, quantity, client_uuid?, unit_cost?, selling_price?, date? }` — inbound types add stock |
+| POST | `/stock-records/{id}/reverse` | contra movement; PUT/DELETE are 422 `immutable_movement` |
+
+Every 422 business rejection carries `errors.code` (see `BusinessRuleException`).
+
+## Offline sync v2 (Phase 1 — plan Appendix A)
+
+Auth: `auth:sanctum` + tenant. **Not** behind the subscription gate: a lapsed tenant's devices keep
+syncing; once the 7-day grace ends pushed batches are `held` and applied automatically on renewal.
+Push requires a registered device: send `X-Device-Id: <device_id>`.
+
+### `POST /devices/register`
+`{ device_id, name?, platform?, app_version? }` → `{ device_id, number_prefix: "D1", server_time, server_seq, entitlements }`.
+Re-registering keeps the prefix. `GET /devices` lists; `POST /devices/{id}/revoke` (owner) blocks pushes with 403 `device_revoked`.
+
+### `POST /sync/push`
+```json
+{ "device_time": 1758700000000,
+  "batches": [ { "batch_uuid": "…", "kind": "sale", "ops": [
+    { "op_uuid": "…", "table": "sales", "uuid": "…", "action": "insert",
+      "data": { "provisional_number": "RCP-D1-000123", "occurred_at": 1758698990000, "has_payment_ops": 1,
+                "items": [ { "product_uuid": "…", "quantity": "3.000", "unit_price": "1500.00" } ] } },
+    { "op_uuid": "…", "table": "payments", "uuid": "…", "action": "insert",
+      "data": { "sale_uuid": "…", "method": "cash", "amount": "4500.00", "received_at": 1758698995000 } } ] } ] }
+```
+Per batch: one transaction; any rejected op rolls the batch back. Result per batch:
+`{ batch_uuid, status: applied|replayed|rejected|conflict|held, ops:[{op_uuid, status, code?, server_seq?, server_data?, conflict_id?}],
+assigned: { sales: { <uuid>: { receipt_number, invoice_number, id, server_seq } } }, derived: { products: { <uuid>: { current_quantity } } }, stock_exceptions: [] }`.
+
+Tables (wire keys, parents first): `categories, sub_categories, financial_periods, financial_categories, products, sales, sale_items,
+payments, stock_movements, financial_records, budget_programs, budget_item_categories, budget_items, contribution_records,
+farm_types*, production_guide_tasks*, batches, feed_types, customers, daily_records, feed_stock, poultry_sales, expenses, egg_tx,
+mortality_events, health_events, vacc_events` (*pull-only).
+
+Rules: events (`sales, payments, stock_movements`) are insert-if-absent by uuid; updates → `immutable_event`; `action: void` on a sale voids it.
+Masters: whole-row LWW with version check — a stale `version` colliding with a newer server edit → `conflict` (`stale_version`) + inbox item.
+References are sent as `*_uuid`; an unknown parent → `missing_parent` (never a null FK). Offline oversell is **accepted** and flagged
+(`stock_exception`, inbox item). Movement types: `purchase_receipt, stock_in, return, adjustment (signed), stock_take (signed), damage,
+expired, lost, internal_use, opening, other`.
+
+### `GET /sync/pull?table=products&since_seq=0&limit=500` (or `tables=a,b,c`)
+`{ table, rows:[{…, uuid, server_seq, version, is_deleted, *_uuid}], next_seq, has_more, server_time }` — ordered by `server_seq`;
+loop while `has_more`. Tombstones arrive with `is_deleted: 1`. Admin/web edits bump `server_seq`, so they flow to devices.
+
+### `POST /sync/bootstrap`
+`{ tables?: [...], page?: 1, page_size?: 500 }` → `{ tables: { products: { rows, next_page } }, seq, tables_order }`. Continue incremental pulls from `seq`.
+
+### Conflict inbox
+`GET /sync/conflicts?state=open|resolved|all`; `POST /sync/conflicts/{id}/resolve { choice: mine|server|merged|counted|ignore, data?, counted_quantity? }`.
+`counted` on a `stock_exception` records one adjustment to the counted quantity.
+
+### Entitlements
+`GET /auth/me` and device registration return `entitlements: { state: active|grace|expired|inactive, plan, ends_at, grace_until, limits, features, negative_stock_policy, currency, server_time }`.
+
 ---
 
 _Legacy note: the pre-v1 endpoints (`/api/api/{model}`, `/api/mobile/*`, param-based

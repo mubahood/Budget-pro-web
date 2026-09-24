@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Services\Shop\PaymentService;
 use App\Services\Shop\SaleService;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -23,13 +24,16 @@ use Illuminate\Support\Facades\Log;
  */
 class SaleRecord extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /** Runtime-only: SaleService assigns numbers itself inside finalize(). */
     public bool $skipNumbering = false;
 
     /** Runtime-only: extra payment to post after this save (set in updating). */
     protected float $pendingPaymentAmount = 0.0;
+
+    /** Runtime-only: PaymentService/SaleService are writing derived totals — skip the intent hook. */
+    public bool $writingDerived = false;
 
     protected static function booted(): void
     {
@@ -104,6 +108,9 @@ class SaleRecord extends Model
         });
 
         static::updating(function (SaleRecord $sale) {
+            if ($sale->writingDerived) {
+                return;
+            }
             if ($sale->voided_at !== null && ! $sale->isDirty('voided_at') && $sale->isDirty(['amount_paid', 'payment_status', 'total_amount'])) {
                 throw BusinessRuleException::make('sale_voided', 'A voided sale cannot be modified.');
             }

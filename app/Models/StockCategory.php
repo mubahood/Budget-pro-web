@@ -4,12 +4,13 @@ namespace App\Models;
 
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class StockCategory extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /**
      * The "booted" method of the model.

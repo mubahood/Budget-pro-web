@@ -18,6 +18,17 @@ class SubscriptionFulfillment
 {
     public function fulfill(SubscriptionInvoice $invoice, array $flwData): void
     {
+        $this->activate($invoice, $flwData);
+
+        // Offline batches held while the plan was lapsed are applied now (Appendix E "Plan expired").
+        $company = Company::find($invoice->company_id);
+        if ($company && $company->hasActiveAccess()) {
+            app(\App\Services\Sync\SyncApplier::class)->applyHeld($company);
+        }
+    }
+
+    private function activate(SubscriptionInvoice $invoice, array $flwData): void
+    {
         DB::transaction(function () use ($invoice, $flwData) {
             $locked = SubscriptionInvoice::whereKey($invoice->id)->lockForUpdate()->first();
 

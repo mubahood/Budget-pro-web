@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Scopes\CompanyScope;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Money received against a sale (several rows = split payment). Ledger income
@@ -12,11 +13,14 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Payment extends Model
 {
+    use Syncable;
+
     public const METHODS = ['cash', 'mobile_money', 'card', 'bank', 'credit', 'cheque', 'other'];
 
     protected $fillable = [
         'client_uuid', 'company_id', 'sale_record_id', 'method', 'provider', 'reference', 'amount', 'currency',
         'received_at', 'received_by_id', 'financial_record_id', 'is_reversal', 'reverses_id', 'notes',
+        'uuid', 'device_id', 'created_by_uuid', 'client_created_at', 'client_updated_at',
     ];
 
     protected $casts = [

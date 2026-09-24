@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Support\Sync\SyncSequence;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -43,6 +44,7 @@ trait PoultrySyncable
             if (empty($model->client_updated_at)) {
                 $model->client_updated_at = $nowMs;
             }
+            $model->server_seq = SyncSequence::next();
         });
 
         // Admin-UI edits (laravel-admin Form::save() -> Eloquent save()) must
@@ -53,6 +55,7 @@ trait PoultrySyncable
         static::updating(function ($model) {
             $model->version = ((int) $model->getOriginal('version') ?: 0) + 1;
             $model->client_updated_at = (int) round(microtime(true) * 1000);
+            $model->server_seq = SyncSequence::next();
         });
     }
 
@@ -79,6 +82,27 @@ trait PoultrySyncable
         }
 
         return [$wire, $newCursor];
+    }
+
+    /** v2 pull: rows changed after $sinceSeq, ordered by server_seq (never a timestamp). */
+    public static function syncPullBySeq(int $companyId, int $sinceSeq, int $limit = 500): array
+    {
+        $rows = static::query()->withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('server_seq', '>', $sinceSeq)
+            ->orderBy('server_seq')
+            ->limit($limit + 1)
+            ->get();
+        $hasMore = $rows->count() > $limit;
+        $rows = $rows->take($limit);
+        $wire = [];
+        $next = $sinceSeq;
+        foreach ($rows as $row) {
+            $wire[] = $row->toSyncArray() + ['server_seq' => (int) $row->server_seq];
+            $next = max($next, (int) $row->server_seq);
+        }
+
+        return [$wire, $next, $hasMore];
     }
 
     /**
@@ -108,6 +132,7 @@ trait PoultrySyncable
             'client_updated_at' => $clientUpdatedAt,
             'version' => ($existing->version ?? 0) + 1,
             'entered_by' => $enteredBy,
+            'server_seq' => SyncSequence::next(),
         ];
 
         foreach (static::$syncColumns as $column) {

@@ -35,7 +35,7 @@ class SaleService
      *               payments?: array<int, array{method?:string, amount:float|string, reference?:string|null, provider?:string|null}>,
      *               amount_paid?: float|string|null, payment_method?: string|null, discount_amount?: float|string|null, discount_reason?: string|null,
      *               customer_name?: string|null, customer_phone?: string|null, customer_address?: string|null, sale_date?: mixed, notes?: string|null,
-     *               client_uuid?: string|null, allow_negative_stock?: bool}  $data
+     *               client_uuid?: string|null, allow_negative_stock?: bool, provisional_number?: string|null, device_id?: string|null}  $data
      * @return array{sale: SaleRecord, replayed: bool}
      */
     public function checkout(int $companyId, int $userId, array $data): array
@@ -67,6 +67,8 @@ class SaleService
             $sale->notes = $data['notes'] ?? null;
             $sale->status = 'Completed';
             $sale->currency = Company::withoutGlobalScopes()->find($companyId)?->currency;
+            $sale->provisional_number = $data['provisional_number'] ?? null; // offline receipt ref (Appendix D)
+            $sale->device_id = $data['device_id'] ?? null;
             $sale->skipNumbering = true; // numbers are assigned in finalize(), inside this transaction
             $sale->save();
 
@@ -135,10 +137,10 @@ class SaleService
             $sale->voided_at = now();
             $sale->voided_by_id = $userId;
             $sale->voided_reason = $reason;
-            $sale->saveQuietly();
+            $sale->saveQuietlySynced();
             $this->payments->syncSaleTotals($sale);
             $sale->status = 'Voided';
-            $sale->saveQuietly();
+            $sale->saveQuietlySynced();
 
             return $this->loaded($sale);
         });
@@ -214,7 +216,7 @@ class SaleService
                 $line->line_total = round((float) $line->line_total - $share, 2);
             }
             $line->profit = round((float) $line->line_total - ((float) $line->unit_cost * (float) $line->quantity), 2);
-            $line->saveQuietly();
+            $line->saveQuietlySynced();
         }
 
         $total = round(array_sum($lines->map(fn ($l) => (float) $l->line_total)->all()), 2);
@@ -237,7 +239,7 @@ class SaleService
                 'allow_negative' => $allowNegative || (bool) $products[(int) $line->stock_item_id]->allow_negative_stock,
             ]);
             $line->stock_record_id = $movement->id;
-            $line->saveQuietly();
+            $line->saveQuietlySynced();
         }
 
         // Numbers + totals.
@@ -254,7 +256,7 @@ class SaleService
         $sale->balance = $total;
         $sale->payment_status = 'Unpaid';
         $sale->processed_at = now();
-        $sale->saveQuietly();
+        $sale->saveQuietlySynced();
 
         // Payments -> ledger. Cash over-tender becomes change, not income.
         $remaining = $total;
@@ -271,12 +273,12 @@ class SaleService
         }
         if ($remaining < 0) {
             $sale->change_given = round(-$remaining, 2);
-            $sale->saveQuietly();
+            $sale->saveQuietlySynced();
         }
         $this->payments->syncSaleTotals($sale);
         if ($remaining < 0) {
             $sale->change_given = round(-$remaining, 2);
-            $sale->saveQuietly();
+            $sale->saveQuietlySynced();
         }
 
         return $sale;

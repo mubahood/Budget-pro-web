@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class BudgetProgram extends Model
 {
-    use AuditLogger, HasFactory;
+    use AuditLogger, HasFactory, Syncable;
 
     /**
      * The "booted" method of the model.
@@ -168,9 +169,6 @@ budget_total
     /**
      * Recalculate all stored totals for a BudgetProgram from its children.
      * Uses direct DB queries to avoid model events and infinite loops.
-     *
-     * @param int $programId
-     * @return void
      */
     public static function recalculateFromChildren(int $programId): void
     {
@@ -193,16 +191,16 @@ budget_total
             DB::table('budget_programs')
                 ->where('id', $programId)
                 ->update([
-                    'budget_total'    => $budgetTotal,
-                    'budget_spent'    => $budgetSpent,
-                    'budget_balance'  => $budgetTotal - $budgetSpent,
-                    'total_expected'  => (float) ($contributionAggregates->total_expected ?? 0),
+                    'budget_total' => $budgetTotal,
+                    'budget_spent' => $budgetSpent,
+                    'budget_balance' => $budgetTotal - $budgetSpent,
+                    'total_expected' => (float) ($contributionAggregates->total_expected ?? 0),
                     'total_collected' => (float) ($contributionAggregates->total_collected ?? 0),
                     'total_in_pledge' => (float) ($contributionAggregates->total_in_pledge ?? 0),
-                    'updated_at'      => now(),
+                    'updated_at' => now(),
                 ]);
         } catch (\Throwable $th) {
-            Log::error('BudgetProgram::recalculateFromChildren failed for program #' . $programId . ': ' . $th->getMessage());
+            Log::error('BudgetProgram::recalculateFromChildren failed for program #'.$programId.': '.$th->getMessage());
         }
     }
 

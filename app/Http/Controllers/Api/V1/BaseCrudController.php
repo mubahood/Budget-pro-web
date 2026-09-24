@@ -263,9 +263,14 @@ abstract class BaseCrudController extends Controller
      */
     protected function scopedQuery(Request $request)
     {
-        return $this->modelClass::query()
+        $query = $this->modelClass::query()
             ->withoutGlobalScopes()
             ->where($this->table().'.company_id', $this->companyId($request));
+        if (in_array('is_deleted', $this->columns(), true)) {
+            $query->where($this->table().'.is_deleted', 0);
+        }
+
+        return $query;
     }
 
     protected function findOwned(Request $request, $id, array $with = []): ?Model
