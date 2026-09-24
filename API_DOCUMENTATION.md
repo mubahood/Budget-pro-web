@@ -250,6 +250,24 @@ Multipart `{ uuid, purpose: product_image|receipt|avatar|logo|adjustment_photo|d
 ### Entitlements
 `GET /auth/me` and device registration return `entitlements: { state: active|grace|expired|inactive, plan, ends_at, grace_until, limits, features, negative_stock_policy, currency, server_time }`.
 
+## POS & inventory (Phase 2)
+
+| Method | Path | Notes |
+|---|---|---|
+| CRUD | `/units` | `{ name, abbreviation, factor }` — a Crate with factor 24 sells 24 pieces of stock |
+| CRUD | `/product-barcodes` | `{ stock_item_id, barcode, unit_id? }`; unique per company; `GET /stock-items/by-barcode/{code}` also matches these and returns `scanned_unit_id` |
+| POST | `/sales/checkout` | now also `customer_id`, `shift_id`, `items.*.unit_id`. When `payments[]` is sent, a balance needs `customer_id` (422 `customer_required`) and must fit the credit limit (422 `credit_limit_exceeded`). A named buyer with a phone joins the debt book automatically. Products with `track_stock=false` never move stock |
+| POST | `/sales/{id}/returns` | `{ items:[{sale_item_id, quantity, restock?}], reason?, refund_method?, shift_id?, client_uuid? }` — refunds only what was over-paid; status becomes `Partially Refunded` / `Refunded` |
+| GET | `/sales/{id}/receipt.txt` · `/sales/{id}/receipt.pdf` | WhatsApp text (golden-file tested) and PDF |
+| CRUD | `/customers` | + `GET /customers/{id}/statement?from&to`, `POST /customers/{id}/payments { amount, method?, reference?, client_uuid? }` (settles oldest sales first; surplus = account credit) |
+| CRUD | `/suppliers` | + `GET /suppliers/{id}/statement`, `POST /suppliers/{id}/payments` |
+| GET/POST | `/shifts`, `/shifts/current`, `/shifts/open { opening_float }`, `/shifts/{id}/close { counted_cash }` | expected cash = float + cash received − cash refunded; `variance` = counted − expected |
+| CRUD | `/stock-takes` | + `POST /stock-takes/{id}/counts { counts:[{stock_item_id, counted_quantity}] }`, `POST /stock-takes/{id}/post` (on-hand set to the count) |
+| POST/GET | `/goods-receipts` | `{ supplier_id?, invoice_ref?, amount_paid?, items:[{stock_item_id, quantity, unit_cost}] }` — purchase movements, cost follows, unpaid part becomes supplier balance |
+| POST | `/stock-records` | adjustments accept `reason` (`damage, expired, lost, theft, internal_use, correction, gift, restock, return, other`) and `image` (a `/files` path) |
+
+Sync wire keys added: `units, customers, suppliers, product_barcodes, shifts (insert = open, update {status: closed} = close), sale_returns, goods_receipts, stock_takes`; poultry customers moved to `poultry_customers`. Account payments are `payments` ops with `customer_uuid` and no `sale_uuid`. `auth/me` → `company.shop` carries receipt header/footer, negative-stock policy, low-stock default, require_shift.
+
 ---
 
 _Legacy note: the pre-v1 endpoints (`/api/api/{model}`, `/api/mobile/*`, param-based

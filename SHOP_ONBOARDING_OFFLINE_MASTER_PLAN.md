@@ -1099,17 +1099,17 @@ Mobile
 
 ### Phase 2 — Real POS & inventory, offline (4 weeks)
 
-- [ ] P2-1 Product model upgrades: units, barcodes table, `min_stock`, `track_stock`, `allow_negative_stock`, soft delete, images via queue
-- [ ] P2-2 Cart, barcode scan (`mobile_scanner`), line/header discounts (permission-gated), unit selector, held carts
-- [ ] P2-3 Payments: cash+change, MoMo reference, card, bank, credit (customer required), split; `payments` table & endpoints
-- [ ] P2-4 Customers + debt book + statements; suppliers (basic)
-- [ ] P2-5 Receipts: provisional/final numbers (Appendix D device part), WhatsApp share (text + image), Bluetooth ESC/POS print, PDF via API
-- [ ] P2-6 Void & return/refund flows with ledger symmetry
-- [ ] P2-7 Stock In (quick + GRN-lite), adjustments with reasons/photos, stock take sessions, movement history per product
-- [ ] P2-8 Shifts/cash-up (open/close/variance)
-- [ ] P2-9 Sales history, today's dashboard from local DB, low-stock list, sync chip everywhere (B9)
-- [ ] P2-10 Web admin POS rewritten on `SaleService`; currency helper; renamed menus; product/customer pages with actions (A9)
-- [ ] P2-11 Golden-file tests for receipts; feature tests for every new endpoint; soak test (B11)
+- [x] P2-1 Product model upgrades: units, barcodes table, `min_stock`, `track_stock`, `allow_negative_stock`, soft delete, images via queue
+- [x] P2-2 Cart, barcode scan (`mobile_scanner`), line/header discounts (permission-gated), unit selector, held carts
+- [x] P2-3 Payments: cash+change, MoMo reference, card, bank, credit (customer required), split; `payments` table & endpoints
+- [x] P2-4 Customers + debt book + statements; suppliers (basic)
+- [x] P2-5 Receipts: provisional/final numbers (Appendix D device part), WhatsApp share (text + image), Bluetooth ESC/POS print, PDF via API
+- [x] P2-6 Void & return/refund flows with ledger symmetry
+- [x] P2-7 Stock In (quick + GRN-lite), adjustments with reasons/photos, stock take sessions, movement history per product
+- [x] P2-8 Shifts/cash-up (open/close/variance)
+- [x] P2-9 Sales history, today's dashboard from local DB, low-stock list, sync chip everywhere (B9)
+- [x] P2-10 Web admin POS rewritten on `SaleService`; currency helper; renamed menus; product/customer pages with actions (A9)
+- [x] P2-11 Golden-file tests for receipts; feature tests for every new endpoint; soak test (B11)
 
 ### Phase 3 — Onboarding, team, notifications, billing (3 weeks)
 

@@ -59,6 +59,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P1-12** Engine A (OfflineStore/SyncEngine/SyncResources) deleted; the 13 legacy model caches now read local only and write through the repo; all 11 create screens work offline; stock records support Stock In; the poultry engine moved to protocol v2 (paged, seq cursor; v1 endpoints kept a release); farm expenses post to the local ledger; demo-farm expenses never reach the real ledger.
 - **P1-13** Engine tests against an in-memory server: outbox ordering, crash between row and op, in-flight edit race, 1,900-row paging, dirty rows never overwritten, tombstones, two-device same-field conflict, two-device offline oversell reconciliation (Σ movements == server quantity on both phones), missing-parent retry, held batches, photo queue, provisional numbers, FTS + injection-safe search. 65 Flutter tests green; debug APK builds.
 
+
+### Phase 2 — Real POS & inventory, offline
+
+#### Backend (ca0b02d + follow-up)
+- **P2-1** Units (sell by piece or crate from one stock), extra product barcodes (carton codes pick the unit), `track_stock`, `is_active`; tombstone deletes.
+- **P2-3/P2-4** Payments per method incl. split and credit; customers with credit limits, debt book (oldest-first settlement, account credit, statements); suppliers with payables, payments, statements.
+- **P2-5** Receipt text (WhatsApp) and PDF endpoints; server and phone share one layout (golden files on both sides).
+- **P2-6** Returns/refunds: restock toggle per line, refund only what was over-paid, contra ledger rows, credit sales owe less, line profit shrinks.
+- **P2-7** Goods receipts (cost follows, payables, purchase expense), stock count sessions, adjustment reasons + photos.
+- **P2-8** Shifts with cash-up (expected = float + cash − refunds, variance).
+- **P2-10** Web admin: customers (statement, record payment), suppliers (pay), units, shifts, receive stock, stock counts, product movement history with add-stock/adjust, shop settings (receipt header/footer, negative-stock policy, low-stock default, require shift), plain menu names.
+- **P2-11** `PosInventoryTest` (12), `ShopAdminTest` (4), `sync:soak` command + CI soak test; registry wire-key uniqueness guard. Fixed along the way: poultry `customers` key shadowing shop customers, child client uuids overflowing CHAR(36), unit prices filled before scaling, return profit base, empty product gallery crash, missing `StockCategory` import in the stock-take sync handler.
+
+#### Mobile (budget-pro-mobo)
+- **P2-2** Sell screen: FTS search, camera barcode scan (carton barcodes sell cartons), quantity stepper, unit selector, price/discount per line and on the whole sale (owners/managers only), customer picker, hold & resume sales.
+- **P2-3** Payment: cash with change, mobile money with transaction ID, card, bank, split, sell on credit (customer + credit limit checked on the phone).
+- **P2-5** Receipt: provisional number offline, final number after sync (“Ref D1-…”), WhatsApp text, share as image, Bluetooth ESC/POS printing (58/80 mm).
+- **P2-6** Returns per line with restock toggle; same-day void (permission-gated).
+- **P2-4/P2-7/P2-8** Customers & debt book with statement and payments; suppliers; receive stock; stock counts with scanning; shift open/close with live cash-up; product stock history with running balance, “Add stock” and “Set counted qty”; adjustment reasons.
+- **P2-9** Shop home: Sell button, Today (sales, cash, mobile money, profit, credit, what customers owe), low stock by per-product minimum, sync chip.
+- Every POS action is one local transaction + outbox batch; provisional rows are replaced by the server’s on sync. 74 Flutter tests (incl. crate sale, credit, returns + void convergence, cash-up, GRN + count, held carts, receipt golden, ESC/POS bytes); debug APK builds (Kotlin Gradle plugin raised to 2.2.0 for the new plugins).
+
 ---
 
 ## [2.0.0] - 2025-12-09

@@ -25,6 +25,14 @@ class CompanyResource extends JsonResource
             'status' => $this->status,
             'license_expire' => optional($this->license_expire)->toDateString(),
             'has_active_access' => $this->hasActiveAccess(),
+            'shop' => [
+                'receipt_header' => $this->receipt_header,
+                'receipt_footer' => $this->receipt_footer,
+                'negative_stock_policy' => $this->negative_stock_policy ?? 'flag',
+                'low_stock_default' => $this->low_stock_default === null ? null : (float) $this->low_stock_default,
+                'require_shift' => (bool) $this->require_shift,
+                'timezone' => $this->timezone,
+            ],
             'settings' => [
                 'worker_can_create_stock_item' => $this->settings_worker_can_create_stock_item,
                 'worker_can_create_stock_record' => $this->settings_worker_can_create_stock_record,
