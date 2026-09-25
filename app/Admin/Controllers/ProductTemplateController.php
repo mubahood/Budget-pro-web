@@ -15,6 +15,7 @@ class ProductTemplateController extends AdminController
     protected function grid()
     {
         $grid = new Grid(new ProductTemplate());
+        $grid->actions(fn ($actions) => $actions->disableView()); // no detail page: edit shows everything
         $grid->model()->orderBy('business_type')->orderBy('sort_order');
         $grid->filter(function ($filter) {
             $filter->disableIdFilter();
@@ -38,6 +39,7 @@ class ProductTemplateController extends AdminController
     protected function form()
     {
         $form = new Form(new ProductTemplate());
+        $form->tools(fn ($tools) => $tools->disableView());
         $form->select('business_type', 'Business type')->options(collect(config('onboarding.business_types'))->map(fn ($t) => $t['label']))->required();
         $form->select('country', 'Country')->options(collect(config('onboarding.countries'))->map(fn ($c) => $c['name']))->help('Empty = every country');
         $form->text('name', 'Name')->rules('required|max:150');

@@ -15,6 +15,7 @@ class UnitController extends TenantAdminController
     protected function grid()
     {
         $grid = new Grid(new Unit());
+        $grid->actions(fn ($actions) => $actions->disableView()); // no detail page: edit shows everything
         $grid->model()->where('company_id', Admin::user()->company_id);
         $grid->column('name');
         $grid->column('abbreviation', 'Short');
@@ -27,6 +28,7 @@ class UnitController extends TenantAdminController
     protected function form()
     {
         $form = new Form(new Unit());
+        $form->tools(fn ($tools) => $tools->disableView());
         $form->hidden('company_id')->default(Admin::user()->company_id);
         $form->text('name')->required()->placeholder('Crate');
         $form->text('abbreviation', 'Short name')->required()->placeholder('crt');

@@ -13,7 +13,7 @@ Route::group([
 
     $router->get('/', 'HomeController@index')->name('home');
     $router->get('subscription-expired', 'BillingController@expired');
-    $router->resource('product-templates', ProductTemplateController::class);
+    $router->resource('product-templates', ProductTemplateController::class)->except(['show']);
     $router->get('setup', 'SetupController@index');
     $router->post('setup/business', 'SetupController@business');
     $router->post('setup/products', 'SetupController@products');
@@ -56,7 +56,7 @@ Route::group([
     $router->get('suppliers/{id}/pay', 'SupplierController@payForm');
     $router->post('suppliers/{id}/pay', 'SupplierController@pay');
     $router->resource('suppliers', SupplierController::class);
-    $router->resource('units', UnitController::class);
+    $router->resource('units', UnitController::class)->except(['show']);
     $router->resource('shifts', ShiftController::class)->only(['index', 'show']);
     $router->post('purchase-orders/{id}/send', 'PurchaseOrderController@send')->where('id', '[0-9]+');
     $router->post('purchase-orders/{id}/receive', 'PurchaseOrderController@receive')->where('id', '[0-9]+');

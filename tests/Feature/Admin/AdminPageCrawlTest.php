@@ -62,4 +62,31 @@ class AdminPageCrawlTest extends AdminTestCase
         }
         $this->assertSame([], $failures);
     }
+
+    /** Every admin route has the page behind it (a resource route without detail() or form() is a 500). */
+    public function test_every_admin_route_has_its_page_method(): void
+    {
+        $missing = [];
+        foreach (Route::getRoutes() as $route) {
+            $action = $route->getActionName();
+            if (! str_contains($action, '@') || ! str_starts_with($action, 'App\\Admin\\') || str_contains($action, 'AuthController')) {
+                continue;
+            }
+            [$class, $method] = explode('@', $action);
+            if (! method_exists($class, $method)) {
+                $missing[] = "{$route->uri()}: {$class}::{$method}";
+
+                continue;
+            }
+            if (str_starts_with((new \ReflectionMethod($class, $method))->getDeclaringClass()->getName(), 'Encore\\')) {
+                $need = match ($method) {
+                    'show' => 'detail', 'index' => 'grid', default => 'form'
+                };
+                if (! method_exists($class, $need)) {
+                    $missing[] = "{$route->uri()}: {$class}::{$need}";
+                }
+            }
+        }
+        $this->assertSame([], $missing);
+    }
 }
