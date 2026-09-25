@@ -40,7 +40,7 @@ class AdminAccess
         '/billing*', '/setup*', '/duplicates*', '/your-data*', '/engagement*', '/purchase-orders*', '/purchase-returns*', '/reorder-suggestions*', '/reports*', '/locations*', '/stock-transfers*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
         '/poultry-*',
         '/tracked-devices*', '/device-locations*', '/device-commands*', '/tracking-map*',
-        '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search',
+        '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search', '/ajax*',
         '/financial-report', '/budget-program-print', '/thanks', '/data-exports-print', '/sale-receipt-pdf', '/sale-invoice-pdf',
     ];
 

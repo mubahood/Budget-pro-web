@@ -34,6 +34,7 @@ class StockSubCategoryController extends TenantAdminController
         $u = Admin::user();
         $grid->model()
             ->where('company_id', $u->company_id)
+            ->where('is_deleted', 0)
             ->orderBy('created_at', 'desc');
 
         // ID with badge
@@ -206,17 +207,8 @@ class StockSubCategoryController extends TenantAdminController
             $filter->between('updated_at', 'Updated Date')->datetime();
         });
 
-        // Batch Actions
-        $grid->batchActions(function ($batch) {
-            // Activate batch
-            $batch->add(new \App\Admin\Actions\BatchActivate());
-
-            // Deactivate batch
-            $batch->add(new \App\Admin\Actions\BatchDeactivate());
-
-            // Clone/Duplicate batch action
-            $batch->add(new \App\Admin\Actions\BatchClone('Stock Sub-Category'));
-        });
+        // No custom batch actions: laravel-admin runs them through /_handle_action_, which shop
+        // users cannot reach (it would let a request name any class). Status is editable per row.
 
         // Row Actions - Dropdown menu for cleaner interface
         $grid->actions(function ($actions) {

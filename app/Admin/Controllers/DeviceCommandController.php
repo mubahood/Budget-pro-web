@@ -26,6 +26,7 @@ class DeviceCommandController extends TenantAdminController
         $grid->disableCreateButton();
         $grid->actions(function ($actions) {
             $actions->disableEdit();
+            $actions->disableDelete();
         });
 
         $devices = TrackedDevice::pluck('name', 'id')->all();

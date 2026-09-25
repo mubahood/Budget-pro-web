@@ -14,7 +14,60 @@ class FinancialRecordController extends TenantAdminController
      *
      * @var string
      */
-    protected $title = 'FinancialRecord';
+    protected $title = 'Income & expenses';
+
+    /** What created a system-posted row, and where it must be corrected. */
+    private const SOURCES = [
+        'sale_record' => ['sale', 'sale-records'], 'sale' => ['sale', 'sale-records'], 'payment' => ['payment', null],
+        'stock_record' => ['stock movement', 'stock-records'], 'goods_receipt' => ['delivery', 'goods-receipts'],
+        'purchase_return' => ['return to supplier', 'purchase-returns'], 'sale_return' => ['return', null],
+    ];
+
+    /** Plain words for a system-posted row: "Posted from sale #12 — void or refund there." */
+    public static function sourceNote(FinancialRecord $record): ?string
+    {
+        if (empty($record->source_type)) {
+            return null;
+        }
+        [$label, $path] = self::SOURCES[$record->source_type] ?? [str_replace('_', ' ', (string) $record->source_type), null];
+        $link = $path && $record->source_id ? '<a href="'.admin_url($path.'/'.$record->source_id).'">'.e($label).' #'.(int) $record->source_id.'</a>' : e($label).($record->source_id ? ' #'.(int) $record->source_id : '');
+
+        return 'Posted automatically from '.$link.'. It cannot be edited or deleted here — correct it there (void or refund the sale, reverse the payment, etc.).';
+    }
+
+    private function refuseSystemRow($id): ?\Illuminate\Http\RedirectResponse
+    {
+        $record = FinancialRecord::where('company_id', \Encore\Admin\Facades\Admin::user()->company_id)->find($id);
+        if ($record !== null && ! empty($record->source_type)) {
+            admin_warning('This entry was posted by the system', FinancialRecordController::sourceNote($record));
+
+            return redirect(admin_url('financial-records/'.$record->id));
+        }
+
+        return null;
+    }
+
+    public function edit($id, \Encore\Admin\Layout\Content $content)
+    {
+        return $this->refuseSystemRow($id) ?? parent::edit($id, $content);
+    }
+
+    public function update($id)
+    {
+        return $this->refuseSystemRow($id) ?? parent::update($id);
+    }
+
+    /** @return mixed */
+    public function destroy($id)
+    {
+        $system = FinancialRecord::where('company_id', \Encore\Admin\Facades\Admin::user()->company_id)
+            ->whereIn('id', array_filter(explode(',', (string) $id)))->whereNotNull('source_type')->where('source_type', '!=', '')->first();
+        if ($system !== null) {
+            return response()->json(['status' => false, 'message' => strip_tags((string) FinancialRecordController::sourceNote($system))]);
+        }
+
+        return parent::destroy($id);
+    }
 
     /**
      * Make a grid builder.
@@ -27,7 +80,30 @@ class FinancialRecordController extends TenantAdminController
         $u = \Encore\Admin\Facades\Admin::user();
 
         $grid->model()->where('company_id', $u->company_id)
-            ->orderBy('date', 'desc');
+            ->where('is_deleted', 0)
+            ->orderBy('date', 'desc')->orderBy('id', 'desc');
+
+        $grid->actions(function (\Encore\Admin\Grid\Displayers\Actions $actions) {
+            if (! empty($actions->row->source_type)) {
+                $actions->disableEdit();
+                $actions->disableDelete();
+            }
+        });
+
+        // Income and expenses are summed separately (adding them together means nothing).
+        $grid->footer(function ($query) {
+            $rows = (clone $query)->toBase()->cloneWithout(['orders', 'limit', 'offset'])->cloneWithoutBindings(['order'])
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'Income' THEN amount ELSE 0 END), 0) AS income, COALESCE(SUM(CASE WHEN type = 'Expense' THEN amount ELSE 0 END), 0) AS expense")
+                ->first();
+            $income = (float) ($rows->income ?? 0);
+            $expense = (float) ($rows->expense ?? 0);
+            $net = $income - $expense;
+
+            return '<div style="padding:8px 12px"><strong>Income:</strong> <span class="text-success">'.e(\App\Support\Money::format($income)).'</span>'
+                .' &nbsp; <strong>Expenses:</strong> <span class="text-danger">'.e(\App\Support\Money::format($expense)).'</span>'
+                .' &nbsp; <strong>Net:</strong> <span class="'.($net >= 0 ? 'text-success' : 'text-danger').'">'.e(\App\Support\Money::format($net)).'</span>'
+                .' <small class="text-muted">(for the rows matching your filters)</small></div>';
+        });
 
         $grid->disableBatchActions();
 
@@ -93,11 +169,9 @@ class FinancialRecordController extends TenantAdminController
             ->display(function ($amount) {
                 $color = $this->type == 'Income' ? 'success' : 'danger';
 
-                return "<span class='badge badge-{$color}'>".\App\Support\Money::symbol().' '.number_format($amount).'</span>';
-            })->sortable()
-            ->totalRow(function ($amount) {
-                return '<strong>'.\App\Support\Money::symbol().' '.number_format($amount).'</strong>';
-            });
+                return "<span class='badge badge-{$color}'>".\App\Support\Money::symbol().' '.number_format((float) $amount).'</span>'
+                    .($this->source_type ? ' <i class="fa fa-lock text-muted" title="Posted automatically; correct it where it came from"></i>' : '');
+            })->sortable();
 
         $grid->column('quantity', __('Qty'))
             ->display(function ($quantity) {
@@ -152,7 +226,15 @@ class FinancialRecordController extends TenantAdminController
      */
     protected function detail($id)
     {
-        $show = new Show(FinancialRecord::findOrFail($id));
+        $record = FinancialRecord::findOrFail($id);
+        $show = new Show($record);
+        if (! empty($record->source_type)) {
+            $show->panel()->tools(function ($tools) {
+                $tools->disableEdit();
+                $tools->disableDelete();
+            });
+            $show->field('source_type', __('Where it came from'))->unescape()->as(fn () => FinancialRecordController::sourceNote($record));
+        }
 
         $show->field('id', __('Id'));
         $show->field('created_at', __('Created at'));
@@ -208,8 +290,9 @@ class FinancialRecordController extends TenantAdminController
             ->default('Expense')
             ->help('Is this money coming in or going out?');
 
+        $company = \App\Models\Company::withoutGlobalScopes()->find($u->company_id);
         $form->date('date', __('Transaction Date'))
-            ->default(date('Y-m-d'))
+            ->default(now()->setTimezone(\App\Support\LocalTime::timezone($company))->toDateString())
             ->rules('required|date')
             ->required()
             ->help('When did this transaction occur?');

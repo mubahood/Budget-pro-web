@@ -41,16 +41,9 @@ class FinancialReportController extends TenantAdminController
             })->hide();
         $grid->column('type', __('Type'))
             ->sortable();
-        $grid->column('file', __('Download PDF'))
-            ->display(function ($file) {
-                if ($file) {
-                    $url = url("/storage/$file");
-
-                    return "<a href='$url' target='_blank'>Download</a>";
-                } else {
-                    return '';
-                }
-            });
+        // Rendered fresh for the signed-in owner (never a public file link).
+        $grid->column('file', __('PDF'))
+            ->display(fn () => "<a href='".url('financial-report?id='.$this->id)."' target='_blank'><i class='fa fa-file-pdf-o'></i> Open</a>");
         /*         $grid->column('period_type', __('Period type'));
         $grid->column('start_date', __('Start date'));
         $grid->column('end_date', __('End date'));

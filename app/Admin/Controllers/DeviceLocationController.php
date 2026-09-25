@@ -29,6 +29,7 @@ class DeviceLocationController extends TenantAdminController
         $grid->disableExport();
         $grid->actions(function ($actions) {
             $actions->disableEdit();
+            $actions->disableDelete();
         });
 
         $devices = TrackedDevice::pluck('name', 'id')->all();

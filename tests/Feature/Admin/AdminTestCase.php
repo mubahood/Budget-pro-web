@@ -21,6 +21,11 @@ abstract class AdminTestCase extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // laravel-admin keeps page scripts in static arrays; in one test process they would pile up across tests.
+        \Encore\Admin\Admin::$script = [];
+        \Encore\Admin\Admin::$deferredScript = [];
+        \Encore\Admin\Admin::$style = [];
+        \Encore\Admin\Admin::$html = [];
         $this->seed(AdminRolesSeeder::class);
     }
 

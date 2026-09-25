@@ -33,11 +33,23 @@ class StockItemController extends TenantAdminController
 
         $u = Admin::user();
 
+        $threshold = StockItemController::lowStockThreshold((int) $u->company_id);
+
         $grid->model()->where('company_id', $u->company_id)
+            ->where('is_deleted', 0)
             ->orderBy('created_at', 'desc');
 
-        $grid->filter(function ($filter) use ($u) {
+        $grid->filter(function ($filter) use ($u, $threshold) {
             $filter->disableIdFilter();
+
+            // Keys are linked from the dashboard (stock-items?_scope_=low|out|no_cost).
+            $filter->scope('low', __('Running low'))
+                ->where('track_stock', 1)->where('current_quantity', '>', 0)
+                ->whereRaw('current_quantity <= COALESCE(min_stock, ?)', [$threshold]);
+            $filter->scope('out', __('Out of stock'))
+                ->where('track_stock', 1)->where('current_quantity', '<=', 0);
+            $filter->scope('no_cost', __('No buying price'))
+                ->where(fn ($q) => $q->whereNull('buying_price')->orWhere('buying_price', '<=', 0));
 
             $filter->like('name', __('Product Name'));
             $filter->like('sku', __('SKU/Batch Number'));
@@ -146,27 +158,30 @@ class StockItemController extends TenantAdminController
         // Original quantity - clean display, hidden by default
         $grid->column('original_quantity', __('Initial Stock'))
             ->display(function ($original_quantity) {
-                return number_format($original_quantity, 2);
+                return StockItemController::qty($original_quantity);
             })
             ->sortable()
             ->hide();
 
         // Current quantity - NOT editable (only changes via StockRecords)
-        $grid->column('current_quantity', __('Quantity'))
-            ->display(function ($current_quantity) {
-                $quantity = number_format((float) $current_quantity, 2);
-                // Add visual indicator for low/out of stock
-                if ($current_quantity <= 0) {
-                    return "<span class='label label-danger'>{$quantity} (Out of Stock)</span>";
-                } elseif ($current_quantity < 10) {
-                    return "<span class='label label-warning'>{$quantity} (Low Stock)</span>";
+        $grid->column('current_quantity', __('In stock'))
+            ->display(function ($current_quantity) use ($threshold) {
+                $quantity = e(StockItemController::qty($current_quantity));
+                if (! $this->track_stock) {
+                    return $quantity;
+                }
+                $level = $this->min_stock !== null ? (float) $this->min_stock : $threshold;
+                if ((float) $current_quantity <= 0) {
+                    return "<span class='label label-danger'>{$quantity} (Out of stock)</span>";
+                } elseif ((float) $current_quantity <= $level) {
+                    return "<span class='label label-warning'>{$quantity} (Low)</span>";
                 }
 
                 return $quantity;
             })
             ->sortable()
             ->totalRow(function ($amount) {
-                return '<strong>Total: '.number_format((float) $amount, 2).'</strong>';
+                return '<strong>Total: '.e(StockItemController::qty($amount)).'</strong>';
             });
 
         // Stock value - computed field (quantity * buying_price), not sortable, no totalRow
@@ -252,8 +267,18 @@ class StockItemController extends TenantAdminController
                     </li>
                     <li class="divider"></li>
                     <li>
-                        <a href="'.admin_url('stock-records?stock_item_id='.$actions->row->id).'" target="_blank">
-                            <i class="fa fa-history text-info"></i> Stock Records
+                        <a href="'.admin_url('stock-records/create?stock_item_id='.$actions->row->id.'&type=Stock%20In').'">
+                            <i class="fa fa-plus text-success"></i> Add stock
+                        </a>
+                    </li>
+                    <li>
+                        <a href="'.admin_url('stock-records/create?stock_item_id='.$actions->row->id.'&type=Damage').'">
+                            <i class="fa fa-sliders text-warning"></i> Adjust / write off
+                        </a>
+                    </li>
+                    <li>
+                        <a href="'.admin_url('stock-records?stock_item_id='.$actions->row->id).'">
+                            <i class="fa fa-history text-info"></i> Stock movements
                         </a>
                     </li>
                 </ul>
@@ -298,7 +323,7 @@ class StockItemController extends TenantAdminController
             ->style('primary')
             ->tools(function ($tools) use ($item) {
                 $tools->append('<a class="btn btn-sm btn-success" href="'.admin_url('stock-records/create?stock_item_id='.$item->id.'&type=Stock%20In').'"><i class="fa fa-plus"></i> Add stock</a>&nbsp;');
-                $tools->append('<a class="btn btn-sm btn-warning" href="'.admin_url('stock-records/create?stock_item_id='.$item->id.'&type=Adjustment%20Out').'"><i class="fa fa-sliders"></i> Adjust</a>&nbsp;');
+                $tools->append('<a class="btn btn-sm btn-warning" href="'.admin_url('stock-records/create?stock_item_id='.$item->id.'&type=Damage').'"><i class="fa fa-sliders"></i> Adjust / write off</a>&nbsp;');
             });
 
         // Stock per location and batches (P4-4).
@@ -406,12 +431,12 @@ class StockItemController extends TenantAdminController
 
         $show->field('original_quantity', __('Initial Quantity'))
             ->as(function ($original_quantity) {
-                return number_format((float) $original_quantity, 2);
+                return StockItemController::qty($original_quantity);
             });
 
         $show->field('current_quantity', __('Current Quantity'))
             ->as(function ($current_quantity) {
-                return number_format((float) $current_quantity, 2);
+                return StockItemController::qty($current_quantity);
             });
 
         $show->field('stock_value', __('Stock Value ('.\App\Support\Money::symbol().')'))
@@ -496,9 +521,9 @@ class StockItemController extends TenantAdminController
             </div>');
         } else {
             // When creating, allow selection
-            $sub_cat_ajax_url = url('api/stock-sub-categories').'?company_id='.$u->company_id;
             $form->select('stock_sub_category_id', __('Stock Category'))
-                ->ajax($sub_cat_ajax_url)
+                ->config('minimumInputLength', 0)
+                ->ajax(admin_url('ajax/sub-categories'))
                 ->options(function ($id) use ($cloneData) {
                     // When cloning, prioritize the cloned data
                     if ($cloneData && $cloneData->stock_sub_category_id) {
@@ -520,7 +545,7 @@ class StockItemController extends TenantAdminController
                 ->default($cloneData ? $cloneData->stock_sub_category_id : null)
                 ->rules('required')
                 ->required()
-                ->help('Select the category and measurement unit for this product. This cannot be changed later.');
+                ->help('Type to search your categories. This cannot be changed later. Missing one? <a href="javascript:void(0)" onclick="openQuickCategoryModal()">Add a category</a> (choose a main category as parent), then search for it here.');
         }
 
         $form->divider('Product Information');
@@ -616,15 +641,16 @@ class StockItemController extends TenantAdminController
 
             // Show current quantity as read-only (managed by StockRecords)
             $form->display('current_quantity', __('Current Stock Quantity'))
-                ->with(function ($value) use ($form) {
+                ->with(function ($value) use ($form, $u) {
                     $model = $form->model();
                     $subcat = StockSubCategory::find($model->stock_sub_category_id);
-                    $unit = $subcat ? $subcat->measurement_unit : '';
-                    $formatted = number_format((float) $value, 2);
+                    $unit = e($subcat ? $subcat->measurement_unit : '');
+                    $formatted = e(StockItemController::qty($value));
+                    $level = $model->min_stock !== null ? (float) $model->min_stock : StockItemController::lowStockThreshold((int) $u->company_id);
 
                     if ($value <= 0) {
                         return "<span class='label label-danger'>{$formatted} {$unit} (Out of Stock)</span>";
-                    } elseif ($value < 10) {
+                    } elseif ($value <= $level) {
                         return "<span class='label label-warning'>{$formatted} {$unit} (Low Stock)</span>";
                     }
 
@@ -633,7 +659,7 @@ class StockItemController extends TenantAdminController
 
             $form->html('<div class="alert alert-info">
                 <i class="fa fa-info-circle"></i>
-                <strong>Note:</strong> Stock quantities cannot be changed directly. Please use <a href="'.admin_url('stock-records').'" target="_blank">Stock Records</a> to manage inventory adjustments (sales, purchases, damages, etc.)
+                <strong>Note:</strong> Stock quantities cannot be changed here. Use <a href="'.admin_url('goods-receipts/create').'">Receive stock</a> for deliveries, <a href="'.admin_url('stock-takes/create').'">Stock counts</a> to correct figures, or <a href="'.admin_url('stock-records').'">Stock movements</a> for damage and losses.
             </div>');
         } else {
             // When creating, allow setting initial quantity
@@ -713,5 +739,21 @@ class StockItemController extends TenantAdminController
         });
 
         return $form;
+    }
+
+    /** Shop-wide low-stock level: the company default, else the platform default. */
+    public static function lowStockThreshold(int $companyId): float
+    {
+        $default = \App\Models\Company::withoutGlobalScopes()->whereKey($companyId)->value('low_stock_default');
+
+        return (float) ($default ?? config('saas.low_stock_threshold', 10));
+    }
+
+    /** 12.500 → "12.5", 3.000 → "3" (pass '' as $thousands for a value that goes back into an input). */
+    public static function qty($value, string $thousands = ','): string
+    {
+        $s = rtrim(rtrim(number_format((float) $value, 3, '.', $thousands), '0'), '.');
+
+        return $s === '-0' ? '0' : $s;
     }
 }

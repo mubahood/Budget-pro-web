@@ -459,10 +459,12 @@ class ApiController extends BaseController
     }
 
     /**
-     * Quick Sale Recording — AJAX endpoint.
+     * Quick Sale Recording — AJAX endpoint. Goes through the same checkout as the
+     * POS and the app (receipt number, payment, stock rules, customer), paid in full.
      */
     public function quick_sale_record(Request $r)
     {
+        /** @var \App\Models\User|null $u */
         $u = \Encore\Admin\Facades\Admin::user();
 
         if ($u == null) {
@@ -471,131 +473,137 @@ class ApiController extends BaseController
                 'message' => 'Unauthenticated',
             ], 401);
         }
+        if (! \App\Services\Team\Permissions::can($u, 'sell')) {
+            return response()->json(['success' => false, 'message' => 'Your role does not allow selling.'], 403);
+        }
 
-        try {
-            $validator = \Validator::make($r->all(), [
-                'stock_item_id' => 'required|exists:stock_items,id',
-                'quantity' => 'required|numeric|min:1',
-                'price' => 'nullable|numeric|min:0',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $validator->errors()->first(),
-                ], 422);
-            }
-
-            $stockItem = \App\Models\StockItem::find($r->stock_item_id);
-
-            if ($stockItem == null || $stockItem->company_id != $u->company_id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Product not found',
-                ], 404);
-            }
-
-            if ($stockItem->current_quantity < $r->quantity) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Insufficient stock! Available: '.$stockItem->current_quantity.' units',
-                ], 422);
-            }
-
-            $salePrice = $r->price ?? $stockItem->selling_price;
-
-            $stockRecord = new \App\Models\StockRecord();
-            $stockRecord->company_id = $u->company_id;
-            $stockRecord->stock_item_id = $stockItem->id;
-            $stockRecord->quantity = abs($r->quantity);
-            $stockRecord->type = 'Sale';
-            $stockRecord->created_by_id = $u->id;
-            $stockRecord->description = $r->description ?? 'Quick sale recorded';
-            $stockRecord->selling_price = $salePrice; // the price the customer actually paid, not the list price
-            $stockRecord->save();
-
-            $stockItem->refresh();
-
-            $totalAmount = $salePrice * $r->quantity;
-            $profit = ($salePrice - $stockItem->buying_price) * $r->quantity;
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Sale recorded successfully!',
-                'data' => [
-                    'id' => $stockRecord->id,
-                    'product' => $stockItem->name,
-                    'quantity' => $r->quantity,
-                    'price' => $salePrice,
-                    'total' => $totalAmount,
-                    'profit' => $profit,
-                    'remaining_stock' => $stockItem->current_quantity,
-                ],
-            ]);
-        } catch (\Exception $e) {
+        $validator = \Validator::make($r->all(), [
+            'stock_item_id' => 'required|integer',
+            'quantity' => 'required|numeric|min:0.001',
+            'price' => 'nullable|numeric|min:0',
+            'payment_method' => 'nullable|string|max:30',
+            'customer_name' => 'nullable|string|max:120',
+            'customer_phone' => 'nullable|string|max:30',
+        ]);
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error: '.$e->getMessage(),
-            ], 500);
+                'message' => $validator->errors()->first(),
+            ], 422);
         }
+
+        $stockItem = \App\Models\StockItem::withoutGlobalScopes()->where('company_id', $u->company_id)->where('is_deleted', 0)->find((int) $r->stock_item_id);
+        if ($stockItem === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found',
+            ], 404);
+        }
+        if ($r->filled('price') && round((float) $r->price, 2) !== round((float) $stockItem->selling_price, 2) && ! \App\Services\Team\Permissions::can($u, 'discount')) {
+            return response()->json(['success' => false, 'message' => 'Your role does not allow changing prices.'], 403);
+        }
+
+        $unitPrice = $r->filled('price') ? round((float) $r->price, 2) : round((float) $stockItem->selling_price, 2);
+        $total = round($unitPrice * (float) $r->quantity, 2);
+        $method = $r->input('payment_method', 'cash');
+
+        try {
+            $result = (new \App\Services\Shop\SaleService())->checkout((int) $u->company_id, (int) $u->id, [
+                'items' => [['stock_item_id' => $stockItem->id, 'quantity' => (float) $r->quantity, 'unit_price' => $unitPrice]],
+                'payments' => $total > 0 ? [['method' => $method, 'amount' => $total]] : [],
+                'payments_explicit' => true,
+                'payment_method' => $method,
+                'customer_name' => $r->input('customer_name') ?: null,
+                'customer_phone' => $r->input('customer_phone') ?: null,
+                'notes' => $r->input('description') ?: null,
+            ]);
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $sale = $result['sale'];
+        $stockItem->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Sale recorded successfully!',
+            'data' => [
+                'id' => $sale->id,
+                'receipt_number' => $sale->receipt_number,
+                'url' => admin_url('sale-records/'.$sale->id),
+                'product' => $stockItem->name,
+                'quantity' => (float) $r->quantity,
+                'price' => $unitPrice,
+                'total' => (float) $sale->total_amount,
+                'remaining_stock' => (float) $stockItem->current_quantity,
+            ],
+        ]);
     }
 
     /**
-     * Global Search — AJAX endpoint for the admin command palette.
+     * Global Search — AJAX endpoint for the admin command palette. Only the
+     * signed-in user's shop; live (not deleted) rows; every result links to its page.
      */
     public function global_search(Request $r)
     {
+        /** @var \App\Models\User|null $u */
         $u = \Encore\Admin\Facades\Admin::user();
+        $empty = ['products' => [], 'categories' => [], 'sales' => [], 'customers' => [], 'suppliers' => []];
 
         if ($u == null) {
-            return response()->json([
-                'products' => [],
-                'categories' => [],
-                'sales' => [],
-            ], 401);
+            return response()->json($empty, 401);
         }
 
-        $query = $r->get('q', '');
-        $companyId = $u->company_id;
+        $query = trim((string) $r->get('q', ''));
+        if (mb_strlen($query) < 2) {
+            return response()->json($empty);
+        }
+        $companyId = (int) $u->company_id;
+        $like = '%'.addcslashes($query, '%_\\').'%';
+        $perms = \App\Services\Team\Permissions::of($u);
 
-        $products = \App\Models\StockItem::where('company_id', $companyId)
-            ->where(function ($q) use ($query) {
-                $q->where('name', 'like', "%{$query}%")
-                    ->orWhere('sku', 'like', "%{$query}%")
-                    ->orWhere('barcode', 'like', "%{$query}%");
-            })
-            ->limit(10)
-            ->get(['id', 'name', 'sku', 'current_quantity', 'selling_price']);
+        $products = DB::table('stock_items')->where('company_id', $companyId)->where('is_deleted', 0)
+            ->where(fn ($q) => $q->where('name', 'like', $like)->orWhere('sku', 'like', $like)->orWhere('barcode', $query))
+            ->orderBy('name')->limit(8)->get(['id', 'name', 'sku', 'current_quantity', 'selling_price'])
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'sku' => $p->sku, 'current_quantity' => (float) $p->current_quantity,
+                'selling_price' => (float) $p->selling_price, 'url' => admin_url('stock-items/'.$p->id)]);
 
-        $categories = \App\Models\StockSubCategory::where('company_id', $companyId)
-            ->where('name', 'like', "%{$query}%")
-            ->withCount('stock_items')
-            ->limit(5)
-            ->get(['id', 'name']);
+        $categories = DB::table('stock_sub_categories as s')->where('s.company_id', $companyId)->where('s.is_deleted', 0)->where('s.name', 'like', $like)
+            ->orderBy('s.name')->limit(5)->get(['s.id', 's.name'])
+            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name,
+                'products_count' => DB::table('stock_items')->where('company_id', $companyId)->where('is_deleted', 0)->where('stock_sub_category_id', $c->id)->count(),
+                'url' => admin_url('stock-items?stock_sub_category_id='.$c->id)]);
 
-        $sales = \App\Models\StockRecord::where('company_id', $companyId)
-            ->whereHas('stock_item', function ($q) use ($query) {
-                $q->where('name', 'like', "%{$query}%");
-            })
-            ->with('stock_item:id,name')
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+        $sales = in_array('sell', $perms, true) || in_array('view_reports', $perms, true)
+            ? DB::table('sale_records')->where('company_id', $companyId)->where('is_deleted', 0)
+                ->where(fn ($q) => $q->where('receipt_number', 'like', $like)->orWhere('invoice_number', 'like', $like)->orWhere('provisional_number', $query)
+                    ->orWhere('customer_name', 'like', $like)->orWhere('customer_phone', 'like', $like))
+                ->orderByDesc('id')->limit(8)->get(['id', 'receipt_number', 'customer_name', 'customer_phone', 'sale_date', 'total_amount', 'status'])
+                ->map(fn ($s) => ['id' => $s->id, 'receipt_number' => $s->receipt_number, 'customer_name' => $s->customer_name, 'customer_phone' => $s->customer_phone,
+                    'date' => $s->sale_date ? date('d M Y', strtotime((string) $s->sale_date)) : '', 'total' => (float) $s->total_amount, 'status' => $s->status,
+                    'url' => admin_url('sale-records/'.$s->id)])
+            : collect();
 
-        $salesFormatted = $sales->map(function ($sale) {
-            return [
-                'id' => $sale->id,
-                'product_name' => $sale->stock_item ? $sale->stock_item->name : 'N/A',
-                'date' => date('d M Y', strtotime($sale->created_at)),
-                'quantity' => $sale->quantity,
-                'total' => $sale->total,
-            ];
-        });
+        $customers = in_array('sell', $perms, true)
+            ? DB::table('customers')->where('company_id', $companyId)->where('is_deleted', 0)
+                ->where(fn ($q) => $q->where('name', 'like', $like)->orWhere('phone', 'like', $like))
+                ->orderBy('name')->limit(5)->get(['id', 'name', 'phone', 'balance'])
+                ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'balance' => (float) $c->balance, 'url' => admin_url('customers/'.$c->id)])
+            : collect();
+
+        $suppliers = in_array('restock', $perms, true)
+            ? DB::table('suppliers')->where('company_id', $companyId)->where('is_deleted', 0)
+                ->where(fn ($q) => $q->where('name', 'like', $like)->orWhere('phone', 'like', $like))
+                ->orderBy('name')->limit(5)->get(['id', 'name', 'phone', 'balance'])
+                ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'balance' => (float) $c->balance, 'url' => admin_url('suppliers/'.$c->id)])
+            : collect();
 
         return response()->json([
-            'products' => $products,
-            'categories' => $categories,
-            'sales' => $salesFormatted,
+            'products' => $products->values(),
+            'categories' => $categories->values(),
+            'sales' => $sales->values(),
+            'customers' => $customers->values(),
+            'suppliers' => $suppliers->values(),
         ]);
     }
 }

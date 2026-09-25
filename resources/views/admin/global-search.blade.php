@@ -125,7 +125,7 @@
         <input 
             type="text" 
             id="global-search-input" 
-            placeholder="🔍 Search products, categories, sales... (Cmd+K or Ctrl+K)"
+            placeholder="Search receipts, customers, products… (Ctrl+K, Alt+K or /)"
             autocomplete="off"
         >
         <div id="global-search-results"></div>
@@ -173,6 +173,17 @@ document.getElementById('global-search-overlay').addEventListener('click', funct
     }
 });
 
+// Enter opens the first result
+document.getElementById('global-search-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        const first = document.querySelector('#global-search-results a.search-result-item');
+        if (first) {
+            e.preventDefault();
+            window.location.href = first.getAttribute('href');
+        }
+    }
+});
+
 // Search as user types
 document.getElementById('global-search-input').addEventListener('input', function(e) {
     const query = e.target.value.trim();
@@ -210,63 +221,52 @@ function performGlobalSearch(query) {
     });
 }
 
+function escapeHtml(v) {
+    return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+}
+
+function searchRow(url, type, cssType, title, subtitle) {
+    return '<a class="search-result-item" style="display:block;color:inherit;text-decoration:none" href="' + escapeHtml(url) + '">'
+        + '<span class="search-result-type ' + cssType + '">' + type + '</span>'
+        + '<div class="search-result-title">' + escapeHtml(title) + '</div>'
+        + '<div class="search-result-subtitle">' + escapeHtml(subtitle) + '</div></a>';
+}
+
 function displaySearchResults(data) {
     const resultsDiv = document.getElementById('global-search-results');
-    
-    if (!data.products.length && !data.categories.length && !data.sales.length) {
+    const money = '{{ \App\Support\Money::symbol() }} ';
+    const groups = ['sales', 'products', 'customers', 'suppliers', 'categories'];
+    if (!groups.some(function (g) { return data[g] && data[g].length; })) {
         resultsDiv.innerHTML = '<div class="search-empty"><i class="fa fa-search fa-2x" style="color: #ddd;"></i><br><br>No results found</div>';
         return;
     }
-    
+
     let html = '';
-    
-    // Products
-    if (data.products.length > 0) {
-        data.products.forEach(product => {
-            html += `
-                <div class="search-result-item" onclick="window.location.href='<?php echo admin_url('stock-items'); ?>/${product.id}/edit'">
-                    <span class="search-result-type type-product">PRODUCT</span>
-                    <div class="search-result-title">${product.name}</div>
-                    <div class="search-result-subtitle">
-                        SKU: ${product.sku || 'N/A'} • Stock: ${product.current_quantity} units • Price: {{ \App\Support\Money::symbol() }} ${formatNumber(product.selling_price)}
-                    </div>
-                </div>
-            `;
-        });
-    }
-    
-    // Categories
-    if (data.categories.length > 0) {
-        data.categories.forEach(category => {
-            html += `
-                <div class="search-result-item" onclick="window.location.href='<?php echo admin_url('stock-sub-categories'); ?>/${category.id}/edit'">
-                    <span class="search-result-type type-category">CATEGORY</span>
-                    <div class="search-result-title">${category.name}</div>
-                    <div class="search-result-subtitle">${category.products_count || 0} products</div>
-                </div>
-            `;
-        });
-    }
-    
-    // Sales (Stock Records)
-    if (data.sales.length > 0) {
-        data.sales.forEach(sale => {
-            html += `
-                <div class="search-result-item" onclick="window.location.href='<?php echo admin_url('stock-records'); ?>/${sale.id}/edit'">
-                    <span class="search-result-type type-sale">SALE</span>
-                    <div class="search-result-title">${sale.product_name}</div>
-                    <div class="search-result-subtitle">
-                        Date: ${sale.date} • Quantity: ${sale.quantity} • Total: {{ \App\Support\Money::symbol() }} ${formatNumber(sale.total)}
-                    </div>
-                </div>
-            `;
-        });
-    }
-    
+    (data.sales || []).forEach(function (sale) {
+        html += searchRow(sale.url, 'SALE', 'type-sale', 'Receipt ' + (sale.receipt_number || '#' + sale.id) + ' — ' + (sale.customer_name || 'Walk-in'),
+            sale.date + ' • ' + money + formatNumber(sale.total) + (sale.status && sale.status !== 'Completed' ? ' • ' + sale.status : ''));
+    });
+    (data.products || []).forEach(function (product) {
+        html += searchRow(product.url, 'PRODUCT', 'type-product', product.name,
+            'SKU: ' + (product.sku || 'N/A') + ' • In stock: ' + formatNumber(product.current_quantity) + ' • Price: ' + money + formatNumber(product.selling_price));
+    });
+    (data.customers || []).forEach(function (c) {
+        html += searchRow(c.url, 'CUSTOMER', 'type-category', c.name, (c.phone || '') + (c.balance > 0 ? ' • Owes ' + money + formatNumber(c.balance) : ''));
+    });
+    (data.suppliers || []).forEach(function (s) {
+        html += searchRow(s.url, 'SUPPLIER', 'type-category', s.name, (s.phone || '') + (s.balance > 0 ? ' • We owe ' + money + formatNumber(s.balance) : ''));
+    });
+    (data.categories || []).forEach(function (category) {
+        html += searchRow(category.url, 'CATEGORY', 'type-category', category.name, (category.products_count || 0) + ' products');
+    });
+
     resultsDiv.innerHTML = html;
 }
 
 function formatNumber(num) {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const n = Number(num || 0);
+    return n.toLocaleString('en-US', {maximumFractionDigits: 2});
 }
 </script>

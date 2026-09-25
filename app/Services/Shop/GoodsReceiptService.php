@@ -24,7 +24,10 @@ class GoodsReceiptService
     }
 
     /**
-     * @param  array<int, array{stock_item_id: int, quantity: float|string, unit_cost: float|string, purchase_order_item_id?: int|null, expected_unit_cost?: float|string|null, batch_number?: string|null, expiry_date?: string|null}>  $lines
+     * A blank unit_cost means "same as the product's buying price"; the buying price follows a
+     * new cost only when that cost is above zero (free goods never wipe the product's cost).
+     *
+     * @param  array<int, array{stock_item_id: int, quantity: float|string, unit_cost?: float|string|null, purchase_order_item_id?: int|null, expected_unit_cost?: float|string|null, batch_number?: string|null, expiry_date?: string|null}>  $lines
      */
     public function receive(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $invoiceRef = null, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $receivedOn = null, ?string $clientUuid = null, ?string $notes = null, ?string $deviceId = null, ?int $purchaseOrderId = null, ?int $locationId = null): GoodsReceipt
     {
@@ -64,13 +67,16 @@ class GoodsReceiptService
             $total = 0.0;
             foreach ($lines as $l) {
                 $qty = round((float) $l['quantity'], 3);
-                $cost = round((float) $l['unit_cost'], 2);
-                if ($qty <= 0 || $cost < 0) {
-                    throw BusinessRuleException::make('invalid_line', 'Quantity must be positive and cost cannot be negative.');
-                }
                 $product = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->find($l['stock_item_id']);
                 if ($product === null) {
                     throw BusinessRuleException::make('product_not_found', 'Stock item not found.');
+                }
+                $rawCost = $l['unit_cost'] ?? null;
+                $cost = ($rawCost === null || (is_string($rawCost) && trim($rawCost) === ''))
+                    ? round((float) $product->buying_price, 2)
+                    : round((float) $rawCost, 2);
+                if ($qty <= 0 || $cost < 0) {
+                    throw BusinessRuleException::make('invalid_line', 'Quantity must be positive and cost cannot be negative.');
                 }
                 $movement = $this->stock->record([
                     'stock_item_id' => $product->id, 'type' => 'Purchase', 'quantity' => $qty, 'unit_cost' => $cost,
@@ -78,7 +84,7 @@ class GoodsReceiptService
                     'reference_type' => 'goods_receipt', 'reference_id' => $grn->id, 'date' => $grn->received_on, 'location_id' => $locationId,
                     'batch_in' => ! empty($l['batch_number']) ? [['batch_number' => (string) $l['batch_number'], 'expiry_date' => $l['expiry_date'] ?? null, 'quantity' => $qty]] : [],
                 ]);
-                if ((float) $product->buying_price !== $cost) {
+                if ($cost > 0 && round((float) $product->buying_price, 2) !== $cost) {
                     DB::table('stock_items')->where('id', $product->id)->update([
                         'buying_price' => $cost, 'server_seq' => \App\Support\Sync\SyncSequence::next(), 'version' => DB::raw('version + 1'), 'updated_at' => now(),
                     ]);

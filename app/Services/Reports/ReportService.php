@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
+use App\Support\SalesSource;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -54,6 +55,7 @@ class ReportService
         if ($this->from->greaterThan($this->to)) {
             throw BusinessRuleException::make('invalid_range', 'The start date is after the end date.');
         }
+        \App\Support\LocalTime::prime($companyId); // SalesSource works in the shop's local days
         $method = lcfirst(str_replace('_', '', ucwords($name, '_')));
         $r = $this->{$method}($options);
 
@@ -76,10 +78,30 @@ class ReportService
         return ['key' => $key, 'label' => $label, 'type' => 'text'];
     }
 
-    private function sales()
+    /**
+     * Every sale in the range (web/app sale documents and old-app sale movements, net of returns,
+     * voids left out) — App\Support\SalesSource, one row per sale, local sale day.
+     *
+     * @return array{0: string, 1: array<int, mixed>} [derived table aliased "s", bindings]
+     */
+    private function saleRows(): array
     {
-        return DB::table('sale_records as s')->where('s.company_id', $this->companyId)->where('s.status', '!=', 'Voided')
-            ->whereBetween('s.sale_date', [$this->from->toDateString(), $this->to->toDateString()]);
+        [$from, $bind] = SalesSource::sql($this->companyId, 'x');
+
+        return ["(SELECT x.* FROM {$from} WHERE x.sale_date BETWEEN ? AND ?) s", array_merge($bind, [$this->from->toDateString(), $this->to->toDateString()])];
+    }
+
+    /**
+     * One row per product line, same rules as saleRows(), with the product ("p") and category ("c") joined.
+     *
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    private function lineRows(): array
+    {
+        [$from, $bind] = SalesSource::linesSql($this->companyId, 'x');
+
+        return ["(SELECT x.* FROM {$from} WHERE x.sale_date BETWEEN ? AND ?) l LEFT JOIN stock_items p ON p.id = l.stock_item_id LEFT JOIN stock_categories c ON c.id = p.stock_category_id",
+            array_merge($bind, [$this->from->toDateString(), $this->to->toDateString()])];
     }
 
     private function totals(array $rows, array $keys): array
@@ -92,70 +114,105 @@ class ReportService
         return $t;
     }
 
+    /** Money received per payment method for the sales in the range. */
+    private function salesByMethod(): array
+    {
+        [$from, $bind] = $this->saleRows();
+        $byMethod = [];
+        $add = function (string $method, int $sales, float $amount) use (&$byMethod) {
+            $key = \App\Models\Payment::normalizeMethod($method);
+            $byMethod[$key] ??= ['sales' => 0, 'amount' => 0.0];
+            $byMethod[$key]['sales'] += $sales;
+            $byMethod[$key]['amount'] += $amount;
+        };
+        // Payment rows are signed: refunds and reversals are stored negative already.
+        foreach (DB::select("SELECT p.method, COUNT(DISTINCT p.sale_record_id) AS sales, SUM(p.amount) AS amount
+            FROM {$from} JOIN payments p ON p.sale_record_id = s.sale_id AND p.is_deleted = 0 WHERE s.sale_id > 0 GROUP BY p.method", $bind) as $r) {
+            $add((string) $r->method, (int) $r->sales, (float) $r->amount);
+        }
+        // Sales from before payment rows existed: what was paid at the till lives only in amount_paid.
+        foreach (DB::select("SELECT r.payment_method AS method, COUNT(*) AS sales, SUM(s.amount_paid - COALESCE(pp.total, 0)) AS amount
+            FROM {$from} JOIN sale_records r ON r.id = s.sale_id
+            LEFT JOIN (SELECT sale_record_id, SUM(amount) AS total FROM payments WHERE company_id = ? AND is_deleted = 0 GROUP BY sale_record_id) pp ON pp.sale_record_id = s.sale_id
+            WHERE s.sale_id > 0 AND s.amount_paid - COALESCE(pp.total, 0) > 0 GROUP BY r.payment_method", array_merge($bind, [$this->companyId])) as $r) {
+            $add((string) $r->method, (int) $r->sales, (float) $r->amount);
+        }
+        // Old-app sale movements have no payment rows; they were cash at the till.
+        $old = DB::selectOne("SELECT COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS sales, COALESCE(SUM(s.total_amount), 0) AS amount FROM {$from} WHERE s.sale_id <= 0", $bind);
+        if ((float) $old->amount != 0.0) {
+            $add('cash', (int) $old->sales, (float) $old->amount);
+        }
+        uasort($byMethod, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+        $rows = [];
+        foreach ($byMethod as $method => $v) {
+            $rows[] = ['label' => ucwords(str_replace('_', ' ', (string) $method)), 'sales' => $v['sales'], 'amount' => round($v['amount'], 2)];
+        }
+        $credit = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(s.balance), 0) AS owed FROM {$from} WHERE s.balance > 0", $bind);
+        if ((float) $credit->owed > 0) {
+            $rows[] = ['label' => 'On credit (still owed)', 'sales' => (int) $credit->n, 'amount' => round((float) $credit->owed, 2)];
+        }
+
+        return $rows;
+    }
+
     private function salesSummary(array $o): array
     {
         $by = in_array($o['group_by'] ?? 'day', self::GROUPS, true) ? ($o['group_by'] ?? 'day') : 'day';
         if ($by === 'method') {
-            $rows = DB::table('payments as p')->join('sale_records as s', 's.id', '=', 'p.sale_record_id')->where('p.company_id', $this->companyId)
-                ->where('s.status', '!=', 'Voided')->whereBetween('s.sale_date', [$this->from->toDateString(), $this->to->toDateString()])
-                ->groupBy('p.method')->selectRaw('p.method AS label, COUNT(DISTINCT p.sale_record_id) AS sales, SUM(CASE WHEN p.is_reversal = 1 THEN -p.amount ELSE p.amount END) AS amount')
-                ->orderByDesc('amount')->get()->map(fn ($r) => ['label' => ucwords(str_replace('_', ' ', (string) $r->label)), 'sales' => (int) $r->sales, 'amount' => round((float) $r->amount, 2)])->all();
-            $credit = (float) $this->sales()->sum('s.balance');
-            if ($credit > 0) {
-                $rows[] = ['label' => 'On credit (still owed)', 'sales' => (int) $this->sales()->where('s.balance', '>', 0)->count(), 'amount' => round($credit, 2)];
-            }
+            $rows = $this->salesByMethod();
 
             return ['columns' => [$this->text('label', 'Paid with'), $this->num('sales', 'Sales'), $this->money('amount', 'Amount')], 'rows' => $rows, 'totals' => $this->totals($rows, ['sales', 'amount'])];
         }
         if (in_array($by, ['category', 'product'], true)) {
-            $q = DB::table('sale_record_items as i')->join('sale_records as s', 's.id', '=', 'i.sale_record_id')->leftJoin('stock_items as p', 'p.id', '=', 'i.stock_item_id')
-                ->leftJoin('stock_categories as c', 'c.id', '=', 'p.stock_category_id')->where('s.company_id', $this->companyId)->where('s.status', '!=', 'Voided')
-                ->whereBetween('s.sale_date', [$this->from->toDateString(), $this->to->toDateString()]);
-            $label = $by === 'category' ? 'COALESCE(c.name, "Uncategorised")' : 'i.item_name';
-            $rows = $q->groupByRaw($label)->selectRaw("{$label} AS label, SUM(i.quantity - i.returned_quantity) AS quantity,
-                    SUM(i.line_total * (i.quantity - i.returned_quantity) / NULLIF(i.quantity, 0)) AS amount")
-                ->orderByDesc('amount')->get()->map(fn ($r) => ['label' => (string) $r->label, 'quantity' => round((float) $r->quantity, 3), 'amount' => round((float) $r->amount, 2)])->all();
+            [$from, $bind] = $this->lineRows();
+            $label = $by === 'category' ? 'COALESCE(c.name, "Uncategorised")' : 'COALESCE(l.item_name, p.name)';
+            $rows = collect(DB::select("SELECT {$label} AS label, SUM(l.quantity) AS quantity, SUM(l.revenue) AS amount
+                FROM {$from} GROUP BY {$label} ORDER BY amount DESC", $bind))
+                ->map(fn ($r) => ['label' => (string) $r->label, 'quantity' => round((float) $r->quantity, 3), 'amount' => round((float) $r->amount, 2)])->all();
 
             return ['columns' => [$this->text('label', ucfirst($by)), $this->num('quantity', 'Quantity'), $this->money('amount', 'Sales')], 'rows' => $rows, 'totals' => $this->totals($rows, ['quantity', 'amount'])];
         }
-        [$label, $join] = match ($by) {
-            'cashier' => ['COALESCE(u.name, "—")', true],
-            'customer' => ['COALESCE(NULLIF(s.customer_name, ""), "Walk-in")', false],
-            default => ['s.sale_date', false],
+        $label = match ($by) {
+            'cashier' => 'COALESCE(u.name, "—")',
+            'customer' => 'COALESCE(NULLIF(s.customer_name, ""), "Walk-in")',
+            default => 's.sale_date',
         };
-        $q = $this->sales();
-        if ($join) {
-            $q->leftJoin('admin_users as u', 'u.id', '=', 's.created_by_id');
-        }
-        $rows = $q->groupByRaw($label)->selectRaw("{$label} AS label, COUNT(*) AS sales, SUM(s.total_amount - s.refunded_amount) AS amount,
-                SUM(s.discount_amount) AS discounts, SUM(s.balance) AS owed")->orderBy($by === 'day' ? 'label' : 'amount', $by === 'day' ? 'asc' : 'desc')->get()
+        [$from, $bind] = $this->saleRows();
+        $joins = 'LEFT JOIN sale_records r ON r.id = s.sale_id'.($by === 'cashier' ? ' LEFT JOIN admin_users u ON u.id = s.created_by_id' : '');
+        // Fully returned sales (net 0) are not counted as sales.
+        $rows = collect(DB::select("SELECT {$label} AS label, COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS sales, SUM(s.total_amount) AS amount,
+                SUM(COALESCE(r.discount_amount, 0)) AS discounts, SUM(s.balance) AS owed
+            FROM {$from} {$joins} GROUP BY {$label} ORDER BY ".($by === 'day' ? 'label ASC' : 'amount DESC'), $bind))
             ->map(fn ($r) => ['label' => (string) $r->label, 'sales' => (int) $r->sales, 'amount' => round((float) $r->amount, 2), 'discounts' => round((float) $r->discounts, 2), 'owed' => round((float) $r->owed, 2)])->all();
 
         return ['columns' => [$this->text('label', ucfirst($by)), $this->num('sales', 'Sales'), $this->money('amount', 'Net sales'), $this->money('discounts', 'Discounts'), $this->money('owed', 'Still owed')],
             'rows' => $rows, 'totals' => $this->totals($rows, ['sales', 'amount', 'discounts', 'owed'])];
     }
 
+    /** Operating expenses in the range: stock bought is cost of goods (counted when sold), not an expense. */
+    private function operatingExpenses(): float
+    {
+        return (float) DB::table('financial_records')->where('company_id', $this->companyId)->where('type', 'Expense')->where('is_deleted', 0)
+            ->where(fn ($q) => $q->whereNull('source_type')->orWhereNotIn('source_type', ['goods_receipt', 'supplier_payment']))
+            ->whereBetween('date', [$this->from->toDateString(), $this->to->toDateString()])->sum('amount');
+    }
+
     private function profit(array $o): array
     {
         $by = ($o['group_by'] ?? 'day') === 'product' ? 'product' : 'day';
-        $label = $by === 'product' ? 'i.item_name' : 's.sale_date';
-        $rows = DB::table('sale_record_items as i')->join('sale_records as s', 's.id', '=', 'i.sale_record_id')->where('s.company_id', $this->companyId)
-            ->where('s.status', '!=', 'Voided')->whereBetween('s.sale_date', [$this->from->toDateString(), $this->to->toDateString()])
-            ->groupByRaw($label)->selectRaw("{$label} AS label,
-                SUM(i.line_total * (i.quantity - i.returned_quantity) / NULLIF(i.quantity, 0)) AS revenue,
-                SUM(i.unit_cost * (i.quantity - i.returned_quantity)) AS cost")
-            ->orderBy($by === 'day' ? 'label' : 'revenue', $by === 'day' ? 'asc' : 'desc')->get()
+        $label = $by === 'product' ? 'COALESCE(l.item_name, p.name)' : 'l.sale_date';
+        [$from, $bind] = $this->lineRows();
+        $rows = collect(DB::select("SELECT {$label} AS label, SUM(l.revenue) AS revenue, SUM(l.profit) AS profit
+            FROM {$from} GROUP BY {$label} ORDER BY ".($by === 'day' ? 'label ASC' : 'revenue DESC'), $bind))
             ->map(function ($r) {
                 $rev = round((float) $r->revenue, 2);
-                $cost = round((float) $r->cost, 2);
+                $profit = round((float) $r->profit, 2);
 
-                return ['label' => (string) $r->label, 'revenue' => $rev, 'cost' => $cost, 'profit' => round($rev - $cost, 2), 'margin' => $rev > 0 ? round(($rev - $cost) * 100 / $rev, 1) : 0.0];
+                return ['label' => (string) $r->label, 'revenue' => $rev, 'cost' => round($rev - $profit, 2), 'profit' => $profit, 'margin' => $rev > 0 ? round($profit * 100 / $rev, 1) : 0.0];
             })->all();
         $t = $this->totals($rows, ['revenue', 'cost', 'profit']);
         $t['margin'] = $t['revenue'] > 0 ? round($t['profit'] * 100 / $t['revenue'], 1) : 0.0;
-        $expenses = (float) DB::table('financial_records')->where('company_id', $this->companyId)->where('type', 'Expense')
-            ->where(fn ($q) => $q->whereNull('source_type')->orWhereNotIn('source_type', ['goods_receipt', 'supplier_payment']))
-            ->whereBetween('date', [$this->from->toDateString(), $this->to->toDateString()])->sum('amount');
+        $expenses = $this->operatingExpenses();
 
         return ['columns' => [$this->text('label', $by === 'day' ? 'Day' : 'Product'), $this->money('revenue', 'Sales'), $this->money('cost', 'Cost of goods'), $this->money('profit', 'Gross profit'),
             ['key' => 'margin', 'label' => 'Margin %', 'type' => 'percent']], 'rows' => $rows, 'totals' => $t,
@@ -206,18 +263,18 @@ class ReportService
     private function fastMovers(array $o): array
     {
         $limit = min(100, max(5, (int) ($o['limit'] ?? 20)));
-        $rows = DB::table('sale_record_items as i')->join('sale_records as s', 's.id', '=', 'i.sale_record_id')->where('s.company_id', $this->companyId)->where('s.status', '!=', 'Voided')
-            ->whereBetween('s.sale_date', [$this->from->toDateString(), $this->to->toDateString()])->groupBy('i.item_name')
-            ->selectRaw('i.item_name AS name, SUM(i.quantity - i.returned_quantity) AS quantity, SUM(i.line_total * (i.quantity - i.returned_quantity) / NULLIF(i.quantity, 0)) AS amount')
-            ->orderByDesc('quantity')->limit($limit)->get()->map(fn ($r) => ['name' => $r->name, 'quantity' => round((float) $r->quantity, 3), 'amount' => round((float) $r->amount, 2)])->all();
+        [$from, $bind] = $this->lineRows();
+        $rows = collect(DB::select("SELECT COALESCE(MAX(p.name), MAX(l.item_name)) AS name, SUM(l.quantity) AS quantity, SUM(l.revenue) AS amount
+            FROM {$from} GROUP BY l.stock_item_id HAVING SUM(l.quantity) > 0 ORDER BY quantity DESC LIMIT {$limit}", $bind))
+            ->map(fn ($r) => ['name' => $r->name, 'quantity' => round((float) $r->quantity, 3), 'amount' => round((float) $r->amount, 2)])->all();
 
         return ['columns' => [$this->text('name', 'Product'), $this->num('quantity', 'Sold'), $this->money('amount', 'Sales')], 'rows' => $rows, 'totals' => $this->totals($rows, ['quantity', 'amount'])];
     }
 
     private function customerAging(array $o): array
     {
-        $today = now()->toDateString();
-        $rows = DB::table('sale_records as s')->where('s.company_id', $this->companyId)->where('s.status', '!=', 'Voided')->where('s.balance', '>', 0)
+        $today = now($this->to->getTimezone())->toDateString();
+        $rows = DB::table('sale_records as s')->where('s.company_id', $this->companyId)->where('s.status', '!=', 'Voided')->whereNull('s.voided_at')->where('s.balance', '>', 0)
             ->groupByRaw('COALESCE(s.customer_id, 0), COALESCE(NULLIF(s.customer_name, ""), "Walk-in")')
             ->selectRaw('COALESCE(NULLIF(s.customer_name, ""), "Walk-in") AS name, MAX(s.customer_phone) AS phone,
                 SUM(CASE WHEN DATEDIFF(?, s.sale_date) <= 30 THEN s.balance ELSE 0 END) AS d0_30,
@@ -255,7 +312,9 @@ class ReportService
     private function vatSummary(array $o): array
     {
         $rate = (float) (Company::withoutGlobalScopes()->find($this->companyId)?->tax_rate ?? 0);
-        $sales = (float) $this->sales()->sum(DB::raw('s.total_amount - s.refunded_amount'));
+        // VAT is not stored per sale; it is worked out from gross sales at the shop's rate, so old-app sales count too.
+        [$from, $bind] = $this->saleRows();
+        $sales = (float) DB::selectOne("SELECT COALESCE(SUM(s.total_amount), 0) AS total FROM {$from}", $bind)->total;
         $purchases = (float) DB::table('goods_receipts')->where('company_id', $this->companyId)->whereBetween('received_on', [$this->from->toDateString(), $this->to->toDateString()])->sum('total_cost');
         $returns = (float) DB::table('purchase_returns')->where('company_id', $this->companyId)->whereBetween('returned_on', [$this->from->toDateString(), $this->to->toDateString()])->sum('total_value');
         $vat = fn (float $gross) => $rate > 0 ? round($gross * $rate / (100 + $rate), 2) : 0.0;

@@ -60,7 +60,7 @@ class WebSaleCreateTest extends AdminTestCase
         $data = (fn () => ['s' => $this->getReturnsSummary($t['company']->id), 'r' => $this->getReturnsByReason($t['company']->id), 'top' => $this->getTopReturnedProducts($t['company']->id)])->call($w);
         $this->assertSame(3, (int) $data['s']['today']->returns_count);
         $this->assertEquals(3, (float) $data['s']['total']->units_returned);
-        $this->assertEquals(10000, (float) $data['s']['total']->refund_total);
+        $this->assertEquals(10000 + 5000, (float) $data['s']['total']->refund_total, 'the stand-alone Return movement is valued at its selling price');
         $this->assertContains('Faulty', array_column($data['r'], 'reason'));
         $this->assertSame('Rice', $data['top'][0]->name);
         $this->asAdmin($t['user'])->get('/')->assertOk();

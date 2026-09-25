@@ -131,6 +131,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Returns: a "Return items" form on the web sale page (good → back to stock, faulty → not restocked; profit and refunds follow), and the returns report shows every return (E54).
 - `stock:apply-old-writeoffs` applies old damage/expiry write-offs that never reduced stock (E55).
 
+### Web admin review (2026-09-25)
+- **New dashboard:** quick actions (new sale, receive stock, damage, return, expense, debt payment), a date-range switcher with comparison to the period before, sales / profit / money received / expenses / net / returns, a daily chart, money by payment method, best sellers, who owes you (receive / remind) and whom you owe, stock value and what to reorder, recent sales, and alerts (negative stock, products without a cost, expiring batches, shifts left open) (E56).
+- **Correct numbers everywhere:** sales analytics, financial reports, shop reports, the WhatsApp daily summary and the API dashboard count every app's sales once, leave out voids, net returns, ignore deleted expenses and stop deducting stock purchases twice. Dates are the shop's local day (E56, E58, E61).
+- **Selling on the web:** product search (name, SKU, barcode), prices fill in and totals update as you type, cash sales are paid by default, credit sales go into the customer's debt book, receive and reverse payments on the sale page, a clear sale page with receipt / WhatsApp / return / void, and read-only status (E60).
+- **Stock screens:** category and product pickers work again, the stock-movement form can't record accidental zero-price sales, a delivery with a blank cost keeps the product's cost, stock counts no longer erase sales made while counting (E57), and movements that belong to a sale or delivery are undone on that document.
+- **Security:** receipts, invoices and reports are no longer downloadable by guessing a link; every new financial report was being written to the same shared file (E59).
+- **Navigation:** tidier menu with the most-used screens first, Ping Pin and poultry hidden for shops that don't use them, the Mobile money page opens for shop owners again, a global search for receipts, customers and products, and safe keyboard shortcuts (E62).
+- Fixed pages that crashed: stock movement details, and new-record pages under device tracking.
+
 ---
 
 ## [2.0.0] - 2025-12-09

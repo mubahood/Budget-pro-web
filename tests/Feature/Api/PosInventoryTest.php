@@ -161,11 +161,12 @@ class PosInventoryTest extends ApiTestCase
         $b = $this->product();
         $take = $this->postJson('/api/v1/stock-takes', ['name' => 'Month end'], $this->h)->assertStatus(201)->json('data');
         $this->postJson("/api/v1/stock-takes/{$take['id']}/counts", ['counts' => [['stock_item_id' => $a['id'], 'counted_quantity' => 45], ['stock_item_id' => $b['id'], 'counted_quantity' => 50]]], $this->h)->assertOk();
-        // A sale happens between counting and posting: posting uses the latest on-hand.
+        // A sale happens between counting and posting: the count is applied against the figure at count time
+        // (45 counted, then 1 sold → 44 on the shelf), so the sale is not erased (E57, supersedes E28).
         $this->postJson('/api/v1/sales/checkout', ['items' => [['stock_item_id' => $a['id'], 'quantity' => 1]], 'amount_paid' => 1000], $this->h);
         $posted = $this->postJson("/api/v1/stock-takes/{$take['id']}/post", [], $this->h)->assertOk()->json('data');
         $this->assertSame('posted', $posted['status']);
-        $this->assertSame(45.0, $this->qty($a['id']));
+        $this->assertSame(44.0, $this->qty($a['id']));
         $this->assertSame(50.0, $this->qty($b['id']));
         $this->postJson("/api/v1/stock-takes/{$take['id']}/counts", ['counts' => [['stock_item_id' => $a['id'], 'counted_quantity' => 1]]], $this->h)->assertStatus(422);
     }

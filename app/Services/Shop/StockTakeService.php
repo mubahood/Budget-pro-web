@@ -9,9 +9,11 @@ use App\Models\StockTakeItem;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Stock count sessions (plan A4, P2-7): counts are recorded (on any device),
- * posting sets on-hand to the counted figure with one adjustment movement per
- * product; the latest count for a product wins.
+ * Stock count sessions (plan A4, P2-7): counts are recorded (on any device)
+ * together with what the system showed at that moment; posting applies the
+ * difference (counted − system at count time) as one adjustment per product.
+ * Sales and deliveries between counting and posting are therefore kept, not
+ * wiped. The latest count for a product wins.
  */
 class StockTakeService
 {
@@ -58,6 +60,10 @@ class StockTakeService
             if ($product === null) {
                 throw BusinessRuleException::make('product_not_found', 'Stock item not found.');
             }
+            $existing = StockTakeItem::withoutGlobalScopes()->where('stock_take_id', $take->id)->where('stock_item_id', $product->id)->first();
+            if ($existing !== null && round((float) $existing->counted_quantity, 3) === $qty) {
+                continue; // unchanged count re-sent: keep the snapshot taken when it was counted
+            }
             StockTakeItem::updateOrCreate(
                 ['stock_take_id' => $take->id, 'stock_item_id' => $product->id],
                 ['company_id' => $take->company_id, 'counted_quantity' => $qty, 'system_quantity' => $product->current_quantity]
@@ -81,7 +87,8 @@ class StockTakeService
             $take = StockTake::withoutGlobalScopes()->lockForUpdate()->find($take->id);
             foreach (StockTakeItem::withoutGlobalScopes()->where('stock_take_id', $take->id)->orderBy('stock_item_id')->get() as $item) {
                 $product = StockService::lock((int) $item->stock_item_id);
-                $system = round((float) $product->current_quantity, 3);
+                // Counts saved before the snapshot existed fall back to the live figure.
+                $system = $item->system_quantity !== null ? round((float) $item->system_quantity, 3) : round((float) $product->current_quantity, 3);
                 $delta = round((float) $item->counted_quantity - $system, 3);
                 $item->system_quantity = $system;
                 $item->delta = $delta;

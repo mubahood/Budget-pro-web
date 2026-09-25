@@ -95,7 +95,7 @@ class StockService
             $contra->selling_price = $record->selling_price;
             $contra->unit_cost = $record->unit_cost ?? $record->buying_price;
             $contra->description = 'Reversal of #'.$record->id.($reason ? ': '.$reason : '');
-            $contra->date = now();
+            $contra->date = \App\Support\LocalDate::today((int) $record->company_id);
             $contra->created_by_id = $userId ?? $record->created_by_id;
             $contra->reference_type = $record->reference_type;
             $contra->reference_id = $record->reference_id;

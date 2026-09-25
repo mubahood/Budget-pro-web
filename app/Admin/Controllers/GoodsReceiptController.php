@@ -62,11 +62,13 @@ class GoodsReceiptController extends TenantAdminController
         $form->select('supplier_id', 'Supplier')->options(Supplier::where('company_id', $companyId)->pluck('name', 'id'))->default(request('supplier_id'));
         $form->text('invoice_ref', 'Supplier invoice no.');
         $form->date('received_on', 'Received on')->default(now()->toDateString());
-        $products = StockItem::where('company_id', $companyId)->orderBy('name')->pluck('name', 'id');
+        $rows = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->orderBy('name')->get(['id', 'name', 'buying_price']);
+        $products = $rows->mapWithKeys(fn ($p) => [$p->id => $p->name.' (cost '.Money::format($p->buying_price).')']);
+        $costs = $rows->mapWithKeys(fn ($p) => [$p->id => (float) $p->buying_price]);
         $form->table('items', 'Products received', function ($t) use ($products) {
             $t->select('stock_item_id', 'Product')->options($products);
             $t->decimal('quantity', 'Quantity');
-            $t->decimal('unit_cost', 'Cost per piece');
+            $t->decimal('unit_cost', 'Cost per piece')->help('Filled with the product\'s current cost; change it if the supplier charged differently.');
             $t->text('batch_number', 'Batch (optional)');
             $t->date('expiry_date', 'Expires (optional)');
         });
@@ -76,6 +78,12 @@ class GoodsReceiptController extends TenantAdminController
         }
         $form->decimal('amount_paid', 'Paid now')->default(0)->help('Anything unpaid becomes what you owe the supplier.');
         $form->select('payment_method', 'Paid with')->options(['cash' => 'Cash', 'mobile_money' => 'Mobile Money', 'bank' => 'Bank'])->default('cash');
+
+        // Pre-fill the cost with the product's buying price when a product is picked (blank also means that price).
+        \Encore\Admin\Facades\Admin::script('var bpCosts = '.json_encode($costs).';'
+            .'$(document).off("change.bpcost").on("change.bpcost", "select[name$=\'[stock_item_id]\']", function () {'
+            .'var cost = bpCosts[this.value]; var input = $(this).closest("tr, .form-group, .has-many-items-form, table").find("input[name$=\'[unit_cost]\']").first();'
+            .'if (input.length && !input.val() && cost !== undefined) { input.val(cost); } });');
 
         return $content->title('Receive stock')->body($form);
     }

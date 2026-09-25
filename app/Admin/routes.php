@@ -34,6 +34,11 @@ Route::group([
     $router->resource('stock-items', StockItemController::class);
     $router->resource('stock-records', StockRecordController::class);
     $router->post('stock-records/{id}/reverse', 'StockRecordController@reverse');
+    // Stock pick-lists (tenant-scoped; see StockOptionsController).
+    $router->get('ajax/sub-categories', 'StockOptionsController@subCategories');
+    $router->get('ajax/stock-items', 'StockOptionsController@stockItems');
+    $router->get('ajax/categories', 'StockOptionsController@categories');
+    $router->post('ajax/categories', 'StockOptionsController@storeCategory');
     $router->resource('companies-edit', CompanyEditController::class);
     $router->resource('financial-categories', FinancialCategoryController::class);
     $router->resource('financial-reports', FinancialReportController::class);
@@ -79,12 +84,15 @@ Route::group([
     $router->get('stock-takes/{id}/count', 'StockTakeController@countForm');
     $router->post('stock-takes/{id}/count', 'StockTakeController@saveCounts');
     $router->post('stock-takes/{id}/post', 'StockTakeController@post');
-    $router->resource('stock-takes', StockTakeController::class)->only(['index', 'show', 'create']);
+    $router->resource('stock-takes', StockTakeController::class)->only(['index', 'show', 'create', 'store']);
     $router->resource('sale-records', SaleRecordController::class);
     $router->post('sale-records/{id}/void', 'SaleRecordController@void');
     $router->post('sale-records/{id}/send-receipt', 'SaleRecordController@sendReceipt');
     $router->post('sale-records/{id}/momo-request', 'SaleRecordController@momoRequest');
     $router->post('sale-records/{id}/return', 'SaleRecordController@returnItems');
+    $router->post('sale-records/{id}/payments', 'SaleRecordController@receivePayment')->where('id', '[0-9]+');
+    $router->post('sale-records/{id}/payments/{paymentId}/reverse', 'SaleRecordController@reversePayment')->where(['id' => '[0-9]+', 'paymentId' => '[0-9]+']);
+    $router->get('ajax/products', 'AjaxController@products');
     $router->post('customers/{id}/remind', 'CustomerController@remind');
     $router->get('engagement', 'EngagementController@index');
     $router->post('engagement', 'EngagementController@save');
@@ -105,8 +113,8 @@ Route::group([
 
     $router->resource('tracked-devices', TrackedDeviceController::class);
     $router->post('tracked-devices/{id}/locate-now', 'TrackedDeviceController@locateNow');
-    $router->resource('device-locations', DeviceLocationController::class);
-    $router->resource('device-commands', DeviceCommandController::class);
+    $router->resource('device-locations', DeviceLocationController::class)->only(['index', 'show']);
+    $router->resource('device-commands', DeviceCommandController::class)->only(['index', 'show']);
     $router->get('tracking-map', 'DeviceLocationController@fleetMap');
     $router->get('tracking-map/{deviceId}', 'DeviceLocationController@deviceTrail');
 

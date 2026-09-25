@@ -8,6 +8,7 @@ use App\Models\FinancialCategory;
 use App\Models\FinancialRecord;
 use App\Models\Payment;
 use App\Models\SaleRecord;
+use App\Support\LocalDate;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,6 +36,7 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($sale, $attrs, $amount) {
+            $this->adoptPaidAtSale($sale);
             $method = Payment::normalizeMethod($attrs['method'] ?? $sale->payment_method);
             $receivedAt = isset($attrs['received_at']) ? \Illuminate\Support\Carbon::parse($attrs['received_at']) : now();
 
@@ -55,8 +57,10 @@ class PaymentService
             $payment->save();
 
             $ledger = $this->postIncome($sale, $payment);
-            $payment->financial_record_id = $ledger->id;
-            $payment->saveQuietlySynced();
+            if ($ledger !== null) {
+                $payment->financial_record_id = $ledger->id;
+                $payment->saveQuietlySynced();
+            }
 
             $this->syncSaleTotals($sale);
             if ($sale->customer_id) {
@@ -82,6 +86,8 @@ class PaymentService
             $contra = new Payment();
             $contra->company_id = $payment->company_id;
             $contra->sale_record_id = $payment->sale_record_id;
+            $contra->customer_id = $payment->customer_id; // the debt book and statement net it
+            $contra->shift_id = $payment->shift_id; // ShiftService::totals nets it in the same drawer
             $contra->method = $payment->method;
             $contra->provider = $payment->provider;
             $contra->reference = $payment->reference;
@@ -117,6 +123,7 @@ class PaymentService
     /** amount_paid / balance / payment_status from the payment rows (single source of truth). */
     public function syncSaleTotals(SaleRecord $sale): void
     {
+        $this->adoptPaidAtSale($sale);
         $paid = round((float) Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->sum('amount'), 2);
         $total = round((float) $sale->total_amount, 2);
         $net = max(0, round($total - (float) $sale->refunded_amount, 2)); // what the customer owes after returns
@@ -143,6 +150,7 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($sale, $amount, $method, $userId, $shiftId, $clientUuid) {
+            $this->adoptPaidAtSale($sale);
             $p = new Payment();
             $p->client_uuid = $clientUuid;
             $p->company_id = $sale->company_id;
@@ -169,7 +177,7 @@ class PaymentService
             $row->payment_method = $p->method;
             $row->recipient = $sale->customer_name ?? '';
             $row->receipt = $sale->receipt_number ?? '';
-            $row->date = now();
+            $row->date = LocalDate::today((int) $sale->company_id);
             $row->description = 'Refund for sale '.($sale->receipt_number ?: '#'.$sale->id);
             $row->source_type = 'payment';
             $row->source_id = $p->id;
@@ -213,7 +221,7 @@ class PaymentService
             $row->payment_method = $p->method;
             $row->recipient = $customer->name;
             $row->receipt = $reference ?? '';
-            $row->date = now();
+            $row->date = LocalDate::today((int) $customer->company_id);
             $row->description = 'Payment on account — '.$customer->name;
             $row->source_type = 'payment';
             $row->source_id = $p->id;
@@ -226,8 +234,53 @@ class PaymentService
         });
     }
 
-    private function postIncome(SaleRecord $sale, Payment $payment): FinancialRecord
+    /**
+     * A sale recorded before payment rows existed keeps what was paid at the till only in
+     * amount_paid. The first time money moves on such a sale again (a later payment, a refund,
+     * a void) that amount becomes a payment row, so amount_paid — recomputed from payment rows —
+     * does not forget it. No ledger row: the old app booked that sale's income when it was sold.
+     */
+    public function adoptPaidAtSale(SaleRecord $sale): ?Payment
     {
+        $paidAtSale = round((float) $sale->amount_paid, 2);
+        if ($sale->processed_at === null || $paidAtSale <= 0 || Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->exists()) {
+            return null;
+        }
+        $p = new Payment();
+        $p->company_id = $sale->company_id;
+        $p->sale_record_id = $sale->id;
+        $p->customer_id = $sale->customer_id;
+        $p->method = Payment::normalizeMethod($sale->payment_method);
+        $p->amount = $paidAtSale;
+        $p->currency = $sale->currency;
+        $p->received_at = $sale->created_at ?? now();
+        $p->received_by_id = $sale->created_by_id;
+        $p->notes = self::PAID_AT_SALE;
+        $p->save();
+
+        return $p;
+    }
+
+    public const PAID_AT_SALE = 'Paid at sale';
+
+    /**
+     * Income for a payment, never more than money received beyond what the ledger already holds for
+     * this sale. Before Phase 0 every sale movement posted its full value as Income (source_type
+     * stock_record); a later payment on such a sale collects income that is already booked.
+     */
+    private function postIncome(SaleRecord $sale, Payment $payment): ?FinancialRecord
+    {
+        $legacy = (float) DB::table('financial_records as f')->join('stock_records as m', 'm.id', '=', 'f.source_id')
+            ->where('f.company_id', $sale->company_id)->where('f.source_type', 'stock_record')->where('f.is_deleted', 0)
+            ->where('m.sale_record_id', $sale->id)->sum('f.amount');
+        $viaPayments = (float) DB::table('financial_records as f')->join('payments as p', 'p.financial_record_id', '=', 'f.id')
+            ->where('p.sale_record_id', $sale->id)->where('p.id', '!=', $payment->id)->where('f.is_deleted', 0)->sum('f.amount');
+        $received = (float) Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->sum('amount'); // includes this payment
+        $income = round(min((float) $payment->amount, $received - $legacy - $viaPayments), 2);
+        if ($income <= 0) {
+            return null;
+        }
+
         $category = $this->salesCategory((int) $sale->company_id);
 
         $row = new FinancialRecord();
@@ -235,13 +288,13 @@ class PaymentService
         $row->company_id = $sale->company_id;
         $row->user_id = $payment->received_by_id;
         $row->created_by_id = $payment->received_by_id;
-        $row->amount = $payment->amount;
+        $row->amount = $income;
         $row->quantity = 1;
         $row->type = 'Income';
         $row->payment_method = $payment->method;
         $row->recipient = $sale->customer_name ?? '';
         $row->receipt = $sale->receipt_number ?? '';
-        $row->date = $payment->received_at ?? now();
+        $row->date = LocalDate::date((int) $sale->company_id, $payment->received_at);
         $row->description = 'Payment for sale '.($sale->receipt_number ?: '#'.$sale->id);
         $row->source_type = 'payment';
         $row->source_id = $payment->id;
@@ -265,7 +318,7 @@ class PaymentService
         $row->payment_method = $original->payment_method;
         $row->recipient = $original->recipient;
         $row->receipt = $original->receipt;
-        $row->date = now();
+        $row->date = LocalDate::today((int) $original->company_id);
         $row->description = 'Reversal of ledger #'.$original->id.($reason ? ': '.$reason : '');
         $row->source_type = 'payment';
         $row->source_id = $contraPayment->id;

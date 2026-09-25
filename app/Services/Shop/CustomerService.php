@@ -100,8 +100,15 @@ class CustomerService
     {
         $entries = [];
         $sales = SaleRecord::withoutGlobalScopes()->where('company_id', $customer->company_id)->where('customer_id', $customer->id)->whereNull('voided_at')->get();
+        $recorded = $sales->isEmpty() ? collect() : Payment::withoutGlobalScopes()->whereIn('sale_record_id', $sales->pluck('id'))
+            ->groupBy('sale_record_id')->selectRaw('sale_record_id, SUM(amount) AS total')->pluck('total', 'sale_record_id');
         foreach ($sales as $s) {
             $entries[] = ['date' => (string) $s->sale_date->toDateString(), 'at' => $s->created_at, 'type' => 'sale', 'ref' => $s->receipt_number, 'description' => 'Sale '.$s->receipt_number, 'debit' => round((float) $s->total_amount, 2), 'credit' => 0.0];
+            // Sales from before payment rows existed carry what was paid at the till only in amount_paid.
+            $paidAtSale = round((float) $s->amount_paid - (float) ($recorded[$s->id] ?? 0), 2);
+            if ($paidAtSale > 0) {
+                $entries[] = ['date' => (string) $s->sale_date->toDateString(), 'at' => $s->created_at, 'type' => 'payment', 'ref' => $s->receipt_number, 'description' => 'Paid at sale', 'debit' => 0.0, 'credit' => $paidAtSale];
+            }
             if ((float) $s->refunded_amount > 0) {
                 $entries[] = ['date' => (string) $s->updated_at?->toDateString(), 'at' => $s->updated_at, 'type' => 'return', 'ref' => $s->receipt_number, 'description' => 'Returned goods', 'debit' => 0.0, 'credit' => round((float) $s->refunded_amount, 2)];
             }
@@ -109,7 +116,7 @@ class CustomerService
         $pays = Payment::withoutGlobalScopes()->where('company_id', $customer->company_id)->where('customer_id', $customer->id)->get();
         foreach ($pays as $p) {
             $amt = round((float) $p->amount, 2);
-            $entries[] = ['date' => (string) $p->received_at?->toDateString(), 'at' => $p->received_at, 'type' => $amt < 0 ? 'refund' : 'payment', 'ref' => $p->reference, 'description' => $amt < 0 ? 'Cash refunded' : 'Payment ('.$p->method.')', 'debit' => $amt < 0 ? -$amt : 0.0, 'credit' => $amt > 0 ? $amt : 0.0];
+            $entries[] = ['date' => (string) $p->received_at?->toDateString(), 'at' => $p->received_at, 'type' => $amt < 0 ? 'refund' : 'payment', 'ref' => $p->reference, 'description' => $amt < 0 ? 'Cash refunded' : ($p->notes === PaymentService::PAID_AT_SALE ? 'Paid at sale' : 'Payment ('.$p->method.')'), 'debit' => $amt < 0 ? -$amt : 0.0, 'credit' => $amt > 0 ? $amt : 0.0];
         }
         usort($entries, fn ($a, $b) => [$a['date'], (string) $a['at']] <=> [$b['date'], (string) $b['at']]);
 

@@ -198,32 +198,15 @@
                                 <tr>
                                     <th>Date</th>
                                     <th class="text-right">Sales</th>
+                                    <th class="text-right">Revenue</th>
                                     <th class="text-right">Profit</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @php
-                                    // Get last 30 days of sales
-                                    $companyId = auth()->user()->company_id ?? 25;
-                                    $last30Days = DB::select("
-                                        SELECT 
-                                            DATE(sr.sale_date) as date,
-                                            COALESCE(SUM(sr.total_amount), 0) as revenue,
-                                            COALESCE(SUM(sri.quantity * (sri.unit_price - si.buying_price)), 0) as profit
-                                        FROM sale_records sr
-                                        LEFT JOIN sale_record_items sri ON sr.id = sri.sale_record_id
-                                        LEFT JOIN stock_items si ON sri.stock_item_id = si.id
-                                        WHERE sr.company_id = ?
-                                        AND DATE(sr.sale_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-                                        AND DATE(sr.sale_date) <= CURDATE()
-                                        GROUP BY DATE(sr.sale_date)
-                                        ORDER BY date DESC
-                                    ", [$companyId]);
-                                @endphp
-                                @php
                                     $previousProfit = null;
                                 @endphp
-                                @forelse($last30Days as $index => $day)
+                                @forelse($data['last_30_days'] as $index => $day)
                                     @php
                                         $currentProfit = (float) $day->profit;
                                         $isDecrease = $previousProfit !== null && $currentProfit < $previousProfit;
@@ -237,6 +220,7 @@
                                             <i class="fa fa-calendar" style="margin-right: 5px;"></i>
                                             {{ \Carbon\Carbon::parse($day->date)->format('M j, Y') }}
                                         </td>
+                                        <td class="text-right" style="padding: 10px 8px;">{{ number_format($day->sales) }}</td>
                                         <td class="text-right" style="padding: 10px 8px;">
                                             {{ \App\Support\Money::symbol() }} {{ number_format($day->revenue, 0) }}
                                         </td>
@@ -247,7 +231,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="3" class="text-center text-muted">No sales data available</td>
+                                        <td colspan="4" class="text-center text-muted">No sales data available</td>
                                     </tr>
                                 @endforelse
                             </tbody>

@@ -78,7 +78,7 @@ class SaleRecord extends Model
                 throw BusinessRuleException::make('company_required', 'A sale must belong to a company.');
             }
             if (empty($sale->sale_date)) {
-                $sale->sale_date = now();
+                $sale->sale_date = \App\Support\LocalDate::today((int) $sale->company_id); // the shop's day, not UTC
             }
             if (empty($sale->status)) {
                 $sale->status = 'Completed';
@@ -116,6 +116,11 @@ class SaleRecord extends Model
             if ($sale->voided_at !== null && ! $sale->isDirty('voided_at') && $sale->isDirty(['amount_paid', 'payment_status', 'total_amount'])) {
                 throw BusinessRuleException::make('sale_voided', 'A voided sale cannot be modified.');
             }
+            // Status is derived (Completed -> Voided / Refunded / Partially Refunded) and written only by
+            // SaleService::void and PaymentService::syncSaleTotals, which save quietly (no events).
+            if ($sale->isDirty('status') && ($sale->getOriginal('processed_at') !== null || $sale->voided_at !== null)) {
+                throw BusinessRuleException::make('status_read_only', 'The status of a recorded sale cannot be changed by hand. Void the sale or record a return instead.', ['status' => $sale->getOriginal('status')]);
+            }
             if ($sale->processed_at === null) {
                 return; // unprocessed header (admin form before items are saved) — SaleService will finalise it
             }
@@ -126,17 +131,25 @@ class SaleRecord extends Model
             }
 
             $originalPaid = round((float) $sale->getOriginal('amount_paid'), 2);
+            // What the customer owes after returns; "Paid" means paid up to this, never the gross total.
+            $net = max(0, round((float) $sale->getOriginal('total_amount') - (float) $sale->getOriginal('refunded_amount'), 2));
+            $owed = max(0, round($net - $originalPaid, 2));
             $target = null;
             if ($sale->isDirty('amount_paid')) {
                 $target = round((float) $sale->amount_paid, 2);
             } elseif ($sale->isDirty('payment_status') && $sale->payment_status === 'Paid') {
-                $target = round((float) $sale->total_amount, 2);
+                $target = $net;
             }
 
             if ($target !== null) {
                 $diff = round($target - $originalPaid, 2);
                 if ($diff < 0) {
                     throw BusinessRuleException::make('use_payment_reversal', 'Amount paid cannot be reduced directly. Reverse the payment instead.');
+                }
+                if ($diff > $owed) {
+                    throw BusinessRuleException::make('overpayment', $owed > 0
+                        ? 'Only '.number_format($owed, 2).' is still owed on this sale; amount paid can be at most '.number_format($net, 2).'.'
+                        : 'This sale is already fully paid.', ['balance' => $owed]);
                 }
                 $sale->pendingPaymentAmount = $diff;
             }

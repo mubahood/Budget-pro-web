@@ -287,7 +287,7 @@ class SyncApplier
             'customer_name' => $data['customer_name'] ?? 'Walk-in Customer',
             'customer_phone' => $data['customer_phone'] ?? null,
             'payment_method' => $data['payment_method'] ?? 'cash',
-            'sale_date' => $occurredAt,
+            'sale_date' => isset($data['occurred_at']) ? \App\Support\LocalDate::fromMs($companyId, (int) $data['occurred_at']) : null, // shop's local day
             'notes' => $data['notes'] ?? null,
             'provisional_number' => $data['provisional_number'] ?? null,
             'device_id' => $deviceId,
@@ -391,7 +391,7 @@ class SyncApplier
         $record = $this->stock->record([
             'client_uuid' => $uuid, 'stock_item_id' => (int) $product->id, 'type' => $type, 'quantity' => $qty,
             'description' => $data['description'] ?? $data['reason'] ?? null,
-            'date' => isset($data['occurred_at']) ? \Illuminate\Support\Carbon::createFromTimestampMs((int) $data['occurred_at']) : now(),
+            'date' => isset($data['occurred_at']) ? \App\Support\LocalDate::fromMs((int) $company->id, (int) $data['occurred_at']) : \App\Support\LocalDate::today((int) $company->id),
             'unit_cost' => $data['unit_cost'] ?? null, 'selling_price' => $data['unit_price'] ?? null,
             'reason' => $data['reason'] ?? null, 'image' => $data['image'] ?? null,
             'created_by_id' => $userId, 'allow_negative' => true, 'location_id' => self::deviceLocation((int) $company->id, $deviceId),

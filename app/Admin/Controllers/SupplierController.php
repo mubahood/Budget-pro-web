@@ -19,11 +19,24 @@ class SupplierController extends TenantAdminController
     protected function grid()
     {
         $grid = new Grid(new Supplier());
-        $grid->model()->where('company_id', Admin::user()->company_id)->orderBy('name');
+        $grid->model()->where('company_id', Admin::user()->company_id)->where('is_deleted', 0)->orderByDesc('balance')->orderBy('name');
         $grid->quickSearch('name', 'phone');
+        $grid->filter(function ($f) {
+            $f->disableIdFilter();
+            $f->like('name', 'Name');
+            $f->where(fn ($q) => $q->where('balance', '>', 0), 'We owe them', 'owed')->radio(['' => 'All suppliers', '1' => 'Only suppliers we owe']);
+        });
+        $grid->actions(function ($actions) {
+            $row = $actions->row;
+            if ((float) $row->balance > 0) {
+                $actions->prepend('<a class="btn btn-xs btn-primary" href="'.admin_url('suppliers/'.$row->id.'/pay').'"><i class="fa fa-money"></i> Pay</a> ');
+            }
+            $actions->prepend('<a class="btn btn-xs btn-default" href="'.admin_url('goods-receipts/create?supplier_id='.$row->id).'"><i class="fa fa-truck"></i> Receive stock</a> ');
+        });
+        $grid->setActionClass(\Encore\Admin\Grid\Displayers\Actions::class);
         $grid->column('name')->sortable();
         $grid->column('phone');
-        $grid->column('balance', 'We owe')->display(fn ($b) => Money::format($b))->sortable();
+        $grid->column('balance', 'We owe')->display(fn ($b) => (float) $b > 0 ? '<strong style="color:#c0392b">'.e(Money::format($b)).'</strong>' : e(Money::format($b)))->sortable();
         $grid->column('payment_terms_days', 'Terms (days)');
 
         return $grid;

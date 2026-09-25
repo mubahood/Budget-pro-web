@@ -184,12 +184,18 @@
                 </div>
                 
                 <div class="quick-category-form-group">
-                    <label for="category_parent">Parent Category</label>
+                    <label for="category_parent">Main category</label>
                     <select id="category_parent" name="parent_id">
-                        <option value="">-- None (Top Level) --</option>
+                        <option value="">-- None (this is a main category) --</option>
                         <!-- Options will be loaded via AJAX -->
                     </select>
-                    <div class="quick-category-hint">Optional: Select a parent category to create a subcategory</div>
+                    <div class="quick-category-hint">Products are filed under a sub-category: pick its main category here.</div>
+                </div>
+
+                <div class="quick-category-form-group" id="category_unit_group">
+                    <label for="category_unit">Unit</label>
+                    <input type="text" id="category_unit" name="measurement_unit" placeholder="e.g. pcs, kg, litres" value="pcs">
+                    <div class="quick-category-hint">How products in this sub-category are counted.</div>
                 </div>
                 
                 <div class="quick-category-form-group">
@@ -231,21 +237,21 @@ function closeQuickCategoryModal() {
     document.getElementById('quickCategoryForm').reset();
 }
 
-// Close modal when clicking outside
-window.onclick = function(event) {
+// Close modal when clicking outside (without replacing other pages' click handlers)
+window.addEventListener('click', function(event) {
     const modal = document.getElementById('quickCategoryModal');
     if (event.target === modal) {
         closeQuickCategoryModal();
     }
-}
+});
 
 // Load parent categories
 function loadParentCategories() {
-    fetch('{{ admin_url("api/stock-categories") }}')
+    fetch('{{ admin_url("ajax/categories") }}', {headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}})
         .then(response => response.json())
         .then(data => {
             const select = document.getElementById('category_parent');
-            select.innerHTML = '<option value="">-- None (Top Level) --</option>';
+            select.innerHTML = '<option value="">-- None (this is a main category) --</option>';
             
             if (data.data && Array.isArray(data.data)) {
                 data.data.forEach(category => {
@@ -272,18 +278,20 @@ document.getElementById('quickCategoryForm').addEventListener('submit', function
     const formData = new FormData(this);
     const data = Object.fromEntries(formData.entries());
     
-    fetch('{{ admin_url("api/stock-categories") }}', {
+    fetch('{{ admin_url("ajax/categories") }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': '{{ csrf_token() }}'
         },
         body: JSON.stringify(data)
     })
     .then(response => response.json())
     .then(result => {
-        if (result.status === 'success' || result.id) {
-            toastr.success('✅ Category created successfully!');
+        if (result.status === 'success' && result.id) {
+            toastr.success(data.parent_id ? 'Sub-category "' + result.name + '" added — search for it in the category box.' : 'Category "' + result.name + '" added. Now add a sub-category under it.');
             closeQuickCategoryModal();
             
             // Refresh category dropdowns on the page

@@ -19,13 +19,27 @@ class CustomerController extends TenantAdminController
     protected function grid()
     {
         $grid = new Grid(new Customer());
-        $grid->model()->where('company_id', Admin::user()->company_id)->orderByDesc('balance');
+        $grid->model()->where('company_id', Admin::user()->company_id)->where('is_deleted', 0)->orderByDesc('balance')->orderBy('name');
         $grid->quickSearch('name', 'phone');
+        // `customers?owes=1` (linked from the dashboard) lists only people who owe money.
         $grid->filter(function ($f) {
             $f->disableIdFilter();
             $f->like('name', 'Name');
-            $f->where(fn ($q) => $q->where('balance', '>', 0), 'Owes money', 'owes')->checkbox(['1' => 'Only customers with a balance']);
+            $f->where(fn ($q) => $q->where('balance', '>', 0), 'Owes money', 'owes')->radio(['' => 'Everyone', '1' => 'Only customers who owe']);
         });
+        if (request('owes')) {
+            $grid->expandFilter();
+        }
+        $grid->actions(function ($actions) {
+            $row = $actions->row;
+            if ((float) $row->balance > 0) {
+                $actions->prepend('<a class="btn btn-xs btn-success" href="'.admin_url('customers/'.$row->id.'/pay').'"><i class="fa fa-money"></i> Receive payment</a> ');
+                if ($row->phone) {
+                    $actions->prepend('<form method="post" action="'.admin_url('customers/'.$row->id.'/remind').'" style="display:inline" onsubmit="return confirm(\'Send a payment reminder to '.e(addslashes((string) $row->name)).'?\')">'.csrf_field().'<button class="btn btn-xs btn-warning"><i class="fa fa-bell"></i> Remind</button></form> ');
+                }
+            }
+        });
+        $grid->setActionClass(\Encore\Admin\Grid\Displayers\Actions::class);
         $grid->column('name', 'Name')->sortable();
         $grid->column('phone', 'Phone');
         $grid->column('balance', 'Owes')->display(fn ($b) => (float) $b > 0 ? '<strong style="color:#c0392b">'.Money::format($b).'</strong>' : Money::format($b))->sortable();

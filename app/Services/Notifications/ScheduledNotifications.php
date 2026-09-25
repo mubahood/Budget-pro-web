@@ -3,6 +3,7 @@
 namespace App\Services\Notifications;
 
 use App\Models\Company;
+use App\Support\SalesSource;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -55,29 +56,38 @@ class ScheduledNotifications
         return in_array($tz, timezone_identifiers_list(), true) ? $tz : 'Africa/Kampala';
     }
 
-    /** @return array{count: int, total: float, cash: float, credit: float, top: ?string} */
+    /**
+     * The shop's local day from the one list of sales (web/app sale documents and the old app's
+     * stand-alone sale movements), net of returns, voids left out. A fully returned sale is not a sale.
+     *
+     * @return array{count: int, total: float, cash: float, credit: float, top: ?string}
+     */
     public function daySales(Company $company, Carbon $local): array
     {
-        $from = $local->copy()->startOfDay()->utc();
-        $to = $local->copy()->endOfDay()->utc();
-        $sales = DB::table('sale_records')->where('company_id', $company->id)->where('status', '!=', 'Voided')->whereBetween('created_at', [$from, $to]);
-        $top = DB::table('sale_record_items')->join('sale_records', 'sale_records.id', '=', 'sale_record_items.sale_record_id')
-            ->where('sale_records.company_id', $company->id)->where('sale_records.status', '!=', 'Voided')->whereBetween('sale_records.created_at', [$from, $to])
-            ->groupBy('sale_record_items.item_name')->orderByRaw('SUM(sale_record_items.line_total) DESC')->value('sale_record_items.item_name');
+        \App\Support\LocalTime::prime((int) $company->id);
+        $day = $local->toDateString();
+        [$from, $bind] = SalesSource::sql((int) $company->id);
+        $t = DB::selectOne("SELECT COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS n, COALESCE(SUM(s.total_amount), 0) AS total,
+                COALESCE(SUM(LEAST(s.amount_paid, s.total_amount)), 0) AS cash, COALESCE(SUM(CASE WHEN s.balance > 0 THEN s.balance ELSE 0 END), 0) AS credit
+            FROM {$from} WHERE s.sale_date = ?", array_merge($bind, [$day]));
+        [$lines, $lineBind] = SalesSource::linesSql((int) $company->id);
+        $top = DB::selectOne("SELECT COALESCE(l.item_name, p.name) AS name, SUM(l.revenue) AS revenue
+            FROM {$lines} LEFT JOIN stock_items p ON p.id = l.stock_item_id
+            WHERE l.sale_date = ? GROUP BY COALESCE(l.item_name, p.name) HAVING SUM(l.revenue) > 0 ORDER BY revenue DESC LIMIT 1", array_merge($lineBind, [$day]));
 
         return [
-            'count' => (int) (clone $sales)->count(),
-            'total' => (float) (clone $sales)->sum('total_amount'),
-            'cash' => (float) (clone $sales)->sum('amount_paid'),
-            'credit' => (float) (clone $sales)->where('balance', '>', 0)->sum('balance'),
-            'top' => $top,
+            'count' => (int) $t->n,
+            'total' => round((float) $t->total, 2),
+            'cash' => round((float) $t->cash, 2),
+            'credit' => round((float) $t->credit, 2),
+            'top' => $top?->name,
         ];
     }
 
     private function dailySummary(Company $company, Carbon $local): void
     {
         $d = $this->daySales($company, $local);
-        $cur = $company->currency ?: 'UGX';
+        $cur = $company->currency ?: (string) config('saas.default_currency', 'UGX');
         $body = $d['count'] === 0
             ? 'No sales recorded today.'
             : "{$d['count']} sale".($d['count'] > 1 ? 's' : '').', '.number_format($d['total'])." {$cur} (paid ".number_format($d['cash']).', on credit '.number_format($d['credit']).').'

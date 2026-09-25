@@ -47,7 +47,8 @@ class SaleService
         }
 
         $sale = DB::transaction(function () use ($companyId, $userId, $data, $clientUuid) {
-            $saleDate = isset($data['sale_date']) ? Carbon::parse($data['sale_date']) : now();
+            // The shop's calendar day (a sale at 01:30 in Kampala is not yesterday's UTC date).
+            $saleDate = \App\Support\LocalDate::date($companyId, $data['sale_date'] ?? null);
             $period = $this->periodFor($companyId, $saleDate);
 
             $sale = new SaleRecord();
@@ -162,8 +163,10 @@ class SaleService
         return DB::transaction(function () use ($sale, $reason, $userId) {
             $movements = StockRecord::withoutGlobalScopes()->where('sale_record_id', $sale->id)->where('is_reversal', false)->get();
             foreach ($movements as $movement) {
-                $this->stock->reverse($movement, $reason ?? 'Sale voided', $userId);
+                $contra = $this->stock->reverse($movement, $reason ?? 'Sale voided', $userId);
+                $this->reverseLegacyIncome($movement, $contra, $reason, $userId);
             }
+            $this->payments->adoptPaidAtSale($sale); // money taken at the till before payment rows existed is handed back too
             $payments = Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->where('is_reversal', false)->get();
             foreach ($payments as $payment) {
                 $this->payments->reverse($payment, $reason ?? 'Sale voided', $userId);
@@ -183,6 +186,41 @@ class SaleService
 
             return $this->loaded($sale);
         });
+    }
+
+    /**
+     * Before Phase 0 every sale movement — also those of a sale document — posted its value as
+     * Income (financial_records source_type 'stock_record', source_id = movement id). Voiding such a
+     * sale takes that income back with a contra row, the same shape StockRecord::postLegacyLedger
+     * writes for a reversed stand-alone sale movement. Rows already reversed are left alone.
+     */
+    private function reverseLegacyIncome(StockRecord $movement, StockRecord $contra, ?string $reason, int $userId): void
+    {
+        $rows = \App\Models\FinancialRecord::withoutGlobalScopes()->where('company_id', $movement->company_id)
+            ->where('source_type', 'stock_record')->where('source_id', $movement->id)->where('is_reversal', false)->where('is_deleted', false)->where('amount', '!=', 0)
+            ->whereNotExists(fn ($q) => $q->from('financial_records as rv')->whereColumn('rv.reverses_id', 'financial_records.id'))
+            ->get();
+        foreach ($rows as $original) {
+            $row = new \App\Models\FinancialRecord();
+            $row->financial_category_id = $original->financial_category_id;
+            $row->company_id = $original->company_id;
+            $row->user_id = $userId;
+            $row->created_by_id = $userId;
+            $row->amount = -1 * (float) $original->amount;
+            $row->quantity = $original->quantity;
+            $row->type = $original->type;
+            $row->payment_method = $original->payment_method;
+            $row->recipient = (string) $original->recipient;
+            $row->receipt = (string) $original->receipt;
+            $row->date = \App\Support\LocalDate::today((int) $original->company_id);
+            $row->description = 'Reversal of sale movement #'.$movement->id.($reason ? ': '.$reason : '');
+            $row->source_type = 'stock_record';
+            $row->source_id = $contra->id;
+            $row->is_reversal = true;
+            $row->reverses_id = $original->id;
+            $row->currency = $original->currency;
+            $row->save();
+        }
     }
 
     public function addPayment(SaleRecord $sale, array $attrs, int $userId): Payment

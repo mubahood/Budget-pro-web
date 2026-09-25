@@ -66,12 +66,6 @@ Route::middleware('admin.auth')->group(function () {
         $pdf->loadHTML(view('reports.financial-report', ['data' => $rep, 'company' => $company]));
         $pdf->render();
 
-        $storePath = public_path('storage/files/report-'.$rep->id.'.pdf');
-        file_put_contents($storePath, $pdf->output());
-        $rep->file = 'files/report-'.$rep->id.'.pdf';
-        $rep->file_generated = 'Yes';
-        $rep->saveQuietly();
-
         return $pdf->stream();
     });
 
@@ -91,13 +85,7 @@ Route::middleware('admin.auth')->group(function () {
         $pdf->loadHTML(view('reports.budget-report', ['data' => $rep, 'company' => $company]));
         $pdf->render();
 
-        // Cache the rendered PDF to disk (matches the sibling financial-report
-        // route's pattern), but unlike FinancialReport, budget_programs has no
-        // `file` column -- writing one via saveQuietly() threw "Unknown column
-        // 'file'" and 500'd on every single request to this route.
-        $storePath = public_path('storage/files/budget-'.$rep->id.'.pdf');
-        file_put_contents($storePath, $pdf->output());
-
+        // Streamed only: a copy under public/storage with a guessable name was readable by anyone.
         return $pdf->stream();
     });
 
@@ -127,11 +115,7 @@ Route::middleware('admin.auth')->group(function () {
         $pdf->loadHTML(view('reports.sale-receipt', ['sale' => $sale, 'company' => $sale->company]));
         $pdf->render();
 
-        file_put_contents(public_path('storage/files/receipt-'.$sale->id.'.pdf'), $pdf->output());
-        $sale->receipt_pdf_url = 'files/receipt-'.$sale->id.'.pdf';
-        $sale->receipt_pdf_is_generated = 'Yes';
-        $sale->saveQuietly();
-
+        // Streamed only (no public copy: customers' receipts were readable by guessing the file name).
         return $pdf->stream('receipt-'.$sale->receipt_number.'.pdf');
     });
 
@@ -145,11 +129,7 @@ Route::middleware('admin.auth')->group(function () {
         $pdf->loadHTML(view('reports.sale-invoice', ['sale' => $sale, 'company' => $sale->company]));
         $pdf->render();
 
-        file_put_contents(public_path('storage/files/invoice-'.$sale->id.'.pdf'), $pdf->output());
-        $sale->invoice_pdf_url = 'files/invoice-'.$sale->id.'.pdf';
-        $sale->invoice_pdf_is_generated = 'Yes';
-        $sale->saveQuietly();
-
+        // Streamed only (no public copy: customers' invoices were readable by guessing the file name).
         return $pdf->stream('invoice-'.$sale->invoice_number.'.pdf');
     });
 });

@@ -22,7 +22,23 @@ class StockRecordController extends TenantAdminController
      *
      * @var string
      */
-    protected $title = 'Stock Out Records';
+    protected $title = 'Stock movements';
+
+    /** Movement types this screen may create. Sales are made on Sales / POS so they get a receipt and payment. */
+    public const FORM_TYPES = [
+        'Stock In' => 'Stock in (goods came in without a delivery note)',
+        'Adjustment In' => 'Count correction + (found more than recorded)',
+        'Adjustment Out' => 'Count correction − (found less than recorded)',
+        'Damage' => 'Damaged (write-off)',
+        'Expired' => 'Expired (disposal)',
+        'Lost' => 'Lost / stolen',
+        'Internal Use' => 'Used in the business',
+        'Return' => 'Customer return without a receipt (stock in)',
+        'Other' => 'Other (stock out)',
+    ];
+
+    /** Types that record what the stock cost (inbound goods). */
+    private const COSTED_TYPES = ['Stock In', 'Adjustment In'];
 
     /**
      * Make a grid builder.
@@ -42,6 +58,12 @@ class StockRecordController extends TenantAdminController
         if ($record === null) {
             abort(404);
         }
+        $document = StockRecordController::document($record);
+        if ($document !== null) {
+            admin_error('This movement cannot be undone here', e($document['advice']).' <a href="'.e($document['url']).'">Open the '.e($document['label']).'</a>.');
+
+            return redirect(admin_url('stock-records/'.$record->id));
+        }
         try {
             (new StockService())->reverse($record, request('reason', 'Reversed from admin'), (int) $u->id);
             admin_success('Movement reversed', 'A contra movement was recorded and stock was restored.');
@@ -58,16 +80,15 @@ class StockRecordController extends TenantAdminController
         $u = Admin::user();
 
         $grid->model()->where('company_id', $u->company_id)
+            ->with('reversal')
             ->orderBy('id', 'desc');
 
         // Filters
         $grid->filter(function ($filter) use ($u) {
             $filter->disableIdFilter();
 
-            $filter->like('name', __('Record Name'));
-
-            $filter->equal('stock_item_id', __('Stock Item'))
-                ->select(StockItem::where('company_id', $u->company_id)
+            $filter->equal('stock_item_id', __('Product'))
+                ->select(StockItem::where('company_id', $u->company_id)->where('is_deleted', 0)->orderBy('name')
                     ->pluck('name', 'id'));
 
             $filter->equal('stock_sub_category_id', __('Sub Category'))
@@ -78,15 +99,8 @@ class StockRecordController extends TenantAdminController
                 ->select(StockCategory::where('company_id', $u->company_id)
                     ->pluck('name', 'id'));
 
-            $filter->equal('type', __('Transaction Type'))
-                ->select([
-                    'Sale' => 'Sale',
-                    'Damage' => 'Damage',
-                    'Expired' => 'Expired',
-                    'Lost' => 'Lost',
-                    'Internal Use' => 'Internal Use',
-                    'Other' => 'Other',
-                ]);
+            $filter->equal('type', __('Type'))
+                ->select(array_combine(StockService::types(), StockService::types()));
 
             $filter->equal('created_by_id', __('Recorded By'))
                 ->select(User::where('company_id', $u->company_id)
@@ -114,19 +128,25 @@ class StockRecordController extends TenantAdminController
             $export->originalValue(['quantity', 'selling_price', 'total_sales', 'profit']);
         });
 
-        $grid->quickSearch('name')->placeholder('Search record name');
+        // `name` is only filled on newer rows, so search the product itself too.
+        $grid->quickSearch(function ($model, $query) {
+            $model->where(function ($q) use ($query) {
+                $q->where('name', 'like', '%'.$query.'%')
+                    ->orWhere('description', 'like', '%'.$query.'%')
+                    ->orWhereHas('stockItem', fn ($p) => $p->where('name', 'like', '%'.$query.'%')->orWhere('sku', 'like', '%'.$query.'%')->orWhere('barcode', $query));
+            });
+        })->placeholder('Search product, SKU or note');
         $grid->disableBatchActions();
 
         // Actions - View and Delete only (records are immutable)
         $grid->actions(function ($actions) {
             $row = $actions->row;
-            if (! $row->is_reversal) {
+            if (StockRecordController::reversible($row)) {
                 $url = admin_url('stock-records/'.$actions->getKey().'/reverse');
                 $actions->append('<a href="javascript:void(0)" class="btn btn-xs btn-warning" onclick="if(confirm(\'Reverse this movement? A contra movement will be recorded.\')){var f=document.createElement(\'form\');f.method=\'POST\';f.action=\''.$url.'\';f.innerHTML=\'<input type=hidden name=_token value=\''.csrf_token().'\'>\';document.body.appendChild(f);f.submit();}"><i class="fa fa-undo"></i> Reverse</a>');
             }
             $actions->disableEdit(); // Stock records cannot be edited (audit trail)
-            $actions->disableView(); // We'll use Show page instead
-            // Keep delete enabled (restores stock quantity)
+            $actions->disableDelete(); // corrections are reversals
         });
 
         // Fix action column dropdown display
@@ -183,22 +203,11 @@ class StockRecordController extends TenantAdminController
 
         // Transaction Type - color coded with dot
         $grid->column('type', __('Type'))
-            ->using([
-                'Sale' => 'Sale',
-                'Damage' => 'Damage',
-                'Expired' => 'Expired',
-                'Lost' => 'Lost',
-                'Internal Use' => 'Internal Use',
-                'Other' => 'Other',
-            ])
-            ->dot([
-                'Sale' => 'success',
-                'Damage' => 'danger',
-                'Expired' => 'warning',
-                'Lost' => 'info',
-                'Internal Use' => 'primary',
-                'Other' => 'default',
-            ])
+            ->display(function ($type) {
+                $style = StockService::isInbound((string) $type) ? 'success' : ($type === 'Sale' ? 'primary' : 'danger');
+
+                return "<span class='label label-{$style}'>".e((string) $type).'</span>'.($this->is_reversal ? ' <span class="label label-default">undo</span>' : '');
+            })
             ->sortable();
 
         // Quantity - clean display with unit, sortable, with totals
@@ -282,134 +291,58 @@ class StockRecordController extends TenantAdminController
      */
     protected function detail($id)
     {
-        $show = new Show(StockRecord::findOrFail($id));
+        $record = StockRecord::findOrFail($id);
+        $show = new Show($record);
+        $reversal = StockRecord::withoutGlobalScopes()->where('reverses_id', $record->id)->first();
 
         $show->panel()->tools(function ($tools) {
-            $tools->disableEdit(); // Stock records are immutable
+            $tools->disableEdit(); // Movements are append-only; corrections are reversals.
+            $tools->disableDelete();
         });
 
-        // Transaction Information
-        $show->divider('Transaction Information');
+        $show->field('status', __('Status'))->unescape()->as(function () use ($record, $reversal) {
+            if ($record->is_reversal) {
+                return '<span class="label label-default">Correction</span> This undoes <a href="'.admin_url('stock-records/'.$record->reverses_id).'">movement #'.$record->reverses_id.'</a>.';
+            }
+            if ($reversal) {
+                return '<span class="label label-warning">Reversed</span> Undone by <a href="'.admin_url('stock-records/'.$reversal->id).'">#'.$reversal->id.'</a> on '.$reversal->created_at->format('d M Y H:i').'.';
+            }
+            $document = StockRecordController::document($record);
+            $button = $document !== null
+                ? e($document['advice']).' <a href="'.e($document['url']).'">Open the '.e($document['label']).'</a>.'
+                : '<form method="post" action="'.admin_url('stock-records/'.$record->id.'/reverse').'" class="form-inline" style="display:inline" onsubmit="return confirm(\'Undo this movement? Stock will be put back.\')">'.csrf_field()
+                    .'<input name="reason" class="form-control input-sm" placeholder="Why? (e.g. recorded by mistake)" style="width:240px"> <button class="btn btn-sm btn-warning"><i class="fa fa-undo"></i> Undo this movement</button></form>';
 
-        $show->field('id', __('Record ID'));
+            return '<span class="label label-success">Active</span> '.$button;
+        });
 
-        $show->field('type', __('Transaction Type'))
-            ->using([
-                'Sale' => 'Sale (Revenue)',
-                'Damage' => 'Damage (Write-off)',
-                'Expired' => 'Expired (Disposal)',
-                'Lost' => 'Lost (Missing)',
-                'Internal Use' => 'Internal Use (Consumption)',
-                'Other' => 'Other',
-            ])
-            ->label([
-                'Sale' => 'success',
-                'Damage' => 'danger',
-                'Expired' => 'warning',
-                'Lost' => 'info',
-                'Internal Use' => 'primary',
-                'Other' => 'default',
-            ]);
+        $show->field('type', __('Type'))->unescape()->as(function ($type) {
+            $style = StockService::isInbound((string) $type) ? 'success' : ($type === 'Sale' ? 'primary' : 'danger');
 
-        $show->field('created_at', __('Transaction Date'))
-            ->as(function ($created_at) {
-                return date('l, d F Y \a\t h:i A', strtotime($created_at));
-            });
+            return "<span class='label label-{$style}'>".e((string) $type).'</span>';
+        });
+        $show->field('reason', __('Reason'))->as(fn ($reason) => $reason ? ucfirst(str_replace('_', ' ', $reason)) : '—');
+        $show->field('stock_item_id', __('Product'))->unescape()->as(function ($stockItemId) {
+            $item = StockItem::find($stockItemId);
 
-        // Stock Item Information
-        $show->divider('Stock Item Information');
+            return $item ? '<a href="'.admin_url('stock-items/'.$item->id).'">'.e($item->name).'</a> — in stock now: <strong>'.number_format((float) $item->current_quantity, 2).'</strong>' : 'Product deleted';
+        });
+        $show->field('quantity', __('Quantity'))->as(fn ($q) => number_format((float) $q, 2));
+        $show->field('quantity_delta', __('Stock change'))->unescape()->as(function ($d) {
+            $d = (float) $d;
 
-        $show->field('stock_item_id', __('Stock Item'))
-            ->as(function ($stock_item_id) {
-                $item = StockItem::find($stock_item_id);
-                if (! $item) {
-                    return 'N/A';
-                }
-
-                return $item->name.' (Current Stock: '.number_format($item->current_quantity, 2).' '.$item->stockSubCategory->measurement_unit.')';
-            });
-
-        $show->field('sku', __('Item SKU'));
-
-        $show->field('stock_sub_category_id', __('Sub Category'))
-            ->as(function ($stock_sub_category_id) {
-                $subcat = StockSubCategory::find($stock_sub_category_id);
-
-                return $subcat ? $subcat->name_text : 'N/A';
-            });
-
-        $show->field('stock_category_id', __('Category'))
-            ->as(function ($stock_category_id) {
-                $cat = StockCategory::find($stock_category_id);
-
-                return $cat ? $cat->name_text : 'N/A';
-            });
-
-        // Quantity & Pricing Details
-        $show->divider('Quantity & Pricing Details');
-
-        $show->field('quantity', __('Quantity'))
-            ->as(function ($quantity) {
-                return number_format((float) $quantity, 2).' '.($this->measurement_unit ?? 'units');
-            });
-
-        $show->field('measurement_unit', __('Unit of Measurement'));
-
-        $show->field('selling_price', __('Unit Selling Price ('.Money::symbol().')'))
-            ->as(function ($selling_price) {
-                return Money::symbol().' '.number_format((float) $selling_price, 2);
-            });
-
-        $show->field('total_sales', __('Total Transaction Value ('.Money::symbol().')'))
-            ->as(function ($total_sales) {
-                return Money::symbol().' '.number_format((float) $total_sales, 2);
-            });
-
-        $show->field('profit', __('Profit/Loss ('.Money::symbol().')'))
-            ->as(function ($profit) {
-                if ($this->type !== 'Sale') {
-                    return 'N/A (Not a sale)';
-                }
-
-                $profitValue = (float) $profit;
-                $indicator = $profitValue >= 0 ? '✓ Profit' : '✗ Loss';
-
-                return $indicator.': '.Money::symbol().' '.number_format(abs($profitValue), 2);
-            });
-
-        // Additional Information
-        $show->divider('Additional Information');
-
-        $show->field('description', __('Description / Remarks'))
-            ->as(function ($description) {
-                return $description ?: 'No description provided';
-            });
-
-        // Audit Trail
-        $show->divider('Audit Trail');
-
-        $show->field('created_by_id', __('Recorded By'))
-            ->as(function ($created_by_id) {
-                $user = User::find($created_by_id);
-
-                return $user ? $user->name : 'Unknown User';
-            });
-
-        $show->field('updated_at', __('Last Modified'))
-            ->as(function ($updated_at) {
-                return date('d M Y, h:i A', strtotime($updated_at));
-            });
-
-        // Warning about immutability
-        $show->field('_warning', __('Important Notice'))
-            ->as(function () {
-                return '<div class="alert alert-warning">
-                    <i class="fa fa-lock"></i>
-                    <strong>Immutable Record:</strong> Stock records cannot be edited to maintain audit trail integrity. 
-                    To correct this transaction, delete it (stock will be restored) and create a new record.
-                </div>';
-            })
-            ->unescape();
+            return $d == 0.0 ? '<span class="text-muted">No change</span>' : '<strong class="'.($d > 0 ? 'text-success' : 'text-danger').'">'.($d > 0 ? '+' : '').number_format($d, 2).'</strong>';
+        });
+        $show->field('selling_price', __('Unit price ('.Money::symbol().')'))->as(fn ($v) => number_format((float) $v));
+        $show->field('unit_cost', __('Unit cost ('.Money::symbol().')'))->as(fn ($v) => $v === null ? '—' : number_format((float) $v));
+        $show->field('total_sales', __('Value ('.Money::symbol().')'))->as(fn ($v) => number_format((float) $v));
+        if ($record->type === 'Sale') {
+            $show->field('profit', __('Profit ('.Money::symbol().')'))->unescape()->as(fn ($v) => '<span class="'.((float) $v >= 0 ? 'text-success' : 'text-danger').'">'.number_format((float) $v).'</span>');
+        }
+        $show->field('description', __('Notes'))->as(fn ($d) => $d ?: '—');
+        $show->field('image', __('Photo'))->image();
+        $show->field('created_by_id', __('Recorded by'))->as(fn ($uid) => User::find($uid)->name ?? '—');
+        $show->field('created_at', __('Recorded at'))->as(fn ($d) => $d ? \Illuminate\Support\Carbon::parse($d)->format('D d M Y, H:i') : '—');
 
         return $show;
     }
@@ -460,158 +393,153 @@ class StockRecordController extends TenantAdminController
             return $form;
         }
 
-        // CREATION MODE - Full form
+        // CREATION MODE
         $form->hidden('company_id')->default($u->company_id);
         $form->hidden('created_by_id')->default($u->id);
 
-        $form->html('<div class="alert alert-info">
+        $form->html('<div class="alert alert-info" style="margin-bottom:0">
             <i class="fa fa-info-circle"></i>
-            <strong>Important:</strong> Once created, stock records cannot be edited (audit trail protection). 
-            Ensure all details are correct before saving.
+            Use this for stock that changes <strong>outside a sale or delivery</strong>: damage, expiry, losses, own use and count corrections.
+            <ul style="margin:6px 0 0 0">
+                <li>Selling? Use <a href="'.admin_url('sale-records/create').'">Sales / POS</a> so there is a receipt and the money is recorded.</li>
+                <li>A delivery from a supplier? Use <a href="'.admin_url('goods-receipts/create').'">Receive stock</a> so the cost and what you owe are recorded.</li>
+                <li>A customer brought back goods from a sale? Open the sale and press <strong>Record return</strong>.</li>
+            </ul>
         </div>');
 
-        $form->divider('Stock Item Selection');
-
-        $sub_items_ajax_url = url('api/stock-items').'?company_id='.$u->company_id;
-        $form->select('stock_item_id', __('Stock Item'))
+        $form->select('stock_item_id', __('Product'))
+            ->config('minimumInputLength', 0)
+            ->ajax(admin_url('ajax/stock-items'))
             ->default(request('stock_item_id'))
-            ->ajax($sub_items_ajax_url)
-            ->options(function ($id) {
-                $item = StockItem::find($id);
+            ->options(function ($id) use ($u) {
+                $item = $id ? StockItem::withoutGlobalScopes()->where('company_id', $u->company_id)->find($id) : null;
                 if ($item) {
-                    $stockInfo = ' (Stock: '.number_format($item->current_quantity, 2).' '.$item->stockSubCategory->measurement_unit.')';
+                    $unit = $item->stockSubCategory?->measurement_unit;
 
-                    return [$item->id => $item->name.$stockInfo];
+                    return [$item->id => $item->name.' (in stock: '.StockItemController::qty($item->current_quantity).($unit ? ' '.$unit : '').')'];
                 }
 
                 return [];
             })
             ->rules('required')
             ->required()
-            ->help('Select the stock item for this transaction. Current stock levels are shown in parentheses.');
+            ->help('Type to search by name, SKU or barcode.');
 
-        $form->divider('Transaction Details');
-
-        $form->radio('type', __('Transaction Type'))
-            ->options([
-                'Sale' => 'Sale (stock out, revenue)',
-                'Stock In' => 'Stock In (purchase / restock)',
-                'Return' => 'Customer Return (stock in)',
-                'Adjustment In' => 'Adjustment In (count correction +)',
-                'Adjustment Out' => 'Adjustment Out (count correction −)',
-                'Damage' => 'Damage (write-off)',
-                'Expired' => 'Expired (disposal)',
-                'Lost' => 'Lost (missing)',
-                'Internal Use' => 'Internal Use (consumption)',
-                'Other' => 'Other (stock out)',
-            ])
-            ->rules('required')
+        $type = request('type');
+        $form->radio('type', __('What happened?'))
+            ->options(self::FORM_TYPES)
+            ->default(array_key_exists((string) $type, self::FORM_TYPES) ? $type : null)
+            ->rules('required|in:'.implode(',', array_keys(self::FORM_TYPES)))
             ->required()
-            ->default(request('type', 'Sale'))
-            ->help('Select the type of stock transaction');
-
-        $form->select('reason', __('Reason'))->options(array_combine(\App\Http\Controllers\Api\V1\StockRecordController::REASONS, array_map(fn ($r) => ucfirst(str_replace('_', ' ', $r)), \App\Http\Controllers\Api\V1\StockRecordController::REASONS)))
-            ->help('Why the stock changed (for adjustments)');
-        $form->image('image', __('Photo (optional)'))->move('files/adjustments')->uniqueName();
+            ->stacked()
+            ->when('in', self::COSTED_TYPES, function (Form $form) {
+                $form->decimal('unit_cost', __('Cost per piece ('.Money::symbol().')'))
+                    ->rules('nullable|numeric|min:0')
+                    ->help('Leave blank to use the product\'s buying price.');
+            })
+            ->help('Stock in, count correction + and customer return add stock; the others remove it.');
 
         $form->decimal('quantity', __('Quantity'))
-            ->rules('required|numeric|min:0.01')
+            ->rules('required|numeric|min:0.001')
             ->required()
-            ->default(1)
-            ->help('Enter the quantity being recorded (must be greater than 0)');
+            ->help('How many pieces (or kg, litres…) in the product\'s unit.');
 
-        $form->divider('Pricing Information (For Sales Only)');
+        $form->select('reason', __('Reason'))->options(array_combine(\App\Http\Controllers\Api\V1\StockRecordController::REASONS, array_map(fn ($r) => ucfirst(str_replace('_', ' ', $r)), \App\Http\Controllers\Api\V1\StockRecordController::REASONS)));
+        $form->textarea('description', __('Notes'))
+            ->rows(2)
+            ->placeholder('e.g. dropped by the delivery boy, batch 12 expired');
+        $form->image('image', __('Photo (optional)'))->move('files/adjustments')->uniqueName();
 
-        $form->currency('selling_price', __('Unit Selling Price ('.Money::symbol().')'))
-            ->symbol(Money::symbol())
-            ->rules('nullable|numeric|min:0')
-            ->help('Enter the selling price per unit (defaults to item selling price if left empty)');
-
-        $form->html('<div class="alert alert-info">
-            <i class="fa fa-calculator"></i>
-            <strong>Automatic Calculations:</strong>
-            <ul>
-                <li>Total Value = Quantity × Unit Price</li>
-                <li>Profit = Total Value - (Cost Price × Quantity)</li>
-                <li>Stock In, Return and Adjustment In <strong>add</strong> stock; every other type <strong>removes</strong> it</li>
-            </ul>
-        </div>');
-
-        $form->divider('Additional Information');
-
-        $form->textarea('description', __('Description / Remarks'))
-            ->rows(3)
-            ->help('Add any additional notes or remarks about this transaction')
-            ->placeholder('e.g., Customer name, reason for damage, batch number, etc.');
-
-        // Comprehensive validation before saving
-        $form->saving(function (Form $form) {
-            // Get form data
-            $stock_item_id = (int) $form->stock_item_id;
+        $form->saving(function (Form $form) use ($u) {
+            $type = (string) $form->type;
             $quantity = (float) $form->quantity;
-            $type = $form->type;
 
-            // Validate stock item exists
-            $stock_item = StockItem::find($stock_item_id);
-            if (! $stock_item) {
-                admin_error('Error', 'Selected stock item not found.');
+            if (! array_key_exists($type, self::FORM_TYPES)) {
+                admin_error('Choose what happened', $type === 'Sale'
+                    ? 'Sales are recorded on Sales / POS so there is a receipt and the money is counted.'
+                    : 'Pick one of the options, e.g. Damaged or Stock in.');
 
                 return back()->withInput();
             }
 
-            // Validate quantity
+            $stock_item = StockItem::withoutGlobalScopes()->where('company_id', $u->company_id)->find((int) $form->stock_item_id);
+            if (! $stock_item) {
+                admin_error('Error', 'Selected product not found.');
+
+                return back()->withInput();
+            }
+
             if ($quantity <= 0) {
                 admin_error('Error', 'Quantity must be greater than 0.');
 
                 return back()->withInput();
             }
 
-            // Validate sufficient stock (outbound movements only; products may opt into negative stock)
-            if (! StockService::isInbound((string) $type) && ! $stock_item->allow_negative_stock && $stock_item->current_quantity < $quantity) {
-                $available = number_format($stock_item->current_quantity, 2);
-                $requested = number_format($quantity, 2);
-                admin_error(
-                    'Insufficient Stock',
-                    "Cannot process transaction. Available: {$available}, Requested: {$requested}"
-                );
+            if (! StockService::isInbound($type) && ! $stock_item->allow_negative_stock && (float) $stock_item->current_quantity < $quantity) {
+                admin_error('Not enough stock', 'In stock: '.StockItemController::qty($stock_item->current_quantity).', you entered: '.StockItemController::qty($quantity).'.');
 
                 return back()->withInput();
             }
 
-            // Validate transaction type
-            $validTypes = StockService::types();
-            if (! in_array($type, $validTypes)) {
-                admin_error('Error', 'Invalid transaction type selected.');
+            // Cost only means something for goods coming in; blank stays null (the product's buying price is used).
+            if (! in_array($type, self::COSTED_TYPES, true) || $form->unit_cost === null || $form->unit_cost === '') {
+                $form->unit_cost = null;
+            } elseif ((float) $form->unit_cost < 0) {
+                admin_error('Error', 'Cost cannot be negative.');
 
                 return back()->withInput();
-            }
-
-            // Validate selling price if provided
-            if ($form->selling_price !== null) {
-                $selling_price = (float) $form->selling_price;
-                if ($selling_price < 0) {
-                    admin_error('Error', 'Selling price cannot be negative.');
-
-                    return back()->withInput();
-                }
             }
         });
 
         $form->saved(function (Form $form) {
             $record = $form->model();
-            $type = $record->type;
-            $quantity = number_format($record->quantity, 2);
             $item = StockItem::find($record->stock_item_id);
-            $itemName = $item ? $item->name : 'Unknown';
 
-            admin_success(
-                'Success',
-                "Stock record created successfully!<br>Transaction: {$type}<br>Item: {$itemName}<br>Quantity: {$quantity}<br>Stock has been updated automatically (".(StockService::isInbound((string) $type) ? 'added' : 'removed').').'
-            );
+            admin_success('Saved', e($record->type).': '.e($item->name ?? 'product').' '.((float) $record->quantity_delta > 0 ? '+' : '').StockItemController::qty($record->quantity_delta).'. In stock now: '.StockItemController::qty($item->current_quantity ?? 0).'.');
 
             return redirect(admin_url('stock-records'));
         });
 
         return $form;
+    }
+
+    /**
+     * The document a movement belongs to (sale, delivery, count…), which is where it must be
+     * corrected. Null for a stand-alone movement that may be reversed here.
+     *
+     * @return array{label: string, url: string, advice: string}|null
+     */
+    public static function document(StockRecord $record): ?array
+    {
+        $type = (string) $record->reference_type;
+        $refId = (int) $record->reference_id;
+        if ($record->sale_record_id || $type === 'sale' || $type === 'sale_return') {
+            $saleId = (int) ($record->sale_record_id ?: ($type === 'sale' ? $refId : \Illuminate\Support\Facades\DB::table('sale_returns')->where('id', $refId)->value('sale_record_id')));
+
+            return $type === 'sale_return'
+                ? ['label' => 'sale', 'url' => admin_url('sale-records/'.$saleId), 'advice' => 'This stock came back with a return on a sale, which also refunded money. It cannot be undone; record a new movement if the goods left again.']
+                : ['label' => 'sale', 'url' => admin_url('sale-records/'.$saleId), 'advice' => 'This movement is part of a sale. To undo it, void the sale or record a return on the sale page, so the money is corrected too.'];
+        }
+
+        return match ($type) {
+            'goods_receipt' => ['label' => 'delivery', 'url' => admin_url('goods-receipts/'.$refId), 'advice' => 'This stock came in with a delivery. To send goods back, record a return to the supplier so what you owe is corrected too.'],
+            'purchase_return' => ['label' => 'return to supplier', 'url' => admin_url('purchase-returns/'.$refId), 'advice' => 'This stock went back to a supplier. It cannot be undone here; receive the goods again if they came back.'],
+            'stock_transfer' => ['label' => 'transfers page', 'url' => admin_url('stock-transfers'), 'advice' => 'This stock moved between your locations. Make a transfer back instead.'],
+            'stock_take' => ['label' => 'stock count', 'url' => admin_url('stock-takes/'.$refId), 'advice' => 'This figure was set by a stock count. Count the product again to correct it.'],
+            \App\Console\Commands\ApplyOldWriteoffs::REFERENCE => ['label' => 'original write-off', 'url' => admin_url('stock-records/'.$refId), 'advice' => 'This is an automatic correction that applied an old write-off to the stock figure. Record a new movement if the figure is wrong.'],
+            default => null,
+        };
+    }
+
+    /** Whether the Reverse button applies: a stand-alone movement that is not itself an undo and not undone yet. */
+    public static function reversible(StockRecord $record): bool
+    {
+        if ($record->is_reversal || StockRecordController::document($record) !== null) {
+            return false;
+        }
+
+        return $record->relationLoaded('reversal')
+            ? $record->reversal === null
+            : ! StockRecord::withoutGlobalScopes()->where('reverses_id', $record->id)->exists();
     }
 }

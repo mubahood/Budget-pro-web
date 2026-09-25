@@ -1,578 +1,238 @@
 @php
-    $currency = $company->currency ?? config('saas.default_currency');
-    $d = $data;
+    $m = fn ($v) => \App\Support\Money::format($v, 0, $company->id);
+    $qty = fn ($v) => rtrim(rtrim(number_format((float) $v, 3), '0'), '.');
+    $chg = function ($now, $before) {
+        $c = \App\Services\Dashboard\DashboardService::change((float) $now, (float) $before);
+        if ($c === null) return '';
+        $up = $c >= 0;
+        return '<span class="bp-chg '.($up ? 'up' : 'down').'" title="Compared with the same length of time before"><i class="fa fa-arrow-'.($up ? 'up' : 'down').'"></i> '.number_format(abs($c), 0).'%</span>';
+    };
+    $q = fn (array $extra) => admin_url('/').'?'.http_build_query($extra);
 @endphp
-
 <style>
-    * {
-        font-size: 13px;
-    }
-    
-    .dash-container {
-        background: #f5f6fa;
-        padding: 15px;
-        margin: -15px;
-    }
-    
-    .dash-card {
-        background: #fff;
-        border: 1px solid #e1e4e8;
-        border-radius: 6px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    }
-    
-    .dash-header {
-        font-size: 14px;
-        font-weight: 700;
-        color: #2c3e50;
-        margin: 0 0 12px 0;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #3498db;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .stat-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin-bottom: 15px;
-    }
-    
-    .stat-box {
-        background: #fff;
-        border: 1px solid #e1e4e8;
-        border-left: 4px solid #3498db;
-        border-radius: 6px;
-        padding: 18px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    }
-    
-    .stat-box:nth-child(2) {
-        border-left-color: #2ecc71;
-    }
-    
-    .stat-box:nth-child(3) {
-        border-left-color: #3498db;
-    }
-    
-    .stat-box:nth-child(4) {
-        border-left-color: #27ae60;
-    }
-    
-    .stat-box:nth-child(5) {
-        border-left-color: #e67e22;
-    }
-    
-    .stat-box:nth-child(6) {
-        border-left-color: #9b59b6;
-    }
-    
-    .stat-label {
-        font-size: 11px;
-        color: #7f8c8d;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin: 0 0 5px 0;
-        font-weight: 600;
-    }
-    
-    .stat-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: #2c3e50;
-        margin: 5px 0;
-    }
-    
-    .stat-sub {
-        font-size: 11px;
-        color: #95a5a6;
-        margin: 3px 0 0 0;
-    }
-    
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-    }
-    
-    table th {
-        background: #34495e;
-        padding: 10px;
-        text-align: left;
-        font-weight: 700;
-        color: #fff;
-        border: none;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    table td {
-        padding: 10px;
-        border-bottom: 1px solid #e1e4e8;
-        color: #2c3e50;
-    }
-    
-    table tr:hover {
-        background: #f8f9fa;
-    }
-    
-    .badge {
-        display: inline-block;
-        padding: 4px 12px;
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        border-radius: 4px;
-    }
-    
-    .badge-danger {
-        background: #e74c3c;
-        color: #fff;
-    }
-    
-    .badge-warning {
-        background: #f39c12;
-        color: #fff;
-    }
-    
-    .text-primary {
-        color: #3498db;
-        font-weight: 700;
-    }
-    
-    .text-muted {
-        color: #7f8c8d;
-    }
-    
-    .text-success {
-        color: #27ae60;
-        font-weight: 700;
-    }
-    
-    .text-danger {
-        color: #e74c3c;
-        font-weight: 700;
-    }
-    
-    .text-warning {
-        color: #f39c12;
-        font-weight: 700;
-    }
-    
-    .grid-2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-    }
-    
-    .grid-3 {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 15px;
-    }
-    
-    @media (max-width: 768px) {
-        .grid-2, .grid-3 {
-            grid-template-columns: 1fr;
-        }
-    }
-    
-    .no-data {
-        text-align: center;
-        padding: 30px;
-        color: #999;
-        font-size: 12px;
-        font-style: italic;
-    }
+    .bp-dash { --bp-ink:#1f2d3d; --bp-muted:#6b7785; --bp-line:#e6e9ee; --bp-card:#fff; --bp-good:#16a34a; --bp-bad:#dc2626; --bp-accent:#1d6fb8; }
+    .bp-dash .bp-card { background:var(--bp-card); border:1px solid var(--bp-line); border-radius:8px; padding:14px 16px; margin-bottom:16px; }
+    .bp-dash .bp-card h4 { margin:0 0 10px; font-size:15px; font-weight:600; color:var(--bp-ink); }
+    .bp-dash .bp-card h4 small { color:var(--bp-muted); font-weight:400; }
+    .bp-dash .bp-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .bp-dash .bp-actions { display:flex; flex-wrap:wrap; gap:6px; }
+    .bp-dash .bp-actions .btn { border-radius:6px; }
+    .bp-dash .bp-ranges { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+    .bp-dash .bp-ranges a { padding:4px 10px; border-radius:14px; border:1px solid var(--bp-line); color:var(--bp-ink); background:#fff; font-size:13px; }
+    .bp-dash .bp-ranges a.active { background:var(--bp-accent); border-color:var(--bp-accent); color:#fff; }
+    .bp-dash .bp-ranges form { display:inline-flex; gap:4px; align-items:center; }
+    .bp-dash .bp-ranges input[type=date] { height:28px; padding:2px 6px; border:1px solid var(--bp-line); border-radius:6px; font-size:13px; }
+    .bp-dash .bp-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; }
+    .bp-dash .bp-kpi { background:#fff; border:1px solid var(--bp-line); border-radius:8px; padding:12px 14px; }
+    .bp-dash .bp-kpi .l { color:var(--bp-muted); font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+    .bp-dash .bp-kpi .v { font-size:22px; font-weight:700; color:var(--bp-ink); margin:4px 0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bp-dash .bp-kpi .s { font-size:12px; color:var(--bp-muted); }
+    .bp-dash .bp-kpi.good .v { color:var(--bp-good); } .bp-dash .bp-kpi.bad .v { color:var(--bp-bad); }
+    .bp-dash .bp-chg { font-size:12px; font-weight:600; margin-left:4px; } .bp-dash .bp-chg.up { color:var(--bp-good); } .bp-dash .bp-chg.down { color:var(--bp-bad); }
+    .bp-dash .bp-alert { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; margin-bottom:6px; font-size:13px; }
+    .bp-dash .bp-alert.danger { background:#fdecec; color:#8a1c1c; } .bp-dash .bp-alert.warning { background:#fff6e0; color:#7a5200; } .bp-dash .bp-alert.info { background:#e8f2fb; color:#154a78; }
+    .bp-dash .bp-alert .btn { white-space:nowrap; }
+    .bp-dash table.bp-t { width:100%; font-size:13px; } .bp-dash table.bp-t td, .bp-dash table.bp-t th { padding:6px 4px; border-bottom:1px solid var(--bp-line); vertical-align:middle; }
+    .bp-dash table.bp-t th { color:var(--bp-muted); font-weight:600; font-size:12px; }
+    .bp-dash .num { text-align:right; white-space:nowrap; }
+    .bp-dash .bp-empty { color:var(--bp-muted); padding:12px 0; text-align:center; }
+    .bp-dash .bp-bar { height:6px; background:#eef1f5; border-radius:3px; overflow:hidden; } .bp-dash .bp-bar > span { display:block; height:100%; background:var(--bp-accent); }
+    .bp-dash .bp-scroll { overflow-x:auto; }
+    @media (max-width: 767px) { .bp-dash .bp-kpi .v { font-size:18px; } .bp-dash .bp-toolbar { flex-direction:column; align-items:stretch; } }
 </style>
 
-<div class="dash-container">
-    
-    {{-- Sales Overview Stats --}}
-    <div class="stat-grid">
-        <div class="stat-box">
-            <p class="stat-label">Total Sales</p>
-            <h3 class="stat-value">{{ number_format($d['sales_overview']['total_sales'] ?? 0) }}</h3>
-            <p class="stat-sub">{{ number_format($d['sales_overview']['total_customers'] ?? 0) }} Customers</p>
+<div class="bp-dash">
+    <div class="bp-toolbar">
+        <div class="bp-actions">
+            @if($can['sell'])<a class="btn btn-success" href="{{ admin_url('sale-records/create') }}"><i class="fa fa-shopping-cart"></i> New sale</a>@endif
+            @if($can['restock'])<a class="btn btn-default" href="{{ admin_url('goods-receipts/create') }}"><i class="fa fa-truck"></i> Receive stock</a>@endif
+            @if($can['adjust'])<a class="btn btn-default" href="{{ admin_url('stock-records/create?type=Damage') }}"><i class="fa fa-chain-broken"></i> Damage / loss</a>@endif
+            @if($can['refund'])<a class="btn btn-default" href="{{ admin_url('sale-records') }}" title="Open the sale, then use Return items"><i class="fa fa-undo"></i> Customer return</a>@endif
+            @if($can['finance'])<a class="btn btn-default" href="{{ admin_url('financial-records/create') }}"><i class="fa fa-money"></i> Record expense</a>@endif
+            @if($can['sell'])<a class="btn btn-default" href="{{ admin_url('customers?owes=1') }}"><i class="fa fa-hand-o-right"></i> Receive debt payment</a>@endif
+            @if($can['products'])<a class="btn btn-default" href="{{ admin_url('stock-items/create') }}"><i class="fa fa-plus"></i> Product</a>@endif
         </div>
-        
-        <div class="stat-box">
-            <p class="stat-label">Total Revenue</p>
-            <h3 class="stat-value">{{ $currency }} {{ number_format($d['sales_overview']['total_revenue'] ?? 0) }}</h3>
-            <p class="stat-sub">All Sales</p>
+        @if($kpi)
+        <div class="bp-ranges">
+            @foreach($ranges as $key => $label)
+                <a href="{{ $q(['range' => $key]) }}" class="{{ $range['key'] === $key ? 'active' : '' }}">{{ $label }}</a>
+            @endforeach
+            <form method="get" action="{{ admin_url('/') }}">
+                <input type="hidden" name="range" value="custom">
+                <input type="date" name="from" value="{{ $range['from'] }}" aria-label="From">
+                <input type="date" name="to" value="{{ $range['to'] }}" aria-label="To">
+                <button class="btn btn-xs btn-primary">Show</button>
+            </form>
         </div>
-        
-        <div class="stat-box">
-            <p class="stat-label">Collected</p>
-            <h3 class="stat-value">{{ $currency }} {{ number_format($d['sales_overview']['total_collected'] ?? 0) }}</h3>
-            <p class="stat-sub">{{ number_format($d['sales_overview']['collection_rate'] ?? 0, 1) }}% Collection Rate</p>
-        </div>
-        
-        <div class="stat-box">
-            <p class="stat-label">Outstanding</p>
-            <h3 class="stat-value" style="color: #f44336;">{{ $currency }} {{ number_format($d['sales_overview']['total_outstanding'] ?? 0) }}</h3>
-            <p class="stat-sub">Pending Payment</p>
-        </div>
-        
-        <div class="stat-box">
-            <p class="stat-label">Avg Sale Value</p>
-            <h3 class="stat-value">{{ $currency }} {{ number_format($d['sales_overview']['avg_sale_value'] ?? 0) }}</h3>
-            <p class="stat-sub">Per Transaction</p>
-        </div>
-        
-        <div class="stat-box">
-            <p class="stat-label">Payment Status</p>
-            <h3 class="stat-value">{{ number_format($d['sales_overview']['paid_percentage'] ?? 0, 1) }}%</h3>
-            <p class="stat-sub">{{ $d['sales_overview']['paid_count'] ?? 0 }} Paid, {{ $d['sales_overview']['unpaid_count'] ?? 0 }} Unpaid</p>
-        </div>
-    </div>
-
-    {{-- Financial Overview --}}
-    <div class="dash-card">
-        <h4 class="dash-header">Financial Overview</h4>
-        <div class="stat-grid">
-            <div class="stat-box">
-                <p class="stat-label">Sales Income</p>
-                <h3 class="stat-value" style="color: #4caf50;">{{ $currency }} {{ number_format($d['financial_overview']['sales_income'] ?? 0) }}</h3>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Other Income</p>
-                <h3 class="stat-value" style="color: #4caf50;">{{ $currency }} {{ number_format($d['financial_overview']['other_income'] ?? 0) }}</h3>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Total Expenses</p>
-                <h3 class="stat-value" style="color: #f44336;">{{ $currency }} {{ number_format($d['financial_overview']['total_expense'] ?? 0) }}</h3>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Net Profit</p>
-                <h3 class="stat-value" style="color: {{ ($d['financial_overview']['net_profit'] ?? 0) >= 0 ? '#4caf50' : '#f44336' }};">
-                    {{ $currency }} {{ number_format($d['financial_overview']['net_profit'] ?? 0) }}
-                </h3>
-                <p class="stat-sub">{{ number_format($d['financial_overview']['profit_margin'] ?? 0, 1) }}% Margin</p>
-            </div>
-        </div>
-    </div>
-
-    {{-- Debts & Receivables --}}
-    @if(($d['debts_receivables']['total_debt'] ?? 0) > 0)
-    <div class="dash-card">
-        <h4 class="dash-header">Debts & Receivables</h4>
-        <div class="stat-grid">
-            <div class="stat-box">
-                <p class="stat-label">Total Debtors</p>
-                <h3 class="stat-value">{{ number_format($d['debts_receivables']['total_debtors'] ?? 0) }}</h3>
-                <p class="stat-sub">Customers with Balance</p>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Total Debt</p>
-                <h3 class="stat-value" style="color: #f44336;">{{ $currency }} {{ number_format($d['debts_receivables']['total_debt'] ?? 0) }}</h3>
-                <p class="stat-sub">Outstanding Amount</p>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Fully Unpaid</p>
-                <h3 class="stat-value" style="color: #f44336;">{{ $currency }} {{ number_format($d['debts_receivables']['fully_unpaid'] ?? 0) }}</h3>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Partial Unpaid</p>
-                <h3 class="stat-value" style="color: #ff9800;">{{ $currency }} {{ number_format($d['debts_receivables']['partial_unpaid'] ?? 0) }}</h3>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Overdue 30+ Days</p>
-                <h3 class="stat-value" style="color: #f44336;">{{ $currency }} {{ number_format($d['debts_receivables']['overdue_30'] ?? 0) }}</h3>
-            </div>
-            <div class="stat-box">
-                <p class="stat-label">Overdue 60+ Days</p>
-                <h3 class="stat-value" style="color: #d32f2f;">{{ $currency }} {{ number_format($d['debts_receivables']['overdue_60'] ?? 0) }}</h3>
-            </div>
-        </div>
-
-        {{-- Top Debtors --}}
-        @if(!empty($d['debts_receivables']['top_debtors']))
-        <h4 class="dash-header" style="margin-top: 20px;">Top Debtors</h4>
-        <table>
-            <thead>
-                <tr>
-                    <th>Customer</th>
-                    <th>Phone</th>
-                    <th>Sales</th>
-                    <th>Outstanding</th>
-                    <th>Last Sale</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($d['debts_receivables']['top_debtors'] as $debtor)
-                    <tr>
-                        <td><strong>{{ $debtor->customer_name }}</strong></td>
-                        <td>{{ $debtor->customer_phone ?? 'N/A' }}</td>
-                        <td>{{ $debtor->sale_count }}</td>
-                        <td class="text-primary">{{ $currency }} {{ number_format($debtor->total_debt) }}</td>
-                        <td>{{ \Carbon\Carbon::parse($debtor->last_sale_date)->format('d M Y') }}</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
         @endif
     </div>
+
+    @foreach($alerts as $a)
+        <div class="bp-alert {{ $a['level'] }}"><span><i class="fa fa-exclamation-circle"></i> {{ $a['text'] }}</span><a class="btn btn-xs btn-default" href="{{ $a['link'] }}">{{ $a['action'] }}</a></div>
+    @endforeach
+
+    @if($kpi)
+        <h4 style="margin:14px 0 8px;font-weight:600">{{ $range['label'] }} <small class="text-muted">{{ \Illuminate\Support\Carbon::parse($range['from'])->format('d M') }}@if($range['from'] !== $range['to']) – {{ \Illuminate\Support\Carbon::parse($range['to'])->format('d M Y') }}@else {{ \Illuminate\Support\Carbon::parse($range['to'])->format('Y') }}@endif</small></h4>
+        <div class="bp-kpis">
+            <div class="bp-kpi"><div class="l">Sales</div><div class="v">{{ $m($kpi['sales']) }}</div><div class="s">{{ $kpi['count'] }} sale(s) {!! $chg($kpi['sales'], $prev['sales']) !!}</div></div>
+            @if($can['profit'])
+                <div class="bp-kpi {{ $kpi['profit'] < 0 ? 'bad' : 'good' }}"><div class="l">Profit on sales</div><div class="v">{{ $m($kpi['profit']) }}</div><div class="s">{{ number_format($kpi['margin'], 1) }}% margin {!! $chg($kpi['profit'], $prev['profit']) !!}</div></div>
+            @endif
+            <div class="bp-kpi"><div class="l">Money received</div><div class="v">{{ $m($kpi['collected']) }}</div><div class="s">{{ $m($kpi['on_credit']) }} of these sales still unpaid</div></div>
+            @if($can['finance'] || $can['profit'])
+                <div class="bp-kpi"><div class="l">Expenses</div><div class="v">{{ $m($kpi['expenses']) }}</div><div class="s">Running costs (stock purchases not included) {!! $chg($kpi['expenses'], $prev['expenses']) !!}</div></div>
+            @endif
+            @if($can['profit'])
+                <div class="bp-kpi {{ $kpi['net'] < 0 ? 'bad' : 'good' }}"><div class="l">Net profit</div><div class="v">{{ $m($kpi['net']) }}</div><div class="s">Profit on sales − expenses</div></div>
+            @endif
+            <div class="bp-kpi"><div class="l">Returns</div><div class="v">{{ $m($kpi['returns_value']) }}</div><div class="s">{{ $kpi['returns_count'] }} return(s)</div></div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="bp-card">
+                    <h4>Sales{{ $can['profit'] ? ' & profit' : '' }} <small>{{ count($daily['labels']) > 0 ? $daily['labels'][0].' – '.end($daily['labels']) : '' }}</small></h4>
+                    <div style="position:relative;height:260px"><canvas id="bp-daily-chart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="bp-card">
+                    <h4>Money received by method</h4>
+                    @php $maxM = max(1, ...array_map(fn ($r) => abs($r['amount']), $methods ?: [['amount' => 1]])); @endphp
+                    @forelse($methods as $r)
+                        <div style="margin-bottom:10px">
+                            <div style="display:flex;justify-content:space-between;font-size:13px"><span>{{ $r['label'] }}</span><strong>{{ $m($r['amount']) }}</strong></div>
+                            <div class="bp-bar"><span style="width:{{ max(2, abs($r['amount']) / $maxM * 100) }}%"></span></div>
+                        </div>
+                    @empty
+                        <div class="bp-empty">No money received in this period.</div>
+                    @endforelse
+                    <a href="{{ admin_url('shifts') }}" style="font-size:12px">Shifts & cash-up →</a>
+                </div>
+                <div class="bp-card">
+                    <h4>Best sellers</h4>
+                    @forelse($top as $p)
+                        <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid #f1f3f6">
+                            <span>{{ $p->name ?: 'Deleted product' }} <small class="text-muted">× {{ $qty($p->quantity) }}</small></span><strong>{{ $m($p->revenue) }}</strong>
+                        </div>
+                    @empty
+                        <div class="bp-empty">No sales in this period.</div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
     @endif
 
-    {{-- Inventory Overview Stats --}}
-    <div class="dash-card">
-        <h4 class="dash-header">Inventory Overview</h4>
-        <div class="stat-grid">
-            <div class="stat-box">
-                <p class="stat-label">Total Items</p>
-                <h3 class="stat-value">{{ number_format($d['inventory_overview']['total_items'] ?? 0) }}</h3>
-                <p class="stat-sub">In Stock</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Stock Value</p>
-                <h3 class="stat-value">{{ $currency }} {{ number_format($d['inventory_overview']['total_stock_value'] ?? 0) }}</h3>
-                <p class="stat-sub">Buying Price</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Potential Revenue</p>
-                <h3 class="stat-value">{{ $currency }} {{ number_format($d['inventory_overview']['potential_revenue'] ?? 0) }}</h3>
-                <p class="stat-sub">Selling Price</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Potential Profit</p>
-                <h3 class="stat-value" style="color: #4caf50;">{{ $currency }} {{ number_format($d['inventory_overview']['potential_profit'] ?? 0) }}</h3>
-                <p class="stat-sub">If All Sold</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Out of Stock</p>
-                <h3 class="stat-value" style="color: #f44336;">{{ $d['inventory_overview']['out_of_stock'] ?? 0 }}</h3>
-                <p class="stat-sub">Items Depleted</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Low Stock</p>
-                <h3 class="stat-value" style="color: #ff9800;">{{ $d['inventory_overview']['low_stock'] ?? 0 }}</h3>
-                <p class="stat-sub">Need Restocking</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Avg Profit Margin</p>
-                <h3 class="stat-value">{{ number_format($d['inventory_overview']['avg_profit_margin'] ?? 0, 1) }}%</h3>
-                <p class="stat-sub">Per Item</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Month Sales</p>
-                <h3 class="stat-value">{{ $currency }} {{ number_format($d['inventory_overview']['month_sales'] ?? 0) }}</h3>
-                <p class="stat-sub">Current Month</p>
-            </div>
-            
-            <div class="stat-box">
-                <p class="stat-label">Best Category</p>
-                <h3 class="stat-value" style="font-size: 14px;">{{ $d['inventory_overview']['best_category'] ?? 'N/A' }}</h3>
-                <p class="stat-sub">{{ $d['inventory_overview']['best_category_sales'] ?? 0 }} Sales</p>
-            </div>
-        </div>
-    </div>
-
-    {{-- Sales Performance --}}
-    <div class="grid-2">
-        {{-- Quick Stats --}}
-        <div class="dash-card">
-            <h4 class="dash-header">Sales Performance</h4>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Period</th>
-                        <th>Revenue</th>
-                        <th>Collected</th>
-                        <th>Transactions</th>
-                        <th>Avg Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Today</strong></td>
-                        <td class="text-primary">{{ $currency }} {{ number_format($d['quick_stats']['today']['sales'] ?? 0) }}</td>
-                        <td class="text-success">{{ $currency }} {{ number_format($d['quick_stats']['today']['collected'] ?? 0) }}</td>
-                        <td>{{ $d['quick_stats']['today']['transactions'] ?? 0 }}</td>
-                        <td>{{ $currency }} {{ number_format($d['quick_stats']['today']['avg_value'] ?? 0) }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>This Week</strong></td>
-                        <td class="text-primary">{{ $currency }} {{ number_format($d['quick_stats']['week']['sales'] ?? 0) }}</td>
-                        <td class="text-success">{{ $currency }} {{ number_format($d['quick_stats']['week']['collected'] ?? 0) }}</td>
-                        <td>{{ $d['quick_stats']['week']['transactions'] ?? 0 }}</td>
-                        <td>{{ $currency }} {{ number_format($d['quick_stats']['week']['avg_value'] ?? 0) }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>This Month</strong></td>
-                        <td class="text-primary">{{ $currency }} {{ number_format($d['quick_stats']['month']['sales'] ?? 0) }}</td>
-                        <td class="text-success">{{ $currency }} {{ number_format($d['quick_stats']['month']['collected'] ?? 0) }}</td>
-                        <td>{{ $d['quick_stats']['month']['transactions'] ?? 0 }}</td>
-                        <td>{{ $currency }} {{ number_format($d['quick_stats']['month']['avg_value'] ?? 0) }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>This Year</strong></td>
-                        <td class="text-primary">{{ $currency }} {{ number_format($d['quick_stats']['year']['sales'] ?? 0) }}</td>
-                        <td class="text-success">{{ $currency }} {{ number_format($d['quick_stats']['year']['collected'] ?? 0) }}</td>
-                        <td>{{ $d['quick_stats']['year']['transactions'] ?? 0 }}</td>
-                        <td>{{ $currency }} {{ number_format($d['quick_stats']['year']['avg_value'] ?? 0) }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        {{-- Week Activity --}}
-        <div class="dash-card">
-            <h4 class="dash-header">This Week Activity</h4>
-            @if(!empty($d['stock_alerts']['week_activity']))
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Type</th>
-                            <th>Transactions</th>
-                            <th>Quantity</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($d['stock_alerts']['week_activity'] as $activity)
+    <div class="row">
+        @if($receivables)
+        <div class="col-md-6">
+            <div class="bp-card">
+                <h4>Customers owe you <small>{{ $m($receivables['total']) }}</small></h4>
+                @if($receivables['top'])
+                    <div class="bp-scroll"><table class="bp-t">
+                        @foreach($receivables['top'] as $c)
                             <tr>
-                                <td><strong>{{ ucfirst($activity->type) }}</strong></td>
-                                <td>{{ number_format($activity->count) }}</td>
-                                <td>{{ number_format($activity->total_quantity) }}</td>
-                                <td class="text-primary">{{ $currency }} {{ number_format($activity->total_value) }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            @else
-                <div class="no-data">No activity this week</div>
-            @endif
-        </div>
-    </div>
-
-    {{-- Top Products & Top Customers --}}
-    <div class="grid-2">
-        {{-- Top Selling Products --}}
-        <div class="dash-card">
-            <h4 class="dash-header">Top Selling Products</h4>
-            @if(!empty($d['top_performers']['products']))
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>SKU</th>
-                            <th>Sales</th>
-                            <th>Revenue</th>
-                            <th>Qty</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($d['top_performers']['products'] as $product)
-                            <tr>
-                                <td><strong>{{ $product->name }}</strong></td>
-                                <td>{{ $product->sku }}</td>
-                                <td>{{ $product->sale_count }}</td>
-                                <td class="text-primary">{{ $currency }} {{ number_format($product->total_revenue) }}</td>
-                                <td>{{ number_format($product->total_quantity) }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            @else
-                <div class="no-data">No sales data available</div>
-            @endif
-        </div>
-
-        {{-- Top Customers --}}
-        <div class="dash-card">
-            <h4 class="dash-header">Top Customers</h4>
-            @if(!empty($d['top_performers']['customers']))
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Customer</th>
-                            <th>Phone</th>
-                            <th>Purchases</th>
-                            <th>Total Spent</th>
-                            <th>Balance</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($d['top_performers']['customers'] as $customer)
-                            <tr>
-                                <td><strong>{{ $customer->customer_name }}</strong></td>
-                                <td>{{ $customer->customer_phone ?? 'N/A' }}</td>
-                                <td>{{ $customer->purchase_count }}</td>
-                                <td class="text-primary">{{ $currency }} {{ number_format($customer->total_spent) }}</td>
-                                <td style="color: {{ $customer->outstanding_balance > 0 ? '#f44336' : '#4caf50' }};">
-                                    {{ $currency }} {{ number_format($customer->outstanding_balance) }}
+                                <td><a href="{{ admin_url('customers/'.$c->id) }}">{{ $c->name }}</a><br><small class="text-muted">{{ $c->phone }}</small></td>
+                                <td class="num"><strong>{{ $m($c->balance) }}</strong></td>
+                                <td class="num">
+                                    @if($can['sell'])<a class="btn btn-xs btn-success" href="{{ admin_url('customers/'.$c->id.'/pay') }}">Receive</a>@endif
+                                    @if($c->phone)
+                                        <form method="post" action="{{ admin_url('customers/'.$c->id.'/remind') }}" style="display:inline" onsubmit="return confirm('Send {{ addslashes($c->name) }} a reminder?')">@csrf<button class="btn btn-xs btn-default" title="Send a reminder on WhatsApp/SMS"><i class="fa fa-bell"></i></button></form>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach
-                    </tbody>
-                </table>
-            @else
-                <div class="no-data">No customer data available</div>
-            @endif
+                    </table></div>
+                @endif
+                @if($receivables['unlinked_count'] > 0)
+                    <p style="font-size:12px;margin:8px 0 0" class="text-muted">{{ $m($receivables['unlinked_total']) }} is owed on {{ $receivables['unlinked_count'] }} sale(s) with no customer account. <a href="{{ admin_url('sale-records?payment_status[]=Unpaid&payment_status[]=Partial') }}">See them</a></p>
+                @endif
+                @if(! $receivables['top'] && $receivables['unlinked_count'] === 0)<div class="bp-empty">Nobody owes you money.</div>@endif
+            </div>
         </div>
-    </div>
-
-    {{-- Stock Alerts --}}
-    <div class="dash-card">
-        <h4 class="dash-header">Stock Alerts</h4>
-        @if(!empty($d['stock_alerts']['out_of_stock']) || !empty($d['stock_alerts']['low_stock']))
-            <table>
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>SKU</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($d['stock_alerts']['out_of_stock'] ?? [] as $item)
-                        <tr>
-                            <td>{{ $item->name }}</td>
-                            <td>{{ $item->sku }}</td>
-                            <td><span class="badge badge-danger">Out of Stock</span></td>
-                        </tr>
-                    @endforeach
-                    @foreach($d['stock_alerts']['low_stock'] ?? [] as $item)
-                        <tr>
-                            <td>{{ $item->name }}</td>
-                            <td>{{ $item->sku }}</td>
-                            <td><span class="badge badge-warning">Low ({{ $item->current_quantity }})</span></td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @else
-            <div class="no-data">No stock alerts</div>
+        @endif
+        @if($payables)
+        <div class="col-md-6">
+            <div class="bp-card">
+                <h4>You owe suppliers <small>{{ $m($payables['total']) }}</small></h4>
+                @forelse($payables['top'] as $s)
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid #f1f3f6">
+                        <span><a href="{{ admin_url('suppliers/'.$s->id) }}">{{ $s->name }}</a></span>
+                        <span><strong>{{ $m($s->balance) }}</strong> @if($can['restock'])<a class="btn btn-xs btn-default" href="{{ admin_url('suppliers/'.$s->id.'/pay') }}">Pay</a>@endif</span>
+                    </div>
+                @empty
+                    <div class="bp-empty">You owe no suppliers.</div>
+                @endforelse
+            </div>
+        </div>
         @endif
     </div>
 
-    {{-- System Info --}}
-    <div class="grid-3">
-        <div class="stat-box">
-            <p class="stat-label">Total Employees</p>
-            <h3 class="stat-value">{{ $d['employees_stats']['total_employees'] ?? 0 }}</h3>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="bp-card">
+                <h4>Recent sales <small><a href="{{ admin_url('sale-records') }}">All sales →</a></small></h4>
+                @if($recent)
+                    <div class="bp-scroll"><table class="bp-t">
+                        <tr><th>Receipt</th><th>Customer</th><th class="num">Total</th><th class="num">Owed</th><th></th></tr>
+                        @foreach($recent as $s)
+                            <tr @if($s->voided_at) style="opacity:.55" @endif>
+                                <td><a href="{{ admin_url('sale-records/'.$s->id) }}">{{ $s->receipt_number ?: '#'.$s->id }}</a><br><small class="text-muted">{{ \Illuminate\Support\Carbon::parse($s->created_at)->setTimezone(\App\Support\LocalTime::timezone($company))->format('d M H:i') }}</small></td>
+                                <td>{{ $s->customer_name ?: 'Walk-in' }}</td>
+                                <td class="num">{{ $m((float) $s->total_amount - (float) $s->refunded_amount) }}</td>
+                                <td class="num">@if($s->voided_at)<span class="label label-default">Voided</span>@elseif((float) $s->balance > 0)<span class="label label-warning">{{ $m($s->balance) }}</span>@else<span class="label label-success">Paid</span>@endif</td>
+                                <td class="num"><a href="{{ url('sale-receipt-pdf?id='.$s->id) }}" target="_blank" title="Receipt"><i class="fa fa-print"></i></a></td>
+                            </tr>
+                        @endforeach
+                    </table></div>
+                @else
+                    <div class="bp-empty">No sales yet. @if($can['sell'])<a href="{{ admin_url('sale-records/create') }}">Record your first sale</a>@endif</div>
+                @endif
+            </div>
         </div>
-        <div class="stat-box">
-            <p class="stat-label">Active Users</p>
-            <h3 class="stat-value">{{ $d['employees_stats']['active_employees'] ?? 0 }}</h3>
-        </div>
-        <div class="stat-box">
-            <p class="stat-label">Last Updated</p>
-            <h3 class="stat-value" style="font-size: 14px;">{{ now()->format('H:i') }}</h3>
-            <p class="stat-sub">{{ now()->format('d M Y') }}</p>
+        <div class="col-md-6">
+            <div class="bp-card">
+                <h4>Stock <small>{{ $stock['items'] }} product(s)</small></h4>
+                <div class="bp-kpis" style="grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));margin-bottom:10px">
+                    @if($can['profit'] || $can['restock'])<div class="bp-kpi"><div class="l">Value at cost</div><div class="v" style="font-size:17px">{{ $m($stock['cost_value']) }}</div></div>@endif
+                    <div class="bp-kpi"><div class="l">Value at price</div><div class="v" style="font-size:17px">{{ $m($stock['sale_value']) }}</div></div>
+                    <div class="bp-kpi {{ $stock['out_of_stock'] ? 'bad' : '' }}"><div class="l"><a href="{{ admin_url('stock-items?_scope_=out') }}">Out of stock</a></div><div class="v" style="font-size:17px">{{ $stock['out_of_stock'] }}</div></div>
+                    <div class="bp-kpi"><div class="l"><a href="{{ admin_url('stock-items?_scope_=low') }}">Running low</a></div><div class="v" style="font-size:17px">{{ $stock['low'] }}</div></div>
+                </div>
+                @if($stock['low_items'])
+                    <table class="bp-t">
+                        @foreach($stock['low_items'] as $i)
+                            <tr><td><a href="{{ admin_url('stock-items/'.$i->id) }}">{{ $i->name }}</a></td>
+                                <td class="num"><span class="label {{ (float) $i->current_quantity <= 0 ? 'label-danger' : 'label-warning' }}">{{ $qty($i->current_quantity) }} left</span></td>
+                                <td class="num">@if($can['restock'])<a class="btn btn-xs btn-default" href="{{ admin_url('goods-receipts/create') }}">Restock</a>@endif</td></tr>
+                        @endforeach
+                    </table>
+                    <a href="{{ admin_url('reorder-suggestions') }}" style="font-size:12px">Reorder list with suggested quantities →</a>
+                @else
+                    <div class="bp-empty">All products are well stocked.</div>
+                @endif
+            </div>
         </div>
     </div>
-
 </div>
+
+@if($kpi)
+<script>
+(function () {
+    var data = @json($daily), showProfit = @json((bool) $can['profit']);
+    function draw() {
+        var el = document.getElementById('bp-daily-chart');
+        if (!el || !window.Chart) return;
+        if (el._chart) el._chart.destroy();
+        var sets = [{ type: 'bar', label: 'Sales', data: data.sales, backgroundColor: 'rgba(29,111,184,.75)', borderRadius: 3 }];
+        if (showProfit) sets.push({ type: 'line', label: 'Profit', data: data.profit, borderColor: '#16a34a', backgroundColor: '#16a34a', tension: .3, pointRadius: 2 });
+        el._chart = new Chart(el, { data: { labels: data.labels, datasets: sets }, options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + Number(c.raw).toLocaleString() + ' (' + data.count[c.dataIndex] + ' sales)'; } } } },
+            scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return Number(v).toLocaleString(); } } } } } });
+    }
+    if (window.Chart) { draw(); } else {
+        var s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js'; s.onload = draw; document.head.appendChild(s);
+    }
+})();
+</script>
+@endif

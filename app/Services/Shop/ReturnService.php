@@ -95,7 +95,9 @@ class ReturnService
             $sale->refunded_amount = round((float) $sale->refunded_amount + $value, 2);
             $sale->saveQuietlySynced();
 
-            // Refund only what was actually paid beyond the reduced net.
+            // Refund only what was actually paid beyond the reduced net (money taken at the till on
+            // sales from before payment rows existed counts as paid).
+            $this->payments->adoptPaidAtSale($sale);
             $net = max(0, round((float) $sale->total_amount - (float) $sale->refunded_amount, 2));
             $paid = round((float) \App\Models\Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->sum('amount'), 2);
             $refund = max(0, round($paid - $net, 2));

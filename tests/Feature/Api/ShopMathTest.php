@@ -241,6 +241,12 @@ class ShopMathTest extends ApiTestCase
         $again = $this->postJson('/api/v1/stock-records/'.$out->json('data.id').'/reverse', [], $h)->assertStatus(201);
         $this->assertSame($contra->json('data.id'), $again->json('data.id'));
         $this->assertSame(15.0, $this->qty($h, $item));
+
+        // A sale's movement is undone by voiding or returning on the sale, never on its own.
+        $sale = $this->postJson('/api/v1/sales/checkout', ['items' => [['stock_item_id' => $item, 'quantity' => 1]], 'amount_paid' => 100000], $h)->assertStatus(201);
+        $saleMove = \App\Models\StockRecord::withoutGlobalScopes()->where('sale_record_id', $sale->json('data.id'))->value('id');
+        $this->postJson('/api/v1/stock-records/'.$saleMove.'/reverse', [], $h)->assertStatus(422)->assertJsonPath('errors.code', 'movement_belongs_to_document');
+        $this->assertSame(14.0, $this->qty($h, $item));
     }
 
     public function test_sale_dated_in_closed_period_is_refused_and_duplicate_category_is_422(): void

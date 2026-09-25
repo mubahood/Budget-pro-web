@@ -46,6 +46,8 @@ return [
         'budget' => ['budget-*', 'contribution-records', 'handover-records', 'data-exports'],
         'poultry' => ['poultry-*'],
         'finance' => ['financial-*'],
+        // Ping Pin (phone tracking) is a separate product: shown only to companies that use it (see AdminMenu::modulesOn).
+        'pingpin' => ['tracked-devices*', 'tracking-map*', 'device-*'],
     ],
 
     // Pack sizes created for a new shop (name, abbreviation, pieces per pack); owners add their own.

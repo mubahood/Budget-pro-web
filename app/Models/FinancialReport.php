@@ -46,8 +46,13 @@ class FinancialReport extends Model
     {
         parent::boot();
         //creating
+        // Figures first; the PDF needs the id, so it is built once the row exists.
         static::creating(function ($model) {
-            $model = self::prepare($model);
+            self::prepare($model, false);
+        });
+        static::created(function ($model) {
+            self::writePdf($model);
+            $model->saveQuietly();
         });
         //updating
         static::updating(function ($model) {
@@ -61,7 +66,7 @@ class FinancialReport extends Model
     }
 
     //static prepare
-    public static function prepare($model)
+    public static function prepare($model, bool $withPdf = true)
     {
         $user = User::find($model->user_id);
         if ($user == null) {
@@ -171,25 +176,30 @@ class FinancialReport extends Model
             DB::update("UPDATE $table_name SET do_generate = 'No' WHERE id = ?", [$model->id]);
         }
 
-        $pdf = App::make('dompdf.wrapper');
-        $company = Company::find($user->company_id);
-        if ($company->logo != null) {
-        } else {
-            $company->logo = null;
+        if ($withPdf) {
+            self::writePdf($model);
         }
-        $pdf->loadHTML(view('reports.financial-report', [
-            'data' => $model,
-            'company' => $company,
-        ]));
-
-        $pdf->render();
-        $output = $pdf->output();
-        $store_file_path = public_path('storage/files/report-'.$model->id.'.pdf');
-        file_put_contents($store_file_path, $output);
-        $model->file = 'files/report-'.$model->id.'.pdf';
-        $model->file_generated = 'Yes';
 
         return $model;
+    }
+
+    /** One file per report with an unguessable name (reports were once all written to "report-.pdf"). */
+    public static function writePdf(self $model): void
+    {
+        $pdf = App::make('dompdf.wrapper');
+        $pdf->loadHTML(view('reports.financial-report', [
+            'data' => $model,
+            'company' => Company::withoutGlobalScopes()->find(User::find($model->user_id)?->company_id),
+        ]));
+        $pdf->render();
+        $name = 'files/report-'.$model->id.'-'.\Illuminate\Support\Str::random(24).'.pdf';
+        file_put_contents(public_path('storage/'.$name), $pdf->output());
+        $old = (string) $model->getOriginal('file');
+        if ($old !== '' && $old !== $name && str_starts_with($old, 'files/report-')) {
+            @unlink(public_path('storage/'.$old));
+        }
+        $model->file = $name;
+        $model->file_generated = 'Yes';
     }
 
     //belongs to company

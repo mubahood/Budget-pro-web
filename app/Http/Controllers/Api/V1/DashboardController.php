@@ -14,29 +14,32 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $companyId = (int) $request->user()->company_id;
-        $monthStart = now()->startOfMonth();
+        \App\Support\LocalTime::prime($companyId);
 
+        $products = fn () => DB::table('stock_items')->where('company_id', $companyId)->where('is_deleted', 0);
         $inventory = [
-            'stock_item_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->count(),
-            'low_stock_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->whereRaw('current_quantity <= COALESCE(min_stock, ?)', [(float) config('saas.low_stock_threshold')])->count(),
-            'out_of_stock_count' => (int) DB::table('stock_items')->where('company_id', $companyId)->where('current_quantity', '<=', 0)->count(),
+            'stock_item_count' => (int) $products()->count(),
+            'low_stock_count' => (int) $products()->whereRaw('current_quantity <= COALESCE(min_stock, ?)', [(float) config('saas.low_stock_threshold')])->count(),
+            'out_of_stock_count' => (int) $products()->where('current_quantity', '<=', 0)->count(),
         ];
 
-        $salesMonth = DB::table('sale_records')
-            ->where('company_id', $companyId)
-            ->where('sale_date', '>=', $monthStart)
-            ->selectRaw('COUNT(*) as cnt, COALESCE(SUM(total_amount),0) as revenue, COALESCE(SUM(amount_paid),0) as collected, COALESCE(SUM(balance),0) as outstanding')
-            ->first();
+        // Every sale this calendar month in the shop's timezone: web/app sale documents and old-app
+        // sale movements, net of returns, voids left out. A fully returned sale is not counted.
+        [$from, $bind] = \App\Support\SalesSource::sql($companyId);
+        $salesMonth = DB::selectOne("SELECT COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS cnt, COALESCE(SUM(s.total_amount), 0) AS revenue,
+                COALESCE(SUM(LEAST(s.amount_paid, s.total_amount)), 0) AS collected, COALESCE(SUM(CASE WHEN s.balance > 0 THEN s.balance ELSE 0 END), 0) AS outstanding
+            FROM {$from} WHERE s.sale_date >= DATE_FORMAT(@local_today, '%Y-%m-01') AND s.sale_date <= @local_today", $bind);
 
         $sales = [
             'this_month_count' => (int) ($salesMonth->cnt ?? 0),
-            'this_month_revenue' => (float) ($salesMonth->revenue ?? 0),
-            'this_month_collected' => (float) ($salesMonth->collected ?? 0),
-            'this_month_outstanding' => (float) ($salesMonth->outstanding ?? 0),
+            'this_month_revenue' => round((float) ($salesMonth->revenue ?? 0), 2),
+            'this_month_collected' => round((float) ($salesMonth->collected ?? 0), 2),
+            'this_month_outstanding' => round((float) ($salesMonth->outstanding ?? 0), 2),
         ];
 
         $finance = DB::table('financial_records')
             ->where('company_id', $companyId)
+            ->where('is_deleted', 0)
             ->selectRaw("COALESCE(SUM(CASE WHEN type='Income' THEN amount ELSE 0 END),0) as income, COALESCE(SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END),0) as expense")
             ->first();
 

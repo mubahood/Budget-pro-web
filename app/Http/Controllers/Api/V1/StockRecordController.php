@@ -96,6 +96,10 @@ class StockRecordController extends BaseCrudController
             return $this->notFound('Stock record not found.');
         }
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+        // Movements that belong to a document (sale, delivery, transfer, count…) are undone on that document.
+        if ($doc = \App\Admin\Controllers\StockRecordController::document($record)) {
+            return $this->error($doc['advice'], 422, ['code' => 'movement_belongs_to_document', 'document' => $doc['label']]);
+        }
 
         try {
             $contra = (new StockService())->reverse($record, $data['reason'] ?? null, (int) $request->user()->id);

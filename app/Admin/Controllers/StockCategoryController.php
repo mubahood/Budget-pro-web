@@ -27,7 +27,7 @@ class StockCategoryController extends TenantAdminController
         $grid = new Grid(new StockCategory());
 
         $u = Admin::user();
-        $grid->model()->where('company_id', $u->company_id);
+        $grid->model()->where('company_id', $u->company_id)->where('is_deleted', 0);
         $grid->disableBatchActions();
         $grid->quickSearch('name', 'description', 'status');
 
