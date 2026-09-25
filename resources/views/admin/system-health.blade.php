@@ -27,6 +27,8 @@
             <p>Largest pull lag (changes behind): <strong>{{ $h['sync']['max_pull_lag'] }}</strong></p>
             <p>Messages (24 h): @forelse($h['messages_24h'] as $s => $n){{ $s }} {{ $n }} · @empty none @endforelse</p>
             <p>Shops: {{ $h['tenants']['companies'] }} · deletions scheduled: {{ $h['tenants']['deletions_scheduled'] }}</p>
+            <p>Old app (14 days): <strong>{{ $h['legacy']['legacy_percent'] }}%</strong> of active shops · {{ $h['legacy']['legacy_calls'] }} calls
+                {!! $h['legacy']['ready'] ? '<span class="label label-success">ready to retire</span>' : '<span class="label label-default">keep</span>' !!}</p>
         </div></div>
         <div class="box"><div class="box-header"><h3 class="box-title">Backups & drills</h3></div><div class="box-body no-padding"><table class="table table-condensed">
             @forelse($h['backups'] as $b)

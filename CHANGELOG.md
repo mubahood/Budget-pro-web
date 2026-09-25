@@ -102,6 +102,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Role-aware POS checks, shop menu, cost prices and product edits (cached permissions, offline); module-aware home; getting-started card.
 - English, Kiswahili and Luganda; app renamed **Budget Pro** 2.0.0; 3 value slides; Play listing text (en, sw). 79 Flutter tests; release APK builds.
 
+### Phase 4 — Purchasing, reports, analytics, hardening
+
+#### Backend (cda8c7a … )
+- **P4-1** Purchase orders with line items and a simple lifecycle (draft → sent → partially received → received / cancelled), sent as WhatsApp text or through the messaging provider, received against the order with partial deliveries and cost variances; returns to suppliers (stock out at cost, supplier balance and statement, cash refunds as income); supplier lead times; API and web screens.
+- **P4-2** Thirteen reports from one service (sales by day/cashier/payment/customer/category/product, profit and margin, stock value, low and dead stock, best sellers, customer aging, supplier balances, cash-up, VAT, purchases, movement audit, expiry) as JSON, PDF and Excel (dependency-free writer); web Reports page; each report gated by role.
+- **P4-3** Nightly `product_stats` (7/30/90-day sales, cover), explainable reorder list turned into draft purchase orders per supplier, stock-out forecast behind the plan's `forecasting` flag; the old EOQ forecasting/auto-reorder code and its empty tables removed.
+- **P4-4** Locations with stock per location (existing stock backfilled into "Main shop"), transfers, phones assigned to a location, per-location checkout/sync/receiving; batch and expiry tracking with First-Expiry-First-Out picking, voids restoring the same batches, batches travelling with transfers, expiries in the morning digest. Multi-location is a Business-plan feature. Property test over random movement sequences.
+- **P4-5** Fresh installs work (`migrate` from an empty database runs every migration; stubbed budget migrations guarded); 39 foreign keys and status checks added where the data already allows (`schema:integrity` reports the rest), statuses also guarded in the models; uniqueness on online creates plus a duplicate finder and merge for data created offline; `DatabaseSeeder` for fresh installs; default pack units per business type.
+- **P4-6** Request ids in every response and log line; grouped error tracking (Sentry when configured); platform System health page (errors, queue, scheduler, sync, messages, backups, old-app share); nightly verified backups and a weekly restore drill; owners download all their data or schedule deletion with a 30-day grace.
+- **P4-7** OpenAPI 3.1 generated from routes and validation rules at `/api/docs`, Postman collection, eight ADRs, owner quick start and runbooks (sync incidents, backups).
+- **P4-8** Legacy retirement machinery: every pre-v1 call counted, `legacy:status` adoption report, `LEGACY_API_ENABLED` switch that answers "please update", minimum app version (426) for new apps; v1 `members` and `financial-reports` so the new app needs no legacy route.
+- Fixes found on the way: team list showed every member as manager (partial select without company_id); concurrency test cleanup order (caught by the new foreign keys).
+
+#### Mobile (budget-pro-mobo 0b805ec, 81df413)
+- Reports on the phone: today/week/month from the local database (sales by day/payment/product, profit, what customers owe), any report and range from the server.
+- No legacy calls left; `X-App-Version` on every request and a full-screen "Please update" on 426.
+
 ---
 
 ## [2.0.0] - 2025-12-09

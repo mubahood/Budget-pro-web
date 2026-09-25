@@ -51,6 +51,9 @@ class Permissions
 
     private static function resolve(User $user): array
     {
+        if ($user->company_id === null && $user->id) {
+            $user->company_id = DB::table('admin_users')->where('id', $user->id)->value('company_id'); // partial selects
+        }
         $key = $user->id.':'.$user->company_id;
         if (isset(self::$cache[$key])) {
             return self::$cache[$key];

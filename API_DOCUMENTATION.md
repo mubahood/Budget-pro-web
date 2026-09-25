@@ -324,6 +324,26 @@ Lifecycle (hourly): trial reminders at 3 and 1 days → trial ends → **Free pl
 | POST | `/onboarding/checklist/dismiss` | |
 | PUT | `/company/modules` | `{ modules: [shop, finance, budget, poultry] }` — hidden modules keep their data |
 
+## Purchasing, reports, locations, data (Phase 4)
+
+**Full reference:** `GET /api/docs` (Swagger UI) and `GET /api/openapi.json` — generated from the routes and
+their validation rules; Postman collection in `docs/postman/budget-pro-v1.postman_collection.json`
+(`php artisan api:docs` regenerates both).
+
+| Area | Endpoints |
+|---|---|
+| Purchase orders | CRUD `/purchase-orders` (draft only edits/deletes) · `POST /{id}/send {via_api?}` → `{text, whatsapp_url}` · `POST /{id}/receive {items:[{purchase_order_item_id, quantity, unit_cost?, batch_number?, expiry_date?}], amount_paid?, invoice_ref?}` (partials; `progress.cost_variance`) · `POST /{id}/cancel` |
+| Returns to suppliers | `POST /purchase-returns {supplier_id?, reason?, refund_amount?, items:[{stock_item_id, quantity, unit_cost?}]}` — stock out at cost, supplier balance down, cash refund as income |
+| Reorder list | `GET /reorder-suggestions` (why, suggested quantity, supplier, `runs_out_in_days` with the forecasting feature) · `POST /reorder-suggestions/orders` → one draft PO per supplier |
+| Reports | `GET /reports` (those your role may open) · `GET /reports/{name}?from&to&group_by&days&limit&format=json\|pdf\|xlsx` — sales_summary, profit, stock_valuation, low_stock, dead_stock, fast_movers, customer_aging, supplier_balances, cash_up, vat_summary, purchase_summary, movement_audit, expiry |
+| Locations | `GET/POST /locations`, `PUT /locations/{id}` (Business plan: `multi_location`) · `GET /stock-levels?stock_item_id` · `GET/POST /stock-transfers` · `PUT /devices/{id}/location` · checkout and goods receipts take `location_id` |
+| Batches | products with `track_batches`; goods-receipt lines take `batch_number` + `expiry_date`; sales pick First-Expiry-First-Out; voids restore the same batches |
+| Duplicates | `GET /duplicates` · `POST /duplicates/merge {kind, keep_id, merge_ids[]}` (customers, suppliers, categories, units, products) |
+| Your data | `GET /company/data-requests` · `POST /company/export` · `GET /company/exports/{id}/download` · `POST /company/delete {password}` (30-day grace) · `POST /company/delete/cancel` |
+| Misc | `GET /members` (pickers) · CRUD `/financial-reports` · `GET /app/version` |
+
+Headers: responses carry `X-Request-Id`; apps send `X-App-Version` and get **426 `upgrade_required`** when below `MOBILE_MIN_VERSION`. Legacy pre-v1 routes are counted (`legacy:status`) and answer 426 "please update" once `LEGACY_API_ENABLED=false`.
+
 ---
 
 _Legacy note: the pre-v1 endpoints (`/api/api/{model}`, `/api/mobile/*`, param-based

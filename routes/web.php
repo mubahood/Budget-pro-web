@@ -26,6 +26,14 @@ use Illuminate\Support\Facades\Route;
 Route::get('payment/callback', \App\Http\Controllers\PaymentCallbackController::class)->name('payment.callback');
 
 // Registration (public)
+// API reference (plan A8, P4-7): generated from the routes and their validation rules.
+Route::get('api/openapi.json', function () {
+    $spec = \Illuminate\Support\Facades\Cache::remember('openapi:'.filemtime(base_path('routes/api.php')), 3600, fn () => app(\App\Support\OpenApi\Generator::class)->spec());
+
+    return response()->json($spec, 200, ['Access-Control-Allow-Origin' => '*']);
+});
+Route::view('api/docs', 'api-docs');
+
 // Team invite links (plan C5).
 Route::get('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'show'])->middleware('throttle:30,1')->name('invite.show');
 Route::post('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'accept'])->middleware('throttle:10,1')->name('invite.accept');

@@ -79,34 +79,39 @@ if (! function_exists('apiCrud')) {
 | full rationale. New clients must use /api/v1 instead.
 |
 */
-Route::post('auth/login', [ApiController::class, 'login']);
-Route::post('auth/register', [ApiController::class, 'register']);
-Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
-Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
-Route::get('api/{model}', [ApiController::class, 'my_list']);
-Route::post('api/{model}', [ApiController::class, 'my_update']);
+Route::middleware('legacy')->group(function () {
+    Route::post('auth/login', [ApiController::class, 'login']);
+    Route::post('auth/register', [ApiController::class, 'register']);
+    Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
+    Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
+    Route::get('api/{model}', [ApiController::class, 'my_list']);
+    Route::post('api/{model}', [ApiController::class, 'my_update']);
 
-Route::prefix('mobile')->group(function () {
-    Route::get('dashboard', [MobileApiController::class, 'dashboard']);
+    Route::prefix('mobile')->group(function () {
+        Route::get('dashboard', [MobileApiController::class, 'dashboard']);
 
-    Route::get('budget-programs', [MobileApiController::class, 'budgetPrograms']);
-    Route::get('budget-program/{id}', [MobileApiController::class, 'budgetProgramDetail']);
-    Route::post('budget-program-save', [MobileApiController::class, 'budgetProgramSave']);
+        Route::get('budget-programs', [MobileApiController::class, 'budgetPrograms']);
+        Route::get('budget-program/{id}', [MobileApiController::class, 'budgetProgramDetail']);
+        Route::post('budget-program-save', [MobileApiController::class, 'budgetProgramSave']);
 
-    Route::get('budget-categories', [MobileApiController::class, 'budgetCategories']);
-    Route::post('budget-category-save', [MobileApiController::class, 'budgetCategorySave']);
+        Route::get('budget-categories', [MobileApiController::class, 'budgetCategories']);
+        Route::post('budget-category-save', [MobileApiController::class, 'budgetCategorySave']);
 
-    Route::get('budget-items', [MobileApiController::class, 'budgetItems']);
-    Route::post('budget-item-save', [MobileApiController::class, 'budgetItemSave']);
+        Route::get('budget-items', [MobileApiController::class, 'budgetItems']);
+        Route::post('budget-item-save', [MobileApiController::class, 'budgetItemSave']);
 
-    Route::get('contribution-records', [MobileApiController::class, 'contributionRecords']);
-    Route::post('contribution-record-save', [MobileApiController::class, 'contributionRecordSave']);
+        Route::get('contribution-records', [MobileApiController::class, 'contributionRecords']);
+        Route::post('contribution-record-save', [MobileApiController::class, 'contributionRecordSave']);
 
-    Route::get('list/{model}', [MobileApiController::class, 'genericList']);
-    Route::post('save/{model}', [MobileApiController::class, 'genericSave']);
-});
+        Route::get('list/{model}', [MobileApiController::class, 'genericList']);
+        Route::post('save/{model}', [MobileApiController::class, 'genericSave']);
+    });
+}); // legacy (counted; retired by LEGACY_API_ENABLED=false)
 
-Route::prefix('v1')->group(function () {
+Route::prefix('v1')->middleware('app.version')->group(function () {
+    Route::get('app/version', fn () => response()->json(['code' => 1, 'message' => 'App versions.', 'data' => [
+        'min_version' => config('mobile.min_version'), 'latest_version' => config('mobile.latest_version'), 'store_url' => config('mobile.store_url'),
+    ]]));
 
     // ── Public auth endpoints (rate-limited to deter brute force) ──
     Route::middleware('throttle:10,1')->group(function () {
@@ -311,6 +316,8 @@ Route::prefix('v1')->group(function () {
         apiCrud('financial-categories', FinancialCategoryController::class);
         apiCrud('financial-periods', FinancialPeriodController::class);
         apiCrud('financial-records', FinancialRecordController::class);
+        apiCrud('financial-reports', \App\Http\Controllers\Api\V1\FinancialReportController::class);
+        Route::get('members', [\App\Http\Controllers\Api\V1\MemberController::class, 'index']);
 
         // Budget / fundraising
         apiCrud('budget-programs', BudgetProgramController::class);

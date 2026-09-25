@@ -74,6 +74,8 @@ class Kernel extends HttpKernel
         'api.subscription' => \App\Http\Middleware\EnsureActiveSubscription::class, // API: plan/license valid
         'perm' => \App\Http\Middleware\RequirePermission::class,
         'api.perm' => \App\Http\Middleware\ApiPermissionMap::class,
+        'legacy' => \App\Http\Middleware\LegacyApi::class,
+        'app.version' => \App\Http\Middleware\MinAppVersion::class,
         'admin.platform' => \App\Http\Middleware\PlatformAdminOnly::class, // Admin panel: platform-only screens (P0-1)
         'pingpin.member' => \App\PingPin\Http\Middleware\EnsurePingPinMembership::class, // Ping Pin: fail-closed org membership (see class docblock)
     ];

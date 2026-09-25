@@ -30,6 +30,7 @@ class HealthService
             'messages_24h' => DB::table('message_log')->where('created_at', '>=', $since)->groupBy('status')->selectRaw('status, COUNT(*) AS n')->pluck('n', 'status'),
             'backups' => DB::table('backup_runs')->orderByDesc('id')->limit(10)->get(),
             'last_backup_ok' => DB::table('backup_runs')->where('kind', 'backup')->where('status', 'ok')->max('created_at'),
+            'legacy' => \App\Console\Commands\LegacyStatus::status(),
             'tenants' => ['companies' => DB::table('companies')->count(), 'deletions_scheduled' => DB::table('data_requests')->where('kind', 'delete')->where('status', 'scheduled')->count()],
         ];
     }

@@ -89,7 +89,8 @@ class TeamPermissionsTest extends ApiTestCase
 
         // The link is single-use.
         $this->assertSame(1, DB::table('invites')->where('company_id', $this->owner['company_id'])->where('status', 'accepted')->count());
-        $this->getJson('/api/v1/team', $this->oh)->assertOk()->assertJsonCount(2, 'data.members')->assertJsonCount(0, 'data.invites');
+        $team = $this->getJson('/api/v1/team', $this->oh)->assertOk()->assertJsonCount(2, 'data.members')->assertJsonCount(0, 'data.invites')->json('data.members');
+        $this->assertEqualsCanonicalizing(['owner', 'cashier'], array_column($team, 'role'), 'each member shows their real role');
     }
 
     public function test_role_change_override_deactivate_and_activity(): void

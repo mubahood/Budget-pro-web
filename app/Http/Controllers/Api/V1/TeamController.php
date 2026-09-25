@@ -25,7 +25,7 @@ class TeamController extends Controller
     public function index(Request $request)
     {
         $company = $this->company($request);
-        $members = User::withoutGlobalScopes()->where('company_id', $company->id)->get(['id', 'name', 'email', 'phone_e164', 'status', 'last_login_at'])
+        $members = User::withoutGlobalScopes()->where('company_id', $company->id)->get(['id', 'company_id', 'name', 'email', 'phone_e164', 'status', 'last_login_at'])
             ->map(fn ($u) => $u->toArray() + ['role' => Permissions::roleOf($u), 'is_owner' => (int) $company->owner_id === (int) $u->id]);
         $invites = DB::table('invites')->where('company_id', $company->id)->where('status', 'pending')->orderByDesc('id')
             ->get(['id', 'name', 'phone_e164', 'email', 'role', 'expires_at', 'sent_count', 'created_at']);

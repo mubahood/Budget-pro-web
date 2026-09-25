@@ -1126,14 +1126,14 @@ Mobile
 
 ### Phase 4 — Purchasing, reports, analytics, hardening (4 weeks)
 
-- [ ] P4-1 Suppliers full, PO lifecycle, GRN with partials/variances, supplier payments & statements, purchase returns, "send PO on WhatsApp" (A5)
-- [ ] P4-2 Reports API + PDF/XLSX + mobile local reports; VAT summary; aging (A6)
-- [ ] P4-3 `product_stats` nightly job; reorder suggestions; re-introduce forecasting behind plan flag or delete the EOQ code for good (A7)
-- [ ] P4-4 Locations & transfers; batches/expiry/FEFO (optional per business type)
-- [ ] P4-5 Schema integrity pass: FKs, per-company uniques, booleans, enums, `migrate:fresh` repair, `DatabaseSeeder` with plans/roles/units/templates (Part D)
-- [ ] P4-6 Observability (Sentry, sync metrics, Horizon), backups + restore drill, tenant export/delete
-- [ ] P4-7 OpenAPI + Postman + docs refresh; ADR log
-- [ ] P4-8 Legacy retirement: telemetry, forced-upgrade screen, remove `ApiController`/`MobileApiController`/`Utils::get_user` (B10 step 4)
+- [x] P4-1 Suppliers full, PO lifecycle, GRN with partials/variances, supplier payments & statements, purchase returns, "send PO on WhatsApp" (A5)
+- [x] P4-2 Reports API + PDF/XLSX + mobile local reports; VAT summary; aging (A6)
+- [x] P4-3 `product_stats` nightly job; reorder suggestions; re-introduce forecasting behind plan flag or delete the EOQ code for good (A7)
+- [x] P4-4 Locations & transfers; batches/expiry/FEFO (optional per business type)
+- [x] P4-5 Schema integrity pass: FKs, per-company uniques, booleans, enums, `migrate:fresh` repair, `DatabaseSeeder` with plans/roles/units/templates (Part D)
+- [x] P4-6 Observability (Sentry, sync metrics, Horizon), backups + restore drill, tenant export/delete
+- [x] P4-7 OpenAPI + Postman + docs refresh; ADR log
+- [x] P4-8 Legacy retirement: telemetry, forced-upgrade screen, remove `ApiController`/`MobileApiController`/`Utils::get_user` (B10 step 4)
 
 ### Phase 5 — Differentiators (continuous)
 

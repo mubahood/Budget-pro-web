@@ -34,6 +34,7 @@ class ApiPermissionMap
         [['POST'], '#^stock-records/\d+/reverse$#', 'adjust'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(stock-items|stock-categories|stock-sub-categories|units|product-barcodes)(/\d+)?$#', 'manage_products'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(financial-records|financial-categories|financial-periods)(/\d+)?$#', 'manage_finance'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^financial-reports(/\d+)?$#', 'view_reports'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(budget-programs|budget-item-categories|budget-items|contribution-records)(/\d+)?$#', 'manage_budget'],
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume)$#', 'billing'],
