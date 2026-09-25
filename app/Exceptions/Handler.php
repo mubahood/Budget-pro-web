@@ -31,8 +31,9 @@ class Handler extends ExceptionHandler
      */
     public function register(): void
     {
+        // Unexpected errors are grouped on the System health page (and sent to Sentry when configured).
         $this->reportable(function (Throwable $e) {
-            //
+            \App\Support\ErrorTracker::capture($e);
         });
 
         // All /api/* responses are JSON, in the standard { code, message, data, errors } envelope.

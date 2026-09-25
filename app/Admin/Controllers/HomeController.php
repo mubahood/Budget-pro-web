@@ -40,6 +40,10 @@ class HomeController extends Controller
         $dashboardData = $this->getDashboardData($companyId);
         $checklist = $onboarding->checklist($company);
 
+        $deletion = \Illuminate\Support\Facades\DB::table('data_requests')->where('company_id', $companyId)->where('kind', 'delete')->where('status', 'scheduled')->value('purge_after');
+        if ($deletion) {
+            admin_warning('This shop is scheduled for deletion', 'All data will be deleted on '.\Illuminate\Support\Carbon::parse($deletion)->format('d M Y').'. <a href="'.admin_url('your-data').'">Cancel it</a>.');
+        }
         if (! $checklist['dismissed'] && $checklist['done'] < $checklist['total']) {
             $content->row(view('admin.getting-started', ['checklist' => $checklist]));
         }

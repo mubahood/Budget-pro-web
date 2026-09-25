@@ -15,6 +15,7 @@ class DispatchNotifications extends Command
 
     public function handle(Lifecycle $lifecycle, ScheduledNotifications $notifications): int
     {
+        \Illuminate\Support\Facades\Cache::forever('heartbeat:saas_hourly', now()->toIso8601String()); // System health: the scheduler is alive
         $billing = $lifecycle->run();
         $sent = $notifications->run();
         $this->info('billing '.json_encode($billing).' notices '.json_encode($sent));

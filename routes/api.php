@@ -178,6 +178,11 @@ Route::prefix('v1')->group(function () {
         Route::post('onboarding/templates/apply', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'applyTemplates']);
         Route::post('onboarding/import', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'import']);
         Route::post('onboarding/checklist/dismiss', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'dismissChecklist']);
+        Route::get('company/data-requests', [\App\Http\Controllers\Api\V1\TenantDataController::class, 'index']);
+        Route::post('company/export', [\App\Http\Controllers\Api\V1\TenantDataController::class, 'export'])->middleware('throttle:3,60');
+        Route::get('company/exports/{id}/download', [\App\Http\Controllers\Api\V1\TenantDataController::class, 'download'])->whereNumber('id');
+        Route::post('company/delete', [\App\Http\Controllers\Api\V1\TenantDataController::class, 'delete'])->middleware('throttle:5,60');
+        Route::post('company/delete/cancel', [\App\Http\Controllers\Api\V1\TenantDataController::class, 'cancelDelete']);
         Route::put('company/modules', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'modules']);
 
         // Team (plan C5): owner/managers with manage_team.

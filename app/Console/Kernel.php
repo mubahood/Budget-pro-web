@@ -17,6 +17,9 @@ class Kernel extends ConsoleKernel
         $schedule->command('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
         $schedule->command('saas:hourly')->hourly()->withoutOverlapping();
         $schedule->command('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
+        $schedule->command('ops backup')->dailyAt('02:00')->withoutOverlapping();
+        $schedule->command('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
+        $schedule->command('ops purge')->dailyAt('04:00')->withoutOverlapping();
         // Messages (OTP, invites, notices) go through the database queue; cron runs the worker each minute.
         $schedule->command('queue:work --stop-when-empty --tries=3 --max-time=50')->everyMinute()->withoutOverlapping();
     }

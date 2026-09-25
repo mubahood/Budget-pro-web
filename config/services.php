@@ -31,4 +31,6 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Error tracking: forwarded to Sentry only when the SDK is installed and this is set (plan Part D).
+    'sentry_dsn' => env('SENTRY_LARAVEL_DSN'),
 ];

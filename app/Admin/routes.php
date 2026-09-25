@@ -59,6 +59,13 @@ Route::group([
     $router->resource('purchase-orders', PurchaseOrderController::class)->only(['index', 'show', 'create', 'store']);
     $router->resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'show', 'create', 'store']);
     $router->get('reports', 'ReportController@index');
+    $router->get('your-data', 'YourDataController@index');
+    $router->post('your-data/export', 'YourDataController@export');
+    $router->get('your-data/exports/{id}', 'YourDataController@download')->where('id', '[0-9]+');
+    $router->post('your-data/delete', 'YourDataController@delete');
+    $router->post('your-data/delete/cancel', 'YourDataController@cancel');
+    $router->get('system-health', 'SystemHealthController@index');
+    $router->post('system-health/errors/{id}/resolve', 'SystemHealthController@resolve');
     $router->get('duplicates', 'DuplicateController@index');
     $router->post('duplicates/merge', 'DuplicateController@merge');
     $router->get('locations', 'LocationController@index');
