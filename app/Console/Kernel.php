@@ -12,16 +12,18 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        // Every task runs inside this scheduler process (no child process per command): the shared host
+        // allows 25 processes per account and spawning failed at busy minutes (DECISIONS E52).
+        $task = fn (string $command, array $args = []) => fn () => \Illuminate\Support\Facades\Artisan::call($command, $args);
 
-        $schedule->command('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
-        $schedule->command('saas:hourly')->hourly()->withoutOverlapping();
-        $schedule->command('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
-        $schedule->command('ops backup')->dailyAt('02:00')->withoutOverlapping();
-        $schedule->command('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
-        $schedule->command('ops purge')->dailyAt('04:00')->withoutOverlapping();
-        // Messages (OTP, invites, notices) go through the database queue; cron runs the worker each minute.
-        $schedule->command('queue:work --stop-when-empty --tries=3 --max-time=50')->everyMinute()->withoutOverlapping();
+        $schedule->call($task('tracking:backfill-location-names'))->name('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping();
+        $schedule->call($task('shop:product-stats'))->name('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
+        $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
+        $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
+        $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:00')->withoutOverlapping();
+        // Messages (OTP, invites, notices) go through the database queue; the worker drains it each minute.
+        $schedule->call($task('queue:work', ['--stop-when-empty' => true, '--tries' => 3, '--max-time' => 50]))->name('queue:work')->everyMinute()->withoutOverlapping();
     }
 
     /**

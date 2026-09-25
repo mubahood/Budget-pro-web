@@ -94,4 +94,15 @@ class OpsTest extends ApiTestCase
         $this->assertTrue(DB::table('admin_users')->where('company_id', $stays['company_id'])->exists());
         $this->assertSame('done', DB::table('data_requests')->where('company_id', $gone['company_id'])->value('status'));
     }
+
+    /** The shared host allows 25 processes: scheduled tasks must run inside the scheduler process (E52). */
+    public function test_scheduled_tasks_do_not_spawn_processes(): void
+    {
+        $events = app(\Illuminate\Console\Scheduling\Schedule::class)->events();
+        $this->assertNotEmpty($events);
+        foreach ($events as $e) {
+            $this->assertInstanceOf(\Illuminate\Console\Scheduling\CallbackEvent::class, $e, (string) $e->description);
+        }
+        $this->assertContains('saas:hourly', array_map(fn ($e) => $e->description, $events));
+    }
 }
