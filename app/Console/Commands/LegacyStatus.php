@@ -31,12 +31,18 @@ class LegacyStatus extends Command
         $oldOnly = $legacy->diff($new)->count();
         $active = $legacy->merge($new)->unique()->count();
         $pct = $active > 0 ? round($oldOnly * 100 / $active, 1) : 0.0;
-        $ready = $pct < (float) config('mobile.legacy_retire_below_percent', 5);
+        // Telemetry must have been collecting for the whole window before "no calls" means "nobody uses it".
+        $started = DB::table('information_schema.tables')->where('table_schema', DB::getDatabaseName())->where('table_name', 'legacy_calls')->value('create_time');
+        $collecting = $started === null || now()->diffInDays(\Illuminate\Support\Carbon::parse($started)) < $days;
+        $ready = ! $collecting && $pct < (float) config('mobile.legacy_retire_below_percent', 5);
 
         return ['days' => $days, 'legacy_companies' => $oldOnly, 'new_companies' => $new->count(), 'legacy_percent' => $pct,
             'legacy_calls' => (int) DB::table('legacy_calls')->where('day', '>=', $since)->sum('calls'), 'ready' => $ready,
-            'recommendation' => $ready
+            'collecting' => $collecting,
+            'recommendation' => $collecting
+                ? "Still collecting: counting started less than {$days} days ago. Check again later."
+                : ($ready
                 ? 'Below the retirement threshold: set LEGACY_API_ENABLED=false (old apps then see "please update"), then remove ApiController/MobileApiController/Utils::get_user in the next release.'
-                : 'Keep the legacy routes: shops still use the old app. Remind them to update (Play Store).'];
+                : 'Keep the legacy routes: shops still use the old app. Remind them to update (Play Store).')];
     }
 }

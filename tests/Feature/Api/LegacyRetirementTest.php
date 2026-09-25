@@ -47,6 +47,9 @@ class LegacyRetirementTest extends ApiTestCase
         $this->postJson('/api/v1/devices/register', ['device_id' => (string) Str::uuid()], $this->auth($old['token']))->assertOk();
         $after = LegacyStatus::status();
         $this->assertSame($before['legacy_companies'] - 1, $after['legacy_companies']);
+        $this->assertFalse($after['ready'] && $after['collecting'], 'never "ready" while telemetry is younger than the window');
+        $this->travel(15)->days();
+        $this->assertFalse(LegacyStatus::status()['collecting']);
         $this->artisan('legacy:status')->assertSuccessful();
     }
 
