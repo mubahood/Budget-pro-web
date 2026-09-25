@@ -32,6 +32,9 @@ class StockRecord extends Model
     /** Runtime-only: set by StockService when an idempotent replay returned an existing row. */
     public bool $wasReplayed = false;
 
+    /** Runtime-only: batches an inbound movement adds (batch_number, expiry_date, quantity) — P4-4. */
+    public array $batchIn = [];
+
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
@@ -108,6 +111,9 @@ class StockRecord extends Model
             }
 
             $model->company_id = $item->company_id;
+            if (empty($model->location_id)) {
+                $model->location_id = \App\Services\Shop\LocationStock::defaultLocation((int) $item->company_id);
+            }
             $model->stock_category_id = $item->stock_category_id;
             $model->stock_sub_category_id = $item->stock_sub_category_id;
             $model->sku = $item->sku;
@@ -148,6 +154,8 @@ class StockRecord extends Model
                 'client_updated_at' => \App\Support\Sync\SyncSequence::nowMs(),
                 'updated_at' => now(),
             ]);
+
+            \App\Services\Shop\LocationStock::applied($model);
 
             $item = StockItem::withoutGlobalScopes()->find($model->stock_item_id);
             if ($item?->stockSubCategory) {

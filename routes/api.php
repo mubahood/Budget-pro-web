@@ -281,6 +281,24 @@ Route::prefix('v1')->group(function () {
         Route::post('stock-takes/{id}/counts', [StockTakeController::class, 'counts'])->whereNumber('id');
         Route::post('stock-takes/{id}/post', [StockTakeController::class, 'post'])->whereNumber('id');
         apiCrud('goods-receipts', GoodsReceiptController::class);
+        // Purchasing (plan A5, P4-1/P4-3)
+        apiCrud('purchase-orders', \App\Http\Controllers\Api\V1\PurchaseOrderController::class);
+        Route::post('purchase-orders/{id}/send', [\App\Http\Controllers\Api\V1\PurchaseOrderController::class, 'send'])->whereNumber('id');
+        Route::post('purchase-orders/{id}/receive', [\App\Http\Controllers\Api\V1\PurchaseOrderController::class, 'receive'])->whereNumber('id');
+        Route::post('purchase-orders/{id}/cancel', [\App\Http\Controllers\Api\V1\PurchaseOrderController::class, 'cancel'])->whereNumber('id');
+        apiCrud('purchase-returns', \App\Http\Controllers\Api\V1\PurchaseReturnController::class);
+        // Locations & transfers (P4-4)
+        Route::get('locations', [\App\Http\Controllers\Api\V1\LocationController::class, 'index']);
+        Route::post('locations', [\App\Http\Controllers\Api\V1\LocationController::class, 'store']);
+        Route::put('locations/{id}', [\App\Http\Controllers\Api\V1\LocationController::class, 'update'])->whereNumber('id');
+        Route::get('stock-levels', [\App\Http\Controllers\Api\V1\LocationController::class, 'levels']);
+        Route::get('stock-transfers', [\App\Http\Controllers\Api\V1\LocationController::class, 'transfersIndex']);
+        Route::post('stock-transfers', [\App\Http\Controllers\Api\V1\LocationController::class, 'transfer']);
+        Route::put('devices/{id}/location', [\App\Http\Controllers\Api\V1\LocationController::class, 'deviceLocation'])->whereNumber('id');
+        Route::get('reports', [\App\Http\Controllers\Api\V1\ReportController::class, 'index']);
+        Route::get('reports/{name}', [\App\Http\Controllers\Api\V1\ReportController::class, 'show'])->where('name', '[a-z_]+');
+        Route::get('reorder-suggestions', [\App\Http\Controllers\Api\V1\ReorderController::class, 'index']);
+        Route::post('reorder-suggestions/orders', [\App\Http\Controllers\Api\V1\ReorderController::class, 'orders']);
 
         // Finance
         apiCrud('financial-categories', FinancialCategoryController::class);

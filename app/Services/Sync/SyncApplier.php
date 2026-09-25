@@ -293,6 +293,7 @@ class SyncApplier
             'device_id' => $deviceId,
             'customer_id' => $customerId,
             'shift_id' => $shiftId,
+            'location_id' => self::deviceLocation($companyId, $deviceId), // the phone's shop (P4-4)
             'from_sync' => true, // offline sales are never rejected for credit limits or closed shifts
             'allow_negative_stock' => true, // a completed offline sale is never rejected for stock (Appendix E)
         ]);
@@ -390,7 +391,7 @@ class SyncApplier
             'date' => isset($data['occurred_at']) ? \Illuminate\Support\Carbon::createFromTimestampMs((int) $data['occurred_at']) : now(),
             'unit_cost' => $data['unit_cost'] ?? null, 'selling_price' => $data['unit_price'] ?? null,
             'reason' => $data['reason'] ?? null, 'image' => $data['image'] ?? null,
-            'created_by_id' => $userId, 'allow_negative' => true,
+            'created_by_id' => $userId, 'allow_negative' => true, 'location_id' => self::deviceLocation((int) $company->id, $deviceId),
         ]);
         $touchedProducts[] = (int) $product->id;
         $product->refresh();
@@ -516,6 +517,17 @@ class SyncApplier
         return ['status' => 'applied', 'model' => $take];
     }
 
+    /** The location a phone sells from (set by the owner under Locations); null = the shop's default. */
+    public static function deviceLocation(int $companyId, ?string $deviceId): ?int
+    {
+        if (! $deviceId) {
+            return null;
+        }
+        $loc = \Illuminate\Support\Facades\DB::table('devices')->where('company_id', $companyId)->where('device_id', $deviceId)->value('location_id');
+
+        return $loc ? (int) $loc : null;
+    }
+
     /** Permission a pushed op needs (plan C5), mirroring ApiPermissionMap. */
     public static function permissionFor(string $table, string $action, array $data): ?string
     {
@@ -548,7 +560,7 @@ class SyncApplier
             'sale' => 'Sale', 'purchase' => 'Purchase', 'purchase_receipt' => 'Purchase', 'stock_in' => 'Stock In', 'return' => 'Return',
             'adjustment_in' => 'Adjustment In', 'adjustment_out' => 'Adjustment Out', 'damage' => 'Damage', 'expired' => 'Expired',
             'lost' => 'Lost', 'internal_use' => 'Internal Use', 'opening' => 'Opening', 'stock_take' => $signedQty >= 0 ? 'Adjustment In' : 'Adjustment Out',
-            'adjustment' => $signedQty >= 0 ? 'Adjustment In' : 'Adjustment Out', 'transfer_in' => 'Transfer In', 'transfer_out' => 'Transfer Out', 'other' => 'Other',
+            'adjustment' => $signedQty >= 0 ? 'Adjustment In' : 'Adjustment Out', 'transfer_in' => 'Transfer In', 'transfer_out' => 'Transfer Out', 'purchase_return' => 'Purchase Return', 'other' => 'Other',
         ];
         $key = strtolower(str_replace([' ', '-'], '_', $wire));
         if (isset($map[$key])) {

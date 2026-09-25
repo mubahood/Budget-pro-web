@@ -64,6 +64,7 @@ class SaleController extends BaseCrudController
             'allow_negative_stock' => ['nullable', 'boolean'],
             'customer_id' => ['nullable', 'integer'],
             'shift_id' => ['nullable', 'integer'],
+            'location_id' => ['nullable', 'integer'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.unit_id' => ['nullable', 'integer'],
             'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],

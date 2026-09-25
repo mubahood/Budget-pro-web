@@ -74,6 +74,7 @@ class StockItem extends Model
         'track_stock',
         'is_active',
         'unit_id',
+        'track_batches',
     ];
 
     /**
@@ -145,6 +146,13 @@ class StockItem extends Model
         static::created(function ($model) {
             // Update parent categories
             self::updateParentCategories($model);
+            // Opening stock sits in the shop's default location (P4-4); batch-tracked products get an opening batch.
+            $loc = \App\Services\Shop\LocationStock::defaultLocation((int) $model->company_id);
+            \App\Services\Shop\LocationStock::adjust((int) $model->company_id, $loc, (int) $model->id, (float) $model->original_quantity);
+            if ($model->track_batches && (float) $model->original_quantity > 0) {
+                \Illuminate\Support\Facades\DB::table('stock_batches')->insert(['company_id' => $model->company_id, 'stock_item_id' => $model->id, 'location_id' => $loc,
+                    'batch_number' => 'OPENING', 'quantity' => $model->original_quantity, 'unit_cost' => $model->buying_price, 'created_at' => now(), 'updated_at' => now()]);
+            }
         });
 
         static::updated(function ($model) {

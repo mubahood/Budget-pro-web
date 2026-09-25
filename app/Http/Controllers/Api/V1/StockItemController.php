@@ -14,7 +14,7 @@ class StockItemController extends BaseCrudController
     protected string $resourceName = 'Stock item';
 
     // current_quantity is derived from original_quantity by the model and immutable after create.
-    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity', 'min_stock', 'allow_negative_stock', 'track_stock', 'is_active', 'unit_id'];
+    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity', 'min_stock', 'allow_negative_stock', 'track_stock', 'is_active', 'unit_id', 'track_batches'];
 
     protected array $searchable = ['name', 'sku', 'barcode'];
 
@@ -46,6 +46,7 @@ class StockItemController extends BaseCrudController
             'min_stock' => ['nullable', 'numeric', 'min:0'],
             'allow_negative_stock' => ['nullable', 'boolean'],
             'track_stock' => ['nullable', 'boolean'],
+            'track_batches' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
             'unit_id' => ['nullable', Rule::exists('units', 'id')->where('company_id', $companyId)],
         ];

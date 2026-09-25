@@ -37,7 +37,7 @@ class AdminAccess
         '/financial-periods*', '/financial-categories*', '/financial-records*', '/financial-reports*',
         '/budget-programs*', '/budget-item-categories*', '/budget-items*', '/contribution-records*',
         '/handover-records*', '/data-exports*',
-        '/billing*', '/setup*', '/purchase-orders*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
+        '/billing*', '/setup*', '/purchase-orders*', '/purchase-returns*', '/reorder-suggestions*', '/reports*', '/locations*', '/stock-transfers*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
         '/poultry-*',
         '/tracked-devices*', '/device-locations*', '/device-commands*', '/tracking-map*',
         '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search',
@@ -147,7 +147,8 @@ class AdminAccess
         'financial-categories' => 'manage_finance', 'financial-periods' => 'manage_finance', 'financial-reports' => 'view_reports',
         'employees' => 'manage_team', 'companies-edit' => 'manage_settings', 'budget-programs' => 'manage_budget', 'budget-items' => 'manage_budget',
         'budget-item-categories' => 'manage_budget', 'contribution-records' => 'manage_budget', 'data-exports' => 'manage_budget',
-        'billing' => null,
+        'billing' => null, 'purchase-returns' => 'restock', 'reorder-suggestions' => 'restock', 'reports' => 'view_reports',
+        'locations' => 'manage_settings', 'stock-transfers' => 'adjust',
     ];
 
     /** Replace `*` on tenant roles with the explicit allow-list and pin platform menus. Idempotent. */

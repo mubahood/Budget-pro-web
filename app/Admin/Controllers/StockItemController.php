@@ -301,6 +301,28 @@ class StockItemController extends TenantAdminController
                 $tools->append('<a class="btn btn-sm btn-warning" href="'.admin_url('stock-records/create?stock_item_id='.$item->id.'&type=Adjustment%20Out').'"><i class="fa fa-sliders"></i> Adjust</a>&nbsp;');
             });
 
+        // Stock per location and batches (P4-4).
+        $show->field('locations_and_batches', __('Where the stock is'))->unescape()->as(function () use ($item) {
+            $levels = \Illuminate\Support\Facades\DB::table('stock_levels as l')->join('locations as loc', 'loc.id', '=', 'l.location_id')->where('l.stock_item_id', $item->id)->get(['loc.name', 'l.quantity']);
+            $h = '<table class="table table-condensed"><tr><th>Location</th><th class="text-right">On hand</th></tr>';
+            foreach ($levels as $l) {
+                $h .= '<tr><td>'.e($l->name).'</td><td class="text-right">'.e(rtrim(rtrim(number_format((float) $l->quantity, 3, '.', ''), '0'), '.')).'</td></tr>';
+            }
+            $h .= '</table>';
+            if ($item->track_batches) {
+                $batches = \Illuminate\Support\Facades\DB::table('stock_batches as b')->leftJoin('locations as loc', 'loc.id', '=', 'b.location_id')->where('b.stock_item_id', $item->id)->where('b.quantity', '>', 0)
+                    ->orderByRaw('b.expiry_date IS NULL')->orderBy('b.expiry_date')->get(['b.batch_number', 'b.expiry_date', 'b.quantity', 'loc.name']);
+                $h .= '<table class="table table-condensed"><tr><th>Batch</th><th>Expires</th><th>Location</th><th class="text-right">Quantity</th></tr>';
+                foreach ($batches as $b) {
+                    $soon = $b->expiry_date && \Illuminate\Support\Carbon::parse($b->expiry_date)->lte(now()->addDays(30));
+                    $h .= '<tr'.($soon ? ' class="danger"' : '').'><td>'.e($b->batch_number).'</td><td>'.e((string) $b->expiry_date).'</td><td>'.e((string) $b->name).'</td><td class="text-right">'.e(rtrim(rtrim(number_format((float) $b->quantity, 3, '.', ''), '0'), '.')).'</td></tr>';
+                }
+                $h .= '</table>';
+            }
+
+            return $h;
+        });
+
         // Movement history with a running balance (plan A4/A9).
         $show->field('movement_history', __('Movement history'))->unescape()->as(function () use ($item) {
             $rows = \App\Models\StockRecord::withoutGlobalScopes()->where('stock_item_id', $item->id)->orderBy('id')->get(['id', 'date', 'type', 'reason', 'quantity_delta', 'description', 'is_reversal', 'created_by_id']);
@@ -634,6 +656,9 @@ class StockItemController extends TenantAdminController
         }
 
         // Form saving hooks
+        $form->switch('track_batches', __('Track batches & expiry dates'))->states(['on' => ['value' => 1, 'text' => 'Yes'], 'off' => ['value' => 0, 'text' => 'No']])
+            ->help('For medicines, seeds and food: record the batch and expiry on each delivery; sales take the batch that expires first.');
+
         $form->saving(function (Form $form) {
             // Additional validation before saving
             $buying_price = (float) $form->buying_price;

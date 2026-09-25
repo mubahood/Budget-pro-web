@@ -2,149 +2,140 @@
 
 namespace App\Admin\Controllers;
 
+use App\Exceptions\BusinessRuleException;
 use App\Models\PurchaseOrder;
-use Encore\Admin\Form;
+use App\Models\StockItem;
+use App\Models\Supplier;
+use App\Services\Shop\PurchaseOrderService;
+use App\Support\Money;
+use Encore\Admin\Facades\Admin;
 use Encore\Admin\Grid;
-use Encore\Admin\Show;
+use Encore\Admin\Layout\Content;
+use Encore\Admin\Widgets\Form as WidgetForm;
 
+/** Purchase orders on the web (plan A5, P4-1): draft → send (WhatsApp) → receive (partials) → closed. */
 class PurchaseOrderController extends TenantAdminController
 {
-    /**
-     * Title for current resource.
-     *
-     * @var string
-     */
-    protected $title = 'Purchase Orders';
+    protected $title = 'Purchase orders';
 
-    /**
-     * Make a grid builder.
-     *
-     * @return Grid
-     */
+    private function orders(): PurchaseOrderService
+    {
+        return new PurchaseOrderService();
+    }
+
+    private function find($id): PurchaseOrder
+    {
+        return PurchaseOrder::withoutGlobalScopes()->where('company_id', Admin::user()->company_id)->with(['supplier', 'items.product'])->findOrFail($id);
+    }
+
     protected function grid()
     {
         $grid = new Grid(new PurchaseOrder());
-
-        $grid->column('id', __('Id'));
-        $grid->column('company_id', __('Company id'));
-        $grid->column('created_by_id', __('Created by id'));
-        $grid->column('financial_period_id', __('Financial period id'));
-        $grid->column('po_number', __('Po number'));
-        $grid->column('po_date', __('Po date'));
-        $grid->column('expected_delivery_date', __('Expected delivery date'));
-        $grid->column('actual_delivery_date', __('Actual delivery date'));
-        $grid->column('supplier_name', __('Supplier name'));
-        $grid->column('supplier_email', __('Supplier email'));
-        $grid->column('supplier_phone', __('Supplier phone'));
-        $grid->column('supplier_address', __('Supplier address'));
-        $grid->column('items', __('Items'));
-        $grid->column('subtotal', __('Subtotal'));
-        $grid->column('tax_amount', __('Tax amount'));
-        $grid->column('shipping_cost', __('Shipping cost'));
-        $grid->column('discount_amount', __('Discount amount'));
-        $grid->column('total_amount', __('Total amount'));
-        $grid->column('status', __('Status'));
-        $grid->column('approved_by_id', __('Approved by id'));
-        $grid->column('approved_at', __('Approved at'));
-        $grid->column('approval_notes', __('Approval notes'));
-        $grid->column('items_ordered', __('Items ordered'));
-        $grid->column('items_received', __('Items received'));
-        $grid->column('received_percentage', __('Received percentage'));
-        $grid->column('notes', __('Notes'));
-        $grid->column('terms_and_conditions', __('Terms and conditions'));
-        $grid->column('reference_number', __('Reference number'));
-        $grid->column('payment_terms', __('Payment terms'));
-        $grid->column('created_at', __('Created at'));
-        $grid->column('updated_at', __('Updated at'));
-        $grid->column('deleted_at', __('Deleted at'));
+        $grid->model()->where('company_id', Admin::user()->company_id)->orderByDesc('id');
+        $grid->actions(fn ($a) => $a->disableEdit()->disableDelete());
+        $grid->filter(function ($f) {
+            $f->disableIdFilter();
+            $f->equal('status')->select(array_combine(PurchaseOrder::STATUSES, array_map(fn ($s) => ucfirst(str_replace('_', ' ', $s)), PurchaseOrder::STATUSES)));
+            $f->equal('supplier_id', 'Supplier')->select(Supplier::where('company_id', Admin::user()->company_id)->pluck('name', 'id'));
+        });
+        $grid->column('number', 'No.');
+        $grid->column('order_date', 'Date')->display(fn ($v) => $v ? substr((string) $v, 0, 10) : '');
+        $grid->column('supplier.name', 'Supplier');
+        $grid->column('status', 'Status')->label(['draft' => 'default', 'sent' => 'info', 'partially_received' => 'warning', 'received' => 'success', 'cancelled' => 'danger']);
+        $grid->column('expected_date', 'Expected')->display(fn ($v) => $v ? substr((string) $v, 0, 10) : '');
+        $grid->column('subtotal', 'Total')->display(fn ($v) => Money::format($v));
 
         return $grid;
     }
 
-    /**
-     * Make a show builder.
-     *
-     * @param  mixed  $id
-     * @return Show
-     */
-    protected function detail($id)
+    public function show($id, Content $content)
     {
-        $show = new Show(PurchaseOrder::findOrFail($id));
+        $po = $this->find($id);
+        $progress = $this->orders()->progress($po);
 
-        $show->field('id', __('Id'));
-        $show->field('company_id', __('Company id'));
-        $show->field('created_by_id', __('Created by id'));
-        $show->field('financial_period_id', __('Financial period id'));
-        $show->field('po_number', __('Po number'));
-        $show->field('po_date', __('Po date'));
-        $show->field('expected_delivery_date', __('Expected delivery date'));
-        $show->field('actual_delivery_date', __('Actual delivery date'));
-        $show->field('supplier_name', __('Supplier name'));
-        $show->field('supplier_email', __('Supplier email'));
-        $show->field('supplier_phone', __('Supplier phone'));
-        $show->field('supplier_address', __('Supplier address'));
-        $show->field('items', __('Items'));
-        $show->field('subtotal', __('Subtotal'));
-        $show->field('tax_amount', __('Tax amount'));
-        $show->field('shipping_cost', __('Shipping cost'));
-        $show->field('discount_amount', __('Discount amount'));
-        $show->field('total_amount', __('Total amount'));
-        $show->field('status', __('Status'));
-        $show->field('approved_by_id', __('Approved by id'));
-        $show->field('approved_at', __('Approved at'));
-        $show->field('approval_notes', __('Approval notes'));
-        $show->field('items_ordered', __('Items ordered'));
-        $show->field('items_received', __('Items received'));
-        $show->field('received_percentage', __('Received percentage'));
-        $show->field('notes', __('Notes'));
-        $show->field('terms_and_conditions', __('Terms and conditions'));
-        $show->field('reference_number', __('Reference number'));
-        $show->field('payment_terms', __('Payment terms'));
-        $show->field('created_at', __('Created at'));
-        $show->field('updated_at', __('Updated at'));
-        $show->field('deleted_at', __('Deleted at'));
-
-        return $show;
+        return $content->title('Purchase order '.$po->number)->body(view('admin.purchase-order', ['po' => $po, 'progress' => $progress, 'text' => $this->orders()->text($po)]));
     }
 
-    /**
-     * Make a form builder.
-     *
-     * @return Form
-     */
+    public function create(Content $content)
+    {
+        $companyId = Admin::user()->company_id;
+        $form = new WidgetForm();
+        $form->action(admin_url('purchase-orders'));
+        $form->select('supplier_id', 'Supplier')->options(Supplier::where('company_id', $companyId)->pluck('name', 'id'))->default(request('supplier_id'));
+        $form->date('expected_date', 'Needed by');
+        $products = StockItem::where('company_id', $companyId)->orderBy('name')->pluck('name', 'id');
+        $form->table('items', 'Products', function ($t) use ($products) {
+            $t->select('stock_item_id', 'Product')->options($products);
+            $t->decimal('quantity', 'Quantity');
+            $t->decimal('unit_cost', 'Cost per piece')->help('Empty = last cost');
+        });
+        $form->textarea('notes', 'Note to supplier')->rows(2);
+
+        return $content->title('New purchase order')->body($form);
+    }
+
+    public function store()
+    {
+        $lines = array_values(array_filter((array) request('items', []), fn ($l) => ! empty($l['stock_item_id']) && (float) ($l['quantity'] ?? 0) > 0 && empty($l['_remove_'])));
+        try {
+            $po = $this->orders()->create((int) Admin::user()->company_id, (int) Admin::user()->id, $lines, request('supplier_id') ? (int) request('supplier_id') : null, request('expected_date') ?: null, request('notes') ?: null);
+            admin_success('Draft saved', $po->number.' — '.Money::format($po->subtotal).'. Send it to the supplier when ready.');
+
+            return redirect(admin_url('purchase-orders/'.$po->id));
+        } catch (BusinessRuleException $e) {
+            admin_error('Not saved', $e->getMessage());
+
+            return back()->withInput();
+        }
+    }
+
+    public function send($id)
+    {
+        try {
+            $r = $this->orders()->send($this->find($id), (bool) request('via_api'));
+        } catch (BusinessRuleException $e) {
+            admin_error('Not sent', $e->getMessage());
+
+            return back();
+        }
+        if ($r['whatsapp_url'] && ! request('via_api')) {
+            return redirect()->away($r['whatsapp_url']);
+        }
+        admin_success('Order sent', request('via_api') ? 'The supplier was messaged.' : 'Marked as sent. The supplier has no phone number — copy the text below.');
+
+        return redirect(admin_url('purchase-orders/'.$id));
+    }
+
+    public function receive($id)
+    {
+        $lines = [];
+        foreach ((array) request('received', []) as $itemId => $row) {
+            $lines[] = ['purchase_order_item_id' => (int) $itemId, 'quantity' => $row['quantity'] ?? 0, 'unit_cost' => $row['unit_cost'] ?? null];
+        }
+        try {
+            $grn = $this->orders()->receive($this->find($id), (int) Admin::user()->id, $lines, (float) request('amount_paid', 0), (string) request('payment_method', 'cash'), request('invoice_ref') ?: null);
+            admin_success('Stock received', $grn->number.' — '.Money::format($grn->total_cost));
+        } catch (BusinessRuleException $e) {
+            admin_error('Not received', $e->getMessage());
+        }
+
+        return redirect(admin_url('purchase-orders/'.$id));
+    }
+
+    public function cancel($id)
+    {
+        try {
+            $this->orders()->cancel($this->find($id));
+            admin_success('Order closed', 'Anything not yet delivered is no longer expected.');
+        } catch (BusinessRuleException $e) {
+            admin_error('Not closed', $e->getMessage());
+        }
+
+        return redirect(admin_url('purchase-orders/'.$id));
+    }
+
     protected function form()
     {
-        $form = new Form(new PurchaseOrder());
-
-        $form->number('company_id', __('Company id'));
-        $form->number('created_by_id', __('Created by id'));
-        $form->number('financial_period_id', __('Financial period id'));
-        $form->text('po_number', __('Po number'));
-        $form->date('po_date', __('Po date'))->default(date('Y-m-d'));
-        $form->date('expected_delivery_date', __('Expected delivery date'))->default(date('Y-m-d'));
-        $form->date('actual_delivery_date', __('Actual delivery date'))->default(date('Y-m-d'));
-        $form->text('supplier_name', __('Supplier name'));
-        $form->text('supplier_email', __('Supplier email'));
-        $form->text('supplier_phone', __('Supplier phone'));
-        $form->textarea('supplier_address', __('Supplier address'));
-        $form->text('items', __('Items'));
-        $form->decimal('subtotal', __('Subtotal'))->default(0.00);
-        $form->decimal('tax_amount', __('Tax amount'))->default(0.00);
-        $form->decimal('shipping_cost', __('Shipping cost'))->default(0.00);
-        $form->decimal('discount_amount', __('Discount amount'))->default(0.00);
-        $form->decimal('total_amount', __('Total amount'))->default(0.00);
-        $form->text('status', __('Status'))->default('draft');
-        $form->number('approved_by_id', __('Approved by id'));
-        $form->datetime('approved_at', __('Approved at'))->default(date('Y-m-d H:i:s'));
-        $form->textarea('approval_notes', __('Approval notes'));
-        $form->number('items_ordered', __('Items ordered'));
-        $form->number('items_received', __('Items received'));
-        $form->decimal('received_percentage', __('Received percentage'))->default(0.00);
-        $form->textarea('notes', __('Notes'));
-        $form->textarea('terms_and_conditions', __('Terms and conditions'));
-        $form->text('reference_number', __('Reference number'));
-        $form->text('payment_terms', __('Payment terms'));
-
-        return $form;
+        return new \Encore\Admin\Form(new PurchaseOrder());
     }
 }

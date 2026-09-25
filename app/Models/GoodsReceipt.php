@@ -15,7 +15,7 @@ class GoodsReceipt extends Model
 
     protected $table = 'goods_receipts';
 
-    protected $fillable = ['uuid', 'company_id', 'number', 'supplier_id', 'invoice_ref', 'received_on', 'total_cost', 'amount_paid', 'payment_method', 'notes', 'device_id', 'created_by_id'];
+    protected $fillable = ['uuid', 'company_id', 'number', 'supplier_id', 'invoice_ref', 'received_on', 'total_cost', 'amount_paid', 'payment_method', 'notes', 'device_id', 'created_by_id', 'purchase_order_id'];
 
     protected $casts = ['received_on' => 'date', 'total_cost' => 'decimal:2', 'amount_paid' => 'decimal:2', 'is_deleted' => 'boolean'];
 

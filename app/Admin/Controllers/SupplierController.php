@@ -53,6 +53,7 @@ class SupplierController extends TenantAdminController
         $form->email('email');
         $form->text('address');
         $form->number('payment_terms_days', 'Payment terms (days)')->default(0)->min(0);
+        $form->number('lead_time_days', 'Days to deliver')->default(7)->min(0)->help('Used by the reorder list: order enough to last until the next delivery.');
         $form->textarea('notes')->rows(2);
         $form->saving(fn (Form $form) => $form->company_id = Admin::user()->company_id);
 

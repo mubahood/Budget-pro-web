@@ -24,9 +24,9 @@ class GoodsReceiptService
     }
 
     /**
-     * @param  array<int, array{stock_item_id: int, quantity: float|string, unit_cost: float|string}>  $lines
+     * @param  array<int, array{stock_item_id: int, quantity: float|string, unit_cost: float|string, purchase_order_item_id?: int|null, expected_unit_cost?: float|string|null, batch_number?: string|null, expiry_date?: string|null}>  $lines
      */
-    public function receive(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $invoiceRef = null, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $receivedOn = null, ?string $clientUuid = null, ?string $notes = null, ?string $deviceId = null): GoodsReceipt
+    public function receive(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $invoiceRef = null, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $receivedOn = null, ?string $clientUuid = null, ?string $notes = null, ?string $deviceId = null, ?int $purchaseOrderId = null, ?int $locationId = null): GoodsReceipt
     {
         if ($clientUuid) {
             $existing = GoodsReceipt::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $clientUuid)->first();
@@ -41,7 +41,10 @@ class GoodsReceiptService
             throw BusinessRuleException::make('supplier_not_found', 'Supplier not found.');
         }
 
-        return DB::transaction(function () use ($companyId, $userId, $lines, $supplierId, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, $notes, $deviceId) {
+        return DB::transaction(function () use ($companyId, $userId, $lines, $supplierId, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, $notes, $deviceId, $purchaseOrderId, $locationId) {
+            if ($locationId) {
+                LocationStock::assertLocation($companyId, $locationId);
+            }
             $grn = new GoodsReceipt();
             if ($clientUuid) {
                 $grn->uuid = $clientUuid;
@@ -55,6 +58,7 @@ class GoodsReceiptService
             $grn->notes = $notes;
             $grn->device_id = $deviceId;
             $grn->created_by_id = $userId;
+            $grn->purchase_order_id = $purchaseOrderId;
             $grn->save();
 
             $total = 0.0;
@@ -71,14 +75,17 @@ class GoodsReceiptService
                 $movement = $this->stock->record([
                     'stock_item_id' => $product->id, 'type' => 'Purchase', 'quantity' => $qty, 'unit_cost' => $cost,
                     'description' => 'Received '.$grn->number.($invoiceRef ? ' (inv '.$invoiceRef.')' : ''), 'created_by_id' => $userId,
-                    'reference_type' => 'goods_receipt', 'reference_id' => $grn->id, 'date' => $grn->received_on,
+                    'reference_type' => 'goods_receipt', 'reference_id' => $grn->id, 'date' => $grn->received_on, 'location_id' => $locationId,
+                    'batch_in' => ! empty($l['batch_number']) ? [['batch_number' => (string) $l['batch_number'], 'expiry_date' => $l['expiry_date'] ?? null, 'quantity' => $qty]] : [],
                 ]);
                 if ((float) $product->buying_price !== $cost) {
                     DB::table('stock_items')->where('id', $product->id)->update([
                         'buying_price' => $cost, 'server_seq' => \App\Support\Sync\SyncSequence::next(), 'version' => DB::raw('version + 1'), 'updated_at' => now(),
                     ]);
                 }
-                GoodsReceiptItem::create(['company_id' => $companyId, 'goods_receipt_id' => $grn->id, 'stock_item_id' => $product->id, 'quantity' => $qty, 'unit_cost' => $cost, 'stock_record_id' => $movement->id]);
+                GoodsReceiptItem::create(['company_id' => $companyId, 'goods_receipt_id' => $grn->id, 'stock_item_id' => $product->id, 'quantity' => $qty, 'unit_cost' => $cost, 'stock_record_id' => $movement->id,
+                    'purchase_order_item_id' => $l['purchase_order_item_id'] ?? null, 'expected_unit_cost' => isset($l['expected_unit_cost']) ? round((float) $l['expected_unit_cost'], 2) : null,
+                    'batch_number' => $l['batch_number'] ?? null, 'expiry_date' => $l['expiry_date'] ?? null]);
                 $total += $qty * $cost;
             }
             $grn->total_cost = round($total, 2);

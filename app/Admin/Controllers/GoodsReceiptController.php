@@ -67,7 +67,13 @@ class GoodsReceiptController extends TenantAdminController
             $t->select('stock_item_id', 'Product')->options($products);
             $t->decimal('quantity', 'Quantity');
             $t->decimal('unit_cost', 'Cost per piece');
+            $t->text('batch_number', 'Batch (optional)');
+            $t->date('expiry_date', 'Expires (optional)');
         });
+        $locations = \Illuminate\Support\Facades\DB::table('locations')->where('company_id', $companyId)->where('is_active', true)->pluck('name', 'id');
+        if ($locations->count() > 1) {
+            $form->select('location_id', 'Received at')->options($locations)->default(\App\Services\Shop\LocationStock::defaultLocation((int) $companyId));
+        }
         $form->decimal('amount_paid', 'Paid now')->default(0)->help('Anything unpaid becomes what you owe the supplier.');
         $form->select('payment_method', 'Paid with')->options(['cash' => 'Cash', 'mobile_money' => 'Mobile Money', 'bank' => 'Bank'])->default('cash');
 
@@ -79,7 +85,7 @@ class GoodsReceiptController extends TenantAdminController
         $lines = array_values(array_filter((array) request('items', []), fn ($l) => ! empty($l['stock_item_id']) && (float) ($l['quantity'] ?? 0) > 0 && empty($l['_remove_'])));
         try {
             $grn = (new GoodsReceiptService())->receive((int) Admin::user()->company_id, (int) Admin::user()->id, $lines, request('supplier_id') ? (int) request('supplier_id') : null,
-                request('invoice_ref'), (float) request('amount_paid', 0), (string) request('payment_method', 'cash'), request('received_on'));
+                request('invoice_ref'), (float) request('amount_paid', 0), (string) request('payment_method', 'cash'), request('received_on'), null, null, null, null, request('location_id') ? (int) request('location_id') : null);
             admin_success('Stock received', $grn->number.' — '.Money::format($grn->total_cost));
 
             return redirect(admin_url('goods-receipts/'.$grn->id));

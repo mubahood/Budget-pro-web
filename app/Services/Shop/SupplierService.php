@@ -22,8 +22,11 @@ class SupplierService
         $unpaid = (float) (clone $received)->sum('total_cost') - (float) (clone $received)->sum('amount_paid');
         $paid = (float) FinancialRecord::withoutGlobalScopes()->where('company_id', $supplier->company_id)
             ->where('source_type', 'supplier_payment')->where('source_id', $supplier->id)->sum('amount');
+        // Goods sent back lower what we owe; a cash refund from the supplier settles that credit.
+        $returns = \App\Models\PurchaseReturn::withoutGlobalScopes()->where('company_id', $supplier->company_id)->where('supplier_id', $supplier->id);
+        $returned = (float) (clone $returns)->sum('total_value') - (float) (clone $returns)->sum('refund_amount');
 
-        return round($unpaid - $paid, 2);
+        return round($unpaid - $paid - $returned, 2);
     }
 
     public function recalc(int $supplierId): ?Supplier

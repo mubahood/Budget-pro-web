@@ -137,6 +137,7 @@ class CompanyEditController extends TenantAdminController
             ->options(['flag' => 'Allow it, but warn me (recommended)', 'allow' => 'Allow it silently', 'block' => 'Block the sale (online only)'])
             ->default('flag');
         $form->decimal('low_stock_default', __('Default low-stock level'))->help('Used when a product has no minimum stock of its own.');
+        $form->decimal('tax_rate', __('VAT rate (%)'))->help('Prices include VAT at this rate (Uganda 18%, Kenya 16%). Used by the VAT summary report. Leave empty if you are not VAT registered.');
         $form->switch('require_shift', __('Require an open shift to sell'))->states(['on' => ['value' => 1, 'text' => 'Yes'], 'off' => ['value' => 0, 'text' => 'No']]);
         $form->textarea('receipt_header', __('Receipt header'))->rows(2)->help('e.g. TIN, location, opening hours');
         $form->textarea('receipt_footer', __('Receipt footer'))->rows(2)->help('e.g. "Goods once sold are not returnable"');

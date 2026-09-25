@@ -32,8 +32,8 @@ class SaleService
 
     /**
      * @param  array<string, mixed>  $data  items[{stock_item_id, quantity, unit_price?, discount_amount?, unit_id?}], payments[], amount_paid, payment_method,
-     *                                     discount_*, customer_*, customer_id, shift_id, sale_date, notes, client_uuid, provisional_number, device_id,
-     *                                     allow_negative_stock, payments_explicit, from_sync
+     *                                      discount_*, customer_*, customer_id, shift_id, sale_date, notes, client_uuid, provisional_number, device_id,
+     *                                      allow_negative_stock, payments_explicit, from_sync, location_id
      * @return array{sale: SaleRecord, replayed: bool}
      */
     public function checkout(int $companyId, int $userId, array $data): array
@@ -120,7 +120,12 @@ class SaleService
                 'enforce_limit' => empty($data['from_sync']),
             ];
 
-            return $this->finalize($sale->fresh(), $payments, $userId, (bool) ($data['allow_negative_stock'] ?? false));
+            $location = isset($data['location_id']) ? (int) $data['location_id'] : null;
+            if ($location) {
+                LocationStock::assertLocation($companyId, $location);
+            }
+
+            return $this->finalize($sale->fresh(), $payments, $userId, (bool) ($data['allow_negative_stock'] ?? false), $location);
         });
 
         return ['sale' => $this->loaded($sale), 'replayed' => false];
@@ -224,7 +229,7 @@ class SaleService
         return $c;
     }
 
-    private function finalize(SaleRecord $sale, array $payments, int $userId, bool $allowNegative): SaleRecord
+    private function finalize(SaleRecord $sale, array $payments, int $userId, bool $allowNegative, ?int $locationId = null): SaleRecord
     {
         $sale->load('saleRecordItems');
         $lines = $sale->saleRecordItems;
@@ -327,6 +332,7 @@ class SaleService
                 'reference_type' => 'sale',
                 'reference_id' => $sale->id,
                 'sale_record_id' => $sale->id,
+                'location_id' => $locationId,
                 'allow_negative' => $allowNegative || (bool) $products[(int) $line->stock_item_id]->allow_negative_stock,
             ]);
             $line->stock_record_id = $movement->id;

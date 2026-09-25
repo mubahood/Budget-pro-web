@@ -44,16 +44,6 @@ Route::group([
     $router->resource('budget-item-categories', BudgetItemCategoryController::class);
     $router->resource('budget-items', BudgetItemController::class);
     $router->resource('data-exports', DataExportController::class);
-    $router->resource('purchase-orders', PurchaseOrderController::class);
-    // P0-12: forecasting + auto-reorder are unfinished (Phase 4 rebuild); hidden unless the flag is on.
-    // The trigger route is declared before the resource so it is no longer shadowed by {auto_reorder_rule}.
-    if (config('saas.features.inventory_automation')) {
-        $router->get('inventory-forecasts-generate', 'InventoryForecastController@generate');
-        $router->post('inventory-forecasts-generate', 'InventoryForecastController@processGenerate');
-        $router->resource('inventory-forecasts', InventoryForecastController::class);
-        $router->get('auto-reorder-rules/trigger', 'AutoReorderRuleController@trigger');
-        $router->resource('auto-reorder-rules', AutoReorderRuleController::class);
-    }
     // Phase 2 — POS & inventory
     $router->get('customers/{id}/pay', 'CustomerController@payForm');
     $router->post('customers/{id}/pay', 'CustomerController@pay');
@@ -63,6 +53,19 @@ Route::group([
     $router->resource('suppliers', SupplierController::class);
     $router->resource('units', UnitController::class);
     $router->resource('shifts', ShiftController::class)->only(['index', 'show']);
+    $router->post('purchase-orders/{id}/send', 'PurchaseOrderController@send')->where('id', '[0-9]+');
+    $router->post('purchase-orders/{id}/receive', 'PurchaseOrderController@receive')->where('id', '[0-9]+');
+    $router->post('purchase-orders/{id}/cancel', 'PurchaseOrderController@cancel')->where('id', '[0-9]+');
+    $router->resource('purchase-orders', PurchaseOrderController::class)->only(['index', 'show', 'create', 'store']);
+    $router->resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'show', 'create', 'store']);
+    $router->get('reports', 'ReportController@index');
+    $router->get('locations', 'LocationController@index');
+    $router->post('locations', 'LocationController@store');
+    $router->post('locations/devices', 'LocationController@devices');
+    $router->get('stock-transfers', 'LocationController@transfers');
+    $router->post('stock-transfers', 'LocationController@transfer');
+    $router->get('reorder-suggestions', 'ReorderSuggestionController@index');
+    $router->post('reorder-suggestions/orders', 'ReorderSuggestionController@orders');
     $router->resource('goods-receipts', GoodsReceiptController::class)->only(['index', 'show', 'create', 'store']);
     $router->get('stock-takes/{id}/count', 'StockTakeController@countForm');
     $router->post('stock-takes/{id}/count', 'StockTakeController@saveCounts');

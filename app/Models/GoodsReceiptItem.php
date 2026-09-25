@@ -11,7 +11,7 @@ class GoodsReceiptItem extends Model
 {
     protected $table = 'goods_receipt_items';
 
-    protected $fillable = ['company_id', 'goods_receipt_id', 'stock_item_id', 'quantity', 'unit_cost', 'stock_record_id'];
+    protected $fillable = ['company_id', 'goods_receipt_id', 'stock_item_id', 'quantity', 'unit_cost', 'stock_record_id', 'purchase_order_item_id', 'expected_unit_cost', 'batch_number', 'expiry_date'];
 
     protected $casts = ['quantity' => 'decimal:3', 'unit_cost' => 'decimal:2'];
 

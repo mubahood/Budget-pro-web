@@ -17,7 +17,7 @@ class SupplierController extends BaseCrudController
 
     protected string $resourceName = 'Supplier';
 
-    protected array $writable = ['name', 'phone', 'email', 'address', 'payment_terms_days', 'notes', 'is_active'];
+    protected array $writable = ['name', 'phone', 'email', 'address', 'payment_terms_days', 'lead_time_days', 'notes', 'is_active'];
 
     protected array $searchable = ['name', 'phone', 'email'];
 
@@ -31,6 +31,7 @@ class SupplierController extends BaseCrudController
             'email' => ['nullable', 'email', 'max:150'],
             'address' => ['nullable', 'string', 'max:255'],
             'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'lead_time_days' => ['nullable', 'integer', 'min:0', 'max:180'],
             'notes' => ['nullable', 'string', 'max:500'],
             'is_active' => ['nullable', 'boolean'],
         ];
@@ -52,6 +53,12 @@ class SupplierController extends BaseCrudController
         }
         foreach (FinancialRecord::withoutGlobalScopes()->where('source_type', 'supplier_payment')->where('source_id', $s->id)->get() as $p) {
             $entries[] = ['date' => (string) $p->date?->toDateString(), 'type' => 'payment', 'ref' => $p->receipt, 'description' => 'Payment ('.$p->payment_method.')', 'debit' => round((float) $p->amount, 2), 'credit' => 0.0];
+        }
+        foreach (\App\Models\PurchaseReturn::withoutGlobalScopes()->where('supplier_id', $s->id)->get() as $r) {
+            $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'return', 'ref' => $r->number, 'description' => 'Goods returned'.($r->reason ? ": {$r->reason}" : ''), 'debit' => round((float) $r->total_value, 2), 'credit' => 0.0];
+            if ((float) $r->refund_amount > 0) {
+                $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'refund', 'ref' => $r->number, 'description' => 'Refund received', 'debit' => 0.0, 'credit' => round((float) $r->refund_amount, 2)];
+            }
         }
         usort($entries, fn ($a, $b) => strcmp($a['date'], $b['date']));
         $running = 0.0;

@@ -42,10 +42,13 @@ class GoodsReceiptController extends BaseCrudController
             'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
+            'items.*.batch_number' => ['nullable', 'string', 'max:60'],
+            'items.*.expiry_date' => ['nullable', 'date'],
+            'location_id' => ['nullable', 'integer'],
         ]);
         try {
             $grn = (new GoodsReceiptService())->receive($companyId, (int) $request->user()->id, $data['items'], $data['supplier_id'] ?? null, $data['invoice_ref'] ?? null,
-                (float) ($data['amount_paid'] ?? 0), $data['payment_method'] ?? 'cash', $data['received_on'] ?? null, $data['client_uuid'] ?? null, $data['notes'] ?? null, $request->header('X-Device-Id'));
+                (float) ($data['amount_paid'] ?? 0), $data['payment_method'] ?? 'cash', $data['received_on'] ?? null, $data['client_uuid'] ?? null, $data['notes'] ?? null, $request->header('X-Device-Id'), null, $data['location_id'] ?? null);
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }

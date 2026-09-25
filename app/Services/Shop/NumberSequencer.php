@@ -23,6 +23,8 @@ class NumberSequencer
         'stock_take' => 'STK',
         'shift' => 'SHF',
         'refund' => 'RFD',
+        'purchase_return' => 'PRT',
+        'transfer' => 'TRF',
     ];
 
     public static function next(int $companyId, string $kind, ?\DateTimeInterface $on = null): string

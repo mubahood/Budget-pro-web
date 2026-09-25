@@ -19,7 +19,7 @@ class StockService
 {
     public const INBOUND = ['Stock In', 'Purchase', 'Return', 'Adjustment In', 'Opening', 'Transfer In'];
 
-    public const OUTBOUND = ['Sale', 'Damage', 'Expired', 'Lost', 'Internal Use', 'Adjustment Out', 'Other', 'Stock Out', 'Transfer Out'];
+    public const OUTBOUND = ['Sale', 'Damage', 'Expired', 'Lost', 'Internal Use', 'Adjustment Out', 'Other', 'Stock Out', 'Transfer Out', 'Purchase Return'];
 
     public static function types(): array
     {
@@ -43,7 +43,7 @@ class StockService
      *
      * @param  array{stock_item_id:int, type:string, quantity:float|string, description?:string|null, date?:string|\DateTimeInterface|null,
      *               selling_price?:float|null, unit_cost?:float|null, created_by_id?:int|null, client_uuid?:string|null,
-     *               reference_type?:string|null, reference_id?:int|null, sale_record_id?:int|null, allow_negative?:bool}  $attrs
+     *               reference_type?:string|null, reference_id?:int|null, sale_record_id?:int|null, allow_negative?:bool, location_id?:int|null, batch_in?:array<int, array<string, mixed>>}  $attrs
      */
     public function record(array $attrs): StockRecord
     {
@@ -61,7 +61,7 @@ class StockService
         }
 
         $record = new StockRecord();
-        foreach (['stock_item_id', 'type', 'quantity', 'description', 'selling_price', 'unit_cost', 'created_by_id', 'client_uuid', 'reference_type', 'reference_id', 'sale_record_id', 'reason', 'image'] as $key) {
+        foreach (['stock_item_id', 'type', 'quantity', 'description', 'selling_price', 'unit_cost', 'created_by_id', 'client_uuid', 'reference_type', 'reference_id', 'sale_record_id', 'reason', 'image', 'location_id'] as $key) {
             if (array_key_exists($key, $attrs) && $attrs[$key] !== null) {
                 $record->{$key} = $attrs[$key];
             }
@@ -70,6 +70,7 @@ class StockService
             $record->date = $attrs['date'] instanceof \DateTimeInterface ? \Illuminate\Support\Carbon::instance($attrs['date']) : \Illuminate\Support\Carbon::parse($attrs['date']);
         }
         $record->allowNegative = (bool) ($attrs['allow_negative'] ?? false);
+        $record->batchIn = $attrs['batch_in'] ?? [];
         $record->save();
 
         return $record;
@@ -101,6 +102,7 @@ class StockService
             $contra->sale_record_id = $record->sale_record_id;
             $contra->is_reversal = true;
             $contra->reverses_id = $record->id;
+            $contra->location_id = $record->location_id;
             // Undoing an outbound movement puts stock back (always safe); undoing an inbound one removes
             // stock and must respect the product's negative-stock policy like any other movement.
             $contra->allowNegative = ! self::isInbound((string) $record->type);

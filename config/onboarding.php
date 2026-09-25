@@ -42,7 +42,7 @@ return [
 
     // Web paths per module (first path segment, `*` = prefix) — hidden from menus and refused when the module is off.
     'module_paths' => [
-        'shop' => ['stock-*', 'sale-records', 'customers', 'suppliers', 'units', 'shifts', 'goods-receipts', 'purchase-orders', 'inventory-forecasts', 'auto-reorder-rules'],
+        'shop' => ['stock-*', 'sale-records', 'customers', 'suppliers', 'units', 'shifts', 'goods-receipts', 'purchase-orders', 'purchase-returns', 'reorder-suggestions', 'locations', 'stock-transfers'],
         'budget' => ['budget-*', 'contribution-records', 'handover-records', 'data-exports'],
         'poultry' => ['poultry-*'],
         'finance' => ['financial-*'],

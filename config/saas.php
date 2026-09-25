@@ -34,11 +34,8 @@ return [
     // Deep link the payment result page offers to return to the mobile app (null hides the button).
     'mobile_deep_link' => env('MOBILE_DEEP_LINK', 'budgetpro://billing'),
 
-    // Platform-wide feature flags (per-tenant flags live in companies.features, Phase 1+).
-    'features' => [
-        // Inventory forecasting + auto-reorder rules: unfinished modules, rebuilt in Phase 4 (P0-12).
-        'inventory_automation' => (bool) env('FEATURE_INVENTORY_AUTOMATION', false),
-    ],
+    // Plan features (forecasting, multi_location, …) live on plans.features; see Entitlements.
+    'features' => [],
 
     // Currency used when a company has none set (companies choose their own at onboarding).
     'default_currency' => env('SAAS_DEFAULT_CURRENCY', 'UGX'),

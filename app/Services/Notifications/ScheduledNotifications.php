@@ -90,12 +90,21 @@ class ScheduledNotifications
         $default = (float) ($company->low_stock_default ?? config('saas.low_stock_threshold', 10));
         $rows = DB::table('stock_items')->where('company_id', $company->id)->where('is_deleted', false)->where('track_stock', true)
             ->whereRaw('current_quantity <= COALESCE(min_stock, ?)', [$default])->orderBy('current_quantity')->limit(50)->get(['id', 'name', 'current_quantity']);
+        $expiring = DB::table('stock_batches as b')->join('stock_items as p', 'p.id', '=', 'b.stock_item_id')->where('b.company_id', $company->id)->where('b.quantity', '>', 0)
+            ->whereNotNull('b.expiry_date')->where('b.expiry_date', '<=', now()->addDays(30)->toDateString())->orderBy('b.expiry_date')->limit(20)->get(['p.name', 'b.batch_number', 'b.expiry_date']);
+        if ($rows->isEmpty() && $expiring->isEmpty()) {
+            return;
+        }
         if ($rows->isEmpty()) {
+            $this->notifier->notify((int) $company->id, 'low_stock', $expiring->count().' batch(es) expire within 30 days',
+                'Sell or return first: '.$expiring->take(5)->map(fn ($b) => "{$b->name} {$b->batch_number} ({$b->expiry_date})")->implode(', ').'.', []);
+
             return;
         }
         $names = $rows->take(5)->map(fn ($r) => $r->name.' ('.rtrim(rtrim(number_format((float) $r->current_quantity, 3, '.', ''), '0'), '.').')')->implode(', ');
         $more = $rows->count() > 5 ? ' and '.($rows->count() - 5).' more' : '';
-        $this->notifier->notify((int) $company->id, 'low_stock', $rows->count().' product'.($rows->count() > 1 ? 's are' : ' is').' running low', "Reorder soon: {$names}{$more}.", ['product_ids' => $rows->pluck('id')->all()]);
+        $exp = $expiring->isEmpty() ? '' : ' Expiring within 30 days: '.$expiring->take(3)->map(fn ($b) => "{$b->name} {$b->batch_number} ({$b->expiry_date})")->implode(', ').'.';
+        $this->notifier->notify((int) $company->id, 'low_stock', $rows->count().' product'.($rows->count() > 1 ? 's are' : ' is').' running low', "Reorder soon: {$names}{$more}.{$exp}", ['product_ids' => $rows->pluck('id')->all()]);
     }
 
     private function unsyncedDevices(Company $company, Carbon $local): int
