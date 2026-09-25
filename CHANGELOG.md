@@ -81,6 +81,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P2-9** Shop home: Sell button, Today (sales, cash, mobile money, profit, credit, what customers owe), low stock by per-product minimum, sync chip.
 - Every POS action is one local transaction + outbox batch; provisional rows are replaced by the server’s on sync. 74 Flutter tests (incl. crate sale, credit, returns + void convergence, cash-up, GRN + count, held carts, receipt golden, ESC/POS bytes); debug APK builds (Kotlin Gradle plugin raised to 2.2.0 for the new plugins).
 
+### Phase 3 — Onboarding, team, notifications, billing
+
+#### Backend (1a9d9fa, d3c60f2 + close-out)
+- **P3-1** Phone-first identity: E.164 phones (UG/KE/TZ/RW), one-time codes over WhatsApp (Meta Cloud API) with SMS fallback (Africa's Talking) and email, rate limits and lockout, register with a verified phone, login by phone or email, reset by code, profile, session list/revoke, 180-day tokens + refresh. Message log + database queue; `log` drivers until provider keys are set (config/messaging.php).
+- **P3-2** Setup wizard API and web `/setup` (business → products → money → team → done) with step timings; country presets (currency, timezone, VAT, mobile-money providers); 9 template packs (185 products with Kampala prices) as platform-editable data; CSV import with preview.
+- **P3-4** Per-company roles (owner, manager, cashier, stock keeper, accountant, viewer) with per-company overrides; one permission map for the API, per-op checks on sync push, discount/price-override and cost-price gating, web admin sections enforced (not just hidden menus) and the web role kept in step; invites by WhatsApp/SMS/email with API + web accept page, resend/revoke, deactivate (signs out everywhere), transfer ownership, member activity. Existing staff keep manager access.
+- **P3-5** Notification centre + per-user preferences; `saas:hourly` sends the 8 pm daily summary (opt-in), low-stock digest and unsynced-phone alert in each shop's timezone, once per day; cash-up variance alert on shift close; payment-received and billing notices. Scheduler + `queue:work --stop-when-empty` run from cron (decision H9).
+- **P3-6** Billing lifecycle: trial reminders (3 days, 1 day) → **Free plan** after the trial (H2); paid plans → `past_due` with reminders → Free after the 7 grace days; cancel at period end/resume; prorated plan changes (unused days credited, fully-covered changes applied at once); invoice numbers + PDF; local prices + M-Pesa/mobile money for KES/TZS/RWF; tenant billing page on the web.
+- **P3-7** Plan limits enforced online (users, phones, products → 422 `plan_limit_reached` with upgrade link), usage in the entitlement snapshot; WhatsApp automation is a paid feature.
+- **P3-8** Getting-started checklist (API + dashboard card), module enablement per company (hidden from the web menu and routes, from the app home/menu); existing shops keep every module and skip the wizard.
+- **P3-9** Dashboard "today/this month" follows the shop's timezone (`CONVERT_TZ` + `@local_today`); hardcoded UGX removed from web screens and PDFs.
+- **P3-10** "Budget Pro" everywhere on the web (admin title/logo, API manifest).
+- Tests: TeamPermissionsTest, BillingLifecycleTest, OnboardingTest, PhoneAuthTest, TeamWebTest, SetupWizardTest — 255 green; phpstan clean.
+
+#### Mobile (budget-pro-mobo 75f4641)
+- New sign-in: phone or email + password, sign in with a code, forgot password, register with a verified phone; "Try the demo shop" (local-only tenant, never syncs; "Start my real shop" wipes it).
+- Setup wizard with template products created offline through the outbox; team, notifications (bell + preferences), plan & billing (usage, prorated prices, MoMo/card checkout, invoices), settings (language, modules).
+- Role-aware POS checks, shop menu, cost prices and product edits (cached permissions, offline); module-aware home; getting-started card.
+- English, Kiswahili and Luganda; app renamed **Budget Pro** 2.0.0; 3 value slides; Play listing text (en, sw). 79 Flutter tests; release APK builds.
+
 ---
 
 ## [2.0.0] - 2025-12-09

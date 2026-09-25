@@ -13,7 +13,7 @@ return [
     | login page.
     |
     */
-    'name' => 'InvetoTrack',
+    'name' => env('APP_NAME', 'Budget Pro'),
 
     /*
     |--------------------------------------------------------------------------
@@ -24,7 +24,7 @@ return [
     | `img` tag, eg '<img src="http://logo-url" alt="Admin logo">'.
     |
     */
-    'logo' => '<b>Inveto</b> admin',
+    'logo' => '<b>Budget</b> Pro',
 
     /*
     |--------------------------------------------------------------------------
@@ -36,7 +36,7 @@ return [
     | '<img src="http://logo-url" alt="Admin logo">'.
     |
     */
-    'logo-mini' => '<b>ET</b>',
+    'logo-mini' => '<b>BP</b>',
 
     /*
     |--------------------------------------------------------------------------
@@ -89,7 +89,7 @@ return [
     | Html title for all pages.
     |
     */
-    'title' => 'Admin',
+    'title' => 'Budget Pro',
 
     /*
     |--------------------------------------------------------------------------

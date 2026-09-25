@@ -64,8 +64,8 @@ class ApiController extends BaseController
         $roles = DB::table('admin_role_users')->where('user_id', $u->id)->get();
         $company = Company::find($u->company_id);
         $data = [
-            'name' => 'Invetor-Track',
-            'short_name' => 'IT',
+            'name' => 'Budget Pro',
+            'short_name' => 'BP',
             'description' => 'Inventory Management System',
             'version' => '1.0.0',
             'author' => 'M. Muhido',

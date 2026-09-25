@@ -1113,16 +1113,16 @@ Mobile
 
 ### Phase 3 — Onboarding, team, notifications, billing (3 weeks)
 
-- [ ] P3-1 Phone-first auth: OTP (SMS + WhatsApp), forgot/reset, email verification, profile, device list, token expiry (C6)
-- [ ] P3-2 Setup wizard (Appendix F) mobile + web; template packs + CSV import; opening stock
-- [ ] P3-3 Demo mode (never syncs) and "start my real shop" (C3)
-- [ ] P3-4 Per-company roles + permission matrix + policies + `admin_role_menu`; invites via WhatsApp/SMS/email; team screens (C5)
-- [ ] P3-5 Notifications: mail provider, `database` queue + worker, scheduler, welcome/OTP/invite/reset/trial/dunning/daily summary/low stock/unsynced device; preferences (C7)
-- [ ] P3-6 Billing page (web+mobile), proration, cancel, invoices PDF, lifecycle jobs (trialing→past_due→grace→expired), M-Pesa/Airtel for KES/TZS (C8)
-- [ ] P3-7 Quota & feature enforcement with upgrade CTAs (A10)
-- [ ] P3-8 Empty states, getting-started checklist, contextual tips, plain-language menus, module enablement (C4)
-- [ ] P3-9 Localisation: timezone/locale/currency per company, `Money` formatter everywhere, `sw`/`lg` strings, E.164 phones (C10)
-- [ ] P3-10 Branding decision applied everywhere (Appendix H) + Play Store listing refresh
+- [x] P3-1 Phone-first auth: OTP (SMS + WhatsApp), forgot/reset, email verification, profile, device list, token expiry (C6)
+- [x] P3-2 Setup wizard (Appendix F) mobile + web; template packs + CSV import; opening stock
+- [x] P3-3 Demo mode (never syncs) and "start my real shop" (C3)
+- [x] P3-4 Per-company roles + permission matrix + policies + `admin_role_menu`; invites via WhatsApp/SMS/email; team screens (C5)
+- [x] P3-5 Notifications: mail provider, `database` queue + worker, scheduler, welcome/OTP/invite/reset/trial/dunning/daily summary/low stock/unsynced device; preferences (C7)
+- [x] P3-6 Billing page (web+mobile), proration, cancel, invoices PDF, lifecycle jobs (trialing→past_due→grace→expired), M-Pesa/Airtel for KES/TZS (C8)
+- [x] P3-7 Quota & feature enforcement with upgrade CTAs (A10)
+- [x] P3-8 Empty states, getting-started checklist, contextual tips, plain-language menus, module enablement (C4)
+- [x] P3-9 Localisation: timezone/locale/currency per company, `Money` formatter everywhere, `sw`/`lg` strings, E.164 phones (C10)
+- [x] P3-10 Branding decision applied everywhere (Appendix H) + Play Store listing refresh
 
 ### Phase 4 — Purchasing, reports, analytics, hardening (4 weeks)
 

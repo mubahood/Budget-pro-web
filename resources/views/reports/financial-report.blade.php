@@ -311,7 +311,7 @@
         $finance_records = $data->get_inventory_categories();
         ?>
         <div class="mt-4">
-            <p class="fs-18 text-center mt-2 text-uppercase black mb-2 fw-700"><u>Invetory Categories</u></p>
+            <p class="fs-18 text-center mt-2 text-uppercase black mb-2 fw-700"><u>Inventory Categories</u></p>
             @if (count($finance_records) == 0)
                 @include('partials.table_no_data')
             @else

@@ -268,6 +268,62 @@ Multipart `{ uuid, purpose: product_image|receipt|avatar|logo|adjustment_photo|d
 
 Sync wire keys added: `units, customers, suppliers, product_barcodes, shifts (insert = open, update {status: closed} = close), sale_returns, goods_receipts, stock_takes`; poultry customers moved to `poultry_customers`. Account payments are `payments` ops with `customer_uuid` and no `sale_uuid`. `auth/me` → `company.shop` carries receipt header/footer, negative-stock policy, low-stock default, require_shift.
 
+## Accounts, team, notifications, billing, onboarding (Phase 3)
+
+### Phone-first identity (P3-1)
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/auth/otp/request` | `{ identifier (phone any format or email), purpose: login\|register\|reset, country? }` → `{ sent, channel: whatsapp\|sms\|mail, expires_in }`. Unknown accounts get the same answer for login/reset; register on a used number → 422 `already_registered`. 10/min per route |
+| POST | `/auth/otp/verify` | `{ identifier, purpose, code }` → login: token/user/company · register: `verification_token` · reset: `reset_token`. 5 wrong codes → 422 `otp_locked` |
+| POST | `/auth/register` | now phone-first: `phone_number` **or** `email`, `verification_token` (from OTP), `country`, `business_type`, `timezone` |
+| POST | `/auth/login` | `{ identifier (phone or email), password }` (`email` still accepted) |
+| POST | `/auth/password/reset` | `{ reset_token, password, password_confirmation }` — signs out every session |
+| PUT | `/auth/profile` | name, email, phone (re-verification), locale, password change |
+| GET/DELETE | `/auth/sessions`, `/auth/sessions/{id}` · POST `/auth/refresh` | tokens expire after `SANCTUM_EXPIRATION_MINUTES` (180 days) |
+
+`auth/me` now carries `role`, `permissions[]` and `entitlements.usage` (users, devices, products, sales this month, storage vs plan limits).
+
+### Team & roles (P3-4)
+Roles: `owner, manager, cashier, stock_keeper, accountant, viewer`; permissions: `sell, discount, void, refund, restock, adjust, stock_take, manage_products, view_cost, view_profit, view_reports, manage_finance, manage_budget, resolve_conflicts, manage_team, manage_settings, billing` (config/permissions.php). Any refused call answers **403** `{ errors: { code: "forbidden", permission } }`; a pushed sync op is rejected with the same code. Checkout with a discount or a price other than the list price needs `discount`; `buying_price` is hidden without `view_cost`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/team` | members (role, status), pending invites, role matrix |
+| GET/PUT | `/team/roles`, `/team/roles/{role}` | `{ permissions: [...] }` — this company's version of a role (billing/team/settings stay owner-only) |
+| POST | `/team/invites` | `{ role, phone? , email?, name? }` → WhatsApp/SMS/email link (7 days), 422 `plan_limit_reached` when the plan's users are used up |
+| POST/DELETE | `/team/invites/{id}/resend`, `/team/invites/{id}` | |
+| PATCH | `/team/members/{id}` | `{ role?, active? }` — deactivating signs the member out everywhere |
+| GET | `/team/members/{id}/activity` | sales, voids and stock movements by that member |
+| POST | `/team/transfer-ownership` | `{ user_id, password }` (owner only) |
+| GET/POST | `/invites/{token}`, `/invites/{token}/accept` (public) | `{ first_name, last_name, password }` → token; web page at `/invite/{token}` |
+
+### Notifications (P3-5)
+`GET /notifications` (items + unread), `POST /notifications/read { ids? }`, `GET/PUT /notifications/preferences` (`daily_summary` 8 pm local — opt-in, `low_stock`, `unsynced_device`, `cash_variance`, `billing`, `team`; channels `in_app, whatsapp, sms, mail`). The scheduler runs `saas:hourly` (billing lifecycle + time-of-day notices, once per day per shop) and the queue worker every minute.
+
+### Billing (P3-6, P3-7)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/subscription` | + `access_state`, `usage`, `currency`, `can_manage`, `canceled_at`, `is_free` |
+| GET | `/subscription/quote?plan_id=` | `{ amount, currency, credit, full_price, change, immediate, ends_at, payment_options }` — unused paid days are credited |
+| POST | `/subscription/checkout` | prorated; a change fully covered by credit applies at once (`payment_link: null`); KES/TZS/RWF plans with a local price pay by M-Pesa/mobile money |
+| POST | `/subscription/cancel` · `/subscription/resume` | cancel at period end → Free plan |
+| GET | `/subscription/invoices/{id}.pdf` | paid invoices (`BP-2026-000123`) |
+
+Lifecycle (hourly): trial reminders at 3 and 1 days → trial ends → **Free plan** (1 phone, 100 products, 200 sales/month, no WhatsApp automation); paid plan ends → `past_due` + reminders on days 0, 3, 6 → after the 7 grace days → Free. Limits: new users/devices/products are refused online with 422 `plan_limit_reached` (`errors.limit`, `max`, `used`, `upgrade_url`); offline sales are never refused.
+
+### Onboarding, checklist, modules (P3-2, P3-8)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/onboarding` | `state` (step, completed/skipped steps, step_seconds), `checklist` (5 items, percent), `company`, `presets` (countries, business types, modules, payment methods) |
+| POST | `/onboarding/steps/{step}` | `{ skipped?, seconds? }` |
+| PUT | `/onboarding/business` | `{ name, business_type, country, currency?, timezone?, locale?, tax_rate?, modules? }` — country sets currency/timezone |
+| PUT | `/onboarding/money` | `{ payment_methods[], momo_providers[], opening_float, receipt_channels[], negative_stock_policy?, tax_rate?, require_shift? }` |
+| GET | `/onboarding/templates?business_type=` | template pack priced in the shop's currency |
+| POST | `/onboarding/templates/apply` | `{ items: [{ key, selling_price?, buying_price?, opening_stock? }] }` — skips names that already exist |
+| POST | `/onboarding/import` | multipart `file` or `csv` text; `dry_run=1` returns `{ rows, errors, count }`; columns `name, category, sub_category, unit, selling_price, buying_price, opening_stock, barcode, sku` |
+| POST | `/onboarding/checklist/dismiss` | |
+| PUT | `/company/modules` | `{ modules: [shop, finance, budget, poultry] }` — hidden modules keep their data |
+
 ---
 
 _Legacy note: the pre-v1 endpoints (`/api/api/{model}`, `/api/mobile/*`, param-based
