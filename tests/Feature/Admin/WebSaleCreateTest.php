@@ -117,4 +117,25 @@ class WebSaleCreateTest extends AdminTestCase
         $this->assertEquals(2000, (float) $today->p);
         $this->asAdmin($t['user'])->get('/')->assertOk()->assertSee('5,000');
     }
+
+    public function test_voiding_after_a_faulty_return_does_not_put_the_faulty_item_back(): void
+    {
+        $t = $this->makeTenant('company');
+        FinancialPeriod::withoutGlobalScopes()->firstOrCreate(['company_id' => $t['company']->id, 'status' => 'Active'], ['name' => 'FY', 'start_date' => now()->startOfYear(), 'end_date' => now()->endOfYear()]);
+        $cat = StockCategory::create(['company_id' => $t['company']->id, 'name' => 'Elec']);
+        $sub = StockSubCategory::create(['company_id' => $t['company']->id, 'stock_category_id' => $cat->id, 'name' => 'Irons', 'measurement_unit' => 'pcs']);
+        $p = StockItem::create(['company_id' => $t['company']->id, 'created_by_id' => $t['user']->id, 'stock_category_id' => $cat->id, 'stock_sub_category_id' => $sub->id,
+            'name' => 'Iron box', 'sku' => 'I-'.uniqid(), 'buying_price' => 30000, 'selling_price' => 45000, 'original_quantity' => 10]);
+        $sales = new \App\Services\Shop\SaleService();
+        $sale = $sales->checkout($t['company']->id, $t['user']->id, ['payments' => [['method' => 'cash', 'amount' => 135000]], 'payments_explicit' => true, 'items' => [['stock_item_id' => $p->id, 'quantity' => 3]]])['sale'];
+        $line = DB::table('sale_record_items')->where('sale_record_id', $sale->id)->first();
+        $returns = app(\App\Services\Shop\ReturnService::class);
+        $returns->create($sale, [['sale_item_id' => $line->id, 'quantity' => 1, 'restock' => false]], $t['user']->id, 'Faulty');
+        $returns->create($sale->fresh(), [['sale_item_id' => $line->id, 'quantity' => 1, 'restock' => true]], $t['user']->id, 'Changed mind');
+        $this->assertEquals(8, (float) $p->fresh()->current_quantity);
+
+        $sales->void($sale->fresh(), 'Entered twice', $t['user']->id);
+        $this->assertEquals(9, (float) $p->fresh()->current_quantity, 'the good ones are back on the shelf; the faulty one stays written off');
+        $this->assertSame(0.0, round((float) DB::table('payments')->where('sale_record_id', $sale->id)->sum('amount'), 2), 'all the money is handed back');
+    }
 }

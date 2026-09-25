@@ -40,6 +40,14 @@ class AdminPermission
         if ($need !== null && ! Permissions::can($user, $need)) {
             abort(403, 'Your role does not allow this. Ask the shop owner.');
         }
+        // Forms carry the shop and the author as hidden fields; never trust them (a changed value would
+        // write into another shop). A shop user always writes as themselves, into their own shop.
+        if (! in_array($request->method(), ['GET', 'HEAD'], true)) {
+            $own = array_intersect_key(['company_id' => $user->company_id, 'created_by_id' => $user->id, 'user_id' => $user->id], $request->request->all());
+            if ($own !== []) {
+                $request->merge($own);
+            }
+        }
 
         return $next($request);
     }

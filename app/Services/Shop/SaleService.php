@@ -166,6 +166,24 @@ class SaleService
                 $contra = $this->stock->reverse($movement, $reason ?? 'Sale voided', $userId);
                 $this->reverseLegacyIncome($movement, $contra, $reason, $userId);
             }
+            // Undoing the sale movement put back everything sold, including goods that came back faulty
+            // and were never restocked: write those off again so they don't reappear on the shelf.
+            $faulty = DB::table('sale_return_items as ri')->join('sale_returns as r', 'r.id', '=', 'ri.sale_return_id')
+                ->where('r.sale_record_id', $sale->id)->where('r.is_deleted', 0)->where('ri.restock', 0)
+                ->get(['ri.stock_item_id', 'ri.quantity', 'ri.sale_record_item_id', 'r.id as return_id']);
+            foreach ($faulty as $f) {
+                $product = \App\Models\StockItem::withoutGlobalScopes()->find($f->stock_item_id);
+                if ($product === null || $product->track_stock === false) {
+                    continue;
+                }
+                $factor = (float) (DB::table('sale_record_items')->where('id', $f->sale_record_item_id)->value('unit_factor') ?: 1);
+                $this->stock->record([
+                    'stock_item_id' => (int) $f->stock_item_id, 'type' => 'Damage', 'reason' => 'damage', 'quantity' => round((float) $f->quantity * max($factor, 0.001), 3),
+                    'unit_cost' => (float) $product->buying_price, 'created_by_id' => $userId, 'allow_negative' => true,
+                    'description' => 'Faulty return on voided sale '.($sale->receipt_number ?: '#'.$sale->id),
+                    'reference_type' => 'sale_return', 'reference_id' => (int) $f->return_id,
+                ]);
+            }
             $this->payments->adoptPaidAtSale($sale); // money taken at the till before payment rows existed is handed back too
             $payments = Payment::withoutGlobalScopes()->where('sale_record_id', $sale->id)->where('is_reversal', false)->get();
             foreach ($payments as $payment) {

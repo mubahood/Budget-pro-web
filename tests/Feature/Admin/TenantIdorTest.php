@@ -6,6 +6,7 @@ use App\Models\BudgetProgram;
 use App\Models\DataExport;
 use App\Models\FinancialCategory;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 /**
  * P0-2: admin-panel show/edit/delete of another tenant's row must 404, for
@@ -80,5 +81,20 @@ class TenantIdorTest extends AdminTestCase
         $this->asAdmin($a['user'])->get('/employees/'.$b['user']->id.'/edit')->assertNotFound();
         $this->asAdmin($a['user'])->delete('/employees/'.$b['user']->id)->assertNotFound();
         $this->assertNotNull(User::find($b['user']->id));
+    }
+
+    public function test_a_changed_hidden_shop_field_cannot_write_into_another_shop(): void
+    {
+        $mine = $this->makeTenant('company');
+        $other = $this->makeTenant('company');
+        \App\Models\FinancialPeriod::withoutGlobalScopes()->firstOrCreate(['company_id' => $mine['company']->id, 'status' => 'Active'], ['name' => 'FY', 'start_date' => now()->startOfYear(), 'end_date' => now()->endOfYear()]);
+        $cat = DB::table('financial_categories')->insertGetId(['company_id' => $mine['company']->id, 'name' => 'Rent', 'created_at' => now(), 'updated_at' => now()]);
+        $this->asAdmin($mine['user'])->post('/financial-records', ['financial_category_id' => $cat, 'type' => 'Expense', 'date' => now()->toDateString(), 'amount' => '1500',
+            'payment_method' => 'Cash', 'description' => 'Tampered', 'company_id' => $other['company']->id, 'created_by_id' => $other['user']->id, 'user_id' => $other['user']->id]);
+        $row = DB::table('financial_records')->where('description', 'Tampered')->first();
+        $this->assertNotNull($row);
+        $this->assertSame((int) $mine['company']->id, (int) $row->company_id);
+        $this->assertSame((int) $mine['user']->id, (int) $row->created_by_id);
+        $this->assertSame(0, DB::table('financial_records')->where('company_id', $other['company']->id)->count());
     }
 }
