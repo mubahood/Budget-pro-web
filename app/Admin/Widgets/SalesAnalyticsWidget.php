@@ -278,22 +278,15 @@ class SalesAnalyticsWidget extends Widget
      */
     private function getDailySales($companyId)
     {
-        $daily = DB::select('
-            SELECT 
-                DATE(sr.sale_date) as date,
-                COALESCE(SUM(sr.total_amount), 0) as revenue,
-                COALESCE(COUNT(DISTINCT sr.id), 0) as transactions,
-                COALESCE(SUM(sri.quantity * (sri.unit_price - si.buying_price)), 0) as profit
-            FROM sale_records sr
-            LEFT JOIN sale_record_items sri ON sr.id = sri.sale_record_id
-            LEFT JOIN stock_items si ON sri.stock_item_id = si.id
-            WHERE sr.company_id = ?
-            AND MONTH(sr.sale_date) = MONTH(@local_today)
-            AND YEAR(sr.sale_date) = YEAR(@local_today)
-            AND DATE(sr.sale_date) <= @local_today
-            GROUP BY DATE(sr.sale_date)
+        // Every sale: sale documents and the old app's stand-alone sale movements (client report 2026-09-25).
+        [$from, $bind] = \App\Support\SalesSource::sql((int) $companyId);
+        $daily = DB::select("
+            SELECT s.sale_date as date, COALESCE(SUM(s.total_amount), 0) as revenue, COUNT(*) as transactions, COALESCE(SUM(s.profit), 0) as profit
+            FROM {$from}
+            WHERE MONTH(s.sale_date) = MONTH(@local_today) AND YEAR(s.sale_date) = YEAR(@local_today) AND s.sale_date <= @local_today
+            GROUP BY s.sale_date
             ORDER BY date ASC
-        ', [$companyId]);
+        ", $bind);
 
         $labels = [];
         $revenue = [];

@@ -84,6 +84,7 @@ class HomeController extends Controller
      */
     private function getSalesOverview($companyId)
     {
+        [$from, $bind] = \App\Support\SalesSource::sql((int) $companyId);
         $overview = DB::select("
             SELECT 
                 COUNT(*) as total_sales,
@@ -99,9 +100,8 @@ class HomeController extends Controller
                 SUM(CASE WHEN DATE(sale_date) >= DATE_SUB(@local_today, INTERVAL 7 DAY) THEN total_amount ELSE 0 END) as week_sales,
                 SUM(CASE WHEN MONTH(sale_date) = MONTH(@local_today) AND YEAR(sale_date) = YEAR(@local_today) THEN total_amount ELSE 0 END) as month_sales,
                 SUM(CASE WHEN YEAR(sale_date) = YEAR(@local_today) THEN total_amount ELSE 0 END) as year_sales
-            FROM sale_records
-            WHERE company_id = ?
-        ", [$companyId]);
+            FROM {$from}
+        ", $bind);
 
         $result = $overview[0] ?? null;
 
@@ -168,7 +168,7 @@ class HomeController extends Controller
                 SUM(CASE WHEN DATE(sale_date) < DATE_SUB(@local_today, INTERVAL 60 DAY) THEN balance ELSE 0 END) as overdue_60,
                 SUM(CASE WHEN DATE(sale_date) < DATE_SUB(@local_today, INTERVAL 90 DAY) THEN balance ELSE 0 END) as overdue_90
             FROM sale_records
-            WHERE company_id = ?
+            WHERE company_id = ? AND status <> 'Voided'
             AND balance > 0
         ", [$companyId]);
 
@@ -180,7 +180,7 @@ class HomeController extends Controller
                 COALESCE(SUM(balance), 0) as total_debt,
                 MAX(sale_date) as last_sale_date
             FROM sale_records
-            WHERE company_id = ?
+            WHERE company_id = ? AND status <> 'Voided'
             AND balance > 0
             AND customer_name IS NOT NULL
             AND customer_name != ''
@@ -289,13 +289,13 @@ class HomeController extends Controller
         ', [$companyId]);
 
         // Get month sales from sale_records
-        $monthlySales = DB::select('
+        [$from, $bind] = \App\Support\SalesSource::sql((int) $companyId);
+        $monthlySales = DB::select("
             SELECT COALESCE(SUM(total_amount), 0) as month_sales
-            FROM sale_records
-            WHERE company_id = ?
-            AND MONTH(sale_date) = MONTH(@local_today)
+            FROM {$from}
+            WHERE MONTH(sale_date) = MONTH(@local_today)
             AND YEAR(sale_date) = YEAR(@local_today)
-        ', [$companyId]);
+        ", $bind);
 
         // Get best selling category from sale_record_items
         $bestCategory = DB::select('
@@ -393,17 +393,18 @@ class HomeController extends Controller
             'year' => ['condition' => 'YEAR(sale_date) = YEAR(@local_today)'],
         ];
 
+        [$from, $bind] = \App\Support\SalesSource::sql((int) $companyId);
         foreach ($periods as $period => $config) {
             $result = DB::select("
                 SELECT 
                     COALESCE(SUM(total_amount), 0) as sales,
                     COALESCE(SUM(amount_paid), 0) as collected,
                     COUNT(*) as transactions,
-                    COALESCE(AVG(total_amount), 0) as avg_value
-                FROM sale_records
-                WHERE company_id = ?
-                AND {$config['condition']}
-            ", [$companyId]);
+                    COALESCE(AVG(total_amount), 0) as avg_value,
+                    COALESCE(SUM(profit), 0) as profit
+                FROM {$from}
+                WHERE {$config['condition']}
+            ", $bind);
 
             $data = $result[0] ?? (object) ['sales' => 0, 'collected' => 0, 'transactions' => 0, 'avg_value' => 0];
             $stats[$period] = [
@@ -411,6 +412,7 @@ class HomeController extends Controller
                 'collected' => $data->collected,
                 'transactions' => $data->transactions,
                 'avg_value' => round($data->avg_value, 2),
+                'profit' => round((float) ($data->profit ?? 0), 2),
             ];
         }
 
@@ -423,22 +425,24 @@ class HomeController extends Controller
     private function getTopPerformers($companyId)
     {
         // Top selling products from sale_record_items
-        $topProducts = DB::select('
-            SELECT 
-                si.name,
-                si.sku,
-                COUNT(DISTINCT sri.sale_record_id) as sale_count,
-                SUM(sri.quantity) as total_quantity,
-                SUM(sri.subtotal) as total_revenue,
-                COALESCE(AVG(sri.unit_price), 0) as avg_price
-            FROM sale_record_items sri
-            JOIN sale_records sr ON sri.sale_record_id = sr.id
-            JOIN stock_items si ON sri.stock_item_id = si.id
-            WHERE sr.company_id = ?
+        // Sale lines of sale documents plus stand-alone Sale movements (old app / quick sale).
+        $topProducts = DB::select("
+            SELECT si.name, si.sku, COUNT(*) as sale_count, SUM(x.qty) as total_quantity, SUM(x.amount) as total_revenue,
+                COALESCE(SUM(x.amount) / NULLIF(SUM(x.qty), 0), 0) as avg_price
+            FROM (
+                SELECT sri.stock_item_id, sri.quantity - COALESCE(sri.returned_quantity, 0) AS qty, COALESCE(sri.line_total, sri.subtotal) AS amount
+                FROM sale_record_items sri JOIN sale_records sr ON sri.sale_record_id = sr.id
+                WHERE sr.company_id = ? AND sr.status <> 'Voided'
+                UNION ALL
+                SELECT m.stock_item_id, m.quantity, m.total_sales FROM stock_records m
+                WHERE m.company_id = ? AND m.type = 'Sale' AND m.sale_record_id IS NULL AND m.is_reversal = 0
+                  AND NOT EXISTS (SELECT 1 FROM stock_records rv WHERE rv.reverses_id = m.id)
+            ) x
+            JOIN stock_items si ON x.stock_item_id = si.id
             GROUP BY si.id, si.name, si.sku
             ORDER BY total_revenue DESC
             LIMIT 10
-        ', [$companyId]);
+        ", [$companyId, $companyId]);
 
         // Top customers by purchase value
         $topCustomers = DB::select("
@@ -450,7 +454,7 @@ class HomeController extends Controller
                 COALESCE(SUM(balance), 0) as outstanding_balance,
                 MAX(sale_date) as last_purchase_date
             FROM sale_records
-            WHERE company_id = ?
+            WHERE company_id = ? AND status <> 'Voided'
             AND customer_name IS NOT NULL
             AND customer_name != ''
             GROUP BY customer_name, customer_phone

@@ -125,6 +125,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **E3 Mobile-money request-to-pay** — the shop registers its payout number; cashiers request the balance from the customer's phone (MTN/Airtel/M-Pesa via Flutterwave), the phone waits for approval, and the payment is recorded on the sale exactly once (status check or webhook).
 - Already delivered earlier and counted as Part E: thermal printing (E4), units (E6), self-explaining reorder list (E11), POs on WhatsApp (E12), expiry/FEFO (E13), dead stock (E14), multi-branch (E16), daily WhatsApp summary (E17), cash-up variance (E19), VAT/Excel exports (E20).
 
+### Client fixes (2026-09-25)
+- Web selling saved no items ("Please add at least one item") because the form's `_remove_` flag was treated as "removed" whenever it was present. Fixed, with a test that sells through the web form.
+- The dashboard's sales overview, daily sales/profit chart, quick stats and top products now include old-app sales and leave out voided sales (E53).
+- Returns: a "Return items" form on the web sale page (good → back to stock, faulty → not restocked; profit and refunds follow), and the returns report shows every return (E54).
+- `stock:apply-old-writeoffs` applies old damage/expiry write-offs that never reduced stock (E55).
+
 ---
 
 ## [2.0.0] - 2025-12-09

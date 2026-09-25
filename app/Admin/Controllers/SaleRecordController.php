@@ -65,6 +65,30 @@ class SaleRecordController extends TenantAdminController
         return redirect(admin_url('sale-records/'.$id));
     }
 
+    /** Customer brought goods back (client report 2026-09-25): good goods go back on the shelf, faulty ones don't. */
+    public function returnItems($id)
+    {
+        $u = Admin::user();
+        $sale = SaleRecord::withoutGlobalScopes()->where('company_id', $u->company_id)->find($id);
+        if ($sale === null) {
+            abort(404);
+        }
+        $lines = [];
+        foreach ((array) request('lines', []) as $itemId => $l) {
+            if (is_array($l) && (float) ($l['quantity'] ?? 0) > 0) {
+                $lines[] = ['sale_item_id' => (int) $itemId, 'quantity' => (float) $l['quantity'], 'restock' => ($l['condition'] ?? 'good') === 'good'];
+            }
+        }
+        try {
+            $return = app(\App\Services\Shop\ReturnService::class)->create($sale, $lines, (int) $u->id, request('reason') ?: null, (string) (request('refund_method') ?: 'cash'));
+            admin_success('Return recorded', 'Value '.number_format((float) $return->value).'. Good items are back in stock; faulty items are recorded but not restocked.');
+        } catch (BusinessRuleException $e) {
+            admin_error('Return not recorded', $e->getMessage());
+        }
+
+        return redirect(admin_url('sale-records/'.$id));
+    }
+
     public function void($id)
     {
         $u = Admin::user();
@@ -334,6 +358,7 @@ class SaleRecordController extends TenantAdminController
         $show = new Show($sale);
         // Receipt on WhatsApp and mobile-money request (plan Part E1/E3).
         $show->field('engage', __('Send / collect'))->unescape()->as(fn () => view('admin.sale-engage', ['sale' => $sale])->render());
+        $show->field('returns', __('Return items'))->unescape()->as(fn () => view('admin.sale-return', ['sale' => $sale])->render());
 
         $show->field('id', __('ID'));
         $show->field('receipt_number', __('Receipt Number'));
@@ -575,7 +600,9 @@ class SaleRecordController extends TenantAdminController
                 return;
             }
 
-            $items = is_array($form->saleRecordItems) ? array_filter($form->saleRecordItems, fn ($i) => ! empty($i['stock_item_id']) && ! isset($i[Form::REMOVE_FLAG_NAME])) : [];
+            // Every row carries _remove_ (0 = keep, 1 = removed in the form): test its value, not its presence.
+            $rows = request('saleRecordItems', $form->saleRecordItems);
+            $items = is_array($rows) ? array_values(array_filter($rows, fn ($i) => is_array($i) && ! empty($i['stock_item_id']) && empty($i[Form::REMOVE_FLAG_NAME]))) : [];
             if (count($items) === 0) {
                 admin_error('No items', 'Please add at least one item to the sale.');
 

@@ -84,6 +84,7 @@ Route::group([
     $router->post('sale-records/{id}/void', 'SaleRecordController@void');
     $router->post('sale-records/{id}/send-receipt', 'SaleRecordController@sendReceipt');
     $router->post('sale-records/{id}/momo-request', 'SaleRecordController@momoRequest');
+    $router->post('sale-records/{id}/return', 'SaleRecordController@returnItems');
     $router->post('customers/{id}/remind', 'CustomerController@remind');
     $router->get('engagement', 'EngagementController@index');
     $router->post('engagement', 'EngagementController@save');
