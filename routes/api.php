@@ -271,6 +271,14 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('sales/{id}/payments', [SaleController::class, 'addPayment']);
         Route::post('sales/{id}/void', [SaleController::class, 'void']);
         Route::post('sales/{id}/returns', [SaleController::class, 'returns'])->whereNumber('id');
+        // id or uuid: phones know their sales and customers by uuid before the server id arrives
+        Route::post('sales/{id}/send-receipt', [SaleController::class, 'sendReceipt'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
+        Route::post('sales/{id}/momo-request', [SaleController::class, 'momoRequest'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
+        Route::get('momo-requests/{id}', [\App\Http\Controllers\Api\V1\EngageController::class, 'momoStatus'])->whereNumber('id');
+        Route::post('customers/{id}/remind', [\App\Http\Controllers\Api\V1\EngageController::class, 'remind'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
+        Route::get('company/engagement', [\App\Http\Controllers\Api\V1\EngageController::class, 'settings']);
+        Route::put('company/engagement', [\App\Http\Controllers\Api\V1\EngageController::class, 'updateSettings']);
+        Route::put('company/momo', [\App\Http\Controllers\Api\V1\EngageController::class, 'setupMomo']);
         Route::get('sales/{id}/receipt.txt', [SaleController::class, 'receiptText'])->whereNumber('id');
         Route::get('sales/{id}/receipt.pdf', [SaleController::class, 'receiptPdf'])->whereNumber('id');
 

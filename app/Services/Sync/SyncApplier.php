@@ -298,6 +298,9 @@ class SyncApplier
             'allow_negative_stock' => true, // a completed offline sale is never rejected for stock (Appendix E)
         ]);
         $sale = $result['sale'];
+        if (! $result['replayed']) {
+            app(\App\Services\Engage\ReceiptDelivery::class)->auto($sale); // offline sale synced: WhatsApp receipt if the shop chose it
+        }
 
         // Older clients: no payment ops, just amount_paid on the sale.
         $legacyPaid = round((float) ($data['amount_paid'] ?? 0), 2);

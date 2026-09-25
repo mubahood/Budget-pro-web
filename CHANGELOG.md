@@ -119,6 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reports on the phone: today/week/month from the local database (sales by day/payment/product, profit, what customers owe), any report and range from the server.
 - No legacy calls left; `X-App-Version` on every request and a full-screen "Please update" on 426.
 
+### Phase 5 — Differentiators (first three from Part E)
+- **E1 WhatsApp receipts** — receipts go to the customer on WhatsApp (approved template, SMS fallback) with a link to the full receipt and PDF; automatic after a sale when the shop chose WhatsApp receipts; "Text it to the customer" on the phone and web. Paid-plan feature.
+- **E2 Debt book reminders** — opt-in weekly reminders for overdue balances (credit terms per shop or customer), manual "Send a reminder" on the phone and web.
+- **E3 Mobile-money request-to-pay** — the shop registers its payout number; cashiers request the balance from the customer's phone (MTN/Airtel/M-Pesa via Flutterwave), the phone waits for approval, and the payment is recorded on the sale exactly once (status check or webhook).
+- Already delivered earlier and counted as Part E: thermal printing (E4), units (E6), self-explaining reorder list (E11), POs on WhatsApp (E12), expiry/FEFO (E13), dead stock (E14), multi-branch (E16), daily WhatsApp summary (E17), cash-up variance (E19), VAT/Excel exports (E20).
+
 ---
 
 ## [2.0.0] - 2025-12-09

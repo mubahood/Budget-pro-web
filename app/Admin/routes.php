@@ -82,6 +82,12 @@ Route::group([
     $router->resource('stock-takes', StockTakeController::class)->only(['index', 'show', 'create']);
     $router->resource('sale-records', SaleRecordController::class);
     $router->post('sale-records/{id}/void', 'SaleRecordController@void');
+    $router->post('sale-records/{id}/send-receipt', 'SaleRecordController@sendReceipt');
+    $router->post('sale-records/{id}/momo-request', 'SaleRecordController@momoRequest');
+    $router->post('customers/{id}/remind', 'CustomerController@remind');
+    $router->get('engagement', 'EngagementController@index');
+    $router->post('engagement', 'EngagementController@save');
+    $router->post('engagement/momo', 'EngagementController@momo');
     $router->resource('poultry-farm-types', PoultryFarmTypeController::class);
     $router->resource('poultry-production-guide-tasks', PoultryProductionGuideTaskController::class);
     $router->resource('poultry-batches', PoultryBatchController::class);

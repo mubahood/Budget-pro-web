@@ -26,6 +26,19 @@ return [
         'RWF' => env('FLW_RWF_PAYMENT_OPTIONS', 'mobilemoneyrwanda,card'),
     ],
 
+    // Mobile-money collections for shops (plan Part E3): charge type per currency, networks, and the
+    // subaccount bank code for each network (Flutterwave "account_bank" for mobile-money subaccounts).
+    'momo' => [
+        'charge_types' => ['UGX' => 'mobile_money_uganda', 'KES' => 'mpesa', 'TZS' => 'mobile_money_tanzania', 'RWF' => 'mobile_money_rwanda'],
+        'networks' => [
+            'UGX' => ['MTN' => env('FLW_UG_MTN_CODE', 'MTN'), 'AIRTEL' => env('FLW_UG_AIRTEL_CODE', 'AIRTEL')],
+            'KES' => ['MPESA' => env('FLW_KE_MPESA_CODE', 'MPS')],
+            'TZS' => ['VODAFONE' => env('FLW_TZ_VODA_CODE', 'VODAFONE'), 'TIGO' => env('FLW_TZ_TIGO_CODE', 'TIGO'), 'AIRTEL' => env('FLW_TZ_AIRTEL_CODE', 'AIRTEL'), 'HALOPESA' => env('FLW_TZ_HALO_CODE', 'HALOPESA')],
+            'RWF' => ['MTN' => env('FLW_RW_MTN_CODE', 'MTN'), 'AIRTEL' => env('FLW_RW_AIRTEL_CODE', 'AIRTEL')],
+        ],
+        'platform_fee_percent' => (float) env('FLW_MOMO_PLATFORM_FEE_PERCENT', 0),
+    ],
+
     // Currency international customers are billed in.
     'international_currency' => env('FLW_INTL_CURRENCY', 'USD'),
 

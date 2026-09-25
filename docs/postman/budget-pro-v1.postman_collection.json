@@ -1348,6 +1348,66 @@
                     }
                 },
                 {
+                    "name": "GET /company/engagement",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/company/engagement",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "company",
+                                "engagement"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT /company/engagement",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/company/engagement",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "company",
+                                "engagement"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"debt_reminders_enabled\": true,\n    \"credit_terms_days\": 1\n}"
+                        }
+                    }
+                },
+                {
                     "name": "POST /company/export",
                     "request": {
                         "method": "POST",
@@ -1432,6 +1492,40 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"modules\": [\n        \"\"\n    ]\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "PUT company/momo { phone, network } — the number the shop's mobile-money sales reach. */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/company/momo",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "company",
+                                "momo"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"phone\": \"\",\n    \"network\": \"\"\n}"
                         }
                     }
                 }
@@ -1937,6 +2031,33 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"client_uuid\": \"\",\n    \"shift_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST /customers/{id}/remind",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/customers/:id/remind",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers",
+                                ":id",
+                                "remind"
+                            ]
                         }
                     }
                 },
@@ -3565,6 +3686,37 @@
                             ],
                             "path": [
                                 "members"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Momo requests",
+            "item": [
+                {
+                    "name": "GET momo-requests/{id} — status, checking with the provider while pending. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/momo-requests/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "momo-requests",
+                                ":id"
                             ]
                         }
                     }
@@ -5654,6 +5806,41 @@
                     }
                 },
                 {
+                    "name": "POST sales/{id}/momo-request { phone, network?, amount? } — ask the customer to pay by mobile money (Part E3). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sales/:id/momo-request",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales",
+                                ":id",
+                                "momo-request"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"phone\": \"\",\n    \"network\": \"\",\n    \"amount\": 1000\n}"
+                        }
+                    }
+                },
+                {
                     "name": "POST /sales/{id}/payments",
                     "request": {
                         "method": "POST",
@@ -5774,6 +5961,41 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"items\": [\n        {\n            \"sale_item_id\": 1,\n            \"quantity\": 1000,\n            \"restock\": true\n        }\n    ],\n    \"reason\": \"\",\n    \"refund_method\": \"\",\n    \"client_uuid\": \"\",\n    \"shift_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sales/{id}/send-receipt { phone? } — receipt on WhatsApp (SMS fallback) with a link (Part E1). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sales/:id/send-receipt",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales",
+                                ":id",
+                                "send-receipt"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"phone\": \"\"\n}"
                         }
                     }
                 },

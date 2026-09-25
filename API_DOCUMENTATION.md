@@ -344,6 +344,17 @@ their validation rules; Postman collection in `docs/postman/budget-pro-v1.postma
 
 Headers: responses carry `X-Request-Id`; apps send `X-App-Version` and get **426 `upgrade_required`** when below `MOBILE_MIN_VERSION`. Legacy pre-v1 routes are counted (`legacy:status`) and answer 426 "please update" once `LEGACY_API_ENABLED=false`.
 
+## Receipts, debt reminders, mobile money (Phase 5 — Part E1–E3)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/sales/{id or uuid}/send-receipt` `{ phone? }` | WhatsApp template `sale_receipt` (params: shop, receipt no., total, link), SMS fallback; public link `/r/{token}` (+ `/pdf`). Plan feature `whatsapp_receipts` (not on Free). Sent automatically after a sale when the shop chose WhatsApp receipts and the customer phone is known |
+| POST | `/customers/{id or uuid}/remind` | friendly balance reminder (not twice a day; 422 `nothing_owed` / `reminded_recently`) |
+| GET/PUT | `/company/engagement` `{ debt_reminders_enabled, credit_terms_days }` | weekly automatic reminders for overdue balances (sale date + terms, or `due_date`), 10:00 shop time |
+| PUT | `/company/momo` `{ phone, network }` | registers the shop's payout mobile-money number (Flutterwave subaccount) |
+| POST | `/sales/{id or uuid}/momo-request` `{ phone, network?, amount? }` | request-to-pay up to the balance; the customer approves on their phone |
+| GET | `/momo-requests/{id}` | status (checks with Flutterwave while pending); the Flutterwave webhook (`tx_ref` `MOMO-…`) settles it too — the payment is recorded once |
+
 ---
 
 _Legacy note: the pre-v1 endpoints (`/api/api/{model}`, `/api/mobile/*`, param-based

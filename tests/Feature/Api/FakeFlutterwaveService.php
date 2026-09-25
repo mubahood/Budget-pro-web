@@ -12,7 +12,9 @@ use App\Services\FlutterwaveService;
 class FakeFlutterwaveService extends FlutterwaveService
 {
     public array $lastPayload = [];
+
     public bool $initiateSuccess = true;
+
     public array $verifyResult = ['success' => false];
 
     public function __construct()
@@ -53,5 +55,38 @@ class FakeFlutterwaveService extends FlutterwaveService
                 'flw_ref' => 'FLW-TEST-'.$id,
             ],
         ];
+    }
+
+    /** @var array<int, array{type: string, payload: array}> */
+    public array $charges = [];
+
+    public array $subaccounts = [];
+
+    /** tx_ref => verification data (status successful|failed|pending) */
+    public array $byReference = [];
+
+    public function createSubaccount(array $payload): array
+    {
+        $this->subaccounts[] = $payload;
+
+        return ['success' => true, 'id' => 'RS_'.strtoupper(substr(md5(json_encode($payload)), 0, 10))];
+    }
+
+    public function chargeMobileMoney(string $type, array $payload): array
+    {
+        $this->charges[] = ['type' => $type, 'payload' => $payload];
+
+        return ['success' => true, 'status' => 'pending', 'id' => (string) (700000 + count($this->charges)), 'redirect' => null];
+    }
+
+    public function verifyByReference(string $txRef): array
+    {
+        return isset($this->byReference[$txRef]) ? ['success' => true, 'data' => $this->byReference[$txRef]] : ['success' => false, 'message' => 'pending'];
+    }
+
+    /** The customer approved (or declined) the prompt on their phone. */
+    public function customerAnswers(string $txRef, float $amount, string $currency, string $status = 'successful'): void
+    {
+        $this->byReference[$txRef] = ['id' => 880000 + count($this->byReference), 'tx_ref' => $txRef, 'status' => $status, 'amount' => $amount, 'currency' => $currency, 'payment_type' => 'mobilemoneyuganda'];
     }
 }

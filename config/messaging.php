@@ -21,6 +21,7 @@ return [
             'token' => env('WHATSAPP_TOKEN'),
             'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
             'otp_template' => env('WHATSAPP_OTP_TEMPLATE', 'otp_code'),
+            'receipt_template' => env('WHATSAPP_RECEIPT_TEMPLATE', 'sale_receipt'), // params: shop, receipt no., total, link
             'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
         ],
     ],

@@ -1140,6 +1140,11 @@ Mobile
 Pick from Part E by measured demand; suggested first three: WhatsApp receipts via Cloud API (E1), debt book
 reminders (E2), MoMo request-to-pay (E3).
 
+- [x] P5-1 WhatsApp receipts via Cloud API with public receipt link (E1)
+- [x] P5-2 Debt book reminders, weekly and manual (E2)
+- [x] P5-3 Mobile-money request-to-pay settled to the shop (E3)
+- Delivered within earlier phases: E4, E6, E11, E12, E13, E14, E16, E17, E19, E20. Next candidates by demand: E9 loyalty, E7 quick-sell tiles, E24 web POS PWA.
+
 ### Definition of done (applies to every item)
 
 Code + migration + tests + API doc + admin/mobile UI (where applicable) + feature flag (if risky) + a

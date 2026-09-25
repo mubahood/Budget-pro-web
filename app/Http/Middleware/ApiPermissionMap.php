@@ -18,6 +18,9 @@ class ApiPermissionMap
     public const RULES = [
         [['POST'], '#^sales/\d+/void$#', 'void'],
         [['POST'], '#^sales/\d+/returns$#', 'refund'],
+        [['POST'], '#^sales/[0-9A-Fa-f-]+/(send-receipt|momo-request)$#', 'sell'],
+        [['POST'], '#^customers/[0-9A-Fa-f-]+/remind$#', 'sell'],
+        [['PUT'], '#^company/(engagement|momo)$#', 'manage_settings'],
         [['POST', 'PUT', 'PATCH'], '#^sales(/checkout|/\d+(/payments)?)?$#', 'sell'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^customers(/\d+(/payments)?)?$#', 'sell'],
         [['POST'], '#^shifts(/open|/\d+/close)?$#', 'sell'],

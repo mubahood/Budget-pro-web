@@ -18,6 +18,7 @@ class DispatchNotifications extends Command
         \Illuminate\Support\Facades\Cache::forever('heartbeat:saas_hourly', now()->toIso8601String()); // System health: the scheduler is alive
         $billing = $lifecycle->run();
         $sent = $notifications->run();
+        $sent['debt_reminders'] = app(\App\Services\Engage\DebtReminders::class)->run();
         $this->info('billing '.json_encode($billing).' notices '.json_encode($sent));
 
         return self::SUCCESS;

@@ -245,6 +245,13 @@ class BillingController extends Controller
             return response()->json(['status' => 'ignored'], 200);
         }
 
+        // Mobile-money request-to-pay for a shop's sale (Part E3): verified with Flutterwave, recorded once.
+        if (str_starts_with((string) $txRef, 'MOMO-')) {
+            app(\App\Services\Engage\MomoCollections::class)->settle((string) $txRef);
+
+            return response()->json(['status' => 'ok'], 200);
+        }
+
         $invoice = SubscriptionInvoice::where('provider_invoice_id', $txRef)->first();
 
         if ($invoice === null || $invoice->status === 'paid') {

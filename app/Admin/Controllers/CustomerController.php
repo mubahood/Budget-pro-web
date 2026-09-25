@@ -40,7 +40,8 @@ class CustomerController extends TenantAdminController
     {
         $c = Customer::where('company_id', Admin::user()->company_id)->findOrFail($id);
         $show = new Show($c);
-        $show->panel()->tools(fn ($t) => $t->append('<a class="btn btn-sm btn-success" href="'.admin_url('customers/'.$c->id.'/pay').'"><i class="fa fa-money"></i> Record payment</a>&nbsp;'));
+        $show->panel()->tools(fn ($t) => $t->append('<a class="btn btn-sm btn-success" href="'.admin_url('customers/'.$c->id.'/pay').'"><i class="fa fa-money"></i> Record payment</a>&nbsp;')
+            ->append('<form method="post" action="'.admin_url('customers/'.$c->id.'/remind').'" style="display:inline">'.csrf_field().'<button class="btn btn-sm btn-warning"><i class="fa fa-bell"></i> Send reminder</button></form>&nbsp;'));
         $show->field('name');
         $show->field('phone');
         $show->field('email');
@@ -76,6 +77,19 @@ class CustomerController extends TenantAdminController
         });
 
         return $form;
+    }
+
+    public function remind($id)
+    {
+        $customer = \App\Models\Customer::where('company_id', \Encore\Admin\Facades\Admin::user()->company_id)->findOrFail($id);
+        try {
+            app(\App\Services\Engage\DebtReminders::class)->remind($customer);
+            admin_success('Reminder sent', 'On WhatsApp (or SMS).');
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            admin_error('Not sent', $e->getMessage());
+        }
+
+        return redirect(admin_url('customers/'.$id));
     }
 
     public function payForm($id)

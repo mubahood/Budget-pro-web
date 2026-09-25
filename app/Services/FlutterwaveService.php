@@ -71,6 +71,60 @@ class FlutterwaveService
      *
      * @return array{success: bool, data?: array, message?: string}
      */
+    /**
+     * Collections subaccount for a shop (plan Part E3): the shop's mobile-money number receives its sales.
+     *
+     * @return array{success: bool, id?: string, message?: string}
+     */
+    public function createSubaccount(array $payload): array
+    {
+        try {
+            $body = json_decode((string) $this->client()->post('v3/subaccounts', ['json' => $payload])->getBody(), true) ?: [];
+            if (($body['status'] ?? null) === 'success' && ! empty($body['data']['subaccount_id'])) {
+                return ['success' => true, 'id' => (string) $body['data']['subaccount_id']];
+            }
+
+            return ['success' => false, 'message' => $body['message'] ?? 'Could not register the mobile money number.'];
+        } catch (GuzzleException $e) {
+            return ['success' => false, 'message' => 'Payment provider unreachable.'];
+        }
+    }
+
+    /**
+     * Mobile-money charge: the customer approves on their phone (plan Part E3).
+     *
+     * @return array{success: bool, status?: string, id?: string, redirect?: string, message?: string}
+     */
+    public function chargeMobileMoney(string $type, array $payload): array
+    {
+        try {
+            $body = json_decode((string) $this->client()->post('v3/charges?type='.urlencode($type), ['json' => $payload])->getBody(), true) ?: [];
+            if (($body['status'] ?? null) === 'success') {
+                return ['success' => true, 'status' => (string) ($body['data']['status'] ?? 'pending'), 'id' => isset($body['data']['id']) ? (string) $body['data']['id'] : null,
+                    'redirect' => $body['meta']['authorization']['redirect'] ?? null];
+            }
+
+            return ['success' => false, 'message' => $body['message'] ?? 'The mobile money request failed.'];
+        } catch (GuzzleException $e) {
+            return ['success' => false, 'message' => 'Payment provider unreachable.'];
+        }
+    }
+
+    /** @return array{success: bool, data?: array, message?: string} */
+    public function verifyByReference(string $txRef): array
+    {
+        try {
+            $body = json_decode((string) $this->client()->get('v3/transactions/verify_by_reference', ['query' => ['tx_ref' => $txRef]])->getBody(), true) ?: [];
+            if (($body['status'] ?? null) === 'success' && isset($body['data'])) {
+                return ['success' => true, 'data' => $body['data']];
+            }
+
+            return ['success' => false, 'message' => $body['message'] ?? 'Not found.'];
+        } catch (GuzzleException $e) {
+            return ['success' => false, 'message' => 'Payment provider unreachable.'];
+        }
+    }
+
     public function verifyTransaction(int|string $transactionId): array
     {
         try {

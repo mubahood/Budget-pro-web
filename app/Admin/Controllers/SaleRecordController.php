@@ -39,6 +39,32 @@ class SaleRecordController extends TenantAdminController
         return response()->json(['status' => true, 'message' => 'Sale voided; stock and ledger reversed.']);
     }
 
+    public function sendReceipt($id)
+    {
+        $sale = SaleRecord::findOrFail($id);
+        try {
+            app(\App\Services\Engage\ReceiptDelivery::class)->send($sale, request('phone') ?: null);
+            admin_success('Receipt sent', 'On WhatsApp (or SMS).');
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            admin_error('Not sent', $e->getMessage());
+        }
+
+        return redirect(admin_url('sale-records/'.$id));
+    }
+
+    public function momoRequest($id)
+    {
+        $sale = SaleRecord::findOrFail($id);
+        try {
+            $r = app(\App\Services\Engage\MomoCollections::class)->request($sale, (string) request('phone'), request('network') ?: null, null, (int) \Encore\Admin\Facades\Admin::user()->id);
+            $r->status === 'failed' ? admin_error('Request failed', (string) $r->error) : admin_success('Request sent', 'The customer approves on their phone. Refresh this page to see the payment.');
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            admin_error('Not sent', $e->getMessage());
+        }
+
+        return redirect(admin_url('sale-records/'.$id));
+    }
+
     public function void($id)
     {
         $u = Admin::user();
@@ -304,7 +330,10 @@ class SaleRecordController extends TenantAdminController
      */
     protected function detail($id)
     {
-        $show = new Show(SaleRecord::findOrFail($id));
+        $sale = SaleRecord::findOrFail($id);
+        $show = new Show($sale);
+        // Receipt on WhatsApp and mobile-money request (plan Part E1/E3).
+        $show->field('engage', __('Send / collect'))->unescape()->as(fn () => view('admin.sale-engage', ['sale' => $sale])->render());
 
         $show->field('id', __('ID'));
         $show->field('receipt_number', __('Receipt Number'));

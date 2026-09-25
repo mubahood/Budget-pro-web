@@ -88,6 +88,9 @@ class SaleController extends BaseCrudController
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
+        if (! $result['replayed']) {
+            app(\App\Services\Engage\ReceiptDelivery::class)->auto($result['sale']); // WhatsApp receipt when the shop chose it (Part E1)
+        }
         $sale = $this->transform($result['sale']);
         if ($result['replayed']) {
             return $this->success($sale, 'Sale already recorded (idempotent replay).');
@@ -117,6 +120,51 @@ class SaleController extends BaseCrudController
         }
 
         return false;
+    }
+
+    private function findSale(Request $request, string $id): ?SaleRecord
+    {
+        $q = $this->scopedQuery($request);
+
+        return strlen($id) === 36 ? $q->where('uuid', $id)->first() : $q->where('id', (int) $id)->first();
+    }
+
+    /** POST sales/{id}/send-receipt { phone? } — receipt on WhatsApp (SMS fallback) with a link (Part E1). */
+    public function sendReceipt(Request $request, $id)
+    {
+        $sale = $this->findSale($request, (string) $id);
+        if ($sale === null) {
+            return $this->notFound('Sale not found.');
+        }
+        $data = $request->validate(['phone' => ['nullable', 'string', 'max:30']]);
+        try {
+            $delivery = app(\App\Services\Engage\ReceiptDelivery::class);
+            $delivery->send($sale, $data['phone'] ?? null);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return $this->success(['link' => $delivery->link($sale), 'sent_at' => $sale->receipt_sent_at], 'Receipt sent.');
+    }
+
+    /** POST sales/{id}/momo-request { phone, network?, amount? } — ask the customer to pay by mobile money (Part E3). */
+    public function momoRequest(Request $request, $id)
+    {
+        $sale = $this->findSale($request, (string) $id);
+        if ($sale === null) {
+            return $this->notFound('Sale not found.');
+        }
+        $data = $request->validate(['phone' => ['required', 'string', 'max:30'], 'network' => ['nullable', 'string', 'max:20'], 'amount' => ['nullable', 'numeric', 'min:1']]);
+        try {
+            $req = app(\App\Services\Engage\MomoCollections::class)->request($sale, $data['phone'], $data['network'] ?? null, isset($data['amount']) ? (float) $data['amount'] : null, (int) $request->user()->id);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+        if ($req->status === 'failed') {
+            return $this->error($req->error ?: 'The mobile money request failed.', 502, ['code' => 'provider_error', 'request' => $req]);
+        }
+
+        return $this->created($req, 'Request sent. The customer approves on their phone.');
     }
 
     public function addPayment(Request $request, $id)
