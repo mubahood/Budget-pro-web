@@ -93,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P3-8** Getting-started checklist (API + dashboard card), module enablement per company (hidden from the web menu and routes, from the app home/menu); existing shops keep every module and skip the wizard.
 - **P3-9** Dashboard "today/this month" follows the shop's timezone (`CONVERT_TZ` + `@local_today`); hardcoded UGX removed from web screens and PDFs.
 - **P3-10** "Budget Pro" everywhere on the web (admin title/logo, API manifest).
+- Fix found on the production run: a plan that lapsed long ago moves straight to Free without catch-up reminders; only the latest due reminder is ever sent; cancelled messages are never delivered.
 - Tests: TeamPermissionsTest, BillingLifecycleTest, OnboardingTest, PhoneAuthTest, TeamWebTest, SetupWizardTest — 255 green; phpstan clean.
 
 #### Mobile (budget-pro-mobo 75f4641)

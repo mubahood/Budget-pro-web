@@ -91,7 +91,20 @@ class BillingLifecycleTest extends ApiTestCase
         $this->travelTo($sub->ends_at->copy()->addDays(8));
         app(Lifecycle::class)->run();
         $this->assertSame('free', $sub->fresh()->plan->slug);
+        $this->assertSame(2, DB::table('scheduled_notices')->where('company_id', $t['company_id'])->where('key', 'dunning')->count(), 'no catch-up reminder on the way to Free');
         $this->assertSame('active', Company::find($t['company_id'])->accessState());
+    }
+
+    public function test_a_plan_that_lapsed_long_ago_moves_to_free_without_a_pile_of_reminders(): void
+    {
+        $t = $this->registerTenant();
+        $this->pay($t, Plan::where('slug', 'starter')->first());
+        $sub = $this->sub($t['company_id']);
+        $this->travelTo($sub->ends_at->copy()->addDays(40));
+        $counts = app(Lifecycle::class)->run();
+        $this->assertSame(0, DB::table('app_notifications')->where('company_id', $t['company_id'])->where('title', 'like', 'Payment due%')->count());
+        $this->assertSame('free', $sub->fresh()->plan->slug);
+        $this->assertGreaterThanOrEqual(1, $counts['to_free']);
     }
 
     public function test_upgrade_mid_period_is_prorated_and_downgrade_paid_by_credit(): void

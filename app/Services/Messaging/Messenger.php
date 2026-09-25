@@ -47,8 +47,8 @@ class Messenger
     {
         /** @var object{status: string, to: string, body: string}|null $row */
         $row = DB::table('message_log')->find($logId);
-        if ($row === null || $row->status === 'sent') {
-            return (bool) $row;
+        if ($row === null || in_array($row->status, ['sent', 'cancelled'], true)) {
+            return true; // nothing (more) to deliver
         }
         $errors = [];
         foreach ($channels as $kind) {

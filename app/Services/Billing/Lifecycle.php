@@ -81,15 +81,17 @@ class Lifecycle
             $counts['past_due']++;
         }
         $daysOver = (int) floor($sub->ends_at->diffInHours(now()) / 24);
-        foreach ([0, 3, $grace - 1] as $day) {
-            if ($daysOver >= $day && $day < $grace) {
-                $left = $grace - $day;
-                $counts['dunning'] += (int) Notices::once($cid, 'dunning', "d{$day}:".$sub->ends_at->toDateString(), fn () => $this->notifier->notify($cid, 'billing',
-                    'Payment due for '.($sub->plan?->name ?? 'your plan'), "Your plan ended. Renew within {$left} day".($left > 1 ? 's' : '').' to keep your plan; after that the shop moves to the Free plan.'));
-            }
-        }
         if ($daysOver >= $grace) {
             $counts['to_free'] += (int) $this->toFree($company, $sub, 'Your plan has ended');
+
+            return; // past the grace window: no catch-up reminders, straight to Free
+        }
+        // Only the latest reminder that is due (day 0, 3, last grace day), once each.
+        $due = collect([0, 3, $grace - 1])->filter(fn ($d) => $d < $grace && $daysOver >= $d)->max();
+        if ($due !== null) {
+            $left = $grace - $daysOver;
+            $counts['dunning'] += (int) Notices::once($cid, 'dunning', "d{$due}:".$sub->ends_at->toDateString(), fn () => $this->notifier->notify($cid, 'billing',
+                'Payment due for '.($sub->plan?->name ?? 'your plan'), "Your plan ended. Renew within {$left} day".($left > 1 ? 's' : '').' to keep your plan; after that the shop moves to the Free plan.'));
         }
     }
 
