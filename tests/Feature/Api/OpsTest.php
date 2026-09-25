@@ -104,5 +104,7 @@ class OpsTest extends ApiTestCase
             $this->assertInstanceOf(\Illuminate\Console\Scheduling\CallbackEvent::class, $e, (string) $e->description);
         }
         $this->assertContains('saas:hourly', array_map(fn ($e) => $e->description, $events));
+        // queue:work's terminal check must not run a shell command (the host refuses it at busy minutes).
+        $this->assertFalse(\Symfony\Component\Console\Terminal::hasSttyAvailable());
     }
 }

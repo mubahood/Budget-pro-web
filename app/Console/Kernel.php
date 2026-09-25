@@ -15,6 +15,9 @@ class Kernel extends ConsoleKernel
         // Every task runs inside this scheduler process (no child process per command): the shared host
         // allows 25 processes per account and spawning failed at busy minutes (DECISIONS E52).
         $task = fn (string $command, array $args = []) => fn () => \Illuminate\Support\Facades\Artisan::call($command, $args);
+        // queue:work asks Symfony whether `stty` exists, which runs a shell command; at busy minutes the host
+        // refuses it and the warning stopped the worker for that minute. Scheduled tasks have no terminal anyway.
+        \Closure::bind(fn () => self::$stty = false, null, \Symfony\Component\Console\Terminal::class)();
 
         $schedule->call($task('tracking:backfill-location-names'))->name('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
         $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping();
