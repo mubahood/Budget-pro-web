@@ -46,7 +46,8 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Tokens last 180 days (plan C6); apps refresh via POST auth/refresh, a 401 sends the user to log in again.
+    'expiration' => (int) env('SANCTUM_EXPIRATION_MINUTES', 60 * 24 * 180),
 
     /*
     |--------------------------------------------------------------------------

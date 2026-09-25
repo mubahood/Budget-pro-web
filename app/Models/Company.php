@@ -271,12 +271,13 @@ class Company extends Model
      * confirmed payment, extending the period from the later of "now" or the
      * current period end, and keeping the legacy license_expire column in sync.
      */
-    public function activateSubscription(Plan $plan, string $provider = 'flutterwave', ?string $providerRef = null): Subscription
+    public function activateSubscription(Plan $plan, string $provider = 'flutterwave', ?string $providerRef = null, bool $fromNow = false): Subscription
     {
         $subscription = $this->subscription ?? new Subscription(['company_id' => $this->id]);
 
         // Extend from the current expiry if still in the future (renewal), else from now.
-        $base = ($subscription->ends_at && $subscription->ends_at->isFuture())
+        // A prorated plan change starts a fresh period now (the old days were credited).
+        $base = (! $fromNow && $subscription->ends_at && $subscription->ends_at->isFuture())
             ? $subscription->ends_at->copy()
             : now();
 
@@ -289,6 +290,7 @@ class Company extends Model
         $subscription->company_id = $this->id;
         $subscription->plan_id = $plan->id;
         $subscription->status = 'active';
+        $subscription->trial_ends_at = null;
         $subscription->starts_at = $subscription->starts_at ?? now();
         $subscription->ends_at = $endsAt;
         $subscription->canceled_at = null;

@@ -12,7 +12,7 @@
             </p>
             <p>Your sales, stock and records are safe. Renew to continue using the web app:</p>
             <ul>
-                <li>Open the <strong>Budget Pro</strong> mobile app → <em>Settings → Subscription</em> to pay by mobile money or card, or</li>
+                <li><a href="{{ admin_url('billing') }}"><strong>Open Billing</strong></a> to renew by mobile money or card (or in the app: <em>Menu → Billing</em>), or</li>
                 <li>contact support at <a href="mailto:{{ config('mail.from.address') }}">{{ config('mail.from.address') }}</a>.</li>
             </ul>
             @if ($state === 'grace')

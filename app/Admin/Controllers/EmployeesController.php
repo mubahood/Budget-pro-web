@@ -7,7 +7,6 @@ use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 /**
@@ -20,9 +19,6 @@ class EmployeesController extends TenantAdminController
 {
     protected $title = 'Team';
 
-    /** Roles a company may assign to its own staff (never the platform admin role). */
-    private const ASSIGNABLE_ROLE_SLUGS = ['company', 'worker'];
-
     private function companyId(): int
     {
         return (int) Admin::user()->company_id;
@@ -32,11 +28,6 @@ class EmployeesController extends TenantAdminController
     private function findEmployee($id): User
     {
         return User::where('company_id', $this->companyId())->findOrFail($id);
-    }
-
-    private function assignableRoles(): array
-    {
-        return DB::table('admin_roles')->whereIn('slug', self::ASSIGNABLE_ROLE_SLUGS)->pluck('name', 'id')->all();
     }
 
     protected function grid()
@@ -61,8 +52,10 @@ class EmployeesController extends TenantAdminController
         $grid->column('name', __('Full Name'))->display(fn ($name) => "<strong>{$name}</strong>")->sortable();
         $grid->column('email', __('Email / login'))->sortable();
         $grid->column('phone_number', __('Phone'))->display(fn ($p) => $p ? "<a href='tel:{$p}'>{$p}</a>" : '—');
-        $grid->column('roles', __('Role'))->display(function ($roles) {
-            return collect($roles)->pluck('name')->map(fn ($n) => "<span class='badge badge-primary'>{$n}</span>")->implode(' ');
+        $grid->column('id', __('Role'))->display(function () {
+            $role = \App\Services\Team\Permissions::roleOf($this);
+
+            return "<span class='badge badge-primary'>".e(config("permissions.roles.{$role}.label", 'No access')).'</span>';
         });
         $grid->column('status', __('Status'))
             ->using(['Active' => 'Active', 'Inactive' => 'Inactive'])
@@ -91,7 +84,7 @@ class EmployeesController extends TenantAdminController
         $show->field('dob', __('Date of birth'));
         $show->field('address', __('Address'));
         $show->field('status', __('Status'));
-        $show->field('roles', __('Role'))->as(fn ($roles) => collect($roles)->pluck('name')->implode(', '));
+        $show->field('id', __('Role'))->as(fn () => config('permissions.roles.'.\App\Services\Team\Permissions::roleOf($this).'.label', 'No access'));
         $show->field('created_at', __('Added'));
 
         $show->panel()->tools(function ($tools) {
@@ -111,8 +104,6 @@ class EmployeesController extends TenantAdminController
         }
 
         $editingId = $form->isEditing() ? (int) request()->route('employee') : null;
-        $roles = $this->assignableRoles();
-        $defaultRole = (int) array_search('Company Worker', $roles, true);
 
         $form->hidden('company_id')->default($this->companyId());
 
@@ -136,17 +127,20 @@ class EmployeesController extends TenantAdminController
             ->rules($form->isEditing() ? 'nullable|min:8|confirmed' : 'required|min:8|confirmed')
             ->help($form->isEditing() ? 'Leave blank to keep the current password.' : 'At least 8 characters. Share it with the employee; they can change it under Settings.');
         $form->password('password_confirmation', __('Confirm password'));
-        $form->multipleSelect('roles', __('Role'))
-            ->options($roles)
-            ->default($defaultRole ? [$defaultRole] : [])
-            ->rules('required')
-            ->help('Company Worker: sells and records stock. Company Owner: full control of this company.');
+        $teamRoles = collect(config('permissions.roles'))->except('owner')->map(fn ($r) => $r['label'])->all();
+        $currentRole = $editingId ? \App\Services\Team\Permissions::roleOf(User::withoutGlobalScopes()->findOrFail($editingId)) : 'cashier';
+        if ($currentRole === 'owner') {
+            $form->display('team_role_label', __('Role'))->default('Owner');
+        } else {
+            $form->select('team_role', __('Role'))->options($teamRoles)->default($currentRole)->rules('required|in:'.implode(',', array_keys($teamRoles)))->required()
+                ->help('Cashier sells; Stock keeper receives and counts stock; Accountant sees money; Manager can do everything except billing and team.');
+        }
         $form->image('avatar', __('Photo'))->uniqueName()->rules('nullable|image|max:2048');
         $form->radio('status', __('Status'))->options(['Active' => 'Active', 'Inactive' => 'Inactive (cannot log in)'])->default('Active');
 
-        $form->ignore(['password_confirmation']);
+        $form->ignore(['password_confirmation', 'team_role', 'team_role_label']);
 
-        $form->saving(function (Form $form) use ($roles) {
+        $form->saving(function (Form $form) {
             $form->company_id = $this->companyId();
 
             $current = $form->model()->password;
@@ -157,9 +151,26 @@ class EmployeesController extends TenantAdminController
                 $form->password = Hash::make($form->password);
             }
 
-            // Only roles a tenant may assign; drop anything else (e.g. a forged admin role id).
-            $allowed = array_map('intval', array_keys($roles));
-            $form->roles = array_values(array_intersect(array_map('intval', (array) $form->roles), $allowed));
+            if (! $form->isEditing()) {
+                $company = \App\Models\Company::withoutGlobalScopes()->findOrFail($this->companyId());
+                if (! (new \App\Services\Billing\Quotas())->allows($company, 'users')) {
+                    admin_error('Plan limit reached', 'Your plan does not allow more team members. Upgrade under Billing.');
+
+                    return back()->withInput();
+                }
+            }
+        });
+
+        // The company role (plan C5) drives both the app permissions and the web admin role.
+        $form->saved(function (Form $form) {
+            $role = request('team_role');
+            $user = User::withoutGlobalScopes()->find($form->model()->id);
+            if ($user && $role && array_key_exists($role, config('permissions.roles'))) {
+                $company = \App\Models\Company::withoutGlobalScopes()->findOrFail($this->companyId());
+                if ((int) $company->owner_id !== (int) $user->id) {
+                    app(\App\Services\Team\TeamService::class)->setRole($company, $user, $role);
+                }
+            }
         });
 
         return $form;

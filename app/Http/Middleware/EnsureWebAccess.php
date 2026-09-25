@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureWebAccess
 {
     /** Paths (no leading slash) that stay reachable whatever the state. */
-    private const ALWAYS_ALLOWED = ['subscription-expired', 'auth/logout', 'auth/setting', 'auth/login', '_handle_action_', '_handle_form_', '_handle_selectable_', '_handle_renderable_'];
+    private const ALWAYS_ALLOWED = ['subscription-expired', 'billing', 'billing/*', 'auth/logout', 'auth/setting', 'auth/login', '_handle_action_', '_handle_form_', '_handle_selectable_', '_handle_renderable_'];
 
     public function handle(Request $request, Closure $next): Response
     {

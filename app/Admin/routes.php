@@ -13,6 +13,11 @@ Route::group([
 
     $router->get('/', 'HomeController@index')->name('home');
     $router->get('subscription-expired', 'BillingController@expired');
+    $router->get('billing', 'BillingController@index');
+    $router->post('billing/checkout', 'BillingController@checkout');
+    $router->post('billing/cancel', 'BillingController@cancel');
+    $router->post('billing/resume', 'BillingController@resume');
+    $router->get('billing/invoices/{id}', 'BillingController@invoice')->where('id', '[0-9]+');
     $router->resource('stock-categories', StockCategoryController::class);
     $router->resource('stock-sub-categories', StockSubCategoryController::class);
     $router->resource('financial-periods', FinancialPeriodController::class);

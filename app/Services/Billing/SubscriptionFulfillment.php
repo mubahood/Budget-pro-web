@@ -22,6 +22,14 @@ class SubscriptionFulfillment
 
         // Offline batches held while the plan was lapsed are applied now (Appendix E "Plan expired").
         $company = Company::find($invoice->company_id);
+        $invoice->refresh();
+        if ($company && $invoice->status === 'paid' && data_get($invoice->meta, 'notified') === null) {
+            $invoice->meta = array_merge($invoice->meta ?? [], ['notified' => true]);
+            $invoice->save();
+            $company->unsetRelation('subscription');
+            app(\App\Services\Notifications\Notifier::class)->notify((int) $company->id, 'billing', 'Payment received',
+                'Thank you! '.number_format((float) $invoice->amount).' '.$invoice->currency.' received. '.($company->subscription?->plan?->name ?? 'Your plan').' is active until '.$company->subscription?->ends_at?->toFormattedDateString().'.');
+        }
         if ($company && $company->hasActiveAccess()) {
             app(\App\Services\Sync\SyncApplier::class)->applyHeld($company);
         }
@@ -46,9 +54,10 @@ class SubscriptionFulfillment
                 return;
             }
 
-            $subscription = $company->activateSubscription($plan, 'flutterwave', (string) ($flwData['id'] ?? ''));
+            $subscription = $company->activateSubscription($plan, 'flutterwave', (string) ($flwData['id'] ?? ''), (bool) data_get($locked->meta, 'change', false));
 
             $locked->status = 'paid';
+            $locked->number = $locked->number ?: 'BP-'.now()->format('Y').'-'.str_pad((string) $locked->id, 6, '0', STR_PAD_LEFT);
             $locked->subscription_id = $subscription->id;
             $locked->paid_at = now();
             $locked->period_start = $subscription->starts_at;

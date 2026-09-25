@@ -22,6 +22,10 @@ return [
     'grace_days' => env('SAAS_GRACE_DAYS', 7),
 
     // Outbound email (notifications) — off until a mailer is configured on the host.
+    // Decision H2: a trial or lapsed paid plan falls back to the public Free plan instead of a lockout.
+    'free_tier_fallback' => (bool) env('SAAS_FREE_TIER_FALLBACK', true),
+    'free_plan' => env('SAAS_FREE_PLAN', 'free'),
+
     'mail_enabled' => (bool) env('SAAS_MAIL_ENABLED', false),
 
     // Timezone used when formatting dates for people (per-company timezones arrive in Phase 1).

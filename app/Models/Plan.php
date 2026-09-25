@@ -28,7 +28,7 @@ class Plan extends Model
 
     protected $fillable = [
         'name', 'slug', 'description', 'price', 'price_ugx', 'currency', 'interval',
-        'trial_days', 'is_active', 'is_public', 'sort_order', 'features', 'limits',
+        'trial_days', 'is_active', 'is_public', 'sort_order', 'features', 'limits', 'prices',
     ];
 
     protected $casts = [
@@ -40,6 +40,7 @@ class Plan extends Model
         'sort_order' => 'integer',
         'features' => 'array',
         'limits' => 'array',
+        'prices' => 'array',
     ];
 
     public function subscriptions()
@@ -71,6 +72,35 @@ class Plan extends Model
      *
      * @return array{amount: float, currency: string}
      */
+    /**
+     * Charge in the company's own currency when the plan has a local price for it
+     * (mobile money for KES/TZS/RWF, plan C8); otherwise UGX or USD as before.
+     */
+    public function chargeIn(string $currency): array
+    {
+        $currency = strtoupper($currency);
+        $local = data_get($this->prices, $currency);
+        if ($currency !== 'UGX' && $local !== null && (float) $local > 0) {
+            return ['amount' => (float) $local, 'currency' => $currency];
+        }
+
+        return $this->chargeFor($currency === 'UGX');
+    }
+
+    public function isFree(): bool
+    {
+        return (float) $this->price <= 0 && (float) $this->price_ugx <= 0;
+    }
+
+    public function periodDays(): int
+    {
+        return match ($this->interval) {
+            'year' => 365,
+            'lifetime' => 36500,
+            default => 30,
+        };
+    }
+
     public function chargeFor(bool $isUganda): array
     {
         if ($isUganda) {

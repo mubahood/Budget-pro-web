@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('payment/callback', \App\Http\Controllers\PaymentCallbackController::class)->name('payment.callback');
 
 // Registration (public)
+// Team invite links (plan C5).
+Route::get('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'show'])->middleware('throttle:30,1')->name('invite.show');
+Route::post('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'accept'])->middleware('throttle:10,1')->name('invite.accept');
 Route::get('auth/register', [AuthController::class, 'getRegister'])->name('admin.register');
 Route::post('auth/register', [AuthController::class, 'postRegister'])->name('admin.register.post');
 

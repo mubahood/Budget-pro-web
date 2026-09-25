@@ -65,6 +65,13 @@ class StockRecordController extends BaseCrudController
 
     public function store(Request $request)
     {
+        $type = (string) $request->input('type');
+        if (in_array($type, StockService::types(), true)) {
+            $need = $type === 'Sale' ? 'sell' : (StockService::isInbound($type) ? 'restock' : 'adjust');
+            if (! \App\Services\Team\Permissions::can($request->user(), $need)) {
+                return $this->error('Your role does not allow this stock movement.', 403, ['code' => 'forbidden', 'permission' => $need]);
+            }
+        }
         $validated = $request->validate($this->rules($request, null));
 
         try {

@@ -33,12 +33,13 @@ class Subscription extends Model
         'meta' => 'array',
     ];
 
-    public function company()
+    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Company::class);
     }
 
-    public function plan()
+    /** @return \Illuminate\Database\Eloquent\Relations\BelongsTo<Plan, Subscription> */
+    public function plan(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Plan::class);
     }

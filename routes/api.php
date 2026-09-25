@@ -112,6 +112,9 @@ Route::prefix('v1')->group(function () {
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('auth/register', [AuthController::class, 'register']);
         Route::post('auth/login', [AuthController::class, 'login']);
+        Route::post('auth/otp/request', [AuthController::class, 'otpRequest']);
+        Route::post('auth/otp/verify', [AuthController::class, 'otpVerify']);
+        Route::post('auth/password/reset', [AuthController::class, 'resetPassword']);
 
         // Ping Pin's own, independent signup/login (Task 3.1) — NOT the
         // routes above. Same admin_users/Sanctum identity (DECISIONS.md D6),
@@ -137,11 +140,21 @@ Route::prefix('v1')->group(function () {
     Route::post('pingpin/webhooks/flutterwave', [PingPinBillingController::class, 'webhook']);
 
     // ── Authenticated: session/profile (no subscription gate) ──
-    Route::middleware(['auth:sanctum', 'api.tenant'])->group(function () {
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::post('auth/logout-all', [AuthController::class, 'logoutAll']);
         Route::put('auth/password', [AuthController::class, 'updatePassword']);
+        Route::put('auth/profile', [AuthController::class, 'updateProfile']);
+        Route::post('auth/verify/request', [AuthController::class, 'verifyRequest'])->middleware('throttle:5,1');
+        Route::post('auth/verify', [AuthController::class, 'verify'])->middleware('throttle:10,1');
+        Route::get('auth/sessions', [AuthController::class, 'sessions']);
+        Route::delete('auth/sessions/{id}', [AuthController::class, 'revokeSession'])->whereNumber('id');
+        Route::post('auth/refresh', [AuthController::class, 'refresh']);
+        Route::get('notifications', [\App\Http\Controllers\Api\V1\NotificationController::class, 'index']);
+        Route::post('notifications/read', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markRead']);
+        Route::get('notifications/preferences', [\App\Http\Controllers\Api\V1\NotificationController::class, 'preferences']);
+        Route::put('notifications/preferences', [\App\Http\Controllers\Api\V1\NotificationController::class, 'updatePreferences']);
 
         Route::get('company', [CompanyController::class, 'show']);
         Route::put('company', [CompanyController::class, 'update']);
@@ -151,6 +164,27 @@ Route::prefix('v1')->group(function () {
         Route::get('subscription', [BillingController::class, 'current']);
         Route::post('subscription/checkout', [BillingController::class, 'checkout']);
         Route::post('subscription/verify', [BillingController::class, 'verify']);
+        Route::get('subscription/quote', [BillingController::class, 'quote']);
+        Route::post('subscription/cancel', [BillingController::class, 'cancel']);
+        Route::post('subscription/resume', [BillingController::class, 'resume']);
+        Route::get('subscription/invoices/{id}.pdf', [BillingController::class, 'invoicePdf'])->whereNumber('id');
+
+        // Team (plan C5): owner/managers with manage_team.
+        Route::get('team', [\App\Http\Controllers\Api\V1\TeamController::class, 'index']);
+        Route::get('team/roles', [\App\Http\Controllers\Api\V1\TeamController::class, 'roles']);
+        Route::put('team/roles/{role}', [\App\Http\Controllers\Api\V1\TeamController::class, 'updateRole']);
+        Route::post('team/invites', [\App\Http\Controllers\Api\V1\TeamController::class, 'invite']);
+        Route::post('team/invites/{id}/resend', [\App\Http\Controllers\Api\V1\TeamController::class, 'resend'])->whereNumber('id');
+        Route::delete('team/invites/{id}', [\App\Http\Controllers\Api\V1\TeamController::class, 'revoke'])->whereNumber('id');
+        Route::patch('team/members/{userId}', [\App\Http\Controllers\Api\V1\TeamController::class, 'updateMember'])->whereNumber('userId');
+        Route::get('team/members/{userId}/activity', [\App\Http\Controllers\Api\V1\TeamController::class, 'activity'])->whereNumber('userId');
+        Route::post('team/transfer-ownership', [\App\Http\Controllers\Api\V1\TeamController::class, 'transferOwnership']);
+    });
+
+    // Invite links (public, rate-limited): see who invited you, then accept with a password.
+    Route::middleware('throttle:20,1')->group(function () {
+        Route::get('invites/{token}', [\App\Http\Controllers\Api\V1\InviteController::class, 'show']);
+        Route::post('invites/{token}/accept', [\App\Http\Controllers\Api\V1\InviteController::class, 'accept']);
     });
 
     // ── Ping Pin — organisation membership (Task 1.7 / DECISIONS.md D13) ──
@@ -184,7 +218,7 @@ Route::prefix('v1')->group(function () {
     // ── Authenticated + active subscription: the product surface ──
     // Offline sync v2 (plan Appendix A). Deliberately outside api.subscription: a lapsed
     // tenant's devices keep syncing; batches are held (not lost) once the grace ends.
-    Route::middleware(['auth:sanctum', 'api.tenant'])->group(function () {
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm'])->group(function () {
         Route::post('devices/register', [DeviceController::class, 'register']);
         Route::get('devices', [DeviceController::class, 'index']);
         Route::post('devices/{id}/revoke', [DeviceController::class, 'revoke'])->whereNumber('id');
@@ -196,7 +230,7 @@ Route::prefix('v1')->group(function () {
         Route::post('files', [FileController::class, 'store']);
     });
 
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription'])->group(function () {
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription', 'api.perm'])->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index']);
 
         Route::post('uploads', [UploadController::class, 'store']);

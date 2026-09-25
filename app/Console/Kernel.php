@@ -15,6 +15,9 @@ class Kernel extends ConsoleKernel
         // $schedule->command('inspire')->hourly();
 
         $schedule->command('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command('saas:hourly')->hourly()->withoutOverlapping();
+        // Messages (OTP, invites, notices) go through the database queue; cron runs the worker each minute.
+        $schedule->command('queue:work --stop-when-empty --tries=3 --max-time=50')->everyMinute()->withoutOverlapping();
     }
 
     /**

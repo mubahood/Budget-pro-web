@@ -86,7 +86,7 @@ class ShiftService
             throw BusinessRuleException::make('invalid_amount', 'Counted cash cannot be negative.');
         }
 
-        return DB::transaction(function () use ($shift, $countedCash, $userId, $notes) {
+        $closed = DB::transaction(function () use ($shift, $countedCash, $userId, $notes) {
             $t = $this->totals($shift);
             $shift->status = 'closed';
             $shift->closed_at = now();
@@ -103,5 +103,15 @@ class ShiftService
 
             return $shift;
         });
+        if (abs((float) $closed->variance) >= 0.01) {
+            $cur = \App\Models\Company::withoutGlobalScopes()->find($closed->company_id)?->currency ?? '';
+            $who = \App\Models\User::withoutGlobalScopes()->find($closed->opened_by_id)?->name ?? 'A cashier';
+            $diff = (float) $closed->variance;
+            app(\App\Services\Notifications\Notifier::class)->notify((int) $closed->company_id, 'cash_variance',
+                'Cash '.($diff < 0 ? 'short' : 'over').' by '.number_format(abs($diff)).' '.$cur,
+                "{$who}'s shift {$closed->number}: expected ".number_format((float) $closed->expected_cash).', counted '.number_format((float) $closed->counted_cash).'.', ['shift_id' => $closed->id]);
+        }
+
+        return $closed;
     }
 }

@@ -24,6 +24,7 @@ class EmployeesTest extends AdminTestCase
             'password' => 'strongpass1',
             'password_confirmation' => 'strongpass1',
             'roles' => [DB::table('admin_roles')->where('slug', 'worker')->value('id')],
+            'team_role' => 'cashier',
             'status' => 'Active',
         ], $overrides);
     }
@@ -49,7 +50,9 @@ class EmployeesTest extends AdminTestCase
         $this->assertSame((int) $a['company']->id, (int) $worker->company_id);
         $this->assertSame($payload['email'], $worker->username);
         $this->assertTrue(Hash::check('strongpass1', $worker->password));
-        $this->assertTrue($worker->fresh()->isRole('worker'));
+        // The company role (plan C5) sets both app permissions and the matching web role.
+        $this->assertSame('cashier', \App\Services\Team\Permissions::roleOf($worker->fresh()));
+        $this->assertTrue($worker->fresh()->isRole('shop_cashier'));
         $this->assertFalse($worker->fresh()->isRole('admin'));
     }
 

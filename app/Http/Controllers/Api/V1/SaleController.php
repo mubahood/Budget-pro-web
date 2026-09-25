@@ -78,6 +78,9 @@ class SaleController extends BaseCrudController
         ]);
 
         $data['payments_explicit'] = $request->has('payments');
+        if (! \App\Services\Team\Permissions::can($request->user(), 'discount') && $this->changesPrices($companyId, $data)) {
+            return $this->error('Your role cannot give discounts or change prices.', 403, ['code' => 'forbidden', 'permission' => 'discount']);
+        }
         try {
             $result = (new SaleService())->checkout($companyId, (int) $request->user()->id, $data);
         } catch (BusinessRuleException $e) {
@@ -90,6 +93,29 @@ class SaleController extends BaseCrudController
         }
 
         return $this->created($sale, 'Sale recorded successfully.');
+    }
+
+    /** A discount, or a unit price different from the product's price in that unit. */
+    private function changesPrices(int $companyId, array $data): bool
+    {
+        if ((float) ($data['discount_amount'] ?? 0) > 0) {
+            return true;
+        }
+        foreach ($data['items'] as $line) {
+            if ((float) ($line['discount_amount'] ?? 0) > 0) {
+                return true;
+            }
+            if (! isset($line['unit_price'])) {
+                continue;
+            }
+            $product = \App\Models\StockItem::withoutGlobalScopes()->where('company_id', $companyId)->find($line['stock_item_id']);
+            $factor = ! empty($line['unit_id']) ? (float) (\App\Models\Unit::withoutGlobalScopes()->find($line['unit_id'])?->factor ?: 1) : 1.0;
+            if ($product && abs((float) $line['unit_price'] - round((float) $product->selling_price * $factor, 2)) > 0.005) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function addPayment(Request $request, $id)

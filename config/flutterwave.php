@@ -19,6 +19,13 @@ return [
     // Payment options offered to international (non-Uganda) customers — card only.
     'international_payment_options' => env('FLW_INTL_PAYMENT_OPTIONS', 'card'),
 
+    // Mobile money per local billing currency (plan C8): M-Pesa in Kenya, Tanzania/Rwanda mobile money.
+    'local_payment_options' => [
+        'KES' => env('FLW_KES_PAYMENT_OPTIONS', 'mpesa,card'),
+        'TZS' => env('FLW_TZS_PAYMENT_OPTIONS', 'mobilemoneytanzania,card'),
+        'RWF' => env('FLW_RWF_PAYMENT_OPTIONS', 'mobilemoneyrwanda,card'),
+    ],
+
     // Currency international customers are billed in.
     'international_currency' => env('FLW_INTL_CURRENCY', 'USD'),
 

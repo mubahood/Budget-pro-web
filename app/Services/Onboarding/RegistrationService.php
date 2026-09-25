@@ -26,6 +26,28 @@ class RegistrationService
 
     public const PRODUCT_PINGPIN = 'pingpin';
 
+    public const BUSINESS_TYPES = ['retail', 'wholesale', 'pharmacy', 'agro_vet', 'hardware', 'restaurant', 'salon', 'boutique', 'electronics', 'other'];
+
+    /** A short-lived proof that an OTP for this phone/email was verified (register flow). */
+    public static function verificationToken(string $identifier): string
+    {
+        return \Illuminate\Support\Facades\Crypt::encryptString(json_encode(['i' => $identifier, 'p' => 'register', 'exp' => now()->addMinutes(30)->timestamp]));
+    }
+
+    public static function verifiedIdentifier(?string $token): ?string
+    {
+        if (! $token) {
+            return null;
+        }
+        try {
+            $d = json_decode(\Illuminate\Support\Facades\Crypt::decryptString($token), true);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return ($d['p'] ?? '') === 'register' && ($d['exp'] ?? 0) >= now()->timestamp ? (string) $d['i'] : null;
+    }
+
     /**
      * Validation rules shared by every channel.
      *
@@ -40,7 +62,7 @@ class RegistrationService
             'first_name' => [$required, 'string', 'max:100'],
             'last_name' => [$required, 'string', 'max:100'],
             'name' => ['nullable', 'string', 'max:191'],
-            'email' => [$required, 'email', 'max:191', 'unique:admin_users,email'],
+            'email' => [$pingpin ? 'nullable' : 'required_without:phone_number', 'nullable', 'email', 'max:191', 'unique:admin_users,email'],
             'phone_number' => ['nullable', 'string', 'max:30'],
             'password' => array_merge(['required', 'string', 'min:6', 'max:100'], $web ? ['confirmed'] : []),
             'company_name' => [$required, 'string', 'max:191'],
@@ -48,6 +70,10 @@ class RegistrationService
             'company_phone' => ['nullable', 'string', 'max:30'],
             'company_address' => ['nullable', 'string', 'max:500'],
             'currency' => [$required, 'string', Rule::in(config('saas.currencies'))],
+            'country' => ['nullable', 'string', Rule::in(array_keys(\App\Support\Phone::COUNTRIES))],
+            'business_type' => ['nullable', 'string', Rule::in(self::BUSINESS_TYPES)],
+            'timezone' => ['nullable', 'timezone'],
+            'verification_token' => ['nullable', 'string'],
             'device_name' => ['nullable', 'string', 'max:191'],
         ];
     }
@@ -83,9 +109,16 @@ class RegistrationService
         if ($email !== null && User::withoutGlobalScopes()->where('email', $email)->exists()) {
             throw BusinessRuleException::make('email_taken', 'This email is already registered.');
         }
-        if ($email === null && User::withoutGlobalScopes()->where('phone_number', $phone)->exists()) {
+        $currencyGuess = strtoupper((string) ($data['currency'] ?? ''));
+        $country = strtoupper((string) ($data['country'] ?? \App\Support\Phone::countryFor($currencyGuess)));
+        $phoneE164 = $phone ? \App\Support\Phone::e164($phone, $country) : null;
+        if ($phoneE164 !== null && User::withoutGlobalScopes()->where('phone_e164', $phoneE164)->exists()) {
             throw BusinessRuleException::make('phone_taken', 'This phone number is already registered.');
         }
+        if ($email === null && $phoneE164 === null && User::withoutGlobalScopes()->where('phone_number', $phone)->exists()) {
+            throw BusinessRuleException::make('phone_taken', 'This phone number is already registered.');
+        }
+        $verified = self::verifiedIdentifier($data['verification_token'] ?? null);
         if (strlen((string) ($data['password'] ?? '')) < 6) {
             throw BusinessRuleException::make('weak_password', 'Password must be at least 6 characters.');
         }
@@ -93,7 +126,7 @@ class RegistrationService
         $companyName = trim((string) ($data['company_name'] ?? $data['organisation_name'] ?? '')) ?: $name."'s Organisation";
         $trialDays = (int) config('saas.trial_days', 14);
 
-        $result = DB::transaction(function () use ($data, $first, $last, $name, $email, $phone, $currency, $companyName, $trialDays, $product) {
+        $result = DB::transaction(function () use ($data, $first, $last, $name, $email, $phone, $currency, $companyName, $trialDays, $product, $phoneE164, $verified, $country) {
             $user = new User();
             $user->first_name = $first !== '' ? $first : $name;
             $user->last_name = $last;
@@ -101,6 +134,14 @@ class RegistrationService
             $user->username = $email ?? $phone;
             $user->email = $email;
             $user->phone_number = $phone;
+            $user->phone_e164 = $phoneE164;
+            if ($verified !== null && ($verified === $phoneE164 || $verified === $email)) {
+                if ($verified === $phoneE164) {
+                    $user->phone_verified_at = now();
+                } else {
+                    $user->email_verified_at = now();
+                }
+            }
             $user->password = Hash::make($data['password']);
             $user->status = 'Active';
             $user->save();
@@ -113,6 +154,9 @@ class RegistrationService
             $company->address = $data['company_address'] ?? null;
             $company->status = 'Active';
             $company->currency = $currency;
+            $company->country = $country;
+            $company->business_type = $data['business_type'] ?? null;
+            $company->timezone = $data['timezone'] ?? null;
             $company->license_expire = now()->addDays($trialDays);
             $company->save(); // created hook: owner->company_id, account categories
 

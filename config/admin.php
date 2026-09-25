@@ -66,7 +66,7 @@ return [
 
         // PlatformAdminOnly runs BEFORE the 'admin' group so tenant users get a clean 403 for
         // platform paths instead of laravel-admin's deny page (which echoes and exit()s).
-        'middleware' => ['web', \App\Http\Middleware\PlatformAdminOnly::class, 'admin', \App\Http\Middleware\EnsureWebAccess::class],
+        'middleware' => ['web', \App\Http\Middleware\PlatformAdminOnly::class, 'admin', \App\Http\Middleware\EnsureWebAccess::class, \App\Http\Middleware\AdminPermission::class],
     ],
 
     /*

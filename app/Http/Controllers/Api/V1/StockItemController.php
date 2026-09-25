@@ -77,6 +77,27 @@ class StockItemController extends BaseCrudController
         return $this->success($payload, 'Product found.');
     }
 
+    protected function transform(Model $model)
+    {
+        if (! \App\Services\Team\Permissions::can(request()->user(), 'view_cost')) {
+            $model->makeHidden(['buying_price']);
+        }
+
+        return parent::transform($model);
+    }
+
+    /** Plan limit on products (A10): refused online with 422 plan_limit_reached. */
+    public function store(Request $request)
+    {
+        try {
+            (new \App\Services\Billing\Quotas())->assertCanAdd(\App\Models\Company::withoutGlobalScopes()->findOrFail($this->companyId($request)), 'products');
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return parent::store($request);
+    }
+
     protected function optionLabel(Model $model): string
     {
         return trim(($model->getAttribute('sku') ? $model->getAttribute('sku').' — ' : '').$model->getAttribute('name'));

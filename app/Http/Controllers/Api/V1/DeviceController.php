@@ -33,6 +33,14 @@ class DeviceController extends Controller
         $user = $request->user();
         $company = $request->attributes->get('company') ?? Company::find($user->company_id);
 
+        $known = Device::withoutGlobalScopes()->where('company_id', $company->id)->where('device_id', $data['device_id'])->exists();
+        if (! $known) {
+            try {
+                (new \App\Services\Billing\Quotas())->assertCanAdd($company, 'devices');
+            } catch (\App\Exceptions\BusinessRuleException $e) {
+                return $this->error($e->getMessage().' Or remove an old phone under Devices.', 422, $e->toErrors());
+            }
+        }
         $device = Device::register((int) $company->id, (int) $user->id, $data['device_id'], $data);
         if ($device->isRevoked()) {
             return $this->error('This device has been revoked by the owner.', 403, ['code' => 'device_revoked']);

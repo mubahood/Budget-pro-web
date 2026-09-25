@@ -26,6 +26,12 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $avatar
  * @property int|null $company_id
  * @property string|null $phone_number
+ * @property string|null $phone_e164
+ * @property \Illuminate\Support\Carbon|null $phone_verified_at
+ * @property \Illuminate\Support\Carbon|null $email_verified_at
+ * @property \Illuminate\Support\Carbon|null $last_login_at
+ * @property string|null $locale
+ * @property string|null $status
  * @property string|null $address
  * @property string|null $remember_token
  * @property \Illuminate\Support\Carbon|null $created_at

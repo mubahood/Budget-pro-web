@@ -37,7 +37,7 @@ class AdminAccess
         '/financial-periods*', '/financial-categories*', '/financial-records*', '/financial-reports*',
         '/budget-programs*', '/budget-item-categories*', '/budget-items*', '/contribution-records*',
         '/handover-records*', '/data-exports*',
-        '/purchase-orders*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
+        '/billing*', '/purchase-orders*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
         '/poultry-*',
         '/tracked-devices*', '/device-locations*', '/device-commands*', '/tracking-map*',
         '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search',
@@ -83,6 +83,72 @@ class AdminAccess
         self::ensureMenu('Plans', 'plans', 'fa-money', $billingId);
         self::ensureMenu('Subscriptions', 'subscriptions', 'fa-refresh', $billingId);
     }
+
+    /**
+     * One laravel-admin role per company role (config/permissions.php admin_roles), each with the
+     * tenant workspace permission, and menus limited to what the role may use. Idempotent.
+     */
+    public static function ensureShopRoles(): void
+    {
+        $now = now();
+        $tenantPermissionId = DB::table('admin_permissions')->where('slug', self::TENANT_PERMISSION['slug'])->value('id');
+        $base = DB::table('admin_permissions')->whereIn('slug', ['dashboard', 'auth.setting', 'auth.login'])->pluck('id');
+        foreach (config('permissions.admin_roles') as $role => $slug) {
+            if ($slug === 'company') {
+                continue;
+            }
+            if (! DB::table('admin_roles')->where('slug', $slug)->exists()) {
+                DB::table('admin_roles')->insert(['name' => config("permissions.roles.{$role}.label"), 'slug' => $slug, 'created_at' => $now, 'updated_at' => $now]);
+            }
+            $roleId = DB::table('admin_roles')->where('slug', $slug)->value('id');
+            foreach ($base->push($tenantPermissionId)->filter() as $pid) {
+                if (! DB::table('admin_role_permissions')->where('role_id', $roleId)->where('permission_id', $pid)->exists()) {
+                    DB::table('admin_role_permissions')->insert(['role_id' => $roleId, 'permission_id' => $pid, 'created_at' => $now, 'updated_at' => $now]);
+                }
+            }
+            // Menus: everything tenant-facing except what this role cannot use.
+            $allowed = \App\Services\Team\Permissions::defaultsFor($role);
+            foreach (self::MENU_PERMISSIONS as $uri => $perm) {
+                $menuId = DB::table('admin_menu')->where('uri', $uri)->value('id');
+                if (! $menuId) {
+                    continue;
+                }
+                $has = $perm === null || in_array($perm, $allowed, true);
+                $exists = DB::table('admin_role_menu')->where('role_id', $roleId)->where('menu_id', $menuId)->exists();
+                if ($has && ! $exists) {
+                    DB::table('admin_role_menu')->insert(['role_id' => $roleId, 'menu_id' => $menuId, 'created_at' => $now, 'updated_at' => $now]);
+                } elseif (! $has && $exists) {
+                    DB::table('admin_role_menu')->where('role_id', $roleId)->where('menu_id', $menuId)->delete();
+                }
+            }
+        }
+
+        // A menu with any role rows is shown only to those roles, so the legacy tenant roles
+        // (owner, worker, treasurers) are listed on every scoped menu to keep what they see today.
+        $legacy = DB::table('admin_roles')->whereIn('slug', array_column(self::TENANT_ROLES, 'slug'))->pluck('id');
+        foreach (array_keys(self::MENU_PERMISSIONS) as $uri) {
+            $menuId = DB::table('admin_menu')->where('uri', $uri)->value('id');
+            if (! $menuId) {
+                continue;
+            }
+            foreach ($legacy as $roleId) {
+                if (! DB::table('admin_role_menu')->where('role_id', $roleId)->where('menu_id', $menuId)->exists()) {
+                    DB::table('admin_role_menu')->insert(['role_id' => $roleId, 'menu_id' => $menuId, 'created_at' => $now, 'updated_at' => $now]);
+                }
+            }
+        }
+    }
+
+    /** Web menu uri => permission needed to see it (null = everyone in the shop). */
+    public const MENU_PERMISSIONS = [
+        'sale-records' => 'sell', 'customers' => 'sell', 'shifts' => 'sell', 'stock-items' => null, 'stock-categories' => 'manage_products',
+        'stock-sub-categories' => 'manage_products', 'units' => 'manage_products', 'stock-records' => 'adjust', 'goods-receipts' => 'restock',
+        'suppliers' => 'restock', 'stock-takes' => 'stock_take', 'purchase-orders' => 'restock', 'financial-records' => 'manage_finance',
+        'financial-categories' => 'manage_finance', 'financial-periods' => 'manage_finance', 'financial-reports' => 'view_reports',
+        'employees' => 'manage_team', 'companies-edit' => 'manage_settings', 'budget-programs' => 'manage_budget', 'budget-items' => 'manage_budget',
+        'budget-item-categories' => 'manage_budget', 'contribution-records' => 'manage_budget', 'data-exports' => 'manage_budget',
+        'billing' => null,
+    ];
 
     /** Replace `*` on tenant roles with the explicit allow-list and pin platform menus. Idempotent. */
     public static function scopeTenantRoles(): void

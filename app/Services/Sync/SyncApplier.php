@@ -89,6 +89,7 @@ class SyncApplier
             $stockExceptions = [];
             $touchedProducts = [];
             $failed = false;
+            $actor = \App\Models\User::withoutGlobalScopes()->find($userId);
 
             foreach ($batch['ops'] ?? [] as $op) {
                 $opUuid = (string) ($op['op_uuid'] ?? $op['uuid'] ?? '');
@@ -100,6 +101,12 @@ class SyncApplier
                     break;
                 }
                 $op['_user_id'] = $userId;
+                $need = self::permissionFor($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
+                if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)) {
+                    $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role does not allow this.', 'permission' => $need];
+                    $failed = true;
+                    break;
+                }
                 try {
                     $r = match ($config['kind']) {
                         SyncRegistry::KIND_EVENT => $this->applyEvent($company, $deviceId, $userId, $table, $config, $op, $assigned, $touchedProducts, $stockExceptions),
@@ -507,6 +514,31 @@ class SyncApplier
         }
 
         return ['status' => 'applied', 'model' => $take];
+    }
+
+    /** Permission a pushed op needs (plan C5), mirroring ApiPermissionMap. */
+    public static function permissionFor(string $table, string $action, array $data): ?string
+    {
+        $movement = strtolower(str_replace([' ', '-'], '_', (string) ($data['type'] ?? '')));
+
+        return match ($table) {
+            'sales' => $action === 'void' ? 'void' : 'sell',
+            'payments', 'customers', 'shifts' => 'sell',
+            'sale_returns' => 'refund',
+            'stock_movements' => match (true) {
+                $movement === 'sale' => 'sell',
+                $movement === 'stock_take' => 'stock_take',
+                $movement === 'return' => 'refund',
+                in_array($movement, ['stock_in', 'purchase', 'purchase_receipt', 'opening', 'transfer_in'], true) => 'restock',
+                default => 'adjust',
+            },
+            'goods_receipts', 'suppliers' => 'restock',
+            'stock_takes' => 'stock_take',
+            'categories', 'sub_categories', 'products', 'units', 'product_barcodes' => 'manage_products',
+            'financial_periods', 'financial_categories', 'financial_records' => 'manage_finance',
+            'budget_programs', 'budget_item_categories', 'budget_items', 'contribution_records' => 'manage_budget',
+            default => null, // poultry: farm roles live in the poultry module
+        };
     }
 
     /** Wire movement types (lower_snake) → StockService types; a signed quantity decides direction for adjustments. */
