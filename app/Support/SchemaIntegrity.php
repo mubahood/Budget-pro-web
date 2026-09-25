@@ -7,7 +7,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Schema integrity pass (plan Part D, P4-5): foreign keys (RESTRICT for
- * money-bearing links), per-company uniques and status checks. A constraint is
+ * money-bearing links) and status checks. Per-company uniqueness of master data
+ * (names, phones, SKUs, barcodes) is enforced on online writes, not in the
+ * database: phones create those rows offline and two devices creating the same
+ * one are kept and merged (plan Appendix E, DuplicateService, DECISIONS E40). A constraint is
  * only added when the data already satisfies it; anything else is reported by
  * `php artisan schema:integrity` so it can be cleaned first (plan B.3 "constraints
  * after backfill verified"). Safe to run repeatedly.
@@ -56,16 +59,6 @@ class SchemaIntegrity
         ['company_role_permissions', 'company_id', 'companies', 'cascade'],
         ['locations', 'company_id', 'companies', 'restrict'],
     ];
-
-    /**
-     * Per-company uniques for master data are enforced on online writes (validation) and NOT in the
-     * database: phones create customers, suppliers, categories, units and products offline, and two
-     * devices creating the same one must both be kept and offered as a merge (plan Appendix E,
-     * DECISIONS E40). Server-assigned numbers (receipts, invoices, POs, GRNs…) are unique in the DB.
-     *
-     * @var array<int, array{0: string, 1: string, 2: string, 3: string}>
-     */
-    public const UNIQUES = [];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
     public const CHECKS = [
@@ -118,11 +111,6 @@ class SchemaIntegrity
     private static function hasConstraint(string $table, string $name): bool
     {
         return DB::table('information_schema.table_constraints')->where('table_schema', DB::getDatabaseName())->where('table_name', $table)->where('constraint_name', $name)->exists();
-    }
-
-    private static function hasIndex(string $table, string $name): bool
-    {
-        return DB::table('information_schema.statistics')->where('table_schema', DB::getDatabaseName())->where('table_name', $table)->where('index_name', $name)->exists();
     }
 
     private static function columnType(string $table, string $column): ?string
@@ -178,34 +166,6 @@ class SchemaIntegrity
                 DB::statement("ALTER TABLE `{$table}` ADD CONSTRAINT `{$name}` FOREIGN KEY (`{$column}`) REFERENCES `{$parent}` (`id`) ON DELETE ".strtoupper($onDelete));
             }
             $out[] = ['kind' => 'fk', 'target' => $target, 'status' => $apply ? 'added' : 'ready'];
-        }
-
-        foreach (self::UNIQUES as [$table, $name, $columns, $where]) {
-            if (! Schema::hasTable($table)) {
-                continue;
-            }
-            if (self::hasIndex($table, $name)) {
-                $out[] = ['kind' => 'unique', 'target' => "{$table} ({$columns})", 'status' => 'ok'];
-
-                continue;
-            }
-            $plain = preg_replace('/\(\d+\)/', '', $columns);
-            $dups = DB::select("SELECT COUNT(*) AS n FROM (SELECT {$plain} FROM `{$table}` WHERE {$where} GROUP BY {$plain} HAVING COUNT(*) > 1) d")[0]->n ?? 0;
-            if ($dups > 0) {
-                $out[] = ['kind' => 'unique', 'target' => "{$table} ({$columns})", 'status' => 'skipped', 'detail' => "{$dups} duplicate group(s)"];
-
-                continue;
-            }
-            // Unique among active rows: a generated key column that is NULL for deleted/empty rows.
-            if ($apply) {
-                $key = substr('uk_'.str_replace(['uq_', $table.'_'], '', $name), 0, 60);
-                if (! Schema::hasColumn($table, $key)) {
-                    $expr = 'CONCAT_WS(0x1F, '.implode(', ', array_map('trim', explode(',', preg_replace('/\((\d+)\)/', '', $columns)))).')';
-                    DB::statement("ALTER TABLE `{$table}` ADD COLUMN `{$key}` VARCHAR(255) GENERATED ALWAYS AS (IF({$where}, LEFT({$expr}, 255), NULL)) STORED");
-                }
-                DB::statement("ALTER TABLE `{$table}` ADD UNIQUE INDEX `{$name}` (`{$key}`)");
-            }
-            $out[] = ['kind' => 'unique', 'target' => "{$table} ({$columns})", 'status' => $apply ? 'added' : 'ready'];
         }
 
         $checks = self::checksSupported();
