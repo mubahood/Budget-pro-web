@@ -28,7 +28,13 @@ class ConcurrentCheckoutTest extends TestCase
     {
         if ($this->companyId) {
             DB::reconnect();
-            foreach (['payments', 'financial_records', 'sale_record_items', 'sale_records', 'stock_records', 'stock_items', 'stock_sub_categories', 'stock_categories', 'financial_categories', 'financial_periods', 'number_sequences', 'company_members'] as $table) {
+            // Children before parents (foreign keys, P4-5); everything this company created, including its location.
+            $items = DB::table('stock_items')->where('company_id', $this->companyId)->pluck('id');
+            DB::table('stock_record_batches')->whereIn('stock_record_id', DB::table('stock_records')->where('company_id', $this->companyId)->pluck('id'))->delete();
+            DB::table('stock_batches')->whereIn('stock_item_id', $items)->delete();
+            DB::table('stock_levels')->whereIn('stock_item_id', $items)->delete();
+            foreach (['payments', 'financial_records', 'sale_record_items', 'stock_records', 'sale_records', 'product_stats', 'stock_items', 'stock_sub_categories', 'stock_categories', 'financial_categories', 'financial_periods',
+                'number_sequences', 'company_members', 'locations', 'subscriptions', 'app_notifications', 'message_log'] as $table) {
                 DB::table($table)->where('company_id', $this->companyId)->delete();
             }
             DB::table((new User())->getTable())->where('company_id', $this->companyId)->delete();

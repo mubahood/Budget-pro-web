@@ -25,7 +25,7 @@ class UnitController extends BaseCrudController
         $companyId = $this->companyId($request);
 
         return [
-            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:60'],
+            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:60', \Illuminate\Validation\Rule::unique('units', 'name')->where('company_id', $companyId)->where('is_deleted', 0)->ignore($existing?->getKey())],
             'abbreviation' => [$existing ? 'sometimes' : 'required', 'string', 'max:15'],
             'base_unit_id' => ['nullable', Rule::exists('units', 'id')->where('company_id', $companyId)],
             'factor' => ['nullable', 'numeric', 'min:0.001'],

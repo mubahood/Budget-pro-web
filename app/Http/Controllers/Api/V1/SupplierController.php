@@ -26,7 +26,7 @@ class SupplierController extends BaseCrudController
     protected function rules(Request $request, ?Model $existing): array
     {
         return [
-            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:150'],
+            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:150', \Illuminate\Validation\Rule::unique('suppliers', 'name')->where('company_id', $this->companyId($request))->where('is_deleted', 0)->ignore($existing?->getKey())],
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
             'address' => ['nullable', 'string', 'max:255'],

@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        return;
+        if (! Schema::hasTable('budget_items') || Schema::hasColumn('budget_items', 'unit_price')) {
+            return; // applied before the column was tracked by migrations
+        }
         Schema::table('budget_items', function (Blueprint $table) {
             $table->bigInteger('unit_price')->nullable();
             $table->bigInteger('quantity')->nullable();

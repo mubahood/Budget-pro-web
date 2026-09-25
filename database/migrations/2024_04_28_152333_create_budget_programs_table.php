@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        return;
+        if (Schema::hasTable('budget_programs')) {
+            return; // created before the table was tracked by migrations
+        }
         Schema::create('budget_programs', function (Blueprint $table) {
             $table->id();
             $table->timestamps();

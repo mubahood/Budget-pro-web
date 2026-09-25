@@ -128,8 +128,30 @@ class MasterDataService
         } catch (BusinessRuleException $e) {
             return ['status' => 'rejected', 'code' => $e->errorCode() === 'business_rule' ? 'validation' : $e->errorCode(), 'message' => $e->getMessage(), 'errors' => $e->toErrors()];
         }
+        if ($existing === null) {
+            $this->flagDuplicate($companyId, $model);
+        }
 
         return ['status' => 'applied', 'model' => $model];
+    }
+
+    /** A new master row from a phone that looks like one we have: kept, and the owner is told once (Appendix E). */
+    private function flagDuplicate(int $companyId, Model $model): void
+    {
+        $table = $model->getTable();
+        if (! isset(\App\Services\Shop\DuplicateService::KINDS[$table])) {
+            return;
+        }
+        [, $key] = \App\Services\Shop\DuplicateService::KINDS[$table];
+        $value = \Illuminate\Support\Facades\DB::table($table)->where('id', $model->getKey())->selectRaw("{$key} AS k")->value('k');
+        if ($value === null || $value === '') {
+            return;
+        }
+        $twins = \Illuminate\Support\Facades\DB::table($table)->where('company_id', $companyId)->where('is_deleted', false)->whereRaw("{$key} = ?", [$value])->count();
+        if ($twins > 1) {
+            \App\Services\Notifications\Notices::once($companyId, 'duplicate', substr("{$table}:{$value}", 0, 40), fn () => app(\App\Services\Notifications\Notifier::class)->notify($companyId, 'team',
+                'Possible duplicate: '.($model->getAttribute('name') ?? $value), 'Two phones added what looks like the same record. Open Duplicates to merge them — nothing was lost.', ['table' => $table]));
+        }
     }
 
     public function conflict(int $companyId, ?string $deviceId, string $table, ?string $uuid, string $code, array $local, ?array $server, ?string $title = null): SyncConflict

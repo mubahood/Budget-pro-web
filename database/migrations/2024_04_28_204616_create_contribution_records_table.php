@@ -12,7 +12,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        return;
+        if (Schema::hasTable('contribution_records')) {
+            return; // created before the table was tracked by migrations
+        }
         Schema::create('contribution_records', function (Blueprint $table) {
             $table->id();
             $table->timestamps();

@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        return;
+        if (! Schema::hasTable('contribution_records') || Schema::hasColumn('contribution_records', 'category_id')) {
+            return; // applied before the column was tracked by migrations
+        }
         Schema::table('contribution_records', function (Blueprint $table) {
             $table->string('category_id')->nullable()->default('Family');
         });

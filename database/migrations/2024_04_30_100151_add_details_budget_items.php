@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        return;
+        if (! Schema::hasTable('budget_items') || Schema::hasColumn('budget_items', 'details')) {
+            return; // applied before the column was tracked by migrations
+        }
         Schema::table('budget_items', function (Blueprint $table) {
             $table->text('details')->nullable();
         });

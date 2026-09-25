@@ -102,8 +102,25 @@ class OnboardingService
             $company->enabled_modules = config("onboarding.business_types.{$type}.modules");
         }
         $company->save();
+        $this->seedUnits($company);
 
         return $company;
+    }
+
+    /** Common pack sizes for the business type, once, when the shop has no units yet. */
+    public function seedUnits(Company $company): void
+    {
+        if (DB::table('units')->where('company_id', $company->id)->exists()) {
+            return;
+        }
+        foreach (config('onboarding.default_units.'.($company->business_type ?: 'retail'), []) as [$name, $abbr, $factor]) {
+            $unit = new \App\Models\Unit();
+            $unit->company_id = $company->id;
+            $unit->name = $name;
+            $unit->abbreviation = $abbr;
+            $unit->factor = $factor;
+            $unit->save();
+        }
     }
 
     /** Step 4: how the shop takes money and shares receipts. */

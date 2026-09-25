@@ -295,6 +295,8 @@ Route::prefix('v1')->group(function () {
         Route::get('stock-transfers', [\App\Http\Controllers\Api\V1\LocationController::class, 'transfersIndex']);
         Route::post('stock-transfers', [\App\Http\Controllers\Api\V1\LocationController::class, 'transfer']);
         Route::put('devices/{id}/location', [\App\Http\Controllers\Api\V1\LocationController::class, 'deviceLocation'])->whereNumber('id');
+        Route::get('duplicates', [\App\Http\Controllers\Api\V1\DuplicateController::class, 'index']);
+        Route::post('duplicates/merge', [\App\Http\Controllers\Api\V1\DuplicateController::class, 'merge']);
         Route::get('reports', [\App\Http\Controllers\Api\V1\ReportController::class, 'index']);
         Route::get('reports/{name}', [\App\Http\Controllers\Api\V1\ReportController::class, 'show'])->where('name', '[a-z_]+');
         Route::get('reorder-suggestions', [\App\Http\Controllers\Api\V1\ReorderController::class, 'index']);

@@ -48,6 +48,18 @@ return [
         'finance' => ['financial-*'],
     ],
 
+    // Pack sizes created for a new shop (name, abbreviation, pieces per pack); owners add their own.
+    'default_units' => [
+        'retail' => [['Half dozen', '6pk', 6], ['Dozen', 'dz', 12], ['Crate (24)', 'crt', 24]],
+        'wholesale' => [['Dozen', 'dz', 12], ['Carton (12)', 'ctn', 12], ['Crate (24)', 'crt', 24], ['Bale (24)', 'bale', 24]],
+        'restaurant_bar' => [['Crate (24)', 'crt', 24], ['Crate (12)', 'crt12', 12]],
+        'pharmacy' => [['Box (10 strips)', 'box', 10]],
+        'agro_vet' => [['Carton (12)', 'ctn', 12]],
+        'hardware' => [['Box (100)', 'box', 100], ['Dozen', 'dz', 12]],
+        'electronics' => [['Box (10)', 'box', 10]],
+        'boutique' => [['Dozen', 'dz', 12]],
+    ],
+
     'payment_methods' => ['cash' => 'Cash', 'mobile_money' => 'Mobile money', 'card' => 'Card', 'bank' => 'Bank transfer', 'credit' => 'Credit (pay later)'],
 
     'steps' => ['account', 'business', 'products', 'money', 'team', 'first_sale'],

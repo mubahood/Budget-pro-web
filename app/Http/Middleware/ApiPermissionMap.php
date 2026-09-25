@@ -29,6 +29,7 @@ class ApiPermissionMap
         [['POST', 'PUT'], '#^locations(/\d+)?$#', 'manage_settings'],
         [['PUT'], '#^devices/\d+/location$#', 'manage_settings'],
         [['POST'], '#^stock-transfers$#', 'adjust'],
+        [['GET', 'POST'], '#^duplicates(/merge)?$#', 'manage_products'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^stock-takes(/\d+(/counts|/post)?)?$#', 'stock_take'],
         [['POST'], '#^stock-records/\d+/reverse$#', 'adjust'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(stock-items|stock-categories|stock-sub-categories|units|product-barcodes)(/\d+)?$#', 'manage_products'],

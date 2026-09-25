@@ -35,8 +35,9 @@ jobs:
           cp .env.example .env
           php artisan key:generate
           sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/; s/^DB_DATABASE=.*/DB_DATABASE=budget_pro_test/; s/^DB_USERNAME=.*/DB_USERNAME=root/; s/^DB_PASSWORD=.*/DB_PASSWORD=root/' .env
-          php artisan migrate --force
+          php artisan migrate --force          # from an empty database (plan Part D: migrate:fresh must work)
           php artisan db:seed --force
+          php artisan schema:integrity         # foreign keys, status checks: all in place on a clean install
       - name: Code style
         run: vendor/bin/pint --test
       - name: Static analysis

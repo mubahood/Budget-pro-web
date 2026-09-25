@@ -59,6 +59,8 @@ Route::group([
     $router->resource('purchase-orders', PurchaseOrderController::class)->only(['index', 'show', 'create', 'store']);
     $router->resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'show', 'create', 'store']);
     $router->get('reports', 'ReportController@index');
+    $router->get('duplicates', 'DuplicateController@index');
+    $router->post('duplicates/merge', 'DuplicateController@merge');
     $router->get('locations', 'LocationController@index');
     $router->post('locations', 'LocationController@store');
     $router->post('locations/devices', 'LocationController@devices');
