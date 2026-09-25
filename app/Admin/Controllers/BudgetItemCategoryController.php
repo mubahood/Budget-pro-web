@@ -41,14 +41,14 @@ class BudgetItemCategoryController extends TenantAdminController
         /*         $grid->column('created_at', __('Created at'));
         $grid->column('updated_at', __('Updated at')); */
         $grid->column('name', __('Name'))->sortable();
-        $grid->column('target_amount', __('Target Amount (UGX)'))
+        $grid->column('target_amount', __('Target Amount ('.\App\Support\Money::symbol().')'))
             ->display(function ($amount) {
                 return number_format($amount);
             })
             ->totalRow(function ($amount) {
                 return '<strong>'.number_format($amount).'</strong>';
             })->sortable();
-        $grid->column('invested_amount', __('Invested Amount (UGX)'))
+        $grid->column('invested_amount', __('Invested Amount ('.\App\Support\Money::symbol().')'))
             ->display(function ($amount) {
                 return number_format($amount);
             })
@@ -135,26 +135,27 @@ class BudgetItemCategoryController extends TenantAdminController
             They will be recalculated whenever budget items are created or updated.
         </div>');
 
-        $form->display('target_amount', __('Target Amount (UGX)'))
+        $form->display('target_amount', __('Target Amount ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX ' . number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('invested_amount', __('Invested Amount (UGX)'))
+        $form->display('invested_amount', __('Invested Amount ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX ' . number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('balance', __('Balance (UGX)'))
+        $form->display('balance', __('Balance ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
                 $balance = $value ?? 0;
                 $color = $balance > 0 ? 'red' : 'green';
-                return "<span style='color: {$color}; font-weight: bold;'>UGX " . number_format($balance) . '</span>';
+
+                return "<span style='color: {$color}; font-weight: bold;'>".\App\Support\Money::symbol().' '.number_format($balance).'</span>';
             });
 
         $form->display('percentage_done', __('Progress'))
             ->with(function ($value) {
-                return round($value ?? 0, 2) . '%';
+                return round($value ?? 0, 2).'%';
             });
 
         $form->display('is_complete', __('Is Complete'));

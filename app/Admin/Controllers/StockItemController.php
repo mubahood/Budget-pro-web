@@ -354,12 +354,12 @@ class StockItemController extends TenantAdminController
             ->title('Pricing & Financial Information')
             ->style('success');
 
-        $show->field('buying_price', __('Cost Price (UGX)'))
+        $show->field('buying_price', __('Cost Price ('.\App\Support\Money::symbol().')'))
             ->as(function ($buying_price) {
                 return number_format((float) $buying_price, 2);
             });
 
-        $show->field('selling_price', __('Selling Price (UGX)'))
+        $show->field('selling_price', __('Selling Price ('.\App\Support\Money::symbol().')'))
             ->as(function ($selling_price) {
                 return number_format((float) $selling_price, 2);
             });
@@ -392,7 +392,7 @@ class StockItemController extends TenantAdminController
                 return number_format((float) $current_quantity, 2);
             });
 
-        $show->field('stock_value', __('Stock Value (UGX)'))
+        $show->field('stock_value', __('Stock Value ('.\App\Support\Money::symbol().')'))
             ->as(function () {
                 $quantity = (float) $this->current_quantity;
                 $price = (float) $this->buying_price;
@@ -562,15 +562,15 @@ class StockItemController extends TenantAdminController
 
         $form->divider('Pricing Information');
 
-        $form->currency('buying_price', __('Cost/Buying Price (UGX)'))
-            ->symbol('UGX')
+        $form->currency('buying_price', __('Cost/Buying Price ('.\App\Support\Money::symbol().')'))
+            ->symbol(\App\Support\Money::symbol())
             ->default($cloneData ? $cloneData->buying_price : 0.00)
             ->rules('required|numeric|min:0')
             ->required()
             ->help('Enter the price you paid for this product');
 
-        $form->currency('selling_price', __('Selling Price (UGX)'))
-            ->symbol('UGX')
+        $form->currency('selling_price', __('Selling Price ('.\App\Support\Money::symbol().')'))
+            ->symbol(\App\Support\Money::symbol())
             ->default($cloneData ? $cloneData->selling_price : 0.00)
             ->rules('required|numeric|min:0')
             ->required()

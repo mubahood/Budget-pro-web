@@ -55,10 +55,10 @@ class PoultryExpenseController extends TenantAdminController
         });
         $grid->column('amount', __('Amount'))
             ->display(function ($v) {
-                return 'UGX '.number_format($v);
+                return ''.\App\Support\Money::symbol().' '.number_format($v);
             })
             ->totalRow(function ($v) {
-                return "<strong class='text-danger'>UGX ".number_format($v).'</strong>';
+                return "<strong class='text-danger'>".\App\Support\Money::symbol().' '.number_format($v).'</strong>';
             })
             ->sortable();
         $grid->column('batch.name', __('Batch'))->display(function ($name) {
@@ -82,7 +82,7 @@ class PoultryExpenseController extends TenantAdminController
         });
         $show->field('feedType.name', __('Feed Type'));
         $show->field('amount', __('Amount'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('batch.name', __('Batch'));
         $show->field('date', __('Date'));
@@ -115,7 +115,7 @@ class PoultryExpenseController extends TenantAdminController
             ->help('Optional — only relevant when category is Feed.');
 
         $form->currency('amount', __('Amount'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->default(0)
             ->rules('required|numeric|min:0');
 

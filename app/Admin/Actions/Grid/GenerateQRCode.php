@@ -43,7 +43,7 @@ class GenerateQRCode extends RowAction
         $html .= '<div><strong>Name:</strong> '.e($model->name).'</div>';
         $html .= '<div><strong>SKU:</strong> '.e($model->sku).'</div>';
         $html .= '<div><strong>Barcode:</strong> '.e($model->barcode ?? 'N/A').'</div>';
-        $html .= '<div><strong>Price:</strong> UGX '.number_format($model->selling_price).'</div>';
+        $html .= '<div><strong>Price:</strong> '.\App\Support\Money::symbol().' '.number_format($model->selling_price).'</div>';
         $html .= '</div>';
         $html .= '</div>';
 

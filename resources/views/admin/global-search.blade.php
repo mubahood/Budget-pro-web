@@ -228,7 +228,7 @@ function displaySearchResults(data) {
                     <span class="search-result-type type-product">PRODUCT</span>
                     <div class="search-result-title">${product.name}</div>
                     <div class="search-result-subtitle">
-                        SKU: ${product.sku || 'N/A'} • Stock: ${product.current_quantity} units • Price: UGX ${formatNumber(product.selling_price)}
+                        SKU: ${product.sku || 'N/A'} • Stock: ${product.current_quantity} units • Price: {{ \App\Support\Money::symbol() }} ${formatNumber(product.selling_price)}
                     </div>
                 </div>
             `;
@@ -256,7 +256,7 @@ function displaySearchResults(data) {
                     <span class="search-result-type type-sale">SALE</span>
                     <div class="search-result-title">${sale.product_name}</div>
                     <div class="search-result-subtitle">
-                        Date: ${sale.date} • Quantity: ${sale.quantity} • Total: UGX ${formatNumber(sale.total)}
+                        Date: ${sale.date} • Quantity: ${sale.quantity} • Total: {{ \App\Support\Money::symbol() }} ${formatNumber(sale.total)}
                     </div>
                 </div>
             `;

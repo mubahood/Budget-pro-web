@@ -12,7 +12,7 @@ class Money
 
     public static function symbol(?int $companyId = null): string
     {
-        $companyId = $companyId ?? (int) (auth()->user()?->company_id ?? 0);
+        $companyId = $companyId ?? (int) (auth()->user()?->company_id ?? auth('admin')->user()?->company_id ?? 0);
         if ($companyId <= 0) {
             return (string) config('saas.default_currency');
         }

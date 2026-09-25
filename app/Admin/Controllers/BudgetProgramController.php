@@ -121,12 +121,12 @@ class BudgetProgramController extends TenantAdminController
             ->display(function ($budget_balance) use ($currency) {
                 $color = $budget_balance >= 0 ? 'success' : 'danger';
 
-                return "<span class='badge badge-{$color}'>".$currency." ".number_format($budget_balance).'</span>';
+                return "<span class='badge badge-{$color}'>".$currency.' '.number_format($budget_balance).'</span>';
             })->sortable()
             ->totalRow(function ($amount) use ($currency) {
                 $color = $amount >= 0 ? 'success' : 'danger';
 
-                return "<strong class='text-{$color}'>".$currency." ".number_format($amount).'</strong>';
+                return "<strong class='text-{$color}'>".$currency.' '.number_format($amount).'</strong>';
             });
 
         $grid->column('created_at', __('Created'))
@@ -250,37 +250,37 @@ class BudgetProgramController extends TenantAdminController
             <strong>Note:</strong> All financial totals are automatically calculated based on contributions and budget items.
         </div>');
 
-        $form->display('total_expected', __('Total Expected (UGX)'))
+        $form->display('total_expected', __('Total Expected ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX '.number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('total_collected', __('Total Collected (UGX)'))
+        $form->display('total_collected', __('Total Collected ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX '.number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('total_in_pledge', __('Pending Pledges (UGX)'))
+        $form->display('total_in_pledge', __('Pending Pledges ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX '.number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('budget_total', __('Total Budget (UGX)'))
+        $form->display('budget_total', __('Total Budget ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX '.number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('budget_spent', __('Budget Spent (UGX)'))
+        $form->display('budget_spent', __('Budget Spent ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
-                return 'UGX '.number_format($value ?? 0);
+                return ''.\App\Support\Money::symbol().' '.number_format($value ?? 0);
             });
 
-        $form->display('budget_balance', __('Budget Balance (UGX)'))
+        $form->display('budget_balance', __('Budget Balance ('.\App\Support\Money::symbol().')'))
             ->with(function ($value) {
                 $balance = $value ?? 0;
                 $color = $balance >= 0 ? 'green' : 'red';
 
-                return "<span style='color: {$color}; font-weight: bold;'>UGX ".number_format($balance).'</span>';
+                return "<span style='color: {$color}; font-weight: bold;'>".\App\Support\Money::symbol().' '.number_format($balance).'</span>';
             });
 
         $form->saved(function (Form $form) {

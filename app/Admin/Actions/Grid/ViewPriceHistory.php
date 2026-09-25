@@ -37,7 +37,7 @@ class ViewPriceHistory extends RowAction
 
             foreach ($history as $record) {
                 // Parse description for price info
-                preg_match('/from UGX ([\d,]+) to UGX ([\d,]+)/', $record->description, $matches);
+                preg_match('/from '.\App\Support\Money::symbol().' ([\d,]+) to '.\App\Support\Money::symbol().' ([\d,]+)/', $record->description, $matches);
                 $oldPrice = isset($matches[1]) ? $matches[1] : '-';
                 $newPrice = isset($matches[2]) ? $matches[2] : '-';
 
@@ -58,8 +58,8 @@ class ViewPriceHistory extends RowAction
 
                 $html .= '<tr>';
                 $html .= '<td>'.date('M d, Y H:i', strtotime($record->created_at)).'</td>';
-                $html .= '<td>UGX '.$oldPrice.'</td>';
-                $html .= '<td>UGX '.$newPrice.'</td>';
+                $html .= '<td>'.\App\Support\Money::symbol().' '.$oldPrice.'</td>';
+                $html .= '<td>'.\App\Support\Money::symbol().' '.$newPrice.'</td>';
                 $html .= '<td style="color: '.$changeColor.'; font-weight: bold;">';
                 $html .= $changeIcon.' '.$changeText;
                 $html .= '</td>';
@@ -75,8 +75,8 @@ class ViewPriceHistory extends RowAction
         // Show current prices
         $html .= '<div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">';
         $html .= '<strong>Current Prices:</strong><br>';
-        $html .= '📦 Buying: UGX '.number_format($model->buying_price, 0).'<br>';
-        $html .= '💵 Selling: UGX '.number_format($model->selling_price, 0).'<br>';
+        $html .= '📦 Buying: '.\App\Support\Money::symbol().' '.number_format($model->buying_price, 0).'<br>';
+        $html .= '💵 Selling: '.\App\Support\Money::symbol().' '.number_format($model->selling_price, 0).'<br>';
 
         if ($model->selling_price > $model->buying_price) {
             $margin = (($model->selling_price - $model->buying_price) / $model->buying_price) * 100;

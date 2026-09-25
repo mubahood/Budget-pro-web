@@ -31,7 +31,9 @@ class ApiPermissionMap
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume)$#', 'billing'],
         [['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], '#^team(/.*)?$#', 'manage_team'],
-        [['PUT', 'PATCH'], '#^company(/settings)?$#', 'manage_settings'],
+        [['PUT', 'PATCH'], '#^company(/settings|/modules)?$#', 'manage_settings'],
+        [['POST', 'PUT'], '#^onboarding/(templates/apply|import)$#', 'manage_products'],
+        [['POST', 'PUT'], '#^onboarding/(business|money|steps/[a-z_]+|checklist/dismiss)$#', 'manage_settings'],
         [['POST', 'DELETE'], '#^devices/\d+/revoke$#', 'manage_team'],
     ];
 

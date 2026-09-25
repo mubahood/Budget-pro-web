@@ -122,7 +122,7 @@ class CompanyEditController extends TenantAdminController
 
         $form->select('currency', __('Currency'))
             ->options([
-                'UGX' => 'UGX - Ugandan Shilling',
+                \App\Support\Money::symbol() => ''.\App\Support\Money::symbol().' - Ugandan Shilling',
                 'USD' => 'USD - US Dollar',
                 'KES' => 'KES - Kenyan Shilling',
                 'TZS' => 'TZS - Tanzanian Shilling',

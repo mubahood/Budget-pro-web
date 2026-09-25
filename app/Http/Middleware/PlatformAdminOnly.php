@@ -38,6 +38,7 @@ class PlatformAdminOnly
         'subscriptions', 'subscriptions/*',
         'pingpin-plans', 'pingpin-plans/*',
         'gens', 'gens/*', 'gen', 'gen/*',
+        'product-templates', 'product-templates/*',
     ];
 
     public function handle(Request $request, Closure $next, string $mode = 'paths'): Response

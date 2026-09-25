@@ -73,10 +73,10 @@ class PoultryDailyRecordController extends TenantAdminController
         $show->field('feed_kg', __('Feed (kg)'));
         $show->field('water_l', __('Water (L)'));
         $show->field('egg_unit_price', __('Egg Unit Price'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('feed_price_per_kg', __('Feed Price/kg'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('avg_weight_kg', __('Avg Weight (kg)'))->as(function ($v) {
             return $v !== null ? $v : '—';
@@ -135,12 +135,12 @@ class PoultryDailyRecordController extends TenantAdminController
             ->default(0);
 
         $form->currency('egg_unit_price', __('Egg Unit Price'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0')
             ->help('Price per egg on this day.');
 
         $form->currency('feed_price_per_kg', __('Feed Price per kg'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0');
 
         $form->decimal('avg_weight_kg', __('Avg Weight (kg)'))

@@ -45,7 +45,7 @@ class PlanController extends AdminController
         $grid->column('name', __('Name'))->sortable();
         $grid->column('slug', __('Slug'));
         $grid->column('price', __('Price (USD)'))->display(fn ($v) => '$'.number_format((float) $v, 2));
-        $grid->column('price_ugx', __('Price (UGX)'))->display(fn ($v) => number_format((float) $v, 0).' UGX');
+        $grid->column('price_ugx', __('Price ('.\App\Support\Money::symbol().')'))->display(fn ($v) => number_format((float) $v, 0).' '.\App\Support\Money::symbol().'');
         $grid->column('interval', __('Interval'));
         $grid->column('trial_days', __('Trial Days'))->display(fn ($v) => $v > 0 ? "{$v}d" : '—');
         $grid->column('is_active', __('Active'))->display(fn ($v) => $v
@@ -67,7 +67,7 @@ class PlanController extends AdminController
         $show->field('slug', __('Slug'));
         $show->field('description', __('Description'));
         $show->field('price', __('Price (USD)'))->as(fn ($v) => '$'.number_format((float) $v, 2));
-        $show->field('price_ugx', __('Price (UGX)'))->as(fn ($v) => number_format((float) $v, 0).' UGX');
+        $show->field('price_ugx', __('Price ('.\App\Support\Money::symbol().')'))->as(fn ($v) => number_format((float) $v, 0).' '.\App\Support\Money::symbol().'');
         $show->field('currency', __('Currency'));
         $show->field('interval', __('Interval'));
         $show->field('trial_days', __('Trial Days'));
@@ -116,7 +116,7 @@ class PlanController extends AdminController
 
         $form->divider('Pricing');
         $form->decimal('price', __('Price (USD)'))->rules('required|numeric|min:0')->default(0);
-        $form->decimal('price_ugx', __('Price (UGX)'))->rules('required|numeric|min:0')->default(0);
+        $form->decimal('price_ugx', __('Price ('.\App\Support\Money::symbol().')'))->rules('required|numeric|min:0')->default(0);
         $form->text('currency', __('Currency'))->default('USD');
         $form->select('interval', __('Billing Interval'))->options(['month' => 'Monthly', 'year' => 'Yearly', 'lifetime' => 'Lifetime'])->default('month');
         $form->number('trial_days', __('Trial Days'))->default(0)->help('0 for a paid plan; 14 for the trial plan itself.');

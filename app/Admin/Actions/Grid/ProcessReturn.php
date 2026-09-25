@@ -42,7 +42,7 @@ class ProcessReturn extends RowAction
                 'quantity' => $returnQty,
                 'type' => 'Return',
                 'description' => sprintf(
-                    'Product returned: %s. Reason: %s. Refund Amount: UGX %s. Notes: %s',
+                    'Product returned: %s. Reason: %s. Refund Amount: '.\App\Support\Money::symbol().' %s. Notes: %s',
                     $model->name,
                     $reason,
                     number_format($refundAmount ?? 0, 2),
@@ -55,7 +55,7 @@ class ProcessReturn extends RowAction
             DB::commit();
 
             return $this->response()->success(sprintf(
-                'Return processed successfully! %s unit(s) returned to stock. Refund: UGX %s',
+                'Return processed successfully! %s unit(s) returned to stock. Refund: '.\App\Support\Money::symbol().' %s',
                 $returnQty,
                 number_format($refundAmount ?? 0, 2)
             ))->refresh();
@@ -91,8 +91,8 @@ class ProcessReturn extends RowAction
             ->required()
             ->help('Select the reason for return');
 
-        $this->currency('refund_amount', 'Refund Amount (UGX)')
-            ->symbol('UGX')
+        $this->currency('refund_amount', 'Refund Amount ('.\App\Support\Money::symbol().')')
+            ->symbol(\App\Support\Money::symbol())
             ->default(0.00)
             ->rules('nullable|numeric|min:0')
             ->help('Enter the refund amount to be given to customer (leave 0 if no refund)');

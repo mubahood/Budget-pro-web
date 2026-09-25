@@ -267,8 +267,8 @@
                 <td><strong>{{ $item->item_name }}</strong></td>
                 <td class="text-center">{{ $item->item_sku ?? '-' }}</td>
                 <td class="text-center">{{ number_format($item->quantity, 2) }}</td>
-                <td class="text-right">UGX {{ number_format($item->unit_price, 0) }}</td>
-                <td class="text-right">UGX {{ number_format($item->subtotal, 0) }}</td>
+                <td class="text-right">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($item->unit_price, 0) }}</td>
+                <td class="text-right">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($item->subtotal, 0) }}</td>
             </tr>
             @endforeach
         </tbody>
@@ -277,11 +277,11 @@
     <div class="totals-section">
         <div class="totals-row">
             <div class="totals-label">Subtotal:</div>
-            <div class="totals-value">UGX {{ number_format($sale->total_amount, 0) }}</div>
+            <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->total_amount, 0) }}</div>
         </div>
         <div class="totals-row grand-total">
             <div class="totals-label">TOTAL AMOUNT:</div>
-            <div class="totals-value">UGX {{ number_format($sale->total_amount, 0) }}</div>
+            <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->total_amount, 0) }}</div>
         </div>
     </div>
 
@@ -294,12 +294,12 @@
             </tr>
             <tr>
                 <td class="info-label">Amount Paid:</td>
-                <td><strong>UGX {{ number_format($sale->amount_paid, 0) }}</strong></td>
+                <td><strong>{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->amount_paid, 0) }}</strong></td>
             </tr>
             @if($sale->balance > 0)
             <tr>
                 <td class="info-label">Balance Due:</td>
-                <td style="color: #d9534f;"><strong>UGX {{ number_format($sale->balance, 0) }}</strong></td>
+                <td style="color: #d9534f;"><strong>{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->balance, 0) }}</strong></td>
             </tr>
             @else
             <tr>

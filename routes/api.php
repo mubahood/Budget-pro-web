@@ -169,6 +169,17 @@ Route::prefix('v1')->group(function () {
         Route::post('subscription/resume', [BillingController::class, 'resume']);
         Route::get('subscription/invoices/{id}.pdf', [BillingController::class, 'invoicePdf'])->whereNumber('id');
 
+        // Setup wizard, checklist and modules (plan C2/C4).
+        Route::get('onboarding', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'show']);
+        Route::post('onboarding/steps/{step}', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'step']);
+        Route::put('onboarding/business', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'business']);
+        Route::put('onboarding/money', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'money']);
+        Route::get('onboarding/templates', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'templates']);
+        Route::post('onboarding/templates/apply', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'applyTemplates']);
+        Route::post('onboarding/import', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'import']);
+        Route::post('onboarding/checklist/dismiss', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'dismissChecklist']);
+        Route::put('company/modules', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'modules']);
+
         // Team (plan C5): owner/managers with manage_team.
         Route::get('team', [\App\Http\Controllers\Api\V1\TeamController::class, 'index']);
         Route::get('team/roles', [\App\Http\Controllers\Api\V1\TeamController::class, 'roles']);

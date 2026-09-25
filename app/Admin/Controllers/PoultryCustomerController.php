@@ -69,7 +69,7 @@ class PoultryCustomerController extends TenantAdminController
             $g->column('date', __('Date'));
             $g->column('product_label', __('Product'));
             $g->column('total', __('Total'))->display(function ($v) {
-                return 'UGX '.number_format($v);
+                return ''.\App\Support\Money::symbol().' '.number_format($v);
             });
         });
 

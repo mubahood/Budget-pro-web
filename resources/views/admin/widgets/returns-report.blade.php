@@ -23,7 +23,7 @@
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
                         <span class="progress-description">
-                            {{ number_format($data['summary']['today']->units_returned) }} units | UGX {{ number_format($data['summary']['today']->refund_total) }}
+                            {{ number_format($data['summary']['today']->units_returned) }} units | {{ \App\Support\Money::symbol() }} {{ number_format($data['summary']['today']->refund_total) }}
                         </span>
                     </div>
                 </div>
@@ -39,7 +39,7 @@
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
                         <span class="progress-description">
-                            {{ number_format($data['summary']['month']->units_returned) }} units | UGX {{ number_format($data['summary']['month']->refund_total) }}
+                            {{ number_format($data['summary']['month']->units_returned) }} units | {{ \App\Support\Money::symbol() }} {{ number_format($data['summary']['month']->refund_total) }}
                         </span>
                     </div>
                 </div>
@@ -55,7 +55,7 @@
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
                         <span class="progress-description">
-                            {{ number_format($data['summary']['total']->units_returned) }} units | UGX {{ number_format($data['summary']['total']->refund_total) }}
+                            {{ number_format($data['summary']['total']->units_returned) }} units | {{ \App\Support\Money::symbol() }} {{ number_format($data['summary']['total']->refund_total) }}
                         </span>
                     </div>
                 </div>
@@ -132,7 +132,7 @@
                                         <td><strong>{{ $product->name }}</strong></td>
                                         <td><span class="badge bg-red">{{ number_format($product->return_count) }} times</span></td>
                                         <td><span class="badge bg-orange">{{ number_format($product->total_returned) }} units</span></td>
-                                        <td><span class="text-red"><strong>UGX {{ number_format($product->total_refunded) }}</strong></span></td>
+                                        <td><span class="text-red"><strong>{{ \App\Support\Money::symbol() }} {{ number_format($product->total_refunded) }}</strong></span></td>
                                     </tr>
                                 @empty
                                     <tr>
@@ -186,7 +186,7 @@
                                                 <small>{{ $return->description }}</small>
                                             </td>
                                             <td>
-                                                <span class="text-red"><strong>UGX {{ number_format(abs($return->total_sales)) }}</strong></span>
+                                                <span class="text-red"><strong>{{ \App\Support\Money::symbol() }} {{ number_format(abs($return->total_sales)) }}</strong></span>
                                             </td>
                                             <td>
                                                 <small>{{ $return->processed_by }}</small>
@@ -228,7 +228,7 @@ $(document).ready(function() {
                 tension: 0.4,
                 fill: true
             }, {
-                label: 'Refund Amount (UGX)',
+                label: 'Refund Amount ({{ \App\Support\Money::symbol() }})',
                 data: {!! json_encode($data['monthly_trend']['refunds']) !!},
                 borderColor: 'rgb(221, 75, 57)',
                 backgroundColor: 'rgba(221, 75, 57, 0.1)',
@@ -266,7 +266,7 @@ $(document).ready(function() {
                     position: 'right',
                     title: {
                         display: true,
-                        text: 'Refund Amount (UGX)'
+                        text: 'Refund Amount ({{ \App\Support\Money::symbol() }})'
                     },
                     grid: {
                         drawOnChartArea: false,

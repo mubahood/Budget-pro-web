@@ -35,7 +35,7 @@ class ConvertCurrency extends RowAction
                 <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                     <tr style="background: #00c0ef; color: white;">
                         <th style="padding: 10px; text-align: left;">Description</th>
-                        <th style="padding: 10px; text-align: right;">UGX (Original)</th>
+                        <th style="padding: 10px; text-align: right;">'.\App\Support\Money::symbol().' (Original)</th>
                         <th style="padding: 10px; text-align: right;">'.strtoupper($currency).' (Converted)</th>
                     </tr>
                     <tr style="background: #fff;">
@@ -45,17 +45,17 @@ class ConvertCurrency extends RowAction
                     </tr>
                     <tr style="background: #f9f9f9;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Cost Price</strong></td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX '.number_format($model->buying_price, 2).'</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.\App\Support\Money::symbol().' '.number_format($model->buying_price, 2).'</td>
                         <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.strtoupper($currency).' '.number_format($convertedBuyingPrice, 2).'</td>
                     </tr>
                     <tr style="background: #fff;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Selling Price</strong></td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX '.number_format($model->selling_price, 2).'</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.\App\Support\Money::symbol().' '.number_format($model->selling_price, 2).'</td>
                         <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.strtoupper($currency).' '.number_format($convertedSellingPrice, 2).'</td>
                     </tr>
                     <tr style="background: #e8f5e9;">
                         <td style="padding: 10px; border: 1px solid #ddd;"><strong>Profit Margin</strong></td>
-                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">UGX '.number_format($model->selling_price - $model->buying_price, 2).'</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.\App\Support\Money::symbol().' '.number_format($model->selling_price - $model->buying_price, 2).'</td>
                         <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">'.strtoupper($currency).' '.number_format($convertedSellingPrice - $convertedBuyingPrice, 2).'</td>
                     </tr>
                 </table>
@@ -101,7 +101,7 @@ class ConvertCurrency extends RowAction
             ->rules('required|numeric|min:0.0001')
             ->attribute(['type' => 'number', 'step' => '0.0001', 'min' => '0.0001'])
             ->placeholder('e.g., 3700 for USD, 28 for KES')
-            ->help('Enter 1 UGX = X target currency (e.g., 1 UGX = 0.00027 USD means rate is 3700)')
+            ->help('Enter 1 '.\App\Support\Money::symbol().' = X target currency (e.g., 1 '.\App\Support\Money::symbol().' = 0.00027 USD means rate is 3700)')
             ->required();
     }
 

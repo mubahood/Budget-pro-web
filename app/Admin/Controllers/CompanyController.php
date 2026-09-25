@@ -71,7 +71,7 @@ class CompanyController extends AdminController
         $form->email('email', __('Email'));
         $form->select('currency', __('Currency'))
             ->options(array_combine(config('saas.currencies'), config('saas.currencies')))
-            ->default('UGX');
+            ->default(config('saas.default_currency'));
         $form->image('logo', __('Logo'));
         $form->url('website', __('Website'));
         $form->textarea('about', __('About Company'));

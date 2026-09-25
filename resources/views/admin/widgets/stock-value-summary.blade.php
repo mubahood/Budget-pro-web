@@ -17,7 +17,7 @@
                     <span class="info-box-icon"><i class="fa fa-cubes"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">Total Stock Value</span>
-                        <span class="info-box-number">UGX {{ number_format($totalStockValue) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($totalStockValue) }}</span>
                         <div class="progress"><div class="progress-bar" style="width: 100%"></div></div>
                         <span class="progress-description">Cost price basis</span>
                     </div>
@@ -29,7 +29,7 @@
                     <span class="info-box-icon"><i class="fa fa-line-chart"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">Potential Revenue</span>
-                        <span class="info-box-number">UGX {{ number_format($totalPotentialRevenue) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($totalPotentialRevenue) }}</span>
                         <div class="progress"><div class="progress-bar" style="width: 100%"></div></div>
                         <span class="progress-description">If all sold</span>
                     </div>
@@ -41,7 +41,7 @@
                     <span class="info-box-icon"><i class="fa fa-dollar"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">Potential Profit</span>
-                        <span class="info-box-number">UGX {{ number_format($totalPotentialProfit) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($totalPotentialProfit) }}</span>
                         <div class="progress"><div class="progress-bar" style="width: {{ min(100, ($totalPotentialProfit / max($totalStockValue, 1)) * 100) }}%"></div></div>
                         <span class="progress-description">{{ number_format($avgMargin, 1) }}% avg margin</span>
                     </div>
@@ -95,11 +95,11 @@
                                 <span class="badge bg-green">{{ number_format($item->current_quantity) }}</span>
                             </td>
                             <td class="text-right">
-                                UGX {{ number_format($item->buying_price) }}
+                                {{ \App\Support\Money::symbol() }} {{ number_format($item->buying_price) }}
                             </td>
                             <td class="text-right">
                                 <strong style="color: #00a65a;">
-                                    UGX {{ number_format($item->stock_value) }}
+                                    {{ \App\Support\Money::symbol() }} {{ number_format($item->stock_value) }}
                                 </strong>
                             </td>
                             <td class="text-center">

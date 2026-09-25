@@ -93,10 +93,10 @@ class FinancialRecordController extends TenantAdminController
             ->display(function ($amount) {
                 $color = $this->type == 'Income' ? 'success' : 'danger';
 
-                return "<span class='badge badge-{$color}'>UGX ".number_format($amount).'</span>';
+                return "<span class='badge badge-{$color}'>".\App\Support\Money::symbol().' '.number_format($amount).'</span>';
             })->sortable()
             ->totalRow(function ($amount) {
-                return '<strong>UGX '.number_format($amount).'</strong>';
+                return '<strong>'.\App\Support\Money::symbol().' '.number_format($amount).'</strong>';
             });
 
         $grid->column('quantity', __('Qty'))
@@ -216,8 +216,8 @@ class FinancialRecordController extends TenantAdminController
 
         $form->divider('Amount & Quantity');
 
-        $form->currency('amount', __('Amount (UGX)'))
-            ->symbol('UGX')
+        $form->currency('amount', __('Amount ('.\App\Support\Money::symbol().')'))
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0.01')
             ->required()
             ->help('Enter the transaction amount');

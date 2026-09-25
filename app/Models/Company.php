@@ -63,7 +63,24 @@ class Company extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'license_expire' => 'date',
+        'onboarding_state' => 'array',
+        'enabled_modules' => 'array',
+        'payment_methods' => 'array',
+        'receipt_channels' => 'array',
     ];
+
+    /** Modules this company uses (plan C4); unset = the business type's modules, or everything when the type is unknown. */
+    public function modules(): array
+    {
+        if (is_array($this->enabled_modules) && $this->enabled_modules !== []) {
+            return array_values(array_intersect($this->enabled_modules, array_keys(config('onboarding.modules'))));
+        }
+        if ($this->business_type && config("onboarding.business_types.{$this->business_type}.modules")) {
+            return config("onboarding.business_types.{$this->business_type}.modules");
+        }
+
+        return array_keys(config('onboarding.modules'));
+    }
 
     /**
      * Boot method for model events.

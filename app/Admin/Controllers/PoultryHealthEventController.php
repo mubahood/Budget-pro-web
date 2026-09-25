@@ -40,7 +40,7 @@ class PoultryHealthEventController extends TenantAdminController
         $grid->column('symptoms', __('Symptoms'))->limit(40);
         $grid->column('diagnosis', __('Diagnosis'))->limit(40);
         $grid->column('cost', __('Cost'))->display(function ($cost) {
-            return 'UGX '.number_format($cost);
+            return ''.\App\Support\Money::symbol().' '.number_format($cost);
         })->sortable();
         $grid->column('withdrawal_days', __('Withdrawal'))->display(function ($days) {
             return $days.' days';
@@ -61,7 +61,7 @@ class PoultryHealthEventController extends TenantAdminController
         $show->field('diagnosis', __('Diagnosis'));
         $show->field('treatment', __('Treatment'));
         $show->field('cost', __('Cost'))->as(function ($cost) {
-            return 'UGX '.number_format($cost);
+            return ''.\App\Support\Money::symbol().' '.number_format($cost);
         });
         $show->field('withdrawal_days', __('Withdrawal Days'));
         $show->field('date', __('Date'));
@@ -95,7 +95,7 @@ class PoultryHealthEventController extends TenantAdminController
         $form->textarea('treatment', __('Treatment'))->rows(3);
 
         $form->currency('cost', __('Cost'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0')
             ->default(0);
 

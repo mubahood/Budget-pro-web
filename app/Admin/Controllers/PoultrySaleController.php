@@ -62,23 +62,23 @@ class PoultrySaleController extends TenantAdminController
         $grid->column('product_label', __('Product'));
         $grid->column('qty', __('Qty'))->sortable();
         $grid->column('unit_price', __('Unit Price'))->display(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $grid->column('total', __('Total'))
             ->display(function ($v) {
-                return 'UGX '.number_format($v);
+                return ''.\App\Support\Money::symbol().' '.number_format($v);
             })
             ->totalRow(function ($v) {
-                return "<strong class='text-success'>UGX ".number_format($v).'</strong>';
+                return "<strong class='text-success'>".\App\Support\Money::symbol().' '.number_format($v).'</strong>';
             })
             ->sortable();
         $grid->column('amount_paid', __('Amount Paid'))->display(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $grid->column('balance', __('Balance'))->display(function () {
             $color = $this->balance > 0 ? 'danger' : 'success';
 
-            return '<span class="badge badge-'.$color.'">UGX '.number_format($this->balance).'</span>';
+            return '<span class="badge badge-'.$color.'">'.\App\Support\Money::symbol().' '.number_format($this->balance).'</span>';
         });
         $grid->column('customer.name', __('Customer'))->display(function ($name) {
             return $name ?: '—';
@@ -100,16 +100,16 @@ class PoultrySaleController extends TenantAdminController
         $show->field('qty', __('Qty'));
         $show->field('unit', __('Unit'));
         $show->field('unit_price', __('Unit Price'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('total', __('Total'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('amount_paid', __('Amount Paid'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('balance', __('Balance'))->as(function () {
-            return 'UGX '.number_format($this->balance);
+            return ''.\App\Support\Money::symbol().' '.number_format($this->balance);
         });
         $show->field('customer.name', __('Customer'))->as(function ($name) {
             return $name ?: '—';
@@ -152,15 +152,15 @@ class PoultrySaleController extends TenantAdminController
             ->placeholder('e.g. trays, kg, birds');
 
         $form->currency('unit_price', __('Unit Price'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0');
 
         $form->currency('total', __('Total'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0');
 
         $form->currency('amount_paid', __('Amount Paid'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0')
             ->default(0);
 

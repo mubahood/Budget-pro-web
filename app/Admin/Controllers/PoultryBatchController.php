@@ -45,10 +45,10 @@ class PoultryBatchController extends TenantAdminController
         $grid->column('acquired_date', __('Acquired'))->sortable();
         $grid->column('start_count', __('Start Count'))->sortable();
         $grid->column('cost_per_chick', __('Cost/Chick'))->display(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $grid->column('acquisition_cost', __('Total Cost'))->display(function () {
-            return 'UGX '.number_format($this->start_count * $this->cost_per_chick);
+            return ''.\App\Support\Money::symbol().' '.number_format($this->start_count * $this->cost_per_chick);
         });
         $grid->column('status', __('Status'))->display(function ($status) {
             return $status === 'active'
@@ -74,7 +74,7 @@ class PoultryBatchController extends TenantAdminController
         $show->field('acquired_date', __('Acquired Date'));
         $show->field('start_count', __('Start Count'));
         $show->field('cost_per_chick', __('Cost per Chick'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('status', __('Status'));
         $show->field('is_main_farm', __('Main Farm'))->as(fn ($v) => $v ? 'Yes' : 'No');
@@ -145,7 +145,7 @@ class PoultryBatchController extends TenantAdminController
             ->help('Number of birds at the start of this batch.');
 
         $form->currency('cost_per_chick', __('Cost per Chick'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->rules('required|numeric|min:0');
 
         $form->select('status', __('Status'))

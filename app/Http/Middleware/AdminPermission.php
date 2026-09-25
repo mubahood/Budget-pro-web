@@ -26,6 +26,12 @@ class AdminPermission
             return $next($request);
         }
         $section = explode('/', trim($request->path(), '/'))[0] ?? '';
+        $company = \App\Models\Company::withoutGlobalScopes()->find($user->company_id);
+        if ($company && $section !== '' && \App\Models\AdminMenu::pathDisabled($section, \App\Models\AdminMenu::disabledPaths($company))) {
+            admin_warning('Module switched off', 'Turn it on under Company settings → Modules.');
+
+            return redirect(admin_url('/'));
+        }
         $writing = ! in_array($request->method(), ['GET', 'HEAD'], true) || preg_match('#/(create|edit)$#', $request->path());
         $need = AdminAccess::MENU_PERMISSIONS[$section] ?? null;
         if ($need === null && $writing) {

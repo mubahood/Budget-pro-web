@@ -19,7 +19,7 @@
                     <span class="info-box-icon"><i class="fa fa-calendar-check-o"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">Today's Sales</span>
-                        <span class="info-box-number">UGX {{ number_format($data['overview']['today']['revenue']) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($data['overview']['today']['revenue']) }}</span>
                         <div class="progress">
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
@@ -36,7 +36,7 @@
                     <span class="info-box-icon"><i class="fa fa-calendar"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">This Week</span>
-                        <span class="info-box-number">UGX {{ number_format($data['overview']['week']['revenue']) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($data['overview']['week']['revenue']) }}</span>
                         <div class="progress">
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
@@ -53,7 +53,7 @@
                     <span class="info-box-icon"><i class="fa fa-calendar-o"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">This Month</span>
-                        <span class="info-box-number">UGX {{ number_format($data['overview']['month']['revenue']) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($data['overview']['month']['revenue']) }}</span>
                         <div class="progress">
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
@@ -74,12 +74,12 @@
                     <span class="info-box-icon"><i class="fa fa-money"></i></span>
                     <div class="info-box-content">
                         <span class="info-box-text">Month's Profit</span>
-                        <span class="info-box-number">UGX {{ number_format($data['overview']['month']['profit']) }}</span>
+                        <span class="info-box-number">{{ \App\Support\Money::symbol() }} {{ number_format($data['overview']['month']['profit']) }}</span>
                         <div class="progress">
                             <div class="progress-bar" style="width: 100%"></div>
                         </div>
                         <span class="progress-description">
-                            Avg: UGX {{ number_format($data['overview']['today']['avg_transaction']) }}/txn
+                            Avg: {{ \App\Support\Money::symbol() }} {{ number_format($data['overview']['today']['avg_transaction']) }}/txn
                         </span>
                     </div>
                 </div>
@@ -100,7 +100,7 @@
                             <div class="info-box-content">
                                 <span class="info-box-text" style="color: rgba(255,255,255,0.9);">Total Income</span>
                                 <span class="info-box-number" style="font-size: 20px;">
-                                    UGX {{ number_format($data['financial_data']['total_income']) }}
+                                    {{ \App\Support\Money::symbol() }} {{ number_format($data['financial_data']['total_income']) }}
                                 </span>
                             </div>
                         </div>
@@ -113,7 +113,7 @@
                             <div class="info-box-content">
                                 <span class="info-box-text" style="color: rgba(255,255,255,0.9);">Total Expense</span>
                                 <span class="info-box-number" style="font-size: 20px;">
-                                    UGX {{ number_format($data['financial_data']['total_expense']) }}
+                                    {{ \App\Support\Money::symbol() }} {{ number_format($data['financial_data']['total_expense']) }}
                                 </span>
                             </div>
                         </div>
@@ -133,7 +133,7 @@
                             <div class="info-box-content">
                                 <span class="info-box-text" style="color: rgba(255,255,255,0.9);">Balance</span>
                                 <span class="info-box-number" style="font-size: 20px;">
-                                    UGX {{ number_format(abs($balance)) }}
+                                    {{ \App\Support\Money::symbol() }} {{ number_format(abs($balance)) }}
                                     @if($balance < 0)
                                         <small style="font-size: 12px;">(Deficit)</small>
                                     @endif
@@ -238,11 +238,11 @@
                                             {{ \Carbon\Carbon::parse($day->date)->format('M j, Y') }}
                                         </td>
                                         <td class="text-right" style="padding: 10px 8px;">
-                                            UGX {{ number_format($day->revenue, 0) }}
+                                            {{ \App\Support\Money::symbol() }} {{ number_format($day->revenue, 0) }}
                                         </td>
                                         <td class="text-right" style="padding: 10px 8px; color: {{ $profitColor }}; font-weight: bold;">
                                             <i class="fa {{ $icon }}" style="margin-right: 3px;"></i>
-                                            UGX {{ number_format($day->profit, 0) }}
+                                            {{ \App\Support\Money::symbol() }} {{ number_format($day->profit, 0) }}
                                         </td>
                                     </tr>
                                 @empty
@@ -295,8 +295,8 @@
                                         </td>
                                         <td><strong>{{ $product->name }}</strong></td>
                                         <td><span class="badge bg-blue">{{ number_format($product->total_sold) }} units</span></td>
-                                        <td><span class="text-green"><strong>UGX {{ number_format($product->total_revenue) }}</strong></span></td>
-                                        <td><span class="text-orange"><strong>UGX {{ number_format($product->total_profit) }}</strong></span></td>
+                                        <td><span class="text-green"><strong>{{ \App\Support\Money::symbol() }} {{ number_format($product->total_revenue) }}</strong></span></td>
+                                        <td><span class="text-orange"><strong>{{ \App\Support\Money::symbol() }} {{ number_format($product->total_profit) }}</strong></span></td>
                                     </tr>
                                 @empty
                                     <tr>
@@ -328,7 +328,7 @@
                                     <div style="padding: 20px; border: 2px solid #dd4b39; border-radius: 8px; margin: 10px;">
                                         <h4 style="color: #dd4b39; margin-top: 0;">{{ $month['label'] }}</h4>
                                         <p style="font-size: 24px; font-weight: bold; margin: 10px 0;">
-                                            UGX {{ number_format($month['revenue']) }}
+                                            {{ \App\Support\Money::symbol() }} {{ number_format($month['revenue']) }}
                                         </p>
                                         <p style="color: #666; margin: 5px 0;">
                                             <i class="fa fa-shopping-cart"></i> {{ number_format($month['transactions']) }} transactions
@@ -426,9 +426,9 @@ $(document).ready(function() {
                             var value = context.parsed.y;
                             
                             if (label.includes('Income')) {
-                                return '💰 ' + label + ': UGX ' + value.toLocaleString();
+                                return '💰 ' + label + ': {{ \App\Support\Money::symbol() }} ' + value.toLocaleString();
                             } else {
-                                return '💸 ' + label + ': UGX ' + value.toLocaleString();
+                                return '💸 ' + label + ': {{ \App\Support\Money::symbol() }} ' + value.toLocaleString();
                             }
                         },
                         afterBody: function(context) {
@@ -438,7 +438,7 @@ $(document).ready(function() {
                                 var expense = {!! json_encode($data['financial_data']['expense']) !!}[index];
                                 var balance = income - expense;
                                 var balanceLabel = balance >= 0 ? '✅ Net: ' : '⚠️ Net: ';
-                                return balanceLabel + 'UGX ' + balance.toLocaleString();
+                                return balanceLabel + '{{ \App\Support\Money::symbol() }} ' + balance.toLocaleString();
                             }
                         }
                     }
@@ -453,7 +453,7 @@ $(document).ready(function() {
                     },
                     ticks: {
                         callback: function(value) {
-                            return 'UGX ' + value.toLocaleString();
+                            return '{{ \App\Support\Money::symbol() }} ' + value.toLocaleString();
                         },
                         font: {
                             size: 11
@@ -462,7 +462,7 @@ $(document).ready(function() {
                     },
                     title: {
                         display: true,
-                        text: 'Amount (UGX)',
+                        text: 'Amount ({{ \App\Support\Money::symbol() }})',
                         font: {
                             size: 12,
                             weight: 'bold'
@@ -526,7 +526,7 @@ $(document).ready(function() {
                             var value = context.parsed || 0;
                             var total = context.dataset.data.reduce((a, b) => a + b, 0);
                             var percentage = ((value / total) * 100).toFixed(1);
-                            return label + ': UGX ' + value.toLocaleString() + ' (' + percentage + '%)';
+                            return label + ': {{ \App\Support\Money::symbol() }} ' + value.toLocaleString() + ' (' + percentage + '%)';
                         }
                     }
                 }
@@ -608,11 +608,11 @@ $(document).ready(function() {
                             
                             if (label.includes('Revenue')) {
                                 return [
-                                    '💰 ' + label + ': UGX ' + value.toLocaleString(),
+                                    '💰 ' + label + ': {{ \App\Support\Money::symbol() }} ' + value.toLocaleString(),
                                     '📊 Transactions: ' + transactions
                                 ];
                             } else {
-                                return '📈 ' + label + ': UGX ' + value.toLocaleString();
+                                return '📈 ' + label + ': {{ \App\Support\Money::symbol() }} ' + value.toLocaleString();
                             }
                         }
                     }
@@ -627,7 +627,7 @@ $(document).ready(function() {
                     },
                     ticks: {
                         callback: function(value) {
-                            return 'UGX ' + value.toLocaleString();
+                            return '{{ \App\Support\Money::symbol() }} ' + value.toLocaleString();
                         },
                         font: {
                             size: 11
@@ -636,7 +636,7 @@ $(document).ready(function() {
                     },
                     title: {
                         display: true,
-                        text: 'Amount (UGX)',
+                        text: 'Amount ({{ \App\Support\Money::symbol() }})',
                         font: {
                             size: 12,
                             weight: 'bold'

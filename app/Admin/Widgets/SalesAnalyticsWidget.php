@@ -22,6 +22,8 @@ class SalesAnalyticsWidget extends Widget
         $u = Admin::user();
         $companyId = $u->company_id;
 
+        \App\Support\LocalTime::prime((int) $companyId);
+
         // Get analytics data
         $data = [
             'overview' => $this->getOverviewStats($companyId),
@@ -52,7 +54,7 @@ class SalesAnalyticsWidget extends Widget
             JOIN stock_items si ON sr.stock_item_id = si.id
             WHERE sr.company_id = ?
             AND sr.type = 'Sale'
-            AND DATE(sr.created_at) = CURDATE()
+            AND DATE(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = @local_today
         ", [$companyId]);
 
         // This week's sales
@@ -66,7 +68,7 @@ class SalesAnalyticsWidget extends Widget
             JOIN stock_items si ON sr.stock_item_id = si.id
             WHERE sr.company_id = ?
             AND sr.type = 'Sale'
-            AND YEARWEEK(sr.created_at) = YEARWEEK(CURDATE())
+            AND YEARWEEK(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = YEARWEEK(@local_today)
         ", [$companyId]);
 
         // This month's sales
@@ -80,8 +82,8 @@ class SalesAnalyticsWidget extends Widget
             JOIN stock_items si ON sr.stock_item_id = si.id
             WHERE sr.company_id = ?
             AND sr.type = 'Sale'
-            AND MONTH(sr.created_at) = MONTH(CURDATE())
-            AND YEAR(sr.created_at) = YEAR(CURDATE())
+            AND MONTH(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = MONTH(@local_today)
+            AND YEAR(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = YEAR(@local_today)
         ", [$companyId]);
 
         // Previous month for comparison
@@ -91,8 +93,8 @@ class SalesAnalyticsWidget extends Widget
             FROM stock_records
             WHERE company_id = ?
             AND type = 'Sale'
-            AND MONTH(created_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
-            AND YEAR(created_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
+            AND MONTH(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = MONTH(DATE_SUB(@local_today, INTERVAL 1 MONTH))
+            AND YEAR(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = YEAR(DATE_SUB(@local_today, INTERVAL 1 MONTH))
         ", [$companyId]);
 
         $todayData = $today[0];
@@ -145,7 +147,7 @@ class SalesAnalyticsWidget extends Widget
             FROM stock_records
             WHERE company_id = ?
             AND type = 'Sale'
-            AND created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+            AND created_at >= DATE_SUB(@local_today, INTERVAL 12 MONTH)
             GROUP BY DATE_FORMAT(created_at, '%Y-%m')
             ORDER BY month ASC
         ", [$companyId]);
@@ -187,8 +189,8 @@ class SalesAnalyticsWidget extends Widget
             JOIN stock_items si ON sr.stock_item_id = si.id
             WHERE sr.company_id = ?
             AND sr.type = 'Sale'
-            AND MONTH(sr.created_at) = MONTH(CURDATE())
-            AND YEAR(sr.created_at) = YEAR(CURDATE())
+            AND MONTH(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = MONTH(@local_today)
+            AND YEAR(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = YEAR(@local_today)
             GROUP BY si.id, si.name, si.image
             ORDER BY total_revenue DESC
             LIMIT 10
@@ -215,8 +217,8 @@ class SalesAnalyticsWidget extends Widget
             JOIN stock_categories sc ON ssc.stock_category_id = sc.id
             WHERE sr.company_id = ?
             AND sr.type = 'Sale'
-            AND MONTH(sr.created_at) = MONTH(CURDATE())
-            AND YEAR(sr.created_at) = YEAR(CURDATE())
+            AND MONTH(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = MONTH(@local_today)
+            AND YEAR(CONVERT_TZ(sr.created_at, '+00:00', @tz_offset)) = YEAR(@local_today)
             GROUP BY sc.id, sc.name
             ORDER BY total_sales DESC
         ", [$companyId]);
@@ -255,8 +257,8 @@ class SalesAnalyticsWidget extends Widget
                 FROM stock_records
                 WHERE company_id = ?
                 AND type = 'Sale'
-                AND MONTH(created_at) = ?
-                AND YEAR(created_at) = ?
+                AND MONTH(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = ?
+                AND YEAR(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = ?
             ", [$companyId, $date->month, $date->year]);
 
             $data = $monthData[0];
@@ -286,9 +288,9 @@ class SalesAnalyticsWidget extends Widget
             LEFT JOIN sale_record_items sri ON sr.id = sri.sale_record_id
             LEFT JOIN stock_items si ON sri.stock_item_id = si.id
             WHERE sr.company_id = ?
-            AND MONTH(sr.sale_date) = MONTH(CURDATE())
-            AND YEAR(sr.sale_date) = YEAR(CURDATE())
-            AND DATE(sr.sale_date) <= CURDATE()
+            AND MONTH(sr.sale_date) = MONTH(@local_today)
+            AND YEAR(sr.sale_date) = YEAR(@local_today)
+            AND DATE(sr.sale_date) <= @local_today
             GROUP BY DATE(sr.sale_date)
             ORDER BY date ASC
         ', [$companyId]);
@@ -328,9 +330,9 @@ class SalesAnalyticsWidget extends Widget
                 COALESCE(COUNT(CASE WHEN type = 'Expense' THEN 1 END), 0) as expense_count
             FROM financial_records
             WHERE company_id = ?
-            AND MONTH(date) = MONTH(CURDATE())
-            AND YEAR(date) = YEAR(CURDATE())
-            AND DATE(date) <= CURDATE()
+            AND MONTH(date) = MONTH(@local_today)
+            AND YEAR(date) = YEAR(@local_today)
+            AND DATE(date) <= @local_today
             GROUP BY DATE(date)
             ORDER BY day ASC
         ", [$companyId]);

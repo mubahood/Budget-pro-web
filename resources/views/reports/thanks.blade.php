@@ -4,7 +4,7 @@
     $programName = $program->title ?: ($program->name ?? 'our fundraiser');
     $companyName = $company->name ?? '';
     $amount = number_format((float) $record->amount);
-    $currency = $company->currency ?? 'UGX';
+    $currency = $company->currency ?? config('saas.default_currency');
     $isFullyPaid = $record->fully_paid === 'Yes';
 
     // Plain text, WhatsApp's own formatting only (*bold*, _italic_, literal

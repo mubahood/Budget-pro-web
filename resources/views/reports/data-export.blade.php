@@ -3,7 +3,7 @@
     $totalAmount = $records->sum('amount');
     $totalPaid = $records->sum('paid_amount');
     $totalPending = $records->sum('not_paid_amount');
-    $currency = $company->currency ?? 'UGX';
+    $currency = $company->currency ?? config('saas.default_currency');
 
     // WhatsApp's own plain-text markup (*bold*, real line breaks) -- no
     // HTML, same reasoning as reports/thanks.blade.php's copy button.

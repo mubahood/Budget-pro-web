@@ -49,7 +49,7 @@ class PoultryFeedStockController extends TenantAdminController
             return number_format($v, 2);
         })->sortable();
         $grid->column('cost', __('Cost'))->display(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         })->sortable();
         $grid->column('batch.name', __('Batch'))->display(function ($name) {
             return $name ?: '—';
@@ -70,7 +70,7 @@ class PoultryFeedStockController extends TenantAdminController
         $show->field('source', __('Source'));
         $show->field('qty_kg', __('Qty (kg)'));
         $show->field('cost', __('Cost'))->as(function ($v) {
-            return 'UGX '.number_format($v);
+            return ''.\App\Support\Money::symbol().' '.number_format($v);
         });
         $show->field('batch.name', __('Batch'));
         $show->field('date', __('Date'));
@@ -111,7 +111,7 @@ class PoultryFeedStockController extends TenantAdminController
             ->rules('required|numeric|min:0');
 
         $form->currency('cost', __('Cost'))
-            ->symbol('UGX')
+            ->symbol(\App\Support\Money::symbol())
             ->default(0)
             ->rules('required|numeric|min:0');
 

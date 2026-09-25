@@ -13,6 +13,15 @@ Route::group([
 
     $router->get('/', 'HomeController@index')->name('home');
     $router->get('subscription-expired', 'BillingController@expired');
+    $router->resource('product-templates', ProductTemplateController::class);
+    $router->get('setup', 'SetupController@index');
+    $router->post('setup/business', 'SetupController@business');
+    $router->post('setup/products', 'SetupController@products');
+    $router->post('setup/import', 'SetupController@import');
+    $router->post('setup/money', 'SetupController@money');
+    $router->post('setup/team', 'SetupController@team');
+    $router->post('setup/skip/{step}', 'SetupController@skip');
+    $router->post('setup/dismiss', 'SetupController@dismiss');
     $router->get('billing', 'BillingController@index');
     $router->post('billing/checkout', 'BillingController@checkout');
     $router->post('billing/cancel', 'BillingController@cancel');

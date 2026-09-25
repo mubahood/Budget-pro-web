@@ -30,12 +30,23 @@ class HomeController extends Controller
                     <p>Please contact your administrator to resolve this issue.</p></div>');
         }
 
+        // New shops go through the setup wizard first (plan C2); owners only.
+        $onboarding = app(\App\Services\Onboarding\OnboardingService::class);
+        if (\App\Services\Team\Permissions::can($u, 'manage_settings') && $onboarding->needsSetup($company)) {
+            return redirect(admin_url('setup'));
+        }
+
         // Get comprehensive dashboard data
         $dashboardData = $this->getDashboardData($companyId);
+        $checklist = $onboarding->checklist($company);
+
+        if (! $checklist['dismissed'] && $checklist['done'] < $checklist['total']) {
+            $content->row(view('admin.getting-started', ['checklist' => $checklist]));
+        }
 
         return $content
             ->title($company->name.' - Dashboard')
-            ->description('Welcome back, '.$u->name.' | '.now()->format('l, d F Y'))
+            ->description('Welcome back, '.$u->name.' | '.now()->setTimezone($company->timezone ?: config('saas.display_timezone'))->format('l, d F Y'))
             ->row(new SalesAnalyticsWidget())
             ->row(new ReturnsReportWidget())
             ->body(view('admin.dashboard', [
@@ -50,6 +61,8 @@ class HomeController extends Controller
      */
     private function getDashboardData($companyId)
     {
+        \App\Support\LocalTime::prime((int) $companyId);
+
         return [
             'sales_overview' => $this->getSalesOverview($companyId),
             'debts_receivables' => $this->getDebtsAndReceivables($companyId),
@@ -78,10 +91,10 @@ class HomeController extends Controller
                 SUM(CASE WHEN payment_status = 'Paid' THEN 1 ELSE 0 END) as paid_count,
                 SUM(CASE WHEN payment_status = 'Unpaid' THEN 1 ELSE 0 END) as unpaid_count,
                 SUM(CASE WHEN payment_status = 'Partial' THEN 1 ELSE 0 END) as partial_count,
-                SUM(CASE WHEN DATE(sale_date) = CURDATE() THEN total_amount ELSE 0 END) as today_sales,
-                SUM(CASE WHEN DATE(sale_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN total_amount ELSE 0 END) as week_sales,
-                SUM(CASE WHEN MONTH(sale_date) = MONTH(CURDATE()) AND YEAR(sale_date) = YEAR(CURDATE()) THEN total_amount ELSE 0 END) as month_sales,
-                SUM(CASE WHEN YEAR(sale_date) = YEAR(CURDATE()) THEN total_amount ELSE 0 END) as year_sales
+                SUM(CASE WHEN DATE(sale_date) = @local_today THEN total_amount ELSE 0 END) as today_sales,
+                SUM(CASE WHEN DATE(sale_date) >= DATE_SUB(@local_today, INTERVAL 7 DAY) THEN total_amount ELSE 0 END) as week_sales,
+                SUM(CASE WHEN MONTH(sale_date) = MONTH(@local_today) AND YEAR(sale_date) = YEAR(@local_today) THEN total_amount ELSE 0 END) as month_sales,
+                SUM(CASE WHEN YEAR(sale_date) = YEAR(@local_today) THEN total_amount ELSE 0 END) as year_sales
             FROM sale_records
             WHERE company_id = ?
         ", [$companyId]);
@@ -147,9 +160,9 @@ class HomeController extends Controller
                 COALESCE(AVG(balance), 0) as avg_debt,
                 SUM(CASE WHEN payment_status = 'Unpaid' THEN balance ELSE 0 END) as fully_unpaid,
                 SUM(CASE WHEN payment_status = 'Partial' THEN balance ELSE 0 END) as partial_unpaid,
-                SUM(CASE WHEN DATE(sale_date) < DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN balance ELSE 0 END) as overdue_30,
-                SUM(CASE WHEN DATE(sale_date) < DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN balance ELSE 0 END) as overdue_60,
-                SUM(CASE WHEN DATE(sale_date) < DATE_SUB(CURDATE(), INTERVAL 90 DAY) THEN balance ELSE 0 END) as overdue_90
+                SUM(CASE WHEN DATE(sale_date) < DATE_SUB(@local_today, INTERVAL 30 DAY) THEN balance ELSE 0 END) as overdue_30,
+                SUM(CASE WHEN DATE(sale_date) < DATE_SUB(@local_today, INTERVAL 60 DAY) THEN balance ELSE 0 END) as overdue_60,
+                SUM(CASE WHEN DATE(sale_date) < DATE_SUB(@local_today, INTERVAL 90 DAY) THEN balance ELSE 0 END) as overdue_90
             FROM sale_records
             WHERE company_id = ?
             AND balance > 0
@@ -276,8 +289,8 @@ class HomeController extends Controller
             SELECT COALESCE(SUM(total_amount), 0) as month_sales
             FROM sale_records
             WHERE company_id = ?
-            AND MONTH(sale_date) = MONTH(CURDATE())
-            AND YEAR(sale_date) = YEAR(CURDATE())
+            AND MONTH(sale_date) = MONTH(@local_today)
+            AND YEAR(sale_date) = YEAR(@local_today)
         ', [$companyId]);
 
         // Get best selling category from sale_record_items
@@ -293,8 +306,8 @@ class HomeController extends Controller
             JOIN stock_sub_categories ssc ON si.stock_sub_category_id = ssc.id
             JOIN stock_categories sc ON ssc.stock_category_id = sc.id
             WHERE sr.company_id = ?
-            AND MONTH(sr.sale_date) = MONTH(CURDATE())
-            AND YEAR(sr.sale_date) = YEAR(CURDATE())
+            AND MONTH(sr.sale_date) = MONTH(@local_today)
+            AND YEAR(sr.sale_date) = YEAR(@local_today)
             GROUP BY sc.id, sc.name
             ORDER BY total_revenue DESC
             LIMIT 1
@@ -370,10 +383,10 @@ class HomeController extends Controller
     {
         $stats = [];
         $periods = [
-            'today' => ['condition' => 'DATE(sale_date) = CURDATE()'],
-            'week' => ['condition' => 'DATE(sale_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)'],
-            'month' => ['condition' => 'MONTH(sale_date) = MONTH(CURDATE()) AND YEAR(sale_date) = YEAR(CURDATE())'],
-            'year' => ['condition' => 'YEAR(sale_date) = YEAR(CURDATE())'],
+            'today' => ['condition' => 'DATE(sale_date) = @local_today'],
+            'week' => ['condition' => 'DATE(sale_date) >= DATE_SUB(@local_today, INTERVAL 7 DAY)'],
+            'month' => ['condition' => 'MONTH(sale_date) = MONTH(@local_today) AND YEAR(sale_date) = YEAR(@local_today)'],
+            'year' => ['condition' => 'YEAR(sale_date) = YEAR(@local_today)'],
         ];
 
         foreach ($periods as $period => $config) {

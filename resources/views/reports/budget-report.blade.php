@@ -80,7 +80,7 @@
                 <td style="width: 30%;">
                     <div class="my-card mr-1">
                         <p class="black fs-14 fw-700">Overall Budget</p>
-                        <p class="py-3"><span>UGX</span><span
+                        <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                 class="fs-26 fw-800">{{ number_format($data->budget_total) }}</span>
                         </p>
                     </div>
@@ -88,7 +88,7 @@
                 <td style="width: 30%;">
                     <div class="my-card mx-1">
                         <p class="black fs-14 fw-700">Budget Covered</p>
-                        <p class="py-3"><span>UGX</span><span
+                        <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                 class="fs-26 fw-800">{{ number_format($data->budget_spent) }}</span>
                         </p>
                     </div>
@@ -96,7 +96,7 @@
                 <td style="width: 30%;">
                     <div class="my-card ml-1">
                         <p class="black fs-14 fw-700">Pending Budget</p>
-                        <p class="py-3"><span>UGX</span><span
+                        <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                 class="fs-26 fw-800">{{ number_format($data->budget_balance) }}</span>
                         </p>
                     </div>

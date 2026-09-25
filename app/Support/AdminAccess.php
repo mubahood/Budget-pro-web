@@ -37,7 +37,7 @@ class AdminAccess
         '/financial-periods*', '/financial-categories*', '/financial-records*', '/financial-reports*',
         '/budget-programs*', '/budget-item-categories*', '/budget-items*', '/contribution-records*',
         '/handover-records*', '/data-exports*',
-        '/billing*', '/purchase-orders*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
+        '/billing*', '/setup*', '/purchase-orders*', '/customers*', '/suppliers*', '/units*', '/shifts*', '/goods-receipts*', '/stock-takes*',
         '/poultry-*',
         '/tracked-devices*', '/device-locations*', '/device-commands*', '/tracking-map*',
         '/api/products/quick-add', '/api/sales/quick-record', '/api/global-search',
@@ -49,7 +49,7 @@ class AdminAccess
     /** Root menu titles and child uris visible to platform admins only. */
     public const PLATFORM_MENU_TITLES = ['Admin', 'Billing'];
 
-    public const PLATFORM_MENU_URIS = ['pingpin-plans', 'plans', 'subscriptions'];
+    public const PLATFORM_MENU_URIS = ['pingpin-plans', 'plans', 'subscriptions', 'product-templates'];
 
     /** Create the roles, base permissions and platform menus if they are missing. Idempotent. */
     public static function ensureBaseline(): void

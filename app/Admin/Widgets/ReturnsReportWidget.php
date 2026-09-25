@@ -22,6 +22,8 @@ class ReturnsReportWidget extends Widget
         $u = Admin::user();
         $companyId = $u->company_id;
 
+        \App\Support\LocalTime::prime((int) $companyId);
+
         // Get returns data
         $data = [
             'summary' => $this->getReturnsSummary($companyId),
@@ -45,7 +47,7 @@ class ReturnsReportWidget extends Widget
             FROM stock_records
             WHERE company_id = ?
             AND type = 'Return'
-            AND DATE(created_at) = CURDATE()
+            AND DATE(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = @local_today
         ", [$companyId]);
 
         // This month
@@ -57,8 +59,8 @@ class ReturnsReportWidget extends Widget
             FROM stock_records
             WHERE company_id = ?
             AND type = 'Return'
-            AND MONTH(created_at) = MONTH(CURDATE())
-            AND YEAR(created_at) = YEAR(CURDATE())
+            AND MONTH(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = MONTH(@local_today)
+            AND YEAR(CONVERT_TZ(created_at, '+00:00', @tz_offset)) = YEAR(@local_today)
         ", [$companyId]);
 
         // Total all-time
@@ -143,7 +145,7 @@ class ReturnsReportWidget extends Widget
             FROM stock_records
             WHERE company_id = ?
             AND type = 'Return'
-            AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+            AND created_at >= DATE_SUB(@local_today, INTERVAL 6 MONTH)
             GROUP BY DATE_FORMAT(created_at, '%Y-%m')
             ORDER BY month ASC
         ", [$companyId]);

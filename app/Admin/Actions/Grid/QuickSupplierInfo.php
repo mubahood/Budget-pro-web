@@ -85,8 +85,8 @@ class QuickSupplierInfo extends RowAction
         $html .= '<h4>Product Purchase Info</h4>';
         $html .= '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
 
-        $html .= '<div><strong>Last Purchase Price:</strong> UGX '.number_format($model->buying_price).'</div>';
-        $html .= '<div><strong>Current Selling Price:</strong> UGX '.number_format($model->selling_price).'</div>';
+        $html .= '<div><strong>Last Purchase Price:</strong> '.\App\Support\Money::symbol().' '.number_format($model->buying_price).'</div>';
+        $html .= '<div><strong>Current Selling Price:</strong> '.\App\Support\Money::symbol().' '.number_format($model->selling_price).'</div>';
 
         if ($model->reorder_level) {
             $html .= '<div><strong>Reorder Level:</strong> '.number_format($model->reorder_level).' units</div>';

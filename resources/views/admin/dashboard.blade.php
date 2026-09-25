@@ -1,5 +1,5 @@
 @php
-    $currency = $company->currency ?? 'UGX';
+    $currency = $company->currency ?? config('saas.default_currency');
     $d = $data;
 @endphp
 

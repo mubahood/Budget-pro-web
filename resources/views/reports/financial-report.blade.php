@@ -185,7 +185,7 @@
                     <td style="width: 30%;">
                         <div class="my-card mr-1">
                             <p class="black fs-14 fw-700">Total Income</p>
-                            <p class="py-3"><span>UGX</span><span
+                            <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                     class="fs-26 fw-800">{{ number_format($data->total_income) }}</span>
                             </p>
                         </div>
@@ -193,7 +193,7 @@
                     <td style="width: 30%;">
                         <div class="my-card mx-1">
                             <p class="black fs-14 fw-700">Total Expenses</p>
-                            <p class="py-3"><span>UGX</span><span
+                            <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                     class="fs-26 fw-800">{{ number_format($data->total_expense) }}</span>
                             </p>
                         </div>
@@ -201,7 +201,7 @@
                     <td style="width: 30%;">
                         <div class="my-card ml-1">
                             <p class="black fs-14 fw-700">Profit or Loss</p>
-                            <p class="py-3"><span>UGX</span><span
+                            <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                     class="fs-26 fw-800">{{ number_format($data->profit) }}</span>
                             </p>
                         </div>
@@ -212,7 +212,7 @@
                     <td style="width: 30%;">
                         <div class="my-card mr-1">
                             <p class="black fs-14 fw-700">Total Investment</p>
-                            <p class="py-3"><span>UGX</span><span
+                            <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                     class="fs-26 fw-800">{{ number_format($data->inventory_total_buying_price) }}</span>
                             </p>
                         </div>
@@ -220,7 +220,7 @@
                     <td style="width: 30%;">
                         <div class="my-card mx-1">
                             <p class="black fs-14 fw-700">Total Sales</p>
-                            <p class="py-3"><span>UGX</span><span
+                            <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                     class="fs-26 fw-800">{{ number_format($data->inventory_total_selling_price) }}</span>
                             </p>
                         </div>
@@ -228,7 +228,7 @@
                     <td style="width: 30%;">
                         <div class="my-card ml-1">
                             <p class="black fs-14 fw-700">Profits/Loss</p>
-                            <p class="py-3"><span>UGX</span><span
+                            <p class="py-3"><span>{{ \App\Support\Money::symbol() }}</span><span
                                     class="fs-26 fw-800">{{ number_format($data->inventory_total_earned_profit) }}</span>
                             </p>
                         </div>
