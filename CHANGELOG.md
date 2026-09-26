@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### International (2026-09-26)
+- **Countries:** 30 in setup and sign-up (plus "Another country"), each with its currency, time zone and VAT rate, and mobile-money networks where the country has them. The getting-started list leaves out mobile money where there is none. `Phone` knows 28 national number formats and never reads an unknown country's local number as Ugandan. More currencies: BIF, CDF, MWK, ZMW, SSP.
+- **Template packs v4:** products marked East-African (local brands, dishes, boda parts, airtime in shilling amounts) are shown only to shops in the region; 933 of 1,028 products are offered everywhere. Starting prices exist in 24 currencies, with cents where shelves use them.
+
 ### Onboarding variety (2026-09-26)
 - 22 business types in groups, each with an icon and a line of example products. New types: supermarket, kiosk/duka, fresh produce, butchery, bakery, liquor store, cosmetics, furniture, spare parts (cars & boda) and stationery/printing.
 - Template packs v3: 1,016 products across 21 packs (35–67 each, 6–11 categories), with real brands and shelf sizes, most common first. The seeder switches off pack rows that were dropped instead of deleting them. The legacy `restaurant` type uses the `restaurant_bar` pack. `template_pack` records every pack the picks came from.

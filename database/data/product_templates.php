@@ -14,9 +14,14 @@
 | may override a converted price with a 7th element, e.g. ['KES' => ['sell' => 50, 'cost' => 40]].
 */
 return [
-    'version' => 3,
+    'version' => 4,
     // Multiply a UGX price by this to get the local price.
-    'rates' => ['UGX' => 1, 'KES' => 1 / 28.3, 'TZS' => 0.70, 'RWF' => 0.39],
+    'rates' => ['UGX' => 1, 'KES' => 1 / 28.3, 'TZS' => 0.70, 'RWF' => 0.39,
+        // Elsewhere (1 USD ≈ 3,650 UGX): the owner edits every price anyway, these only give a sensible start.
+        'USD' => 1 / 3650, 'EUR' => 0.92 / 3650, 'GBP' => 0.79 / 3650, 'CAD' => 1.37 / 3650, 'AUD' => 1.52 / 3650,
+        'AED' => 3.67 / 3650, 'SAR' => 3.75 / 3650, 'ZAR' => 18.5 / 3650, 'GHS' => 15.5 / 3650, 'NGN' => 1550 / 3650,
+        'INR' => 84 / 3650, 'EGP' => 49 / 3650, 'ETB' => 125 / 3650, 'XAF' => 605 / 3650, 'XOF' => 605 / 3650,
+        'ZMW' => 26 / 3650, 'MWK' => 1750 / 3650, 'BIF' => 2900 / 3650, 'CDF' => 2850 / 3650, 'SSP' => 4500 / 3650],
     'packs' => [
         'retail' => [
             // Groceries
@@ -499,6 +504,7 @@ return [
             // Meals
             ['Local meal (matooke, beans)', 'Food', 'Meals', 'plate', 7000, 3800],
             ['Chips & chicken', 'Food', 'Meals', 'plate', 15000, 9000],
+            ['Burger & chips', 'Food', 'Meals', 'plate', 18000, 10000],
             ['Pilao', 'Food', 'Meals', 'plate', 10000, 6000],
             ['Rice & beef stew', 'Food', 'Meals', 'plate', 10000, 6000],
             ['Posho & beans', 'Food', 'Meals', 'plate', 5000, 2500],
@@ -506,15 +512,20 @@ return [
             ['Fish (tilapia) & chips', 'Food', 'Meals', 'plate', 25000, 15000],
             ['Luwombo (chicken)', 'Food', 'Meals', 'plate', 25000, 14000],
             ['Chips (plain)', 'Food', 'Meals', 'plate', 6000, 3000],
+            ['Spaghetti bolognese', 'Food', 'Meals', 'plate', 15000, 8000],
             // Snacks
             ['Rolex', 'Food', 'Snacks', 'pcs', 3000, 1600],
+            ['Chicken wrap', 'Food', 'Snacks', 'pcs', 8000, 4500],
             ['Chapati', 'Food', 'Snacks', 'pcs', 1000, 500],
             ['Samosa', 'Food', 'Snacks', 'pcs', 1000, 500],
             ['Mandazi', 'Food', 'Snacks', 'pcs', 500, 250],
             ['Katogo', 'Food', 'Snacks', 'plate', 5000, 2500],
+            ['Sandwich (club)', 'Food', 'Snacks', 'pcs', 10000, 5500],
             // Grill
             ['Goat muchomo (stick)', 'Grill', 'Goat', 'pcs', 5000, 2800],
+            ['Beef skewer (stick)', 'Grill', 'Beef', 'pcs', 5000, 2800],
             ['Chicken muchomo (quarter)', 'Grill', 'Chicken', 'pcs', 12000, 7000],
+            ['Grilled chicken (quarter)', 'Grill', 'Chicken', 'pcs', 12000, 7000],
             ['Pork (roasted) 1/2 kg', 'Grill', 'Pork', 'plate', 15000, 9000],
             ['Gonja (roasted)', 'Grill', 'Sides', 'pcs', 1000, 500],
             // Hot drinks
@@ -522,6 +533,7 @@ return [
             ['Coffee (cup)', 'Hot drinks', 'Coffee', 'cup', 3000, 1100],
             ['African tea (cup)', 'Hot drinks', 'Tea', 'cup', 2500, 900],
             ['Cappuccino', 'Hot drinks', 'Coffee', 'cup', 7000, 2500],
+            ['Hot chocolate', 'Hot drinks', 'Chocolate', 'cup', 6000, 2200],
             // Soft drinks
             ['Soda 300ml', 'Drinks', 'Soft drinks', 'bottle', 1500, 800],
             ['Water 500ml', 'Drinks', 'Water', 'bottle', 1500, 700],
@@ -536,6 +548,8 @@ return [
             ['Guinness 500ml', 'Beer', 'Stout', 'bottle', 6000, 4200],
             ['Tusker Lite 330ml', 'Beer', 'Premium', 'bottle', 5000, 3600],
             ['Smirnoff Guarana 330ml', 'Beer', 'Ready to drink', 'bottle', 5000, 3600],
+            ['Heineken 330ml', 'Beer', 'Imported', 'bottle', 7000, 4800],
+            ['Smirnoff Ice 330ml', 'Beer', 'Ready to drink', 'bottle', 5000, 3600],
             // Spirits
             ['Spirit 250ml', 'Spirits', 'Local spirits', 'bottle', 10000, 7500],
             ['Uganda Waragi 200ml', 'Spirits', 'Local spirits', 'bottle', 8000, 6000],
@@ -1069,6 +1083,9 @@ return [
             ['Eagle Lager 500ml', 'Beer', 'Local lager', 'bottle', 3000, 2500],
             ['Heineken 330ml', 'Beer', 'Imported', 'bottle', 5000, 4100],
             ['Bell Lager can 500ml', 'Beer', 'Cans', 'pcs', 4000, 3300],
+            ['Beer 500ml', 'Beer', 'Lager', 'bottle', 4000, 3300],
+            ['Beer (crate of 24)', 'Beer', 'Crates', 'crate', 88000, 80000],
+            ['Budweiser 330ml', 'Beer', 'Imported', 'bottle', 5000, 4100],
             // Spirits
             ['Uganda Waragi 200ml', 'Spirits', 'Gin', 'bottle', 6000, 5000],
             ['Uganda Waragi 750ml', 'Spirits', 'Gin', 'bottle', 20000, 17000],
@@ -1262,6 +1279,124 @@ return [
             ['Carrier bag', 'Supplies', 'Packaging', 'pcs', 200, 100],
             ['Face masks (pack of 10)', 'Supplies', 'Protective', 'pack', 5000, 3500],
             ['Hand sanitiser 500ml', 'Supplies', 'Hygiene', 'bottle', 8000, 6000],
+        ],
+    ],
+    // East-Africa-only rows, by exact name: hidden from shops outside UG/KE/TZ/RW (local brands,
+    // local foods and boda-boda parts). Every other row is shown to every shop worldwide.
+    'regional' => [
+        'retail' => [
+            'Beans (Nambale) 1kg',
+            'Royco mchuzi mix 75g',
+        ],
+        'supermarket' => [
+            'Kakira sugar 1kg',
+            'Kakira sugar 2kg',
+            'Posho (maize flour) 2kg',
+            'Royco mchuzi mix 200g',
+            'Kericho Gold tea bags (50)',
+        ],
+        'kiosk' => [
+            'Mandazi',
+        ],
+        'pharmacy' => [
+            'Lumartem (adult dose)',
+            'Coldcap (strip)',
+        ],
+        'agro_vet' => [
+            'Maize seed (Longe 5) 2kg',
+            'Sukuma wiki seed 50g',
+        ],
+        'restaurant_bar' => [
+            'Local meal (matooke, beans)',
+            'Pilao',
+            'Posho & beans',
+            'Luwombo (chicken)',
+            'Rolex',
+            'Mandazi',
+            'Katogo',
+            'Goat muchomo (stick)',
+            'Chicken muchomo (quarter)',
+            'Gonja (roasted)',
+            'African tea (cup)',
+            'Nile Special 500ml',
+            'Club Pilsener 500ml',
+            'Bell Lager 500ml',
+            'Tusker Lite 330ml',
+            'Smirnoff Guarana 330ml',
+            'Uganda Waragi 200ml',
+            'Uganda Waragi 750ml',
+        ],
+        'boutique' => [
+            'Kanzu',
+            'Gomesi',
+            'Kitenge dress',
+        ],
+        'poultry' => [
+            'Kienyeji feed 50kg',
+            'Kuroiler chick (2 weeks)',
+        ],
+        'butchery' => [
+            'Tripe (byenda) 1kg',
+            'Mukene (silverfish) 1kg',
+        ],
+        'bakery' => [
+            'Mandazi',
+            'Half cakes (kabalagala)',
+        ],
+        'cosmetics' => [
+            'Nice & Lovely body lotion 400ml',
+            'Movit petroleum jelly 100g',
+            'Movit body lotion 400ml',
+            'Bathing soap (Movit)',
+            'Movit hair food 100g',
+        ],
+        'auto_spares' => [
+            'Boda engine oil 1L (4T)',
+            'Boda air filter',
+            'Boda brake shoes',
+            'Boda battery 12V',
+            'Boda headlight',
+            'Boda tyre (rear)',
+            'Boda tube',
+            'Boda tyre (front)',
+            'Boda chain & sprocket kit',
+            'Boda clutch plates',
+            'Boda side mirror',
+            'Boda clutch cable',
+            'Boda brake cable',
+            'Boda shock absorber (pair)',
+            'Boda seat cover',
+            'Boda piston kit',
+            'Boda helmet',
+        ],
+        'liquor_store' => [
+            'Nile Special 500ml',
+            'Bell Lager 500ml',
+            'Club Pilsener 500ml',
+            'Nile Special (crate of 25)',
+            'Tusker Lager 500ml',
+            'Eagle Lager 500ml',
+            'Bell Lager can 500ml',
+            'Uganda Waragi 200ml',
+            'Uganda Waragi 750ml',
+            'Uganda Waragi 350ml',
+            'Coffee Spirit 200ml',
+            'Best Whisky 200ml',
+            'Smirnoff Guarana 330ml',
+        ],
+        'fresh_produce' => [
+            'Matooke (bunch, medium)',
+            'Matooke (heap)',
+            'Matooke (bunch, big)',
+            'Sukuma wiki (bundle)',
+            'Dodo (amaranth, bundle)',
+            'Beans (Nambale) 1kg',
+            'Simsim 1kg',
+            'Dhania (coriander, bundle)',
+            'Dried fish (mukene) 1kg',
+        ],
+        'other' => [
+            'Transport (boda trip)',
         ],
     ],
 ];

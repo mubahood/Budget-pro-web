@@ -83,7 +83,7 @@ class OnboardingServiceTest extends TestCase
 
     public function test_apply_templates_refuses_unpriced_rows_and_marks_only_when_something_was_created(): void
     {
-        ['user' => $u, 'company' => $c] = $this->shop('USD'); // no USD prices in the packs
+        ['user' => $u, 'company' => $c] = $this->shop('JPY'); // no JPY prices in the packs
         $items = collect($this->svc->templates($c, 'retail')['items'])->take(3)->values();
         try {
             $this->svc->applyTemplates($c, $u, $items->map(fn ($i) => ['key' => $i['key']])->all());

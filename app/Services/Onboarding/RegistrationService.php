@@ -82,7 +82,7 @@ class RegistrationService
             'company_phone' => ['nullable', 'string', 'max:30'],
             'company_address' => ['nullable', 'string', 'max:500'],
             'currency' => [$required, 'string', Rule::in(config('saas.currencies'))],
-            'country' => ['nullable', 'string', Rule::in(array_keys(\App\Support\Phone::COUNTRIES))],
+            'country' => ['nullable', 'string', Rule::in(array_keys((array) config('onboarding.countries')))],
             'business_type' => ['nullable', 'string', Rule::in(self::businessTypes())],
             'timezone' => ['nullable', 'timezone'],
             'verification_token' => ['nullable', 'string'],

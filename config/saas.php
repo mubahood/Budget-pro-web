@@ -105,6 +105,7 @@ return [
     'currencies' => [
         'UGX', 'KES', 'TZS', 'RWF', 'USD', 'EUR', 'GBP', 'ZAR', 'NGN', 'GHS',
         'INR', 'CAD', 'AUD', 'JPY', 'CNY', 'AED', 'SAR', 'EGP', 'ETB', 'XAF', 'XOF',
+        'BIF', 'CDF', 'MWK', 'ZMW', 'SSP',
     ],
 
     /*

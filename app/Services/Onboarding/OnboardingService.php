@@ -116,7 +116,7 @@ class OnboardingService
         $country = strtoupper((string) ($data['country'] ?? $company->country ?? 'UG'));
         $preset = config("onboarding.countries.{$country}");
         if ($preset === null) {
-            throw BusinessRuleException::make('invalid_country', 'Choose Uganda, Kenya, Tanzania or Rwanda.');
+            throw BusinessRuleException::make('invalid_country', 'Choose your country from the list.');
         }
         $type = $data['business_type'] ?? $company->business_type ?? 'other';
         if (! array_key_exists($type, config('onboarding.business_types'))) {
@@ -191,8 +191,11 @@ class OnboardingService
         $type ??= $company->business_type ?: 'retail';
         $type = self::PACK_ALIASES[$type] ?? $type;
         $currency = $company->currency ?: 'UGX';
+        // Products with a country are local ones (East-African brands, dishes, boda parts): only shops in that region see them.
+        $country = $company->country ?: 'UG';
+        $local = config("onboarding.countries.{$country}.region") === 'ea' ? ['UG', 'KE', 'TZ', 'RW', $country] : [$country];
         $rows = DB::table('product_templates')->where('business_type', $type)->where('is_active', true)
-            ->where(fn ($q) => $q->whereNull('country')->orWhere('country', $company->country ?: 'UG'))
+            ->where(fn ($q) => $q->whereNull('country')->orWhereIn('country', $local))
             ->orderBy('sort_order')->get();
         if ($rows->isEmpty()) {
             $rows = DB::table('product_templates')->where('business_type', $type)->where('is_active', true)->orderBy('sort_order')->get();
@@ -392,6 +395,10 @@ class OnboardingService
             ['key' => 'set_up_momo', 'label' => 'Set up mobile money', 'done' => $sig['momo']],
             ['key' => 'whatsapp_receipts', 'label' => 'Send receipts on WhatsApp', 'done' => $sig['receipts']],
         ];
+        // Mobile money is set up only where the country has it.
+        if (! config('onboarding.countries.'.($company->country ?: 'UG').'.momo')) {
+            $items = array_values(array_filter($items, fn ($i) => $i['key'] !== 'set_up_momo'));
+        }
         $done = count(array_filter($items, fn ($i) => $i['done']));
 
         return ['items' => $items, 'done' => $done, 'total' => count($items), 'percent' => (int) round($done * 100 / count($items)),
