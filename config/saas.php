@@ -8,6 +8,10 @@ return [
     // The new shop interface (budget-pro-new), linked from the classic admin's top bar. Empty = no link.
     'new_ui_url' => env('SAAS_NEW_UI_URL', ''),
 
+    // Send shop users from classic screens to the same screen in the new interface (App\Http\Middleware\RedirectToNewUi).
+    // Screens the new interface lacks, platform admins, the API and ?classic=1 sessions stay here.
+    'redirect_to_new_ui' => (bool) env('SAAS_REDIRECT_TO_NEW_UI', false),
+
     // Where team invite links (/invite/…) open. Empty = public_url (the classic invite page).
     'invite_url' => env('SAAS_INVITE_URL', ''),
 

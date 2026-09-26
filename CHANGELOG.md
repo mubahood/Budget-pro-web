@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Classic screens send shop users to the new interface (2026-09-26)
+- `RedirectToNewUi` (admin middleware, on with `SAAS_REDIRECT_TO_NEW_UI=true`) moves page views of shop users to the same screen at `SAAS_NEW_UI_URL`, opening the same record where there is one (`stock-items/15/edit` → `/products?peek=15`, `sale-records/create` → `/sell`). The classic login page goes to the new login.
+- Stays classic: platform admins, companies without the shop module, screens the new interface lacks (budgets, pledges, poultry, device tracking, data exports, engagement), writes, AJAX, the API, public receipt and invite pages. `?classic=1` keeps a browser session classic (the new interface's "Classic screens" button, platform admin sign-in at `/auth/login?classic=1`).
+
 ### International (2026-09-26)
 - **Countries:** 30 in setup and sign-up (plus "Another country"), each with its currency, time zone and VAT rate, and mobile-money networks where the country has them. The getting-started list leaves out mobile money where there is none. `Phone` knows 28 national number formats and never reads an unknown country's local number as Ugandan. More currencies: BIF, CDF, MWK, ZMW, SSP.
 - **Template packs v4:** products marked East-African (local brands, dishes, boda parts, airtime in shilling amounts) are shown only to shops in the region; 933 of 1,028 products are offered everywhere. Starting prices exist in 24 currencies, with cents where shelves use them.
