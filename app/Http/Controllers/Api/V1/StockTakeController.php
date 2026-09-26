@@ -6,7 +6,6 @@ use App\Exceptions\BusinessRuleException;
 use App\Models\StockTake;
 use App\Services\Shop\StockTakeService;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * Stock count sessions (P2-7).
@@ -28,11 +27,7 @@ class StockTakeController extends BaseCrudController
     public function store(Request $request)
     {
         $companyId = $this->companyId($request);
-        $data = $request->validate([
-            'name' => ['nullable', 'string', 'max:120'],
-            'stock_category_id' => ['nullable', Rule::exists('stock_categories', 'id')->where('company_id', $companyId)],
-            'client_uuid' => ['nullable', 'uuid'],
-        ]);
+        $data = $request->validate(\App\Support\Rules\StockTakeRules::rules($companyId));
         $take = (new StockTakeService())->create($companyId, (int) $request->user()->id, $data['name'] ?? '', $data['stock_category_id'] ?? null, $data['client_uuid'] ?? null, $request->header('X-Device-Id'));
 
         return $this->created($take, 'Stock count started.');
@@ -45,7 +40,7 @@ class StockTakeController extends BaseCrudController
         if ($take === null) {
             return $this->notFound('Stock take not found.');
         }
-        $data = $request->validate(['counts' => ['required', 'array', 'min:1'], 'counts.*.stock_item_id' => ['required', 'integer'], 'counts.*.counted_quantity' => ['required', 'numeric', 'min:0']]);
+        $data = $request->validate(\App\Support\Rules\StockTakeRules::countRules());
         try {
             $take = (new StockTakeService())->count($take, $data['counts']);
         } catch (BusinessRuleException $e) {
@@ -69,6 +64,23 @@ class StockTakeController extends BaseCrudController
         }
 
         return $this->success($take->load('items.product'), 'Stock count posted; on-hand now matches the count.');
+    }
+
+    /** POST stock-takes/{id}/cancel — drop a draft count (nothing moves). */
+    public function cancel(Request $request, $id)
+    {
+        /** @var StockTake|null $take */
+        $take = $this->findOwned($request, $id);
+        if ($take === null) {
+            return $this->notFound('Stock take not found.');
+        }
+        try {
+            $take = (new StockTakeService())->cancel($take);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return $this->success($take, 'Stock count cancelled.');
     }
 
     public function update(Request $request, $id)

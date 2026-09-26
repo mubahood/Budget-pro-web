@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Models\StockItem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class StockItemController extends BaseCrudController
 {
@@ -14,7 +13,7 @@ class StockItemController extends BaseCrudController
     protected string $resourceName = 'Stock item';
 
     // current_quantity is derived from original_quantity by the model and immutable after create.
-    protected array $writable = ['stock_sub_category_id', 'name', 'description', 'image', 'barcode', 'sku', 'buying_price', 'selling_price', 'original_quantity', 'min_stock', 'allow_negative_stock', 'track_stock', 'is_active', 'unit_id', 'track_batches'];
+    protected array $writable = \App\Support\Rules\StockItemRules::WRITABLE;
 
     protected array $searchable = ['name', 'sku', 'barcode'];
 
@@ -28,28 +27,7 @@ class StockItemController extends BaseCrudController
 
     protected function rules(Request $request, ?Model $existing): array
     {
-        $companyId = (int) $request->user()->company_id;
-
-        return [
-            'stock_sub_category_id' => [
-                $existing ? 'sometimes' : 'required',
-                Rule::exists('stock_sub_categories', 'id')->where('company_id', $companyId),
-            ],
-            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:191'],
-            'description' => ['nullable', 'string', 'max:2000'],
-            'image' => ['nullable', 'string', 'max:255'],
-            'barcode' => ['nullable', 'string', 'max:100', \Illuminate\Validation\Rule::unique('stock_items', 'barcode')->where('company_id', $companyId)->where('is_deleted', 0)->ignore($existing?->getKey())],
-            'sku' => ['nullable', 'string', 'max:100', \Illuminate\Validation\Rule::unique('stock_items', 'sku')->where('company_id', $companyId)->where('is_deleted', 0)->ignore($existing?->getKey())],
-            'buying_price' => ['nullable', 'numeric', 'min:0'],
-            'selling_price' => [$existing ? 'sometimes' : 'required', 'numeric', 'min:0'],
-            'original_quantity' => ['nullable', 'numeric', 'min:0'],
-            'min_stock' => ['nullable', 'numeric', 'min:0'],
-            'allow_negative_stock' => ['nullable', 'boolean'],
-            'track_stock' => ['nullable', 'boolean'],
-            'track_batches' => ['nullable', 'boolean'],
-            'is_active' => ['nullable', 'boolean'],
-            'unit_id' => ['nullable', Rule::exists('units', 'id')->where('company_id', $companyId)],
-        ];
+        return \App\Support\Rules\StockItemRules::rules($this->companyId($request), $existing?->getKey(), $existing !== null);
     }
 
     /**
@@ -94,6 +72,14 @@ class StockItemController extends BaseCrudController
             (new \App\Services\Billing\Quotas())->assertCanAdd(\App\Models\Company::withoutGlobalScopes()->findOrFail($this->companyId($request)), 'products');
         } catch (\App\Exceptions\BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        // Opening stock and cost default to 0 like the table does: without it the model copied a null
+        // into current_quantity and the insert failed (500) for a product sent without opening stock.
+        foreach (['original_quantity', 'buying_price'] as $field) {
+            if ($request->input($field) === null) {
+                $request->merge([$field => 0]);
+            }
         }
 
         return parent::store($request);

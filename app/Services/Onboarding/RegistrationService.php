@@ -28,6 +28,18 @@ class RegistrationService
 
     public const BUSINESS_TYPES = ['retail', 'wholesale', 'pharmacy', 'agro_vet', 'hardware', 'restaurant', 'salon', 'boutique', 'electronics', 'other'];
 
+    /**
+     * Business types a sign-up may name: the original list (older apps still send `restaurant`)
+     * plus every type the setup wizard offers (config('onboarding.business_types'): `restaurant_bar`,
+     * `poultry`, `fundraising`…), so a type picked on any sign-up form is also a valid setup preset.
+     *
+     * @return list<string>
+     */
+    public static function businessTypes(): array
+    {
+        return array_values(array_unique(array_merge(self::BUSINESS_TYPES, array_keys((array) config('onboarding.business_types', [])))));
+    }
+
     /** A short-lived proof that an OTP for this phone/email was verified (register flow). */
     public static function verificationToken(string $identifier): string
     {
@@ -71,7 +83,7 @@ class RegistrationService
             'company_address' => ['nullable', 'string', 'max:500'],
             'currency' => [$required, 'string', Rule::in(config('saas.currencies'))],
             'country' => ['nullable', 'string', Rule::in(array_keys(\App\Support\Phone::COUNTRIES))],
-            'business_type' => ['nullable', 'string', Rule::in(self::BUSINESS_TYPES)],
+            'business_type' => ['nullable', 'string', Rule::in(self::businessTypes())],
             'timezone' => ['nullable', 'timezone'],
             'verification_token' => ['nullable', 'string'],
             'device_name' => ['nullable', 'string', 'max:191'],

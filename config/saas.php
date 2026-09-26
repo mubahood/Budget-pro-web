@@ -1,6 +1,10 @@
 <?php
 
 return [
+    // Where budget-pro itself is served: links that open budget-pro pages (public receipts /r/…,
+    // team invites /invite/…) use it, whichever interface created them (budget-pro-new overrides app.url).
+    'public_url' => env('SAAS_PUBLIC_URL', env('APP_URL', 'http://localhost')),
+
     /*
     |--------------------------------------------------------------------------
     | Trial length (days) for newly registered companies

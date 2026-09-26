@@ -108,9 +108,13 @@ class FinancialRecord extends Model
             if (! empty($model->source_type) && $model->isDirty(['amount', 'type', 'financial_category_id', 'date', 'source_type', 'source_id', 'company_id'])) {
                 throw BusinessRuleException::make('ledger_locked', 'This ledger entry was posted by the system (sale/payment). Reverse the payment instead of editing it.');
             }
-            $period = FinancialPeriod::withoutGlobalScopes()->find($model->financial_period_id);
+            $period = FinancialPeriod::withoutGlobalScopes()->find($model->getOriginal('financial_period_id') ?? $model->financial_period_id);
             if ($period !== null && $period->status === 'Closed') {
                 throw BusinessRuleException::make('period_closed', 'Cannot update a record in a closed financial period.');
+            }
+            // A new date belongs to the period that contains it (which must itself be open).
+            if ($model->isDirty('date') && $model->date) {
+                $model->financial_period_id = FinancialPeriod::resolveFor((int) $model->company_id, \Illuminate\Support\Carbon::parse($model->date))->id;
             }
             if ((float) $model->amount <= 0 && ! $model->is_reversal) {
                 throw BusinessRuleException::make('invalid_amount', 'Amount must be greater than zero.');

@@ -29,6 +29,42 @@ class SupplierService
         return round($unpaid - $paid - $returned, 2);
     }
 
+    /**
+     * The supplier's account, oldest first: deliveries raise what we owe (credit), payments on
+     * delivery, later payments and goods sent back lower it (debit), a cash refund from the supplier
+     * settles a return. The closing balance equals balance().
+     *
+     * @return array{entries: array<int, array<string, mixed>>, closing_balance: float}
+     */
+    public function statement(Supplier $supplier): array
+    {
+        $entries = [];
+        foreach (GoodsReceipt::withoutGlobalScopes()->where('supplier_id', $supplier->id)->get() as $g) {
+            $entries[] = ['date' => (string) $g->received_on?->toDateString(), 'type' => 'receipt', 'ref' => $g->number, 'description' => 'Goods received '.$g->number, 'debit' => 0.0, 'credit' => round((float) $g->total_cost, 2)];
+            if ((float) $g->amount_paid > 0) {
+                $entries[] = ['date' => (string) $g->received_on?->toDateString(), 'type' => 'payment', 'ref' => $g->number, 'description' => 'Paid on delivery', 'debit' => round((float) $g->amount_paid, 2), 'credit' => 0.0];
+            }
+        }
+        foreach (FinancialRecord::withoutGlobalScopes()->where('source_type', 'supplier_payment')->where('source_id', $supplier->id)->get() as $p) {
+            $entries[] = ['date' => (string) $p->date?->toDateString(), 'type' => 'payment', 'ref' => $p->receipt, 'description' => 'Payment ('.$p->payment_method.')', 'debit' => round((float) $p->amount, 2), 'credit' => 0.0];
+        }
+        foreach (\App\Models\PurchaseReturn::withoutGlobalScopes()->where('supplier_id', $supplier->id)->get() as $r) {
+            $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'return', 'ref' => $r->number, 'description' => 'Goods returned'.($r->reason ? ": {$r->reason}" : ''), 'debit' => round((float) $r->total_value, 2), 'credit' => 0.0];
+            if ((float) $r->refund_amount > 0) {
+                $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'refund', 'ref' => $r->number, 'description' => 'Refund received', 'debit' => 0.0, 'credit' => round((float) $r->refund_amount, 2)];
+            }
+        }
+        usort($entries, fn ($a, $b) => strcmp($a['date'], $b['date']));
+        $running = 0.0;
+        foreach ($entries as &$e) {
+            $running = round($running + $e['credit'] - $e['debit'], 2);
+            $e['balance'] = $running;
+        }
+        unset($e);
+
+        return ['entries' => $entries, 'closing_balance' => $running];
+    }
+
     public function recalc(int $supplierId): ?Supplier
     {
         $s = Supplier::withoutGlobalScopes()->find($supplierId);
@@ -63,7 +99,7 @@ class SupplierService
             $row->payment_method = \App\Models\Payment::normalizeMethod($method);
             $row->recipient = $supplier->name;
             $row->receipt = $reference ?? '';
-            $row->date = now();
+            $row->date = \App\Support\LocalDate::today((int) $supplier->company_id);
             $row->description = 'Payment to supplier '.$supplier->name;
             $row->source_type = 'supplier_payment';
             $row->source_id = $supplier->id;

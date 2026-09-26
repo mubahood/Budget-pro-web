@@ -234,7 +234,7 @@ class OnboardingService
 
                 continue;
             }
-            $rows[] = ['name' => mb_substr($row['name'], 0, 150), 'category' => $row['category'] ?: 'General', 'sub_category' => ($row['sub_category'] ?? null) ?: ($row['category'] ?: 'General'),
+            $rows[] = ['name' => mb_substr($row['name'], 0, 150), 'category' => ($row['category'] ?? null) ?: 'General', 'sub_category' => ($row['sub_category'] ?? null) ?: (($row['category'] ?? null) ?: 'General'),
                 'unit' => ($row['unit'] ?? null) ?: 'pcs', 'selling_price' => $sell, 'buying_price' => $cost ?? 0, 'opening_stock' => $qty ?? 0,
                 'barcode' => ($row['barcode'] ?? null) ?: null, 'sku' => ($row['sku'] ?? null) ?: null];
         }

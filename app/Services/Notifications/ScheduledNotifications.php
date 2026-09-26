@@ -84,7 +84,12 @@ class ScheduledNotifications
         ];
     }
 
-    private function dailySummary(Company $company, Carbon $local): void
+    /**
+     * The daily summary for a shop's local day: the words of the 8 pm message.
+     *
+     * @return array{title: string, body: string, data: array<string, mixed>}
+     */
+    public function dailySummaryMessage(Company $company, Carbon $local): array
     {
         $d = $this->daySales($company, $local);
         $cur = $company->currency ?: (string) config('saas.default_currency', 'UGX');
@@ -92,7 +97,29 @@ class ScheduledNotifications
             ? 'No sales recorded today.'
             : "{$d['count']} sale".($d['count'] > 1 ? 's' : '').', '.number_format($d['total'])." {$cur} (paid ".number_format($d['cash']).', on credit '.number_format($d['credit']).').'
                 .($d['top'] ? " Best seller: {$d['top']}." : '');
-        $this->notifier->notify((int) $company->id, 'daily_summary', "{$company->name} today", $body, ['date' => $local->toDateString()] + $d);
+
+        return ['title' => "{$company->name} today", 'body' => $body, 'data' => ['date' => $local->toDateString()] + $d];
+    }
+
+    /**
+     * Send today's summary now to one person's phone (WhatsApp, falling back to SMS) — the owner's
+     * "send it to me" button. Returns the message_log id.
+     */
+    public function sendDailySummaryTo(Company $company, \App\Models\User $user, ?Carbon $local = null): int
+    {
+        if (! $user->phone_e164) {
+            throw \App\Exceptions\BusinessRuleException::make('no_phone', 'Add your phone number to your profile first, so the summary has somewhere to go.');
+        }
+        $m = $this->dailySummaryMessage($company, $local ?? now()->setTimezone($this->tz($company)));
+
+        return app(\App\Services\Messaging\Messenger::class)->send($user->phone_e164, "*{$m['title']}*\n{$m['body']}", ['whatsapp', 'sms'],
+            ['company_id' => (int) $company->id, 'user_id' => (int) $user->id, 'purpose' => 'daily_summary']);
+    }
+
+    private function dailySummary(Company $company, Carbon $local): void
+    {
+        $m = $this->dailySummaryMessage($company, $local);
+        $this->notifier->notify((int) $company->id, 'daily_summary', $m['title'], $m['body'], $m['data']);
     }
 
     private function lowStock(Company $company): void

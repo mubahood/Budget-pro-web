@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Models\Unit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /** Units of measure (plan A8 `units`). */
 class UnitController extends BaseCrudController
@@ -14,7 +13,7 @@ class UnitController extends BaseCrudController
 
     protected string $resourceName = 'Unit';
 
-    protected array $writable = ['name', 'abbreviation', 'base_unit_id', 'factor'];
+    protected array $writable = \App\Support\Rules\UnitRules::WRITABLE;
 
     protected array $searchable = ['name', 'abbreviation'];
 
@@ -22,14 +21,7 @@ class UnitController extends BaseCrudController
 
     protected function rules(Request $request, ?Model $existing): array
     {
-        $companyId = $this->companyId($request);
-
-        return [
-            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:60', \Illuminate\Validation\Rule::unique('units', 'name')->where('company_id', $companyId)->where('is_deleted', 0)->ignore($existing?->getKey())],
-            'abbreviation' => [$existing ? 'sometimes' : 'required', 'string', 'max:15'],
-            'base_unit_id' => ['nullable', Rule::exists('units', 'id')->where('company_id', $companyId)],
-            'factor' => ['nullable', 'numeric', 'min:0.001'],
-        ];
+        return \App\Support\Rules\UnitRules::rules($this->companyId($request), $existing?->getKey(), $existing !== null);
     }
 
     public function destroy(Request $request, $id)
@@ -38,8 +30,11 @@ class UnitController extends BaseCrudController
         if ($unit === null) {
             return $this->notFound('Unit not found.');
         }
-        if (\App\Models\StockItem::withoutGlobalScopes()->where('unit_id', $unit->id)->exists()) {
-            return $this->error('Products still use this unit.', 422, ['code' => 'unit_in_use']);
+        try {
+            \assert($unit instanceof \App\Models\Unit);
+            \App\Support\Rules\UnitRules::assertDeletable($unit);
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, ['code' => 'unit_in_use']);
         }
 
         return parent::destroy($request, $id);

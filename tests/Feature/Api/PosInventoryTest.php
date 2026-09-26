@@ -281,4 +281,18 @@ class PosInventoryTest extends ApiTestCase
         $this->assertSame(40.0, $this->qty($p['id']));
         $this->assertSame($p['stock_category_id'], \App\Models\StockTake::withoutGlobalScopes()->latest('id')->first()->stock_category_id);
     }
+
+    public function test_a_draft_stock_count_can_be_cancelled_and_a_posted_one_cannot(): void
+    {
+        $a = $this->product();
+        $before = $this->qty($a['id']);
+        $take = $this->postJson('/api/v1/stock-takes', ['name' => 'Mid-week'], $this->h)->assertStatus(201)->json('data');
+        $this->postJson("/api/v1/stock-takes/{$take['id']}/counts", ['counts' => [['stock_item_id' => $a['id'], 'counted_quantity' => 1]]], $this->h)->assertOk();
+        $this->postJson("/api/v1/stock-takes/{$take['id']}/cancel", [], $this->h)->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $this->assertSame($before, $this->qty($a['id']), 'cancelling moves nothing');
+
+        $posted = $this->postJson('/api/v1/stock-takes', ['name' => 'Month end'], $this->h)->json('data');
+        $this->postJson("/api/v1/stock-takes/{$posted['id']}/post", [], $this->h)->assertOk();
+        $this->postJson("/api/v1/stock-takes/{$posted['id']}/cancel", [], $this->h)->assertStatus(422)->assertJsonPath('errors.code', 'stock_take_posted');
+    }
 }

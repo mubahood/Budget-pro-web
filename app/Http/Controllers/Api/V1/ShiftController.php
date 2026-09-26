@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\BusinessRuleException;
 use App\Models\Shift;
 use App\Services\Shop\ShiftService;
+use App\Support\Rules\ShiftRules;
 use Illuminate\Http\Request;
 
 /**
@@ -41,7 +42,7 @@ class ShiftController extends BaseCrudController
 
     public function open(Request $request)
     {
-        $data = $request->validate(['opening_float' => ['required', 'numeric', 'min:0'], 'client_uuid' => ['nullable', 'uuid'], 'notes' => ['nullable', 'string', 'max:500']]);
+        $data = $request->validate(ShiftRules::open());
         try {
             $shift = (new ShiftService())->open($this->companyId($request), (int) $request->user()->id, (float) $data['opening_float'], $request->header('X-Device-Id'), $data['client_uuid'] ?? null, $data['notes'] ?? null);
         } catch (BusinessRuleException $e) {
@@ -58,7 +59,7 @@ class ShiftController extends BaseCrudController
         if ($shift === null) {
             return $this->notFound('Shift not found.');
         }
-        $data = $request->validate(['counted_cash' => ['required', 'numeric', 'min:0'], 'notes' => ['nullable', 'string', 'max:500']]);
+        $data = $request->validate(ShiftRules::close());
         try {
             $shift = (new ShiftService())->close($shift, (float) $data['counted_cash'], (int) $request->user()->id, $data['notes'] ?? null);
         } catch (BusinessRuleException $e) {

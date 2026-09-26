@@ -31,7 +31,7 @@ class PlanController extends AdminController
 
     private const LIMIT_KEYS = [
         'max_users' => 'Max Users',
-        'max_stock_items' => 'Max Stock Items',
+        'max_products' => 'Max Products',
         'max_sales_per_month' => 'Max Sales / Month',
         'max_budget_programs' => 'Max Budget Programs',
     ];

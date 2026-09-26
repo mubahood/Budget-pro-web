@@ -6,7 +6,6 @@ use App\Exceptions\BusinessRuleException;
 use App\Models\GoodsReceipt;
 use App\Services\Shop\GoodsReceiptService;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * Receive stock (GRN-lite, P2-7).
@@ -30,22 +29,7 @@ class GoodsReceiptController extends BaseCrudController
     public function store(Request $request)
     {
         $companyId = $this->companyId($request);
-        $data = $request->validate([
-            'supplier_id' => ['nullable', Rule::exists('suppliers', 'id')->where('company_id', $companyId)],
-            'invoice_ref' => ['nullable', 'string', 'max:80'],
-            'amount_paid' => ['nullable', 'numeric', 'min:0'],
-            'payment_method' => ['nullable', 'string', 'max:30'],
-            'received_on' => ['nullable', 'date'],
-            'notes' => ['nullable', 'string', 'max:500'],
-            'client_uuid' => ['nullable', 'uuid'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
-            'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
-            'items.*.batch_number' => ['nullable', 'string', 'max:60'],
-            'items.*.expiry_date' => ['nullable', 'date'],
-            'location_id' => ['nullable', 'integer'],
-        ]);
+        $data = $request->validate(\App\Support\Rules\GoodsReceiptRules::rules($companyId));
         try {
             $grn = (new GoodsReceiptService())->receive($companyId, (int) $request->user()->id, $data['items'], $data['supplier_id'] ?? null, $data['invoice_ref'] ?? null,
                 (float) ($data['amount_paid'] ?? 0), $data['payment_method'] ?? 'cash', $data['received_on'] ?? null, $data['client_uuid'] ?? null, $data['notes'] ?? null, $request->header('X-Device-Id'), null, $data['location_id'] ?? null);

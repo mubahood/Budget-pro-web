@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\StockRecord;
+use App\Services\Shop\MovementDocuments;
 use App\Services\Shop\StockService;
+use App\Support\Rules\StockRecordRules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * Stock movement ledger (append-only).
@@ -23,7 +24,7 @@ class StockRecordController extends BaseCrudController
 
     protected string $resourceName = 'Stock record';
 
-    protected array $writable = ['stock_item_id', 'type', 'quantity', 'description', 'date', 'selling_price', 'unit_cost', 'client_uuid', 'reason', 'image'];
+    protected array $writable = StockRecordRules::WRITABLE;
 
     protected array $searchable = ['name', 'sku', 'description'];
 
@@ -38,7 +39,7 @@ class StockRecordController extends BaseCrudController
     protected string $optionLabel = 'name';
 
     /** Reason codes for adjustments (plan A4). */
-    public const REASONS = ['damage', 'expired', 'lost', 'theft', 'internal_use', 'correction', 'gift', 'restock', 'return', 'other'];
+    public const REASONS = StockRecordRules::REASONS;
 
     public function types()
     {
@@ -47,27 +48,14 @@ class StockRecordController extends BaseCrudController
 
     protected function rules(Request $request, ?Model $existing): array
     {
-        $companyId = $this->companyId($request);
-
-        return [
-            'client_uuid' => ['nullable', 'uuid'],
-            'stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
-            'type' => ['required', Rule::in(StockService::types())],
-            'quantity' => ['required', 'numeric', 'min:0.001'],
-            'description' => ['nullable', 'string', 'max:1000'],
-            'date' => ['nullable', 'date'],
-            'selling_price' => ['nullable', 'numeric', 'min:0'],
-            'unit_cost' => ['nullable', 'numeric', 'min:0'],
-            'reason' => ['nullable', 'string', 'in:'.implode(',', self::REASONS)],
-            'image' => ['nullable', 'string', 'max:255'],
-        ];
+        return StockRecordRules::rules($this->companyId($request));
     }
 
     public function store(Request $request)
     {
         $type = (string) $request->input('type');
         if (in_array($type, StockService::types(), true)) {
-            $need = $type === 'Sale' ? 'sell' : (StockService::isInbound($type) ? 'restock' : 'adjust');
+            $need = StockRecordRules::permissionFor($type);
             if (! \App\Services\Team\Permissions::can($request->user(), $need)) {
                 return $this->error('Your role does not allow this stock movement.', 403, ['code' => 'forbidden', 'permission' => $need]);
             }
@@ -95,14 +83,10 @@ class StockRecordController extends BaseCrudController
         if ($record === null) {
             return $this->notFound('Stock record not found.');
         }
-        $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+        $data = $request->validate(StockRecordRules::reverseRules());
         // Movements that belong to a document (sale, delivery, transfer, count…) are undone on that document.
-        if ($doc = \App\Admin\Controllers\StockRecordController::document($record)) {
-            return $this->error($doc['advice'], 422, ['code' => 'movement_belongs_to_document', 'document' => $doc['label']]);
-        }
-
         try {
-            $contra = (new StockService())->reverse($record, $data['reason'] ?? null, (int) $request->user()->id);
+            $contra = (new MovementDocuments())->reverse($record, $data['reason'] ?? null, (int) $request->user()->id);
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }

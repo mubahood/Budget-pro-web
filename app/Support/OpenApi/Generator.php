@@ -139,11 +139,18 @@ class Generator
                 // fall through to the source
             }
         }
+        // Rules shared with the web interface live in App\Support\Rules\*Rules (e.g. CustomerRules::rules(...)).
+        if (($shared = $this->sharedRules($src)) !== []) {
+            return $shared;
+        }
         if (! str_contains($src, 'validate([') && preg_match_all('/\$this->(\w+)\(/', $src, $calls)) {
             foreach (array_unique($calls[1]) as $helper) {
                 if (method_exists($class, $helper)) {
                     $h = new ReflectionMethod($class, $helper);
                     $hs = implode('', array_slice(file((string) $h->getFileName()) ?: [], $h->getStartLine() - 1, $h->getEndLine() - $h->getStartLine() + 1));
+                    if (($shared = $this->sharedRules($hs)) !== []) {
+                        return $shared;
+                    }
                     if (str_contains($hs, 'validate([')) {
                         return $this->parseValidate($hs);
                     }
@@ -152,6 +159,53 @@ class Generator
         }
 
         return $this->parseValidate($src);
+    }
+
+    /**
+     * Rules the source takes from a shared rules class (App\Support\Rules\XRules::method(...)), called with
+     * neutral arguments (0 / null / false / '' / []) so the schema lists every field the endpoint accepts.
+     *
+     * @return array<string, string>
+     */
+    private function sharedRules(string $src): array
+    {
+        if (! preg_match_all('/\b([A-Z]\w*Rules)::(\w+)\(/', $src, $m, PREG_SET_ORDER)) {
+            return [];
+        }
+        $out = [];
+        foreach ($m as [, $short, $method]) {
+            $class = 'App\\Support\\Rules\\'.$short;
+            if (! class_exists($class) || ! method_exists($class, $method)) {
+                continue;
+            }
+            $ref = new ReflectionMethod($class, $method);
+            if (! $ref->isStatic() || ! $ref->isPublic()) {
+                continue;
+            }
+            $args = [];
+            foreach ($ref->getParameters() as $p) {
+                if ($p->isDefaultValueAvailable()) {
+                    $args[] = $p->getDefaultValue();
+
+                    continue;
+                }
+                $t = $p->getType();
+                $name = $t instanceof \ReflectionNamedType ? $t->getName() : 'mixed';
+                $args[] = $t?->allowsNull() ? null : match ($name) {
+                    'int' => 0, 'float' => 0.0, 'bool' => false, 'string' => '', 'array' => [], default => null
+                };
+            }
+            try {
+                $rules = $ref->invokeArgs(null, $args);
+            } catch (\Throwable) {
+                continue;
+            }
+            if (is_array($rules) && $rules !== [] && ! array_is_list($rules)) {
+                $out += $this->flatten($rules);
+            }
+        }
+
+        return $out;
     }
 
     /** Rules as given to validate(): arrays of strings/objects → one readable string per field. */

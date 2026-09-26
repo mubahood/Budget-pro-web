@@ -298,6 +298,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         apiCrud('stock-takes', StockTakeController::class);
         Route::post('stock-takes/{id}/counts', [StockTakeController::class, 'counts'])->whereNumber('id');
         Route::post('stock-takes/{id}/post', [StockTakeController::class, 'post'])->whereNumber('id');
+        Route::post('stock-takes/{id}/cancel', [StockTakeController::class, 'cancel'])->whereNumber('id');
         apiCrud('goods-receipts', GoodsReceiptController::class);
         // Purchasing (plan A5, P4-1/P4-3)
         apiCrud('purchase-orders', \App\Http\Controllers\Api\V1\PurchaseOrderController::class);

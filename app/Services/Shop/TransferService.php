@@ -33,6 +33,48 @@ class TransferService
     }
 
     /**
+     * Rename, re-address, close or reopen a location. The main location cannot be closed, and a
+     * location still holding stock must be emptied (moved or counted to zero) first.
+     *
+     * @param  array{name?: string, address?: string|null, is_active?: bool|int|null}  $data
+     */
+    public function updateLocation(int $companyId, int $locationId, array $data): object
+    {
+        /** @var object{id: int, is_default: int|bool}|null $loc */
+        $loc = DB::table('locations')->where('company_id', $companyId)->where('id', $locationId)->first();
+        if ($loc === null) {
+            throw BusinessRuleException::make('location_not_found', 'Location not found.');
+        }
+        $data = array_intersect_key($data, array_flip(['name', 'address', 'is_active']));
+        if (isset($data['name'])) {
+            $data['name'] = trim((string) $data['name']);
+            if (DB::table('locations')->where('company_id', $companyId)->where('name', $data['name'])->where('id', '!=', $locationId)->exists()) {
+                throw BusinessRuleException::make('duplicate_location', 'There is already a location with that name.');
+            }
+        }
+        if (array_key_exists('is_active', $data) && $data['is_active'] !== null && ! $data['is_active']) {
+            if ($loc->is_default) {
+                throw BusinessRuleException::make('default_location', 'The main location cannot be closed.');
+            }
+            if (DB::table('stock_levels')->where('location_id', $locationId)->where('quantity', '!=', 0)->exists()) {
+                throw BusinessRuleException::make('location_has_stock', 'Move or count the stock at this location to zero before closing it.');
+            }
+        }
+        if (array_key_exists('is_active', $data)) {
+            if ($data['is_active'] === null) {
+                unset($data['is_active']);
+            } else {
+                $data['is_active'] = (bool) $data['is_active'];
+            }
+        }
+        if ($data !== []) {
+            DB::table('locations')->where('id', $locationId)->update($data + ['updated_at' => now()]);
+        }
+
+        return DB::table('locations')->where('id', $locationId)->first();
+    }
+
+    /**
      * @param  array<int, array{stock_item_id: int, quantity: float|string}>  $lines
      */
     public function transfer(int $companyId, int $userId, int $fromId, int $toId, array $lines, ?string $notes = null): int

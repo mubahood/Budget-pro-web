@@ -8,8 +8,10 @@ use App\Models\StockItem;
 use App\Models\StockRecord;
 use App\Models\StockSubCategory;
 use App\Models\User;
+use App\Services\Shop\MovementDocuments;
 use App\Services\Shop\StockService;
 use App\Support\Money;
+use App\Support\Rules\StockRecordRules;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -25,20 +27,10 @@ class StockRecordController extends TenantAdminController
     protected $title = 'Stock movements';
 
     /** Movement types this screen may create. Sales are made on Sales / POS so they get a receipt and payment. */
-    public const FORM_TYPES = [
-        'Stock In' => 'Stock in (goods came in without a delivery note)',
-        'Adjustment In' => 'Count correction + (found more than recorded)',
-        'Adjustment Out' => 'Count correction − (found less than recorded)',
-        'Damage' => 'Damaged (write-off)',
-        'Expired' => 'Expired (disposal)',
-        'Lost' => 'Lost / stolen',
-        'Internal Use' => 'Used in the business',
-        'Return' => 'Customer return without a receipt (stock in)',
-        'Other' => 'Other (stock out)',
-    ];
+    public const FORM_TYPES = StockRecordRules::FORM_TYPES;
 
     /** Types that record what the stock cost (inbound goods). */
-    private const COSTED_TYPES = ['Stock In', 'Adjustment In'];
+    private const COSTED_TYPES = StockRecordRules::COSTED_TYPES;
 
     /**
      * Make a grid builder.
@@ -444,7 +436,7 @@ class StockRecordController extends TenantAdminController
             ->required()
             ->help('How many pieces (or kg, litres…) in the product\'s unit.');
 
-        $form->select('reason', __('Reason'))->options(array_combine(\App\Http\Controllers\Api\V1\StockRecordController::REASONS, array_map(fn ($r) => ucfirst(str_replace('_', ' ', $r)), \App\Http\Controllers\Api\V1\StockRecordController::REASONS)));
+        $form->select('reason', __('Reason'))->options(array_combine(StockRecordRules::REASONS, array_map(fn ($r) => ucfirst(str_replace('_', ' ', $r)), StockRecordRules::REASONS)));
         $form->textarea('description', __('Notes'))
             ->rows(2)
             ->placeholder('e.g. dropped by the delivery boy, batch 12 expired');
@@ -505,41 +497,33 @@ class StockRecordController extends TenantAdminController
 
     /**
      * The document a movement belongs to (sale, delivery, count…), which is where it must be
-     * corrected. Null for a stand-alone movement that may be reversed here.
+     * corrected. Null for a stand-alone movement that may be reversed here. The rule itself lives
+     * in App\Services\Shop\MovementDocuments (shared with the API and the new web interface);
+     * this maps its key to the classic admin page.
      *
      * @return array{label: string, url: string, advice: string}|null
      */
     public static function document(StockRecord $record): ?array
     {
-        $type = (string) $record->reference_type;
-        $refId = (int) $record->reference_id;
-        if ($record->sale_record_id || $type === 'sale' || $type === 'sale_return') {
-            $saleId = (int) ($record->sale_record_id ?: ($type === 'sale' ? $refId : \Illuminate\Support\Facades\DB::table('sale_returns')->where('id', $refId)->value('sale_record_id')));
-
-            return $type === 'sale_return'
-                ? ['label' => 'sale', 'url' => admin_url('sale-records/'.$saleId), 'advice' => 'This stock came back with a return on a sale, which also refunded money. It cannot be undone; record a new movement if the goods left again.']
-                : ['label' => 'sale', 'url' => admin_url('sale-records/'.$saleId), 'advice' => 'This movement is part of a sale. To undo it, void the sale or record a return on the sale page, so the money is corrected too.'];
+        $doc = MovementDocuments::document($record);
+        if ($doc === null) {
+            return null;
         }
-
-        return match ($type) {
-            'goods_receipt' => ['label' => 'delivery', 'url' => admin_url('goods-receipts/'.$refId), 'advice' => 'This stock came in with a delivery. To send goods back, record a return to the supplier so what you owe is corrected too.'],
-            'purchase_return' => ['label' => 'return to supplier', 'url' => admin_url('purchase-returns/'.$refId), 'advice' => 'This stock went back to a supplier. It cannot be undone here; receive the goods again if they came back.'],
-            'stock_transfer' => ['label' => 'transfers page', 'url' => admin_url('stock-transfers'), 'advice' => 'This stock moved between your locations. Make a transfer back instead.'],
-            'stock_take' => ['label' => 'stock count', 'url' => admin_url('stock-takes/'.$refId), 'advice' => 'This figure was set by a stock count. Count the product again to correct it.'],
-            \App\Console\Commands\ApplyOldWriteoffs::REFERENCE => ['label' => 'original write-off', 'url' => admin_url('stock-records/'.$refId), 'advice' => 'This is an automatic correction that applied an old write-off to the stock figure. Record a new movement if the figure is wrong.'],
-            default => null,
+        $url = match ($doc['key']) {
+            'sale', 'sale_return' => admin_url('sale-records/'.$doc['id']),
+            'goods_receipt' => admin_url('goods-receipts/'.$doc['id']),
+            'purchase_return' => admin_url('purchase-returns/'.$doc['id']),
+            'stock_transfer' => admin_url('stock-transfers'),
+            'stock_take' => admin_url('stock-takes/'.$doc['id']),
+            default => admin_url('stock-records/'.$doc['id']),
         };
+
+        return ['label' => $doc['label'], 'url' => $url, 'advice' => $doc['advice']];
     }
 
     /** Whether the Reverse button applies: a stand-alone movement that is not itself an undo and not undone yet. */
     public static function reversible(StockRecord $record): bool
     {
-        if ($record->is_reversal || StockRecordController::document($record) !== null) {
-            return false;
-        }
-
-        return $record->relationLoaded('reversal')
-            ? $record->reversal === null
-            : ! StockRecord::withoutGlobalScopes()->where('reverses_id', $record->id)->exists();
+        return MovementDocuments::reversible($record);
     }
 }

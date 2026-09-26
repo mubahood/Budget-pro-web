@@ -984,7 +984,10 @@
                                             "salon",
                                             "boutique",
                                             "electronics",
-                                            "other"
+                                            "other",
+                                            "restaurant_bar",
+                                            "poultry",
+                                            "fundraising"
                                         ]
                                     },
                                     "timezone": {
@@ -3227,132 +3230,6 @@
                         "bearer": []
                     }
                 ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "maxLength": 191
-                                    },
-                                    "email": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "format": "email",
-                                        "maxLength": 191
-                                    },
-                                    "phone_number": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 30
-                                    },
-                                    "phone_number_2": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 30
-                                    },
-                                    "address": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 500
-                                    },
-                                    "website": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 191
-                                    },
-                                    "about": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 2000
-                                    },
-                                    "slogan": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 255
-                                    },
-                                    "logo": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 255
-                                    },
-                                    "currency": {
-                                        "type": "string"
-                                    },
-                                    "settings_worker_can_create_stock_item": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "enum": [
-                                            "Yes",
-                                            "No"
-                                        ]
-                                    },
-                                    "settings_worker_can_create_stock_record": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "enum": [
-                                            "Yes",
-                                            "No"
-                                        ]
-                                    },
-                                    "settings_worker_can_create_stock_category": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "enum": [
-                                            "Yes",
-                                            "No"
-                                        ]
-                                    },
-                                    "settings_worker_can_view_balance": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "enum": [
-                                            "Yes",
-                                            "No"
-                                        ]
-                                    },
-                                    "settings_worker_can_view_stats": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "enum": [
-                                            "Yes",
-                                            "No"
-                                        ]
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/DeviceId"
@@ -3639,24 +3516,6 @@
                         "bearer": []
                     }
                 ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "debt_reminders_enabled": {
-                                        "type": "boolean"
-                                    },
-                                    "credit_terms_days": {
-                                        "type": "integer"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/DeviceId"
@@ -4731,6 +4590,18 @@
                                             "null"
                                         ]
                                     },
+                                    "payment_terms_days": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ]
+                                    },
+                                    "reminders_enabled": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ]
+                                    },
                                     "notes": {
                                         "type": [
                                             "string",
@@ -5013,6 +4884,18 @@
                                             "null"
                                         ]
                                     },
+                                    "payment_terms_days": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ]
+                                    },
+                                    "reminders_enabled": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ]
+                                    },
                                     "notes": {
                                         "type": [
                                             "string",
@@ -5130,6 +5013,18 @@
                                     "credit_limit": {
                                         "type": [
                                             "number",
+                                            "null"
+                                        ]
+                                    },
+                                    "payment_terms_days": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ]
+                                    },
+                                    "reminders_enabled": {
+                                        "type": [
+                                            "boolean",
                                             "null"
                                         ]
                                     },
@@ -6161,6 +6056,26 @@
                                         "type": "string",
                                         "maxLength": 191
                                     },
+                                    "type": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "Income",
+                                            "Expense"
+                                        ]
+                                    },
+                                    "status": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "Active",
+                                            "Inactive"
+                                        ]
+                                    },
                                     "description": {
                                         "type": [
                                             "string",
@@ -6409,6 +6324,26 @@
                                         "type": "string",
                                         "maxLength": 191
                                     },
+                                    "type": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "Income",
+                                            "Expense"
+                                        ]
+                                    },
+                                    "status": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "Active",
+                                            "Inactive"
+                                        ]
+                                    },
                                     "description": {
                                         "type": [
                                             "string",
@@ -6495,6 +6430,26 @@
                                         "type": "string",
                                         "maxLength": 191
                                     },
+                                    "type": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "Income",
+                                            "Expense"
+                                        ]
+                                    },
+                                    "status": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "Active",
+                                            "Inactive"
+                                        ]
+                                    },
                                     "description": {
                                         "type": [
                                             "string",
@@ -6528,7 +6483,7 @@
                 "tags": [
                     "Financial categories"
                 ],
-                "summary": "DELETE /financial-categories/{id}",
+                "summary": "A category still used by entries is kept (set it Inactive instead). */",
                 "operationId": "delete_financial_categories_id",
                 "responses": {
                     "200": {
@@ -9505,6 +9460,12 @@
                                             "null"
                                         ],
                                         "maxLength": 255
+                                    },
+                                    "is_active": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ]
                                     }
                                 },
                                 "required": [
@@ -9569,7 +9530,7 @@
                     }
                 ],
                 "requestBody": {
-                    "required": false,
+                    "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
@@ -9592,7 +9553,10 @@
                                             "null"
                                         ]
                                     }
-                                }
+                                },
+                                "required": [
+                                    "name"
+                                ]
                             }
                         }
                     }
@@ -13197,6 +13161,20 @@
                                                         "number",
                                                         "null"
                                                     ]
+                                                },
+                                                "batch_number": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "maxLength": 60
+                                                },
+                                                "expiry_date": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "format": "date"
                                                 }
                                             },
                                             "required": [
@@ -16948,7 +16926,7 @@
                 "tags": [
                     "Stock categories"
                 ],
-                "summary": "DELETE /stock-categories/{id}",
+                "summary": "A category that still holds products (or sub-categories) is refused: they would lose their home. */",
                 "operationId": "delete_stock_categories_id",
                 "responses": {
                     "200": {
@@ -19353,7 +19331,7 @@
                 "tags": [
                     "Stock sub categories"
                 ],
-                "summary": "DELETE /stock-sub-categories/{id}",
+                "summary": "A sub-category that still holds products is refused: they would lose their home. */",
                 "operationId": "delete_stock_sub_categories_id",
                 "responses": {
                     "200": {
@@ -19845,6 +19823,68 @@
                 "operationId": "delete_stock_takes_id",
                 "responses": {
                     "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/stock-takes/{id}/cancel": {
+            "post": {
+                "tags": [
+                    "Stock takes"
+                ],
+                "summary": "POST stock-takes/{id}/cancel — drop a draft count (nothing moves). */",
+                "operationId": "post_stock_takes_id_cancel",
+                "responses": {
+                    "201": {
                         "description": "OK",
                         "content": {
                             "application/json": {
@@ -22440,7 +22480,23 @@
                                         "items": {
                                             "type": "string",
                                             "enum": [
-                                                ".implode("
+                                                "sell",
+                                                "discount",
+                                                "void",
+                                                "refund",
+                                                "restock",
+                                                "adjust",
+                                                "stock_take",
+                                                "manage_products",
+                                                "view_cost",
+                                                "view_profit",
+                                                "view_reports",
+                                                "manage_finance",
+                                                "manage_budget",
+                                                "resolve_conflicts",
+                                                "manage_team",
+                                                "manage_settings",
+                                                "billing"
                                             ]
                                         }
                                     }

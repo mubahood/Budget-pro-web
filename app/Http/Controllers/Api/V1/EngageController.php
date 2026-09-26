@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\Customer;
 use App\Services\Engage\DebtReminders;
 use App\Services\Engage\MomoCollections;
+use App\Support\Rules\CompanyRules;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,12 +35,9 @@ class EngageController extends Controller
 
     public function updateSettings(Request $request, MomoCollections $momo)
     {
-        $data = $request->validate(['debt_reminders_enabled' => ['sometimes', 'boolean'], 'credit_terms_days' => ['sometimes', 'integer', 'min:0', 'max:365']]);
         $c = $this->company($request);
-        foreach ($data as $k => $v) {
-            $c->{$k} = $v;
-        }
-        $c->saveQuietly();
+        $data = $request->validate(CompanyRules::only($c, CompanyRules::SECTIONS['customers']));
+        CompanyRules::apply($c, $data)->saveQuietly();
 
         return $this->settings($request, $momo);
     }

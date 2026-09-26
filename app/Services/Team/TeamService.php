@@ -66,7 +66,7 @@ class TeamService
 
     private function send(object $invite, string $token, User $by, Company $company): string
     {
-        $link = rtrim((string) config('app.url'), '/').'/invite/'.$token;
+        $link = rtrim((string) config('saas.public_url', config('app.url')), '/').'/invite/'.$token;
         $label = config("permissions.roles.{$invite->role}.label");
         $text = "{$by->name} invited you to join {$company->name} on ".config('app.name')." as {$label}. Accept here: {$link} (valid ".self::INVITE_DAYS.' days)';
         $to = $invite->phone_e164 ?: $invite->email;
@@ -166,6 +166,56 @@ class TeamService
             $this->syncAdminRole($owner, 'manager');
         });
         Permissions::flush();
+    }
+
+    /**
+     * Every role with the permissions it has in this company (defaults plus the company's overrides).
+     *
+     * @return list<array{key: string, label: string, permissions: array<int, string>}>
+     */
+    public static function roleList(Company $company): array
+    {
+        $out = [];
+        foreach (config('permissions.roles') as $key => $r) {
+            $perms = Permissions::defaultsFor($key);
+            foreach (DB::table('company_role_permissions')->where('company_id', $company->id)->where('role', $key)->get() as $o) {
+                $perms = $o->allowed ? array_values(array_unique([...$perms, $o->permission])) : array_values(array_diff($perms, [$o->permission]));
+            }
+            $out[] = ['key' => $key, 'label' => $r['label'], 'permissions' => $key === 'owner' ? Permissions::all() : $perms];
+        }
+
+        return $out;
+    }
+
+    /**
+     * This company's version of a role: stores only the differences from the role's defaults.
+     * Billing, team and settings stay owner-only whatever is asked.
+     *
+     * @param  array<int, string>  $permissions
+     */
+    public function setRolePermissions(Company $company, string $role, array $permissions): void
+    {
+        if ($role === 'owner' || ! array_key_exists($role, config('permissions.roles'))) {
+            throw BusinessRuleException::make('invalid_role', 'This role cannot be changed.');
+        }
+        $defaults = Permissions::defaultsFor($role);
+        $wanted = array_diff($permissions, \App\Support\Rules\TeamRules::OWNER_ONLY);
+        DB::transaction(function () use ($company, $role, $defaults, $wanted) {
+            DB::table('company_role_permissions')->where('company_id', $company->id)->where('role', $role)->delete();
+            foreach (Permissions::all() as $p) {
+                $want = in_array($p, $wanted, true);
+                if ($want !== in_array($p, $defaults, true)) {
+                    DB::table('company_role_permissions')->insert(['company_id' => $company->id, 'role' => $role, 'permission' => $p, 'allowed' => $want, 'created_at' => now(), 'updated_at' => now()]);
+                }
+            }
+        });
+        Permissions::flush();
+    }
+
+    /** Cancel a pending invite of this company; false when there is none. */
+    public function revokeInvite(Company $company, int $inviteId): bool
+    {
+        return DB::table('invites')->where('company_id', $company->id)->where('id', $inviteId)->where('status', 'pending')->update(['status' => 'revoked', 'updated_at' => now()]) > 0;
     }
 
     /** Keep the web admin role (menus, access) in line with the company role. */

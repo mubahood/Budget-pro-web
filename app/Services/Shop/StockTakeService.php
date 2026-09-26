@@ -109,4 +109,19 @@ class StockTakeService
             return $take->load('items');
         });
     }
+
+    /** Cancel a count that was never posted: nothing moves. A posted count stays posted. */
+    public function cancel(StockTake $take): StockTake
+    {
+        if ($take->status === 'cancelled') {
+            return $take;
+        }
+        if ($take->status !== 'draft') {
+            throw BusinessRuleException::make('stock_take_posted', 'This count has already been posted. Count the products again to correct stock.');
+        }
+        $take->status = 'cancelled';
+        $take->save();
+
+        return $take;
+    }
 }

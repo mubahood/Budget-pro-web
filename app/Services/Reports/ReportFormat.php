@@ -4,7 +4,10 @@ namespace App\Services\Reports;
 
 use App\Exceptions\BusinessRuleException;
 
-/** Renders a report as JSON data, PDF or XLSX (plan A6). */
+/**
+ * Renders a report as JSON data, PDF or XLSX (plan A6). The PDF template is found by path, so the
+ * new web interface (budget-pro-new), which shares this class, renders the very same file.
+ */
 class ReportFormat
 {
     public static function cell(mixed $value, string $type): string
@@ -23,7 +26,7 @@ class ReportFormat
         $file = $report['name'].'-'.$report['from'].'-'.$report['to'];
 
         return match ($format) {
-            'pdf' => [app('dompdf.wrapper')->loadHTML(view('reports.table-report', ['report' => $report])->render())->setPaper('a4', count($report['columns']) > 5 ? 'landscape' : 'portrait')->output(), 'application/pdf', $file.'.pdf'],
+            'pdf' => [app('dompdf.wrapper')->loadHTML(view()->file(dirname(__DIR__, 3).'/resources/views/reports/table-report.blade.php', ['report' => $report])->render())->setPaper('a4', count($report['columns']) > 5 ? 'landscape' : 'portrait')->output(), 'application/pdf', $file.'.pdf'],
             'xlsx' => [XlsxWriter::fromReport($report), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $file.'.xlsx'],
             default => throw BusinessRuleException::make('unknown_format', 'Use format=json, pdf or xlsx.'),
         };

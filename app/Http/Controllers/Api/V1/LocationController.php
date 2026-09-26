@@ -7,10 +7,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Services\Shop\LocationStock;
 use App\Services\Shop\TransferService;
+use App\Support\Rules\LocationRules;
+use App\Support\Rules\TransferRules;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 /**
  * Locations, stock per location, transfers and which phone sells where (plan P4-4).
@@ -38,7 +39,7 @@ class LocationController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:120'], 'address' => ['nullable', 'string', 'max:255']]);
+        $data = $request->validate(LocationRules::rules((int) $request->user()->company_id));
         try {
             $id = $this->transfers->createLocation(Company::withoutGlobalScopes()->findOrFail($request->user()->company_id), $data['name'], $data['address'] ?? null);
         } catch (BusinessRuleException $e) {
@@ -51,22 +52,17 @@ class LocationController extends Controller
     public function update(Request $request, $id)
     {
         $companyId = (int) $request->user()->company_id;
-        /** @var object{is_default: int|bool}|null $loc */
-        $loc = DB::table('locations')->where('company_id', $companyId)->find($id);
-        if (! $loc) {
+        if (! DB::table('locations')->where('company_id', $companyId)->where('id', $id)->exists()) {
             return $this->notFound('Location not found.');
         }
-        $data = $request->validate(['name' => ['sometimes', 'string', 'max:120', Rule::unique('locations', 'name')->where('company_id', $companyId)->ignore($id)],
-            'address' => ['nullable', 'string', 'max:255'], 'is_active' => ['nullable', 'boolean']]);
-        if (isset($data['is_active']) && ! $data['is_active'] && $loc->is_default) {
-            return $this->error('The main location cannot be closed.', 422, ['code' => 'default_location']);
+        $data = $request->validate(LocationRules::rules($companyId, (int) $id, true));
+        try {
+            $loc = $this->transfers->updateLocation($companyId, (int) $id, $data);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
         }
-        if (isset($data['is_active']) && ! $data['is_active'] && DB::table('stock_levels')->where('location_id', $id)->where('quantity', '!=', 0)->exists()) {
-            return $this->error('Move or count the stock at this location to zero before closing it.', 422, ['code' => 'location_has_stock']);
-        }
-        DB::table('locations')->where('id', $id)->update($data + ['updated_at' => now()]);
 
-        return $this->success(DB::table('locations')->find($id), 'Location updated.');
+        return $this->success($loc, 'Location updated.');
     }
 
     public function levels(Request $request)
@@ -86,12 +82,7 @@ class LocationController extends Controller
     public function transfer(Request $request)
     {
         $companyId = (int) $request->user()->company_id;
-        $data = $request->validate([
-            'from_location_id' => ['required', 'integer'], 'to_location_id' => ['required', 'integer'], 'notes' => ['nullable', 'string', 'max:500'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
-        ]);
+        $data = $request->validate(TransferRules::rules($companyId));
         try {
             $id = $this->transfers->transfer($companyId, (int) $request->user()->id, (int) $data['from_location_id'], (int) $data['to_location_id'], $data['items'], $data['notes'] ?? null);
         } catch (BusinessRuleException $e) {

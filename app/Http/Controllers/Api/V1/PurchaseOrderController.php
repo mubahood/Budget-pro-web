@@ -7,7 +7,6 @@ use App\Models\PurchaseOrder;
 use App\Services\Shop\PurchaseOrderService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * Purchase orders (plan A5, P4-1).
@@ -36,15 +35,7 @@ class PurchaseOrderController extends BaseCrudController
 
     private function lines(Request $request, int $companyId, bool $required = true): array
     {
-        return $request->validate([
-            'supplier_id' => ['nullable', Rule::exists('suppliers', 'id')->where('company_id', $companyId)],
-            'expected_date' => ['nullable', 'date'],
-            'notes' => ['nullable', 'string', 'max:500'],
-            'items' => [$required ? 'required' : 'sometimes', 'array', 'min:1'],
-            'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
-            'items.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
-        ]);
+        return $request->validate(\App\Support\Rules\PurchaseOrderRules::rules($companyId, $required));
     }
 
     protected function transform(Model $model)
@@ -118,17 +109,7 @@ class PurchaseOrderController extends BaseCrudController
         if (! $po instanceof PurchaseOrder) {
             return $this->notFound('Purchase order not found.');
         }
-        $data = $request->validate([
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.purchase_order_item_id' => ['required', 'integer'],
-            'items.*.quantity' => ['required', 'numeric', 'min:0'],
-            'items.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
-            'amount_paid' => ['nullable', 'numeric', 'min:0'],
-            'payment_method' => ['nullable', 'string', 'max:30'],
-            'invoice_ref' => ['nullable', 'string', 'max:80'],
-            'received_on' => ['nullable', 'date'],
-            'client_uuid' => ['nullable', 'uuid'],
-        ]);
+        $data = $request->validate(\App\Support\Rules\PurchaseOrderRules::receiveRules());
         try {
             $grn = $this->orders->receive($po, (int) $request->user()->id, $data['items'], (float) ($data['amount_paid'] ?? 0), $data['payment_method'] ?? 'cash',
                 $data['invoice_ref'] ?? null, $data['received_on'] ?? null, $data['client_uuid'] ?? null);

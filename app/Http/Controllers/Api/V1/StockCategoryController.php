@@ -13,7 +13,7 @@ class StockCategoryController extends BaseCrudController
     protected string $resourceName = 'Stock category';
 
     // buying_price/selling_price/expected_profit/earned_profit are rollups the model computes.
-    protected array $writable = ['name', 'description', 'status', 'image'];
+    protected array $writable = \App\Support\Rules\StockCategoryRules::WRITABLE;
 
     protected array $searchable = ['name', 'description'];
 
@@ -23,11 +23,23 @@ class StockCategoryController extends BaseCrudController
 
     protected function rules(Request $request, ?Model $existing): array
     {
-        return [
-            'name' => [$existing ? 'sometimes' : 'required', 'string', 'max:191', \Illuminate\Validation\Rule::unique('stock_categories', 'name')->where('company_id', $this->companyId($request))->where('is_deleted', 0)->ignore($existing?->getKey())],
-            'description' => ['nullable', 'string', 'max:1000'],
-            'status' => ['nullable', 'string', 'max:50'],
-            'image' => ['nullable', 'string', 'max:255'],
-        ];
+        return \App\Support\Rules\StockCategoryRules::rules($this->companyId($request), $existing?->getKey(), $existing !== null);
+    }
+
+    /** A category that still holds products (or sub-categories) is refused: they would lose their home. */
+    public function destroy(Request $request, $id)
+    {
+        $model = $this->findOwned($request, $id);
+        if ($model === null) {
+            return $this->notFound('Stock category not found.');
+        }
+        try {
+            \assert($model instanceof \App\Models\StockCategory);
+            \App\Support\Rules\StockCategoryRules::assertDeletable($model);
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return parent::destroy($request, $id);
     }
 }

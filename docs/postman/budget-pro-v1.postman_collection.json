@@ -1021,7 +1021,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-25\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-26\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1133,7 +1133,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-25\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-26\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1167,7 +1167,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-25\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-26\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1239,10 +1239,6 @@
                             {
                                 "key": "Authorization",
                                 "value": "Bearer {{token}}"
-                            },
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
                             }
                         ],
                         "url": {
@@ -1253,10 +1249,6 @@
                             "path": [
                                 "company"
                             ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"email\": \"\",\n    \"phone_number\": \"\",\n    \"phone_number_2\": \"\",\n    \"address\": \"\",\n    \"website\": \"\",\n    \"about\": \"\",\n    \"slogan\": \"\",\n    \"logo\": \"\",\n    \"currency\": \"\",\n    \"settings_worker_can_create_stock_item\": \"Yes\",\n    \"settings_worker_can_create_stock_record\": \"Yes\",\n    \"settings_worker_can_create_stock_category\": \"Yes\",\n    \"settings_worker_can_view_balance\": \"Yes\",\n    \"settings_worker_can_view_stats\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -1385,10 +1377,6 @@
                             {
                                 "key": "Authorization",
                                 "value": "Bearer {{token}}"
-                            },
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
                             }
                         ],
                         "url": {
@@ -1400,10 +1388,6 @@
                                 "company",
                                 "engagement"
                             ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"debt_reminders_enabled\": true,\n    \"credit_terms_days\": 1\n}"
                         }
                     }
                 },
@@ -1823,7 +1807,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
                         }
                     }
                 },
@@ -1935,7 +1919,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
                         }
                     }
                 },
@@ -1969,7 +1953,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
                         }
                     }
                 },
@@ -2405,7 +2389,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"type\": \"Income\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2517,7 +2501,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"type\": \"Income\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2551,12 +2535,12 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"type\": \"Income\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
                 {
-                    "name": "DELETE /financial-categories/{id}",
+                    "name": "A category still used by entries is kept (set it Inactive instead). */",
                     "request": {
                         "method": "DELETE",
                         "header": [
@@ -2640,7 +2624,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-25\",\n    \"end_date\": \"2026-09-25\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2752,7 +2736,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-25\",\n    \"end_date\": \"2026-09-25\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2786,7 +2770,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-25\",\n    \"end_date\": \"2026-09-25\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2875,7 +2859,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-25\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-26\"\n}"
                         }
                     }
                 },
@@ -2987,7 +2971,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-25\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-26\"\n}"
                         }
                     }
                 },
@@ -3021,7 +3005,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-25\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-26\"\n}"
                         }
                     }
                 },
@@ -3110,7 +3094,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-25\",\n    \"end_date\": \"2026-09-25\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -3222,7 +3206,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-25\",\n    \"end_date\": \"2026-09-25\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -3256,7 +3240,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-25\",\n    \"end_date\": \"2026-09-25\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -3345,7 +3329,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"invoice_ref\": \"\",\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"received_on\": \"2026-09-25\",\n    \"notes\": \"\",\n    \"client_uuid\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-25\"\n        }\n    ],\n    \"location_id\": 1\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"invoice_ref\": \"\",\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"received_on\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"client_uuid\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-26\"\n        }\n    ],\n    \"location_id\": 1\n}"
                         }
                     }
                 },
@@ -3622,7 +3606,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"address\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"address\": \"\",\n    \"is_active\": true\n}"
                         }
                     }
                 },
@@ -4932,7 +4916,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-25\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5044,7 +5028,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-25\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5078,7 +5062,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-25\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5166,7 +5150,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"items\": [\n        {\n            \"purchase_order_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ],\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"invoice_ref\": \"\",\n    \"received_on\": \"2026-09-25\",\n    \"client_uuid\": \"\"\n}"
+                            "raw": "{\n    \"items\": [\n        {\n            \"purchase_order_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-26\"\n        }\n    ],\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"invoice_ref\": \"\",\n    \"received_on\": \"2026-09-26\",\n    \"client_uuid\": \"\"\n}"
                         }
                     }
                 },
@@ -5256,7 +5240,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"goods_receipt_id\": 1,\n    \"reason\": \"\",\n    \"refund_amount\": 1000,\n    \"refund_method\": \"\",\n    \"returned_on\": \"2026-09-25\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"goods_receipt_id\": 1,\n    \"reason\": \"\",\n    \"refund_amount\": 1000,\n    \"refund_method\": \"\",\n    \"returned_on\": \"2026-09-26\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5629,7 +5613,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"customer_name\": \"\",\n    \"customer_phone\": \"\",\n    \"customer_address\": \"\",\n    \"payment_method\": \"\",\n    \"amount_paid\": 1000,\n    \"discount_amount\": 1000,\n    \"discount_reason\": \"\",\n    \"sale_date\": \"2026-09-25\",\n    \"notes\": \"\",\n    \"allow_negative_stock\": true,\n    \"customer_id\": 1,\n    \"shift_id\": 1,\n    \"location_id\": 1,\n    \"items\": [\n        {\n            \"unit_id\": 1,\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_price\": 1000,\n            \"discount_amount\": 1000\n        }\n    ],\n    \"payments\": [\n        {\n            \"method\": \"\",\n            \"amount\": 1000,\n            \"reference\": \"\",\n            \"provider\": \"\"\n        }\n    ]\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"customer_name\": \"\",\n    \"customer_phone\": \"\",\n    \"customer_address\": \"\",\n    \"payment_method\": \"\",\n    \"amount_paid\": 1000,\n    \"discount_amount\": 1000,\n    \"discount_reason\": \"\",\n    \"sale_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"allow_negative_stock\": true,\n    \"customer_id\": 1,\n    \"shift_id\": 1,\n    \"location_id\": 1,\n    \"items\": [\n        {\n            \"unit_id\": 1,\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_price\": 1000,\n            \"discount_amount\": 1000\n        }\n    ],\n    \"payments\": [\n        {\n            \"method\": \"\",\n            \"amount\": 1000,\n            \"reference\": \"\",\n            \"provider\": \"\"\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5871,7 +5855,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"provider\": \"\",\n    \"received_at\": \"2026-09-25\",\n    \"notes\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"provider\": \"\",\n    \"received_at\": \"2026-09-26\",\n    \"notes\": \"\"\n}"
                         }
                     }
                 },
@@ -6558,7 +6542,7 @@
                     }
                 },
                 {
-                    "name": "DELETE /stock-categories/{id}",
+                    "name": "A category that still holds products (or sub-categories) is refused: they would lose their home. */",
                     "request": {
                         "method": "DELETE",
                         "header": [
@@ -6934,7 +6918,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-25\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-26\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -7072,7 +7056,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-25\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-26\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -7106,7 +7090,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-25\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-26\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -7381,7 +7365,7 @@
                     }
                 },
                 {
-                    "name": "DELETE /stock-sub-categories/{id}",
+                    "name": "A sub-category that still holds products is refused: they would lose their home. */",
                     "request": {
                         "method": "DELETE",
                         "header": [
@@ -7621,6 +7605,33 @@
                             "path": [
                                 "stock-takes",
                                 ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST stock-takes/{id}/cancel — drop a draft count (nothing moves). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-takes/:id/cancel",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-takes",
+                                ":id",
+                                "cancel"
                             ]
                         }
                     }
@@ -8650,7 +8661,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"permissions\": [\n        \".implode(\"\n    ]\n}"
+                            "raw": "{\n    \"permissions\": [\n        \"sell\"\n    ]\n}"
                         }
                     }
                 },

@@ -25,7 +25,7 @@ class ReceiptDelivery
             $sale->saveQuietly();
         }
 
-        return rtrim((string) config('app.url'), '/').'/r/'.$sale->receipt_token;
+        return rtrim((string) config('saas.public_url', config('app.url')), '/').'/r/'.$sale->receipt_token;
     }
 
     public function allowed(Company $company): bool
