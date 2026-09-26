@@ -165,6 +165,8 @@ class Company extends Model
 
     /**
      * The company's current subscription (most recent).
+     *
+     * @return HasOne<Subscription>
      */
     public function subscription(): HasOne
     {
@@ -283,14 +285,23 @@ class Company extends Model
         return strtoupper((string) $this->currency) === 'UGX';
     }
 
+    /** Suspended by the platform (status Inactive): paying never lifts this, only a platform admin does. */
+    public function isSuspended(): bool
+    {
+        return strtolower((string) $this->status) === 'inactive';
+    }
+
     /**
      * Activate (or renew/upgrade) this company's subscription to a plan after a
      * confirmed payment, extending the period from the later of "now" or the
      * current period end, and keeping the legacy license_expire column in sync.
+     * A platform-suspended company stays suspended (POWER_PLAN §4.1): the paid
+     * period is recorded, access is not.
      */
-    public function activateSubscription(Plan $plan, string $provider = 'flutterwave', ?string $providerRef = null, bool $fromNow = false): Subscription
+    public function activateSubscription(Plan $plan, string $provider = 'flutterwave', ?string $providerRef = null, bool $fromNow = false, string $interval = 'month'): Subscription
     {
         $subscription = $this->subscription ?? new Subscription(['company_id' => $this->id]);
+        $interval = $interval === 'year' ? 'year' : 'month';
 
         // Extend from the current expiry if still in the future (renewal), else from now.
         // A prorated plan change starts a fresh period now (the old days were credited).
@@ -298,9 +309,9 @@ class Company extends Model
             ? $subscription->ends_at->copy()
             : now();
 
-        $endsAt = match ($plan->interval) {
-            'year' => $base->copy()->addYear(),
-            'lifetime' => $base->copy()->addYears(100),
+        $endsAt = match (true) {
+            $plan->interval === 'lifetime' => $base->copy()->addYears(100),
+            $plan->interval === 'year', $interval === 'year' => $base->copy()->addYear(),
             default => $base->copy()->addMonth(),
         };
 
@@ -315,11 +326,16 @@ class Company extends Model
         if ($providerRef !== null) {
             $subscription->provider_subscription_id = $providerRef;
         }
+        $subscription->billing_interval = $interval;
+        $subscription->pending_plan_id = null; // paying for a plan replaces a scheduled change
+        $subscription->pending_change_at = null;
         $subscription->save();
 
         // Keep the legacy licence column consistent with the subscription.
         $this->license_expire = $endsAt;
-        $this->status = 'Active';
+        if (! $this->isSuspended()) {
+            $this->status = 'Active';
+        }
         $this->saveQuietly();
 
         return $subscription;

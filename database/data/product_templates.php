@@ -1,12 +1,22 @@
 <?php
 
 /*
-| Template packs (plan C3): common products per business type, with typical
+| Template packs (plan C3, POWER_PLAN §3.1): common products per business type, with typical
 | Kampala shelf prices in UGX. Versioned: bump `version` when a pack changes.
-| Rows: [name, category, sub-category, unit, selling price UGX, buying price UGX]
+| Rows: [name, category, sub-category, unit, selling price UGX, buying price UGX, optional per-currency overrides]
+|
+| Prices for Kenya, Tanzania and Rwanda are converted from UGX with the fixed `rates` below
+| (approximate mid-market rates, 2026: 1 USD ≈ 3,650 UGX ≈ 129 KES ≈ 2,550 TZS ≈ 1,420 RWF)
+| and rounded to prices a shop would write on a shelf (ProductTemplateSeeder::nice):
+|   below 10 → whole units · below 100 → 5 · below 1,000 → 10 · below 10,000 → 50 ·
+|   below 100,000 → 500 · above → 1,000.
+| They are a starting point: the owner edits every price before the products are created. A row
+| may override a converted price with a 7th element, e.g. ['KES' => ['sell' => 50, 'cost' => 40]].
 */
 return [
-    'version' => 1,
+    'version' => 2,
+    // Multiply a UGX price by this to get the local price.
+    'rates' => ['UGX' => 1, 'KES' => 1 / 28.3, 'TZS' => 0.70, 'RWF' => 0.39],
     'packs' => [
         'retail' => [
             ['Sugar 1kg', 'Groceries', 'Sugar & salt', 'pcs', 5000, 4400], ['Salt 500g', 'Groceries', 'Sugar & salt', 'pcs', 1000, 800],
@@ -107,6 +117,27 @@ return [
             ['Feature phone', 'Phones', 'Feature phones', 'pcs', 60000, 45000], ['Smartphone (entry)', 'Phones', 'Smartphones', 'pcs', 350000, 300000],
             ['Bluetooth speaker', 'Audio', 'Speakers', 'pcs', 70000, 48000], ['Extension cable', 'Electrical', 'Power', 'pcs', 25000, 17000],
             ['Phone repair (screen)', 'Services', 'Repairs', 'service', 80000, 0], ['SIM card', 'Airtime', 'SIM cards', 'pcs', 2000, 1000],
+        ],
+        'poultry' => [
+            ['Layers mash 70kg', 'Feeds', 'Layers', 'bag', 130000, 118000], ['Chick mash 50kg', 'Feeds', 'Chicks', 'bag', 115000, 104000],
+            ['Growers mash 70kg', 'Feeds', 'Growers', 'bag', 120000, 108000], ['Broiler starter 50kg', 'Feeds', 'Broilers', 'bag', 125000, 113000],
+            ['Broiler finisher 50kg', 'Feeds', 'Broilers', 'bag', 120000, 108000], ['Day-old chick (layer)', 'Birds', 'Chicks', 'pcs', 3800, 3200],
+            ['Day-old chick (broiler)', 'Birds', 'Chicks', 'pcs', 3000, 2500], ['Broiler (live, 2kg)', 'Birds', 'Broilers', 'pcs', 18000, 13000],
+            ['Spent layer hen', 'Birds', 'Layers', 'pcs', 15000, 11000], ['Eggs (tray of 30)', 'Eggs', 'Trays', 'tray', 12000, 9500],
+            ['Eggs (piece)', 'Eggs', 'Loose', 'pcs', 500, 350], ['Empty egg trays (bundle of 100)', 'Supplies', 'Packaging', 'bundle', 25000, 20000],
+            ['Newcastle vaccine (100 doses)', 'Veterinary', 'Vaccines', 'vial', 8000, 6000], ['Gumboro vaccine (100 doses)', 'Veterinary', 'Vaccines', 'vial', 9000, 7000],
+            ['Coccidiostat 100g', 'Veterinary', 'Medicines', 'pcs', 10000, 7500], ['Poultry multivitamin 100g', 'Veterinary', 'Supplements', 'pcs', 6000, 4500],
+            ['Dewormer (poultry) 100g', 'Veterinary', 'Medicines', 'pcs', 8000, 6000], ['Plastic feeder', 'Equipment', 'Feeders', 'pcs', 15000, 11000],
+            ['Plastic drinker 5L', 'Equipment', 'Drinkers', 'pcs', 12000, 8500], ['Chicken manure (bag)', 'By-products', 'Manure', 'bag', 10000, 0],
+        ],
+        'other' => [
+            ['Service (standard)', 'Services', 'General', 'service', 10000, 0], ['Delivery fee', 'Services', 'Delivery', 'service', 5000, 0],
+            ['Photocopy (page)', 'Services', 'Printing', 'page', 200, 80], ['Printing (page)', 'Services', 'Printing', 'page', 500, 200],
+            ['Lamination (A4)', 'Services', 'Printing', 'pcs', 3000, 1200], ['Phone charging', 'Services', 'General', 'service', 500, 0],
+            ['Carrier bag', 'Supplies', 'Packaging', 'pcs', 200, 100], ['Water 500ml', 'Drinks', 'Water', 'pcs', 1000, 700],
+            ['Soda 500ml', 'Drinks', 'Soft drinks', 'pcs', 1500, 1150], ['Bread 500g', 'Groceries', 'Bakery', 'pcs', 4500, 3900],
+            ['Exercise book 96 pages', 'Stationery', 'Books', 'pcs', 1000, 750], ['Pen (blue)', 'Stationery', 'Pens', 'pcs', 500, 300],
+            ['Batteries AA (pair)', 'Household', 'Lighting', 'pcs', 2000, 1500], ['Airtime 1,000', 'Airtime', 'Airtime', 'pcs', 1000, 950],
         ],
     ],
 ];

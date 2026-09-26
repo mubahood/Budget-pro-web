@@ -27,13 +27,22 @@ class PlanController extends AdminController
         'api_access' => 'API Access',
         'forecasting' => 'Forecasting',
         'auto_reorder' => 'Auto Reorder',
+        'multi_location' => 'Several locations',
+        'whatsapp_receipts' => 'WhatsApp receipts',
+        'whatsapp_automation' => 'WhatsApp automation',
     ];
+
+    /** Local currencies a plan can be priced in besides UGX (price_ugx) and USD (price). */
+    private const LOCAL_CURRENCIES = ['KES', 'TZS', 'RWF'];
 
     private const LIMIT_KEYS = [
         'max_users' => 'Max Users',
         'max_products' => 'Max Products',
-        'max_sales_per_month' => 'Max Sales / Month',
+        'max_sales_per_month' => 'Max Sales / Month (soft: warns, never blocks)',
         'max_budget_programs' => 'Max Budget Programs',
+        'max_locations' => 'Max Locations',
+        'max_devices' => 'Max Phones',
+        'storage_mb' => 'Storage (MB)',
     ];
 
     protected function grid()
@@ -46,6 +55,7 @@ class PlanController extends AdminController
         $grid->column('slug', __('Slug'));
         $grid->column('price', __('Price (USD)'))->display(fn ($v) => '$'.number_format((float) $v, 2));
         $grid->column('price_ugx', __('Price ('.\App\Support\Money::symbol().')'))->display(fn ($v) => number_format((float) $v, 0).' '.\App\Support\Money::symbol().'');
+        $grid->column('price_ugx_annual', __('Per year (UGX)'))->display(fn ($v, $c) => number_format((float) ($v ?: $this->price_ugx * 10), 0).($v ? '' : ' (10×)'));
         $grid->column('interval', __('Interval'));
         $grid->column('trial_days', __('Trial Days'))->display(fn ($v) => $v > 0 ? "{$v}d" : '—');
         $grid->column('is_active', __('Active'))->display(fn ($v) => $v
@@ -116,7 +126,16 @@ class PlanController extends AdminController
 
         $form->divider('Pricing');
         $form->decimal('price', __('Price (USD)'))->rules('required|numeric|min:0')->default(0);
-        $form->decimal('price_ugx', __('Price ('.\App\Support\Money::symbol().')'))->rules('required|numeric|min:0')->default(0);
+        $form->decimal('price_ugx', __('Price per month (UGX)'))->rules('required|numeric|min:0')->default(0);
+        $form->decimal('price_ugx_annual', __('Price per year (UGX)'))->rules('nullable|numeric|min:0')->help('Blank = 10 × the monthly price (two months free).');
+        $prices = $form->model()->exists ? ($form->model()->prices ?? []) : [];
+        $form->decimal('price_usd_year', __('Price per year (USD)'))->default(data_get($prices, 'USD.year'))->help('Blank = 10 × the monthly USD price.');
+        foreach (self::LOCAL_CURRENCIES as $cur) {
+            $entry = $prices[$cur] ?? null;
+            $form->decimal("price_{$cur}_month", __("Price per month ({$cur})"))->default(is_array($entry) ? ($entry['month'] ?? null) : $entry)
+                ->help("Blank = {$cur} shops pay in USD by card.");
+            $form->decimal("price_{$cur}_year", __("Price per year ({$cur})"))->default(is_array($entry) ? ($entry['year'] ?? null) : null);
+        }
         $form->text('currency', __('Currency'))->default('USD');
         $form->select('interval', __('Billing Interval'))->options(['month' => 'Monthly', 'year' => 'Yearly', 'lifetime' => 'Lifetime'])->default('month');
         $form->number('trial_days', __('Trial Days'))->default(0)->help('0 for a paid plan; 14 for the trial plan itself.');
@@ -144,23 +163,45 @@ class PlanController extends AdminController
         $virtualFields = array_merge(
             array_map(fn ($k) => "feature_{$k}", array_keys(self::FEATURE_KEYS)),
             array_map(fn ($k) => "limit_{$k}", array_keys(self::LIMIT_KEYS)),
+            ['price_usd_year'],
+            array_merge(...array_map(fn ($c) => ["price_{$c}_month", "price_{$c}_year"], self::LOCAL_CURRENCIES)),
         );
         $form->ignore($virtualFields);
 
         $form->saving(function (Form $form) {
-            $features = [];
+            // Merge onto what the plan already has, so keys this form doesn't show are never dropped.
+            $features = (array) ($form->model()->features ?? []);
             foreach (self::FEATURE_KEYS as $key => $label) {
                 $features[$key] = (bool) request("feature_{$key}");
             }
 
-            $limits = [];
+            $limits = (array) ($form->model()->limits ?? []);
             foreach (self::LIMIT_KEYS as $key => $label) {
                 $raw = request("limit_{$key}");
                 $limits[$key] = ($raw === null || $raw === '') ? null : (int) $raw;
             }
 
+            $num = fn ($v) => $v === null || $v === '' ? null : round((float) $v, 2);
+            $prices = (array) ($form->model()->prices ?? []);
+            foreach (self::LOCAL_CURRENCIES as $cur) {
+                $month = $num(request("price_{$cur}_month"));
+                $year = $num(request("price_{$cur}_year"));
+                if ($month === null && $year === null) {
+                    unset($prices[$cur]);
+                } else {
+                    $prices[$cur] = array_filter(['month' => $month, 'year' => $year], fn ($v) => $v !== null);
+                }
+            }
+            $usdYear = $num(request('price_usd_year'));
+            if ($usdYear === null) {
+                unset($prices['USD']);
+            } else {
+                $prices['USD'] = ['month' => (float) request('price', 0), 'year' => $usdYear];
+            }
+
             $form->model()->features = $features;
             $form->model()->limits = $limits;
+            $form->model()->prices = $prices ?: null;
         });
 
         return $form;

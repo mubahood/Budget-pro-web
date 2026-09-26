@@ -25,6 +25,11 @@ class UploadController extends Controller
         ]);
 
         $file = $request->file('file');
+        try { // Plan storage allowance (POWER_PLAN §4.1).
+            (new \App\Services\Billing\Quotas())->assertCanStore(\App\Models\Company::withoutGlobalScopes()->findOrFail((int) $request->user()->company_id), (int) $file->getSize());
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
         $extension = strtolower($file->getClientOriginalExtension());
 
         // Generate a non-guessable, safe filename — never trust the client's name.

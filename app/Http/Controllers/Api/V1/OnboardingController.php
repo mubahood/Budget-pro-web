@@ -30,6 +30,7 @@ class OnboardingController extends Controller
         return [
             'state' => $this->onboarding->state($company),
             'checklist' => $this->onboarding->checklist($company),
+            'checklist_v2' => $this->onboarding->checklistV2($company),
             'company' => new CompanyResource($company),
             'presets' => [
                 'countries' => config('onboarding.countries'),
@@ -62,20 +63,7 @@ class OnboardingController extends Controller
 
     public function business(Request $request)
     {
-        $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:191'],
-            'business_type' => ['required', Rule::in(array_keys(config('onboarding.business_types')))],
-            'country' => ['required', Rule::in(array_keys(config('onboarding.countries')))],
-            'currency' => ['nullable', Rule::in(config('saas.currencies'))],
-            'timezone' => ['nullable', 'timezone'],
-            'locale' => ['nullable', Rule::in(['en', 'sw', 'lg'])],
-            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:50'],
-            'logo' => ['nullable', 'string', 'max:255'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'modules' => ['nullable', 'array'],
-            'modules.*' => [Rule::in(array_keys(config('onboarding.modules')))],
-            'seconds' => ['nullable', 'integer', 'min:0'],
-        ]);
+        $data = $request->validate(\App\Support\Rules\OnboardingRules::business());
         $company = $this->onboarding->saveBusiness($this->company($request), $data);
         $this->onboarding->markStep($company, 'business', false, $data['seconds'] ?? null);
 
@@ -84,19 +72,7 @@ class OnboardingController extends Controller
 
     public function money(Request $request)
     {
-        $data = $request->validate([
-            'payment_methods' => ['required', 'array', 'min:1'],
-            'payment_methods.*' => [Rule::in(array_keys(config('onboarding.payment_methods')))],
-            'momo_providers' => ['nullable', 'array'],
-            'momo_providers.*' => ['string', 'max:30'],
-            'opening_float' => ['nullable', 'numeric', 'min:0'],
-            'receipt_channels' => ['nullable', 'array'],
-            'receipt_channels.*' => [Rule::in(['whatsapp', 'print', 'sms'])],
-            'negative_stock_policy' => ['nullable', Rule::in(['allow', 'flag', 'block'])],
-            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:50'],
-            'require_shift' => ['nullable', 'boolean'],
-            'seconds' => ['nullable', 'integer', 'min:0'],
-        ]);
+        $data = $request->validate(\App\Support\Rules\OnboardingRules::money());
         $company = $this->onboarding->saveMoney($this->company($request), $data);
         $this->onboarding->markStep($company, 'money', false, $data['seconds'] ?? null);
 
@@ -132,10 +108,10 @@ class OnboardingController extends Controller
         return $this->created($r, "{$r['created']} products added.");
     }
 
-    /** POST onboarding/import (multipart `file` or `csv` text) { dry_run?: bool } — preview first, then commit. */
+    /** POST onboarding/import (multipart `file` — CSV or Excel .xlsx — or `csv` text) { dry_run?: bool } — preview first, then commit. */
     public function import(Request $request)
     {
-        $request->validate(['file' => ['nullable', 'file', 'max:2048', 'mimes:csv,txt'], 'csv' => ['nullable', 'string', 'max:2000000'], 'dry_run' => ['nullable', 'boolean']]);
+        $request->validate(['file' => ['nullable', 'file', 'max:2048', 'mimes:csv,txt,xlsx,zip'], 'csv' => ['nullable', 'string', 'max:2000000'], 'dry_run' => ['nullable', 'boolean']]);
         $contents = $request->hasFile('file') ? (string) file_get_contents($request->file('file')->getRealPath()) : (string) $request->input('csv', '');
         try {
             $parsed = $this->onboarding->parseCsv($contents);
@@ -146,7 +122,10 @@ class OnboardingController extends Controller
                 return $this->error('Fix the rows with problems first.', 422, ['code' => 'import_errors', 'rows' => $parsed['errors']]);
             }
             $r = $this->onboarding->createProducts($this->company($request), $request->user(), $parsed['rows']);
-            $this->onboarding->markStep($this->company($request), 'products');
+            if ($r['created'] > 0) {
+                $this->onboarding->markStep($this->company($request), 'products');
+                \App\Services\Onboarding\OnboardingEvents::record((int) $request->user()->company_id, 'import_done', ['created' => $r['created'], 'skipped' => count($r['skipped'])]);
+            }
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }

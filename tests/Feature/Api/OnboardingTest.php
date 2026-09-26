@@ -46,10 +46,14 @@ class OnboardingTest extends ApiTestCase
             ->assertJsonPath('data.company.payment_methods.momo', ['mtn_momo'])->assertJsonPath('data.state.step', 'team');
         $this->postJson('/api/v1/onboarding/steps/team', ['skipped' => true, 'seconds' => 3], $h)->assertOk()->assertJsonPath('data.state.step', 'first_sale');
 
-        $check = $this->getJson('/api/v1/onboarding', $h)->json('data.checklist');
-        $this->assertSame(['add_products' => true, 'first_sale' => false, 'invite_staff' => false, 'set_up_momo' => true, 'whatsapp_receipts' => true],
+        // Ticking mobile money or WhatsApp receipts is not doing them: those items wait for a registered
+        // MoMo number and a receipt actually sent (POWER_PLAN §3.1).
+        $payload = $this->getJson('/api/v1/onboarding', $h)->json('data');
+        $check = $payload['checklist'];
+        $this->assertSame(['add_products' => true, 'first_sale' => false, 'invite_staff' => false, 'set_up_momo' => false, 'whatsapp_receipts' => false],
             collect($check['items'])->pluck('done', 'key')->all());
-        $this->assertSame(60, $check['percent']);
+        $this->assertSame(20, $check['percent']);
+        $this->assertSame(8, $payload['checklist_v2']['total']);
         $this->postJson('/api/v1/onboarding/steps/first_sale', [], $h)->assertOk()->assertJsonPath('data.state.step', 'done');
         $this->assertNotNull($this->getJson('/api/v1/onboarding', $h)->json('data.state.completed_at'));
         $this->assertSame(40, $this->getJson('/api/v1/onboarding', $h)->json('data.state.step_seconds.business'));

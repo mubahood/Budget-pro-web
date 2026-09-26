@@ -686,6 +686,16 @@ class StockItemController extends TenantAdminController
             ->help('For medicines, seeds and food: record the batch and expiry on each delivery; sales take the batch that expires first.');
 
         $form->saving(function (Form $form) {
+            // Plan limit on products (POWER_PLAN §4.1), the same check the API and the new app make.
+            if (! $form->isEditing()) {
+                $company = \App\Models\Company::withoutGlobalScopes()->find(Admin::user()->company_id);
+                if ($company !== null && ! (new \App\Services\Billing\Quotas())->allows($company, 'products')) {
+                    admin_error('Plan limit reached', 'Your plan allows '.(new \App\Services\Billing\Quotas())->limit($company, 'products').' products. Upgrade to add more: '.\App\Services\Billing\BillingService::billingUrl());
+
+                    return back()->withInput();
+                }
+            }
+
             // Additional validation before saving
             $buying_price = (float) $form->buying_price;
             $selling_price = (float) $form->selling_price;

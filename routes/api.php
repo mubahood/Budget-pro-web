@@ -138,7 +138,8 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
     // ── Public billing: pricing page + Flutterwave webhook (signature-verified) ──
     Route::get('plans', [BillingController::class, 'plans']);
-    Route::post('webhooks/flutterwave', [BillingController::class, 'webhook']);
+    // Off the per-IP api throttle: Flutterwave retries a burst of webhooks from a few IPs (POWER_PLAN §4.1).
+    Route::post('webhooks/flutterwave', [BillingController::class, 'webhook'])->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class.':api');
 
     // ── Ping Pin — same public shape, its own separate billing (DECISIONS.md D2) ──
     Route::get('pingpin/plans', [PingPinBillingController::class, 'plans']);
@@ -173,6 +174,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('subscription/cancel', [BillingController::class, 'cancel']);
         Route::post('subscription/resume', [BillingController::class, 'resume']);
         Route::get('subscription/invoices/{id}.pdf', [BillingController::class, 'invoicePdf'])->whereNumber('id');
+        Route::post('subscription/momo', [BillingController::class, 'chargeMomo'])->middleware('throttle:10,1');
+        Route::get('subscription/payments/{id}', [BillingController::class, 'paymentStatus'])->whereNumber('id');
+        Route::post('subscription/schedule-change', [BillingController::class, 'scheduleChange']);
+        Route::post('subscription/cancel-change', [BillingController::class, 'cancelChange']);
 
         // Setup wizard, checklist and modules (plan C2/C4).
         Route::get('onboarding', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'show']);

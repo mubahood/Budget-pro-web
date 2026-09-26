@@ -25,6 +25,10 @@ class FlutterwaveService
      */
     protected function client(): Client
     {
+        // Tests must never reach Flutterwave (a developer's .env may hold a live key): bind a fake instead.
+        if (app()->runningUnitTests() && ! config('flutterwave.allow_network_in_tests', false)) {
+            throw new \LogicException('FlutterwaveService made a network call during tests. Bind a fake (FakeFlutterwaveService / SimulatedFlutterwave).');
+        }
         if ($this->client === null) {
             $this->client = new Client([
                 'base_uri' => config('flutterwave.base_url').'/',
@@ -111,15 +115,61 @@ class FlutterwaveService
     }
 
     /** @return array{success: bool, data?: array, message?: string} */
+    /**
+     * `transient` is true when the provider could not answer (network error or 5xx): the caller should
+     * retry later rather than treat the payment as failed.
+     *
+     * @return array{success: bool, data?: array, message?: string, transient?: bool}
+     */
     public function verifyByReference(string $txRef): array
     {
         try {
-            $body = json_decode((string) $this->client()->get('v3/transactions/verify_by_reference', ['query' => ['tx_ref' => $txRef]])->getBody(), true) ?: [];
+            $response = $this->client()->get('v3/transactions/verify_by_reference', ['query' => ['tx_ref' => $txRef]]);
+            $body = json_decode((string) $response->getBody(), true) ?: [];
             if (($body['status'] ?? null) === 'success' && isset($body['data'])) {
                 return ['success' => true, 'data' => $body['data']];
             }
 
-            return ['success' => false, 'message' => $body['message'] ?? 'Not found.'];
+            return ['success' => false, 'message' => $body['message'] ?? 'Not found.', 'transient' => $response->getStatusCode() >= 500];
+        } catch (GuzzleException $e) {
+            return ['success' => false, 'message' => 'Payment provider unreachable.', 'transient' => true];
+        }
+    }
+
+    /**
+     * Charge a saved card (auto-renew). The token comes from an earlier card payment's verification.
+     *
+     * @return array{success: bool, data?: array, message?: string, transient?: bool}
+     */
+    public function chargeToken(array $payload): array
+    {
+        try {
+            $response = $this->client()->post('v3/tokenized-charges', ['json' => $payload]);
+            $body = json_decode((string) $response->getBody(), true) ?: [];
+            if (($body['status'] ?? null) === 'success' && isset($body['data'])) {
+                return ['success' => true, 'data' => $body['data']];
+            }
+
+            return ['success' => false, 'message' => $body['message'] ?? 'The card could not be charged.', 'transient' => $response->getStatusCode() >= 500];
+        } catch (GuzzleException $e) {
+            return ['success' => false, 'message' => 'Payment provider unreachable.', 'transient' => true];
+        }
+    }
+
+    /**
+     * Refund a verified transaction, fully or in part.
+     *
+     * @return array{success: bool, data?: array, message?: string}
+     */
+    public function refund(int|string $transactionId, ?float $amount = null): array
+    {
+        try {
+            $body = json_decode((string) $this->client()->post("v3/transactions/{$transactionId}/refund", ['json' => array_filter(['amount' => $amount])])->getBody(), true) ?: [];
+            if (($body['status'] ?? null) === 'success') {
+                return ['success' => true, 'data' => $body['data'] ?? []];
+            }
+
+            return ['success' => false, 'message' => $body['message'] ?? 'The refund was refused.'];
         } catch (GuzzleException $e) {
             return ['success' => false, 'message' => 'Payment provider unreachable.'];
         }
@@ -135,11 +185,11 @@ class FlutterwaveService
                 return ['success' => true, 'data' => $body['data']];
             }
 
-            return ['success' => false, 'message' => $body['message'] ?? 'Verification failed.'];
+            return ['success' => false, 'message' => $body['message'] ?? 'Verification failed.', 'transient' => $response->getStatusCode() >= 500];
         } catch (GuzzleException $e) {
             Log::error('Flutterwave verifyTransaction error', ['error' => $e->getMessage()]);
 
-            return ['success' => false, 'message' => 'Payment gateway is unreachable. Please try again.'];
+            return ['success' => false, 'message' => 'Payment gateway is unreachable. Please try again.', 'transient' => true];
         }
     }
 

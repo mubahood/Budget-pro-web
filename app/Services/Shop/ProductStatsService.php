@@ -61,11 +61,10 @@ class ProductStatsService
             ->leftJoin('product_stats as ps', 'ps.stock_item_id', '=', 'si.id')
             ->select('si.id', 'si.name', 'si.current_quantity', 'si.min_stock', 'si.buying_price', 'ps.avg_daily_30', 'ps.sold_30', 'ps.days_of_cover')
             ->orderBy('si.current_quantity')->get();
+        $suppliers = $this->lastSuppliers($rows->pluck('id')->map(fn ($id) => (int) $id)->all());
         $out = [];
         foreach ($rows as $r) {
-            $supplier = DB::table('goods_receipt_items as gi')->join('goods_receipts as g', 'g.id', '=', 'gi.goods_receipt_id')
-                ->join('suppliers as s', 's.id', '=', 'g.supplier_id')->where('gi.stock_item_id', $r->id)->orderByDesc('g.id')
-                ->select('s.id', 's.name', 's.lead_time_days')->first();
+            $supplier = $suppliers[(int) $r->id] ?? null;
             $lead = (int) ($supplier->lead_time_days ?? self::DEFAULT_LEAD_DAYS);
             $min = $r->min_stock === null ? $default : (float) $r->min_stock;
             $onHand = (float) $r->current_quantity;
@@ -82,6 +81,29 @@ class ProductStatsService
                     : 'Brings stock back to twice the minimum ('.rtrim(rtrim(number_format($min * 2, 3, '.', ''), '0'), '.').').',
                 'runs_out_in_days' => $forecasting && $avg > 0 ? (int) floor(max(0, $onHand) / $avg) : null,
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Each product's supplier on its latest goods receipt (plan A5: one grouped query instead of one per product).
+     *
+     * @param  array<int, int>  $itemIds
+     * @return array<int, object{id: int, name: string, lead_time_days: int|null}> stock item id => supplier
+     */
+    private function lastSuppliers(array $itemIds): array
+    {
+        $out = [];
+        foreach (array_chunk($itemIds, 1000) as $chunk) {
+            $latest = DB::table('goods_receipt_items as gi')->join('goods_receipts as g', 'g.id', '=', 'gi.goods_receipt_id')
+                ->join('suppliers as s', 's.id', '=', 'g.supplier_id')->whereIn('gi.stock_item_id', $chunk)
+                ->groupBy('gi.stock_item_id')->select('gi.stock_item_id', DB::raw('MAX(g.id) AS receipt_id'));
+            $rows = DB::query()->fromSub($latest, 'x')->join('goods_receipts as g', 'g.id', '=', 'x.receipt_id')->join('suppliers as s', 's.id', '=', 'g.supplier_id')
+                ->get(['x.stock_item_id', 's.id', 's.name', 's.lead_time_days']);
+            foreach ($rows as $r) {
+                $out[(int) $r->stock_item_id] = $r;
+            }
         }
 
         return $out;

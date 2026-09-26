@@ -8,6 +8,9 @@ return [
     // The new shop interface (budget-pro-new), linked from the classic admin's top bar. Empty = no link.
     'new_ui_url' => env('SAAS_NEW_UI_URL', ''),
 
+    // Where team invite links (/invite/…) open. Empty = public_url (the classic invite page).
+    'invite_url' => env('SAAS_INVITE_URL', ''),
+
     /*
     |--------------------------------------------------------------------------
     | Trial length (days) for newly registered companies
@@ -37,6 +40,32 @@ return [
 
     // Timezone used when formatting dates for people (per-company timezones arrive in Phase 1).
     'display_timezone' => env('SAAS_DISPLAY_TIMEZONE', 'Africa/Kampala'),
+
+    // ── Billing (POWER_PLAN §4) ──
+    // Where "Upgrade" / "Renew" links and billing notices send people: the new shop interface's /plan when set
+    // (e.g. https://shop.example.com/plan). Empty = the classic billing page (public_url + /billing).
+    'billing_url' => env('SAAS_BILLING_URL', ''),
+
+    // Card auto-renew with the token Flutterwave returns after a card payment. Off until tested live with a test key.
+    'auto_renew' => (bool) env('SAAS_AUTO_RENEW', false),
+    // How long before the period ends a saved card is charged, and the renewal reminder days.
+    'auto_renew_hours_before' => (int) env('SAAS_AUTO_RENEW_HOURS_BEFORE', 48),
+    'renewal_reminder_days' => [7, 3, 1],
+
+    // Pending invoices are re-verified with Flutterwave hourly for this long, then marked abandoned.
+    'reconcile_hours' => (int) env('SAAS_RECONCILE_HOURS', 72),
+
+    // Seller details and tax printed on subscription invoices. Prices are tax-inclusive: with a rate set the
+    // invoice shows the tax contained in the total. Lines left empty are simply not printed.
+    'invoice' => [
+        'seller_name' => env('SAAS_INVOICE_SELLER_NAME', env('APP_NAME', 'Budget Pro')),
+        'seller_address' => env('SAAS_INVOICE_SELLER_ADDRESS', ''),
+        'seller_tin' => env('SAAS_INVOICE_SELLER_TIN', ''),
+        'seller_email' => env('SAAS_INVOICE_SELLER_EMAIL', ''),
+        'seller_phone' => env('SAAS_INVOICE_SELLER_PHONE', ''),
+        'tax_label' => env('SAAS_INVOICE_TAX_LABEL', 'VAT'),
+        'tax_rate' => (float) env('SAAS_INVOICE_TAX_RATE', 0),
+    ],
 
     // Deep link the payment result page offers to return to the mobile app (null hides the button).
     'mobile_deep_link' => env('MOBILE_DEEP_LINK', 'budgetpro://billing'),

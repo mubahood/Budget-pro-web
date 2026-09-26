@@ -3889,7 +3889,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"business_type\": \"\",\n    \"country\": \"\",\n    \"currency\": \"\",\n    \"timezone\": \"\",\n    \"locale\": \"en\",\n    \"tax_rate\": 1000,\n    \"logo\": \"\",\n    \"address\": \"\",\n    \"modules\": [\n        \"\"\n    ],\n    \"seconds\": 1\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"business_type\": \"retail\",\n    \"country\": \"UG\",\n    \"currency\": \"UGX\",\n    \"timezone\": \"\",\n    \"locale\": \"en\",\n    \"tax_rate\": 1000,\n    \"logo\": \"\",\n    \"address\": \"\",\n    \"phone_number\": \"\",\n    \"modules\": [\n        \"shop\"\n    ],\n    \"seconds\": 1\n}"
                         }
                     }
                 },
@@ -3921,7 +3921,7 @@
                     }
                 },
                 {
-                    "name": "POST onboarding/import (multipart `file` or `csv` text) { dry_run?: bool } — preview first, then commit. */",
+                    "name": "POST onboarding/import (multipart `file` — CSV or Excel .xlsx — or `csv` text) { dry_run?: bool } — preview first, then commit. */",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -3984,7 +3984,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"payment_methods\": [\n        \"\"\n    ],\n    \"momo_providers\": [\n        \"\"\n    ],\n    \"opening_float\": 1000,\n    \"receipt_channels\": [\n        \"whatsapp\"\n    ],\n    \"negative_stock_policy\": \"allow\",\n    \"tax_rate\": 1000,\n    \"require_shift\": true,\n    \"seconds\": 1\n}"
+                            "raw": "{\n    \"payment_methods\": [\n        \"cash\"\n    ],\n    \"momo_providers\": [\n        \"\"\n    ],\n    \"opening_float\": 1000,\n    \"receipt_channels\": [\n        \"whatsapp\"\n    ],\n    \"negative_stock_policy\": \"allow\",\n    \"tax_rate\": 1000,\n    \"require_shift\": true,\n    \"seconds\": 1\n}"
                         }
                     }
                 },
@@ -7818,6 +7818,32 @@
                     }
                 },
                 {
+                    "name": "POST subscription/cancel-change — keep the current plan after all. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/subscription/cancel-change",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "subscription",
+                                "cancel-change"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "Start a payment for a plan. Returns a Flutterwave hosted-checkout link.",
                     "request": {
                         "method": "POST",
@@ -7847,12 +7873,12 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"plan_id\": 1\n}"
+                            "raw": "{\n    \"plan_id\": 1,\n    \"interval\": \"month\"\n}"
                         }
                     }
                 },
                 {
-                    "name": "GET subscription/invoices/{id}.pdf */",
+                    "name": "GET subscription/invoices/{id}.pdf — billing permission only. */",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -7874,6 +7900,67 @@
                                 "subscription",
                                 "invoices",
                                 ":id.pdf"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST subscription/momo — a mobile-money prompt on the owner's phone; poll GET subscription/payments/{invoice}. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/subscription/momo",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "subscription",
+                                "momo"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"plan_id\": 1,\n    \"interval\": \"month\",\n    \"phone\": \"\",\n    \"network\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET subscription/payments/{id} — where a payment stands (asks Flutterwave while pending). */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/subscription/payments/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "subscription",
+                                "payments",
+                                ":id"
                             ]
                         }
                     }
@@ -7927,6 +8014,40 @@
                                 "subscription",
                                 "resume"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST subscription/schedule-change — move to another plan when the paid period ends (\"at the end of my period\"). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/subscription/schedule-change",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "subscription",
+                                "schedule-change"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"plan_id\": 1,\n    \"interval\": \"month\"\n}"
                         }
                     }
                 },

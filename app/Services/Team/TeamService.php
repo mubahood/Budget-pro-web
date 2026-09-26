@@ -66,7 +66,7 @@ class TeamService
 
     private function send(object $invite, string $token, User $by, Company $company): string
     {
-        $link = rtrim((string) config('saas.public_url', config('app.url')), '/').'/invite/'.$token;
+        $link = self::inviteBase().'/invite/'.$token;
         $label = config("permissions.roles.{$invite->role}.label");
         $text = "{$by->name} invited you to join {$company->name} on ".config('app.name')." as {$label}. Accept here: {$link} (valid ".self::INVITE_DAYS.' days)';
         $to = $invite->phone_e164 ?: $invite->email;
@@ -119,6 +119,56 @@ class TeamService
 
             return $user;
         });
+    }
+
+    /**
+     * The invitee already has an account (made after the invite was sent, or left over from a shop
+     * they were removed from): join it to the inviting shop instead of creating a second account.
+     * Same one-shop-per-account rule as invite(): an owner, or an active member of another shop,
+     * cannot be moved.
+     */
+    public function acceptExisting(string $token, User $user): User
+    {
+        return DB::transaction(function () use ($token, $user) {
+            $invite = DB::table('invites')->where('token_hash', hash('sha256', $token))->lockForUpdate()->first();
+            if (! $invite || $invite->status !== 'pending' || now()->greaterThan($invite->expires_at)) {
+                throw BusinessRuleException::make('invite_invalid', 'This invite link has expired or was already used. Ask for a new one.');
+            }
+            $matches = ($invite->phone_e164 && $invite->phone_e164 === $user->phone_e164)
+                || ($invite->email && strtolower((string) $user->email) === strtolower((string) $invite->email));
+            if (! $matches) {
+                throw BusinessRuleException::make('invite_other_account', 'This invite was sent to a different phone number or email.');
+            }
+            $companyId = (int) $invite->company_id;
+            $ownsOther = Company::withoutGlobalScopes()->where('owner_id', $user->id)->where('id', '!=', $companyId)->exists();
+            // Still working somewhere else: linked to another shop that exists and was not removed from it
+            // (staff from before membership rows have none, and count as working there).
+            $activeElsewhere = $user->company_id && (int) $user->company_id !== $companyId
+                && Company::withoutGlobalScopes()->whereKey($user->company_id)->exists()
+                && ! DB::table('company_members')->where('company_id', $user->company_id)->where('user_id', $user->id)->where('status', '!=', 'active')->exists();
+            if ($ownsOther || $activeElsewhere) {
+                throw BusinessRuleException::make('already_member', 'This account already belongs to another business, so it cannot join this one. Ask for an invite to a different phone number or email.');
+            }
+            $user->company_id = $companyId;
+            $user->status = 'Active';
+            $col = $invite->phone_e164 && $invite->phone_e164 === $user->phone_e164 ? 'phone_verified_at' : 'email_verified_at';
+            $user->{$col} ??= now(); // they received the link there
+            $user->save();
+            DB::table('company_members')->updateOrInsert(['company_id' => $companyId, 'user_id' => $user->id],
+                ['role' => $invite->role, 'status' => 'active', 'invited_by_id' => $invite->invited_by_id, 'joined_at' => now(), 'deactivated_at' => null, 'created_at' => now(), 'updated_at' => now()]);
+            $this->syncAdminRole($user, $invite->role);
+            DB::table('invites')->where('id', $invite->id)->update(['status' => 'accepted', 'accepted_user_id' => $user->id, 'accepted_at' => now(), 'updated_at' => now()]);
+            Permissions::flush();
+            app(\App\Services\Notifications\Notifier::class)->notify($companyId, 'team', 'New team member', "{$user->name} joined as ".config("permissions.roles.{$invite->role}.label").'.');
+
+            return $user;
+        });
+    }
+
+    /** Where invite links open: the new shop interface when configured, else budget-pro's own page. */
+    public static function inviteBase(): string
+    {
+        return rtrim((string) (config('saas.invite_url') ?: config('saas.public_url', config('app.url'))), '/');
     }
 
     public function setRole(Company $company, User $member, string $role): void
@@ -177,11 +227,8 @@ class TeamService
     {
         $out = [];
         foreach (config('permissions.roles') as $key => $r) {
-            $perms = Permissions::defaultsFor($key);
-            foreach (DB::table('company_role_permissions')->where('company_id', $company->id)->where('role', $key)->get() as $o) {
-                $perms = $o->allowed ? array_values(array_unique([...$perms, $o->permission])) : array_values(array_diff($perms, [$o->permission]));
-            }
-            $out[] = ['key' => $key, 'label' => $r['label'], 'permissions' => $key === 'owner' ? Permissions::all() : $perms];
+            // One query for every role's overrides, shared with Permissions (plan A4).
+            $out[] = ['key' => $key, 'label' => $r['label'], 'permissions' => Permissions::forRole((int) $company->id, $key)];
         }
 
         return $out;

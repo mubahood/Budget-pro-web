@@ -35,7 +35,7 @@ class FakeFlutterwaveService extends FlutterwaveService
 
     public function verifyTransaction(int|string $transactionId): array
     {
-        return $this->verifyResult;
+        return $this->down ? ['success' => false, 'message' => 'Payment gateway is unreachable.', 'transient' => true] : $this->verifyResult;
     }
 
     /**
@@ -81,6 +81,10 @@ class FakeFlutterwaveService extends FlutterwaveService
 
     public function verifyByReference(string $txRef): array
     {
+        if ($this->down) {
+            return ['success' => false, 'message' => 'Payment provider unreachable.', 'transient' => true];
+        }
+
         return isset($this->byReference[$txRef]) ? ['success' => true, 'data' => $this->byReference[$txRef]] : ['success' => false, 'message' => 'pending'];
     }
 
@@ -88,5 +92,34 @@ class FakeFlutterwaveService extends FlutterwaveService
     public function customerAnswers(string $txRef, float $amount, string $currency, string $status = 'successful'): void
     {
         $this->byReference[$txRef] = ['id' => 880000 + count($this->byReference), 'tx_ref' => $txRef, 'status' => $status, 'amount' => $amount, 'currency' => $currency, 'payment_type' => 'mobilemoneyuganda'];
+    }
+
+    /** Simulate Flutterwave being down (network error / 5xx) for verification calls. */
+    public bool $down = false;
+
+    public array $tokenCharges = [];
+
+    public array $tokenResult = ['success' => true];
+
+    public array $refunds = [];
+
+    public function chargeToken(array $payload): array
+    {
+        $this->tokenCharges[] = $payload;
+        if (! ($this->tokenResult['success'] ?? false)) {
+            return $this->tokenResult;
+        }
+        $id = 660000 + count($this->tokenCharges);
+        $this->verifyResult = ['success' => true, 'data' => ['id' => $id, 'tx_ref' => $payload['tx_ref'], 'status' => 'successful', 'amount' => $payload['amount'],
+            'currency' => $payload['currency'], 'payment_type' => 'card', 'card' => ['token' => $payload['token'], 'last_4digits' => '4242', 'type' => 'VISA']]];
+
+        return ['success' => true, 'data' => ['id' => $id, 'status' => 'successful', 'tx_ref' => $payload['tx_ref']]];
+    }
+
+    public function refund(int|string $transactionId, ?float $amount = null): array
+    {
+        $this->refunds[] = ['id' => $transactionId, 'amount' => $amount];
+
+        return ['success' => true, 'data' => ['id' => 'R'.$transactionId]];
     }
 }

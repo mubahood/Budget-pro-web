@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -59,16 +60,57 @@ class CompanyScope implements Scope
         $table = $model->getTable();
 
         if (! array_key_exists($table, self::$columnCache)) {
-            self::$columnCache[$table] = in_array('company_id', Schema::getColumnListing($table), true);
+            self::$columnCache = self::cachedMap($table);
         }
 
         return self::$columnCache[$table];
     }
 
-    /** For tests / schema changes at runtime. */
+    /**
+     * The table => has-company_id map, kept in the cache for good (plan A2) so a request no longer
+     * reads information_schema. The key carries the database and the migrations folder's mtime, so a
+     * deploy that adds migrations starts a new map in both apps; `migrate` also forgets it
+     * (AppServiceProvider, MigrationsEnded). A table missing from the map is looked up once and added.
+     *
+     * @return array<string, bool>
+     */
+    private static function cachedMap(string $table): array
+    {
+        $key = self::cacheKey();
+        $map = [];
+        try {
+            $map = (array) Cache::rememberForever($key, fn () => []);
+        } catch (\Throwable) {
+            // No usable cache store (early boot, misconfigured): fall back to this process only.
+        }
+        $map = self::$columnCache + $map;
+        if (! array_key_exists($table, $map)) {
+            $map[$table] = in_array('company_id', Schema::getColumnListing($table), true);
+            try {
+                Cache::forever($key, $map);
+            } catch (\Throwable) {
+            }
+        }
+
+        return $map;
+    }
+
+    private static function cacheKey(): string
+    {
+        $db = (string) config('database.connections.'.config('database.default').'.database');
+        $migrations = @filemtime(dirname(__DIR__, 2).'/database/migrations') ?: 0;
+
+        return 'company_scope.columns.'.md5($db).'.'.$migrations;
+    }
+
+    /** For tests / schema changes at runtime (and after `migrate`): this process and the cache. */
     public static function flushColumnCache(): void
     {
         self::$columnCache = [];
+        try {
+            Cache::forget(self::cacheKey());
+        } catch (\Throwable) {
+        }
     }
 
     public function extend(Builder $builder)

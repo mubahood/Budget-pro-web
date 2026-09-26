@@ -86,7 +86,7 @@ class ReportService
      */
     private function saleRows(): array
     {
-        [$from, $bind] = SalesSource::sql($this->companyId, 'x');
+        [$from, $bind] = SalesSource::sql($this->companyId, 'x', $this->from->toDateString(), $this->to->toDateString());
 
         return ["(SELECT x.* FROM {$from} WHERE x.sale_date BETWEEN ? AND ?) s", array_merge($bind, [$this->from->toDateString(), $this->to->toDateString()])];
     }
@@ -98,7 +98,7 @@ class ReportService
      */
     private function lineRows(): array
     {
-        [$from, $bind] = SalesSource::linesSql($this->companyId, 'x');
+        [$from, $bind] = SalesSource::linesSql($this->companyId, 'x', $this->from->toDateString(), $this->to->toDateString());
 
         return ["(SELECT x.* FROM {$from} WHERE x.sale_date BETWEEN ? AND ?) l LEFT JOIN stock_items p ON p.id = l.stock_item_id LEFT JOIN stock_categories c ON c.id = p.stock_category_id",
             array_merge($bind, [$this->from->toDateString(), $this->to->toDateString()])];

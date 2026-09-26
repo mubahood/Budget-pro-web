@@ -17,9 +17,12 @@ use Illuminate\Support\Facades\DB;
  */
 class OnboardingService
 {
+    /** Keys this service owns in companies.onboarding_state; other keys already there (e.g. `legacy`) are kept on every write. */
+    public const STATE_VERSION = 2;
+
     public function state(Company $company): array
     {
-        $s = is_array($company->onboarding_state) ? $company->onboarding_state : [];
+        $s = $this->raw($company);
 
         return [
             'step' => $s['step'] ?? 'business',
@@ -30,11 +33,37 @@ class OnboardingService
             'completed_at' => $s['completed_at'] ?? null,
             'dismissed_checklist' => (bool) ($s['dismissed_checklist'] ?? false),
             'step_seconds' => $s['step_seconds'] ?? (object) [],
+            'version' => (int) ($s['version'] ?? 1),
+            'channel' => $s['channel'] ?? null,
+            'tour_seen' => (bool) ($s['tour_seen'] ?? false),
+            'app_prompted_at' => $s['app_prompted_at'] ?? null,
+            'skipped_at' => $s['skipped_at'] ?? null,
+            'legacy' => (bool) ($s['legacy'] ?? false),
         ];
     }
 
+    /** The stored JSON as it is, unknown keys included. */
+    private function raw(Company $company): array
+    {
+        $s = $company->onboarding_state;
+        if (is_string($s)) {
+            $s = json_decode($s, true);
+        }
+
+        return is_array($s) ? $s : [];
+    }
+
+    /** Merge $patch onto the stored JSON (never dropping keys this code does not know) and save quietly. */
+    public function remember(Company $company, array $patch): array
+    {
+        $company->onboarding_state = array_merge($this->raw($company), $patch, ['version' => self::STATE_VERSION]);
+        $company->saveQuietly();
+
+        return $this->state($company);
+    }
+
     /** Record a finished or skipped step and move to the next one (Appendix F metrics included). */
-    public function markStep(Company $company, string $step, bool $skipped = false, ?int $seconds = null, array $extra = []): array
+    public function markStep(Company $company, string $step, bool $skipped = false, ?int $seconds = null, array $extra = [], ?string $channel = null): array
     {
         $steps = config('onboarding.steps');
         if (! in_array($step, $steps, true) && $step !== 'done') {
@@ -42,6 +71,7 @@ class OnboardingService
         }
         $s = $this->state($company);
         $s['started_at'] ??= now()->toIso8601String();
+        $s['channel'] ??= $channel ?? OnboardingEvents::channel();
         $key = $skipped ? 'skipped_steps' : 'completed_steps';
         $other = $skipped ? 'completed_steps' : 'skipped_steps';
         if ($step !== 'done') {
@@ -60,16 +90,25 @@ class OnboardingService
         if ($s['step'] === 'done' && ! $s['completed_at']) {
             $s['completed_at'] = now()->toIso8601String();
         }
-        $company->onboarding_state = array_merge($s, $extra);
-        $company->saveQuietly();
+        unset($s['legacy'], $s['version']); // stored as they are
+        $state = $this->remember($company, array_merge($s, $extra));
+        OnboardingEvents::record((int) $company->id, $skipped ? 'step_skipped' : 'step_completed', array_filter(['step' => $step, 'seconds' => $seconds], fn ($v) => $v !== null), $channel);
 
-        return $this->state($company);
+        return $state;
+    }
+
+    /** The owner chose "skip setup" on the web: the wizard stops opening by itself; the checklist stays. */
+    public function skipWizard(Company $company, ?string $channel = null): array
+    {
+        OnboardingEvents::record((int) $company->id, 'wizard_skipped', ['step' => $this->state($company)['step']], $channel);
+
+        return $this->remember($company, ['skipped_at' => now()->toIso8601String()]);
     }
 
     public function dismissChecklist(Company $company): void
     {
-        $company->onboarding_state = array_merge($this->state($company), ['dismissed_checklist' => true]);
-        $company->saveQuietly();
+        $this->remember($company, ['dismissed_checklist' => true]);
+        OnboardingEvents::record((int) $company->id, 'checklist_dismissed');
     }
 
     /** Step 2: business name, type, country → currency, timezone, locale, tax; modules from the type. */
@@ -129,7 +168,7 @@ class OnboardingService
         $methods = array_values(array_intersect($data['payment_methods'] ?? ['cash'], array_keys(config('onboarding.payment_methods'))));
         $momo = array_values(array_intersect($data['momo_providers'] ?? [], array_keys(config('onboarding.countries.'.($company->country ?: 'UG').'.momo', []))));
         $company->payment_methods = ['methods' => $methods ?: ['cash'], 'momo' => $momo, 'opening_float' => (float) ($data['opening_float'] ?? 0)];
-        $company->receipt_channels = array_values(array_intersect($data['receipt_channels'] ?? ['whatsapp'], ['whatsapp', 'print', 'sms']));
+        $company->receipt_channels = array_values(array_intersect($data['receipt_channels'] ?? [], ['whatsapp', 'print', 'sms'])); // nothing pre-ticked
         if (isset($data['negative_stock_policy'])) {
             $company->negative_stock_policy = $data['negative_stock_policy'];
         }
@@ -171,6 +210,8 @@ class OnboardingService
 
     /**
      * Step 3: create the ticked template items (with any edited price and opening stock).
+     * Every ticked item needs a selling price (the pack's price in the shop's currency, or one typed in);
+     * items without one are refused together, by name, and nothing is created.
      *
      * @param  array<int, array{key: int, selling_price?: numeric, buying_price?: numeric, opening_stock?: numeric}>  $picks
      * @return array{created: int, skipped: array<int, string>}
@@ -179,25 +220,60 @@ class OnboardingService
     {
         $templates = DB::table('product_templates')->whereIn('id', array_column($picks, 'key'))->get()->keyBy('id');
         $rows = [];
+        $unpriced = [];
         foreach ($picks as $pick) {
             $t = $templates[$pick['key']] ?? null;
             if ($t === null) {
                 continue;
             }
             $price = json_decode((string) $t->prices, true)[$company->currency ?: 'UGX'] ?? [];
+            $sell = self::amount($pick['selling_price'] ?? null) ?? self::amount($price['sell'] ?? null);
+            if ($sell === null || $sell <= 0) {
+                $unpriced[] = $t->name;
+
+                continue;
+            }
             $rows[] = ['name' => $t->name, 'category' => $t->category, 'sub_category' => $t->sub_category, 'unit' => $t->unit,
-                'selling_price' => $pick['selling_price'] ?? $price['sell'] ?? null, 'buying_price' => $pick['buying_price'] ?? $price['cost'] ?? 0,
-                'opening_stock' => $pick['opening_stock'] ?? 0, 'barcode' => null, 'sku' => null];
+                'selling_price' => $sell, 'buying_price' => self::amount($pick['buying_price'] ?? null) ?? self::amount($price['cost'] ?? null) ?? 0,
+                'opening_stock' => self::amount($pick['opening_stock'] ?? null) ?? 0, 'barcode' => null, 'sku' => null];
         }
-        $r = $this->createProducts($company, $user, $rows);
-        $this->markStep($company, 'products', false, null, ['template_pack' => $company->business_type ?: 'retail']);
+        if ($unpriced !== []) {
+            $list = implode(', ', array_slice($unpriced, 0, 8)).(count($unpriced) > 8 ? ' and '.(count($unpriced) - 8).' more' : '');
+            throw BusinessRuleException::make('prices_required', 'Add a selling price for: '.$list.'.', ['items' => $unpriced]);
+        }
+        $r = $rows === [] ? ['created' => 0, 'skipped' => []] : $this->createProducts($company, $user, $rows);
+        if ($r['created'] > 0) {
+            $pack = $company->business_type ?: 'retail';
+            $this->markStep($company, 'products', false, null, ['template_pack' => $pack]);
+            OnboardingEvents::record((int) $company->id, 'template_applied', ['pack' => $pack, 'created' => $r['created'], 'skipped' => count($r['skipped'])]);
+        }
 
         return $r;
+    }
+
+    private static function amount(mixed $v): ?float
+    {
+        if ($v === null || $v === '') {
+            return null;
+        }
+        $v = is_string($v) ? str_replace([',', ' '], '', $v) : $v;
+
+        return is_numeric($v) ? (float) $v : null;
+    }
+
+    /**
+     * A product file as CSV text: an Excel .xlsx (first sheet) is converted, a CSV is returned as it is.
+     * The API, the classic setup and the new app all import through parseCsv after this.
+     */
+    public static function fileToCsv(string $contents): string
+    {
+        return \App\Support\XlsxReader::isXlsx($contents) ? \App\Support\XlsxReader::toCsv($contents) : $contents;
     }
 
     /** CSV columns (header row, any order): name, category, sub_category, unit, selling_price, buying_price, opening_stock, barcode, sku */
     public function parseCsv(string $contents): array
     {
+        $contents = self::fileToCsv($contents);
         $contents = preg_replace('/^\xEF\xBB\xBF/', '', $contents);
         $lines = array_values(array_filter(preg_split('/\r\n|\r|\n/', $contents), fn ($l) => trim($l) !== ''));
         if ($lines === []) {
@@ -278,6 +354,9 @@ class OnboardingService
                 $item->save();
                 $created++;
             }
+            if ($created > 0) {
+                OnboardingEvents::once((int) $company->id, 'first_product', ['count' => $created]);
+            }
 
             return ['created' => $created, 'skipped' => $skipped];
         });
@@ -293,17 +372,20 @@ class OnboardingService
         return $model;
     }
 
-    /** Getting-started checklist (plan C4): five steps with progress. */
+    /**
+     * Getting-started checklist (plan C4): five steps with progress. The phone app reads this shape;
+     * every item is done only when it really happened (an invite accepted, a MoMo number registered,
+     * a receipt sent), not because a box was ticked.
+     */
     public function checklist(Company $company): array
     {
-        $cid = $company->id;
-        $methods = $company->payment_methods['methods'] ?? [];
+        $sig = $this->signals($company);
         $items = [
-            ['key' => 'add_products', 'label' => 'Add your products', 'done' => DB::table('stock_items')->where('company_id', $cid)->where('is_deleted', false)->exists()],
-            ['key' => 'first_sale', 'label' => 'Make your first sale', 'done' => DB::table('sale_records')->where('company_id', $cid)->exists()],
-            ['key' => 'invite_staff', 'label' => 'Invite a team member', 'done' => DB::table('admin_users')->where('company_id', $cid)->count() > 1 || DB::table('invites')->where('company_id', $cid)->exists()],
-            ['key' => 'set_up_momo', 'label' => 'Set up mobile money', 'done' => in_array('mobile_money', $methods, true)],
-            ['key' => 'whatsapp_receipts', 'label' => 'Send receipts on WhatsApp', 'done' => in_array('whatsapp', $company->receipt_channels ?? [], true)],
+            ['key' => 'add_products', 'label' => 'Add your products', 'done' => $sig['products']],
+            ['key' => 'first_sale', 'label' => 'Make your first sale', 'done' => $sig['first_sale']],
+            ['key' => 'invite_staff', 'label' => 'Invite a team member', 'done' => $sig['staff']],
+            ['key' => 'set_up_momo', 'label' => 'Set up mobile money', 'done' => $sig['momo']],
+            ['key' => 'whatsapp_receipts', 'label' => 'Send receipts on WhatsApp', 'done' => $sig['receipts']],
         ];
         $done = count(array_filter($items, fn ($i) => $i['done']));
 
@@ -311,11 +393,118 @@ class OnboardingService
             'dismissed' => $this->state($company)['dismissed_checklist']];
     }
 
-    /** Web shows /setup until the checklist reaches the threshold (plan C2), unless finished or dismissed. */
+    /**
+     * Getting-started checklist v2 (POWER_PLAN §3.1): eight items, each done on a real signal.
+     * `action` names where the item is done (the web maps it to a screen). Also notes, once, the
+     * milestones only visible from the data (first sale, invite accepted, MoMo ready, phone app, paid plan).
+     *
+     * @return array{items: list<array{key: string, label: string, hint: string, action: string, done: bool}>, done: int, total: int, percent: int, dismissed: bool}
+     */
+    public function checklistV2(Company $company): array
+    {
+        $sig = $this->signals($company);
+        $this->noteMilestones($company, $sig);
+        $items = [
+            ['key' => 'products', 'label' => 'Add your products', 'hint' => 'Load a template pack, import a file or add them one by one.', 'action' => 'products'],
+            ['key' => 'prices', 'label' => 'Give every product a price', 'hint' => 'Products without a selling price can\'t be sold.', 'action' => 'prices'],
+            ['key' => 'first_sale', 'label' => 'Make your first sale', 'hint' => 'Sell something on the till. It takes a minute.', 'action' => 'pos'],
+            ['key' => 'staff', 'label' => 'Get a team member signed in', 'hint' => 'Invite a cashier. It counts once they accept.', 'action' => 'team'],
+            ['key' => 'momo', 'label' => 'Receive mobile money', 'hint' => 'Register the number your MoMo payments should reach.', 'action' => 'momo'],
+            ['key' => 'receipts', 'label' => 'Send a customer a receipt', 'hint' => 'Send one on WhatsApp or SMS after a sale.', 'action' => 'receipts'],
+            ['key' => 'phone_app', 'label' => 'Sign in on the phone app', 'hint' => 'Sell even when the network is down.', 'action' => 'app'],
+            ['key' => 'plan', 'label' => 'Choose your plan', 'hint' => 'Pick the plan that fits before the trial ends.', 'action' => 'plan'],
+        ];
+        foreach ($items as &$i) {
+            $i['done'] = (bool) $sig[$i['key']];
+        }
+        unset($i);
+        $done = count(array_filter($items, fn ($i) => $i['done']));
+
+        return ['items' => $items, 'done' => $done, 'total' => count($items), 'percent' => (int) round($done * 100 / count($items)),
+            'dismissed' => $this->state($company)['dismissed_checklist']];
+    }
+
+    /** @return array{products: bool, prices: bool, first_sale: bool, staff: bool, momo: bool, receipts: bool, phone_app: bool, plan: bool, paid: bool} */
+    public function signals(Company $company): array
+    {
+        $cid = (int) $company->id;
+        $products = DB::table('stock_items')->where('company_id', $cid)->where('is_deleted', false);
+        $hasProducts = (clone $products)->exists();
+        $users = DB::table('admin_users')->where('company_id', $cid)->pluck('id')->all();
+        $sub = DB::table('subscriptions')->where('company_id', $cid)->orderByDesc('id')->first();
+        $paid = false;
+        if ($sub && in_array($sub->status, ['active', 'past_due'], true) && ! in_array((string) $sub->provider, ['trial', 'free'], true) && $sub->plan_id) {
+            $paid = (float) DB::table('plans')->where('id', $sub->plan_id)->value('price_ugx') > 0;
+        }
+
+        return [
+            'products' => $hasProducts,
+            'prices' => $hasProducts && ! (clone $products)->where(fn ($q) => $q->whereNull('selling_price')->orWhere('selling_price', '<=', 0))->exists(),
+            'first_sale' => DB::table('sale_records')->where('company_id', $cid)->exists(),
+            'staff' => DB::table('invites')->where('company_id', $cid)->where('status', 'accepted')->exists()
+                || DB::table('company_members')->where('company_id', $cid)->where('status', 'active')->where('role', '!=', 'owner')->exists(),
+            'momo' => ! empty($company->momo_subaccount_id),
+            'receipts' => DB::table('message_log')->where('company_id', $cid)->where('purpose', 'receipt')->where('status', 'sent')->exists(),
+            'phone_app' => DB::table('devices')->where('company_id', $cid)->exists()
+                || ($users !== [] && DB::table('personal_access_tokens')->where('tokenable_type', User::class)->whereIn('tokenable_id', $users)->exists()),
+            'plan' => $sub !== null && $sub->status !== 'trialing',
+            'paid' => $paid,
+        ];
+    }
+
+    /** Milestones only visible in the data, written once each (and the first sale closes the wizard). */
+    private function noteMilestones(Company $company, array $sig): void
+    {
+        if ($company->is_demo) {
+            return;
+        }
+        $cid = (int) $company->id;
+        $seen = OnboardingEvents::seen($cid);
+        if ($sig['first_sale'] && ! in_array('first_sale', $seen, true)) {
+            $this->noteFirstSale($company);
+        }
+        if (! in_array('invite_sent', $seen, true) && DB::table('invites')->where('company_id', $cid)->exists()) {
+            OnboardingEvents::record($cid, 'invite_sent', [], 'system'); // sent from the phone or the team screen
+        }
+        foreach (['staff' => 'invite_accepted', 'momo' => 'momo_ready', 'phone_app' => 'app_login', 'paid' => 'converted_to_paid'] as $signal => $event) {
+            if ($sig[$signal] && ! in_array($event, $seen, true)) {
+                OnboardingEvents::record($cid, $event, [], 'system');
+            }
+        }
+    }
+
+    /**
+     * The shop has sold: record `first_sale` once (with the time it took from sign-up) and tick the
+     * wizard's first-sale step. When the wizard is still at an earlier step the step is only ticked,
+     * so the owner can finish the rest. Returns true when this call noted it.
+     */
+    public function noteFirstSale(Company $company): bool
+    {
+        $cid = (int) $company->id;
+        if (! DB::table('sale_records')->where('company_id', $cid)->exists()) {
+            return false;
+        }
+        $noted = OnboardingEvents::once($cid, 'first_sale', ['seconds_to_first_sale' => OnboardingEvents::timeToFirstSale($cid)]);
+        $s = $this->state($company);
+        if (! in_array('first_sale', $s['completed_steps'], true)) {
+            if (in_array($s['step'], ['first_sale', 'done'], true)) {
+                $this->markStep($company, 'first_sale');
+            } else {
+                $this->remember($company, ['completed_steps' => array_values(array_unique([...$s['completed_steps'], 'first_sale']))]);
+            }
+        }
+
+        return $noted;
+    }
+
+    /**
+     * Web shows the setup wizard until the checklist reaches the threshold (plan C2), unless setup was
+     * finished, the checklist dismissed or the wizard skipped. Demo shops never need setup.
+     */
     public function needsSetup(Company $company): bool
     {
         $s = $this->state($company);
-        if ($s['completed_at'] || $s['dismissed_checklist']) {
+        if ($s['completed_at'] || $s['dismissed_checklist'] || $s['skipped_at'] || $company->is_demo) {
             return false;
         }
 

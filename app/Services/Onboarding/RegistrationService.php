@@ -204,6 +204,8 @@ class RegistrationService
         });
 
         Log::info('Tenant registered', ['channel' => $channel, 'product' => $product, 'company_id' => $result['company']->id, 'user_id' => $result['user']->id]);
+        OnboardingEvents::record((int) $result['company']->id, 'signed_up', ['product' => $product, 'via' => $channel],
+            match ($channel) { 'api' => 'app', 'shop-web' => 'web', default => mb_substr($channel, 0, 12) }, (int) $result['user']->id);
 
         return $result;
     }

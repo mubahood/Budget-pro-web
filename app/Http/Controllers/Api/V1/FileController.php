@@ -32,6 +32,11 @@ class FileController extends Controller
         }
 
         $file = $request->file('file');
+        try { // Plan storage allowance (POWER_PLAN §4.1): refused before anything is written.
+            (new \App\Services\Billing\Quotas())->assertCanStore(\App\Models\Company::withoutGlobalScopes()->findOrFail($companyId), (int) $file->getSize());
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
         $path = $file->storeAs("files/{$companyId}/".now()->format('Y/m'), $data['uuid'].'.'.$ext, 'public');
 

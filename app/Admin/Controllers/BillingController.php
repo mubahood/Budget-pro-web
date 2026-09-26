@@ -68,7 +68,7 @@ class BillingController extends Controller
         $this->guard();
         $plan = Plan::where('is_active', true)->where('is_public', true)->findOrFail((int) $request->input('plan_id'));
         try {
-            $r = app(BillingService::class)->checkout($this->company(), Admin::user(), $plan);
+            $r = app(BillingService::class)->checkout($this->company(), Admin::user(), $plan, BillingService::interval($request->input('interval')));
         } catch (BusinessRuleException $e) {
             admin_error('Could not start payment', $e->getMessage());
 
@@ -93,14 +93,14 @@ class BillingController extends Controller
         return $this->act(fn (BillingService $b, Company $c) => $b->resume($c), 'Plan resumed', 'Your plan will renew as normal.');
     }
 
-    public function invoice($id)
+    /** Invoice PDF: only people with the billing permission (POWER_PLAN §4.1). */
+    public function invoice($id, \App\Services\Billing\InvoicePdf $pdf)
     {
-        $company = $this->company();
-        $invoice = SubscriptionInvoice::where('company_id', $company->id)->where('status', 'paid')->findOrFail($id);
-        $pdf = app('dompdf.wrapper');
-        $pdf->loadHTML(view('reports.subscription-invoice', ['invoice' => $invoice, 'company' => $company, 'plan' => Plan::find(data_get($invoice->meta, 'plan_id'))])->render());
-
-        return response($pdf->output(), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="invoice-'.($invoice->number ?: $invoice->id).'.pdf"']);
+        try {
+            return $pdf->response($pdf->find(Admin::user(), (int) $id));
+        } catch (BusinessRuleException $e) {
+            abort($e->errorCode() === 'forbidden' ? 403 : 404, $e->getMessage());
+        }
     }
 
     private function act(callable $fn, string $title, string $message)

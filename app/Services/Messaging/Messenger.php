@@ -34,6 +34,12 @@ class Messenger
             'company_id' => $meta['company_id'] ?? null, 'user_id' => $meta['user_id'] ?? null, 'channel' => $channels[0] ?? 'log',
             'to' => $to, 'purpose' => $meta['purpose'] ?? null, 'body' => $text, 'status' => 'queued', 'created_at' => now(), 'updated_at' => now(),
         ]);
+        if (self::isDemo($meta['company_id'] ?? null)) {
+            // Demo shops (DemoShopService) never message anyone: their customers are made up.
+            DB::table('message_log')->where('id', $id)->update(['status' => 'skipped', 'error' => 'demo shop', 'updated_at' => now()]);
+
+            return $id;
+        }
         if ($now || config('queue.default') === 'sync') {
             $this->deliver($id, $channels, $meta);
         } else {
@@ -67,6 +73,11 @@ class Messenger
         DB::table('message_log')->where('id', $logId)->update(['status' => $errors === [] ? 'skipped' : 'failed', 'error' => mb_substr(implode('; ', $errors), 0, 500), 'updated_at' => now()]);
 
         return false;
+    }
+
+    private static function isDemo(mixed $companyId): bool
+    {
+        return $companyId !== null && (bool) DB::table('companies')->where('id', (int) $companyId)->value('is_demo');
     }
 
     /** Channels for a person: phones get WhatsApp then SMS, otherwise email. */

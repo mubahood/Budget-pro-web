@@ -23,6 +23,7 @@ class Subscription extends Model
     protected $fillable = [
         'company_id', 'plan_id', 'status', 'trial_ends_at', 'starts_at', 'ends_at',
         'canceled_at', 'provider', 'provider_subscription_id', 'provider_customer_id', 'meta',
+        'billing_interval', 'pending_plan_id', 'pending_change_at', 'auto_renew',
     ];
 
     protected $casts = [
@@ -30,8 +31,37 @@ class Subscription extends Model
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'canceled_at' => 'datetime',
+        'pending_change_at' => 'datetime',
+        'auto_renew' => 'boolean',
         'meta' => 'array',
     ];
+
+    /** @return \Illuminate\Database\Eloquent\Relations\BelongsTo<Plan, Subscription> */
+    public function pendingPlan(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Plan::class, 'pending_plan_id');
+    }
+
+    /** month | year (older rows have no column value yet: month). */
+    public function interval(): string
+    {
+        return $this->billing_interval === 'year' ? 'year' : 'month';
+    }
+
+    /** A paid plan whose period is still running (active or cancelled-but-not-ended). */
+    public function isPaidAndRunning(): bool
+    {
+        return in_array($this->status, ['active', 'canceled'], true) && $this->ends_at !== null && $this->ends_at->isFuture()
+            && $this->plan !== null && ! $this->plan->isFree();
+    }
+
+    /** The saved card for auto-renew (Flutterwave token + masked details), if any. */
+    public function savedCard(): ?array
+    {
+        $card = data_get($this->meta, 'card');
+
+        return is_array($card) && ! empty($card['token']) ? $card : null;
+    }
 
     public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {

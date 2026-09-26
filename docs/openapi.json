@@ -10080,15 +10080,58 @@
                                         "maxLength": 191
                                     },
                                     "business_type": {
-                                        "type": "string"
+                                        "type": "string",
+                                        "enum": [
+                                            "retail",
+                                            "wholesale",
+                                            "pharmacy",
+                                            "agro_vet",
+                                            "hardware",
+                                            "restaurant_bar",
+                                            "salon",
+                                            "boutique",
+                                            "electronics",
+                                            "poultry",
+                                            "fundraising",
+                                            "other"
+                                        ]
                                     },
                                     "country": {
-                                        "type": "string"
+                                        "type": "string",
+                                        "enum": [
+                                            "UG",
+                                            "KE",
+                                            "TZ",
+                                            "RW"
+                                        ]
                                     },
                                     "currency": {
                                         "type": [
                                             "string",
                                             "null"
+                                        ],
+                                        "enum": [
+                                            "UGX",
+                                            "KES",
+                                            "TZS",
+                                            "RWF",
+                                            "USD",
+                                            "EUR",
+                                            "GBP",
+                                            "ZAR",
+                                            "NGN",
+                                            "GHS",
+                                            "INR",
+                                            "CAD",
+                                            "AUD",
+                                            "JPY",
+                                            "CNY",
+                                            "AED",
+                                            "SAR",
+                                            "EGP",
+                                            "ETB",
+                                            "XAF",
+                                            "XOF"
                                         ]
                                     },
                                     "timezone": {
@@ -10128,13 +10171,26 @@
                                         ],
                                         "maxLength": 500
                                     },
+                                    "phone_number": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 30
+                                    },
                                     "modules": {
                                         "type": [
                                             "array",
                                             "null"
                                         ],
                                         "items": {
-                                            "type": "string"
+                                            "type": "string",
+                                            "enum": [
+                                                "shop",
+                                                "finance",
+                                                "budget",
+                                                "poultry"
+                                            ]
                                         }
                                     },
                                     "seconds": {
@@ -10218,7 +10274,7 @@
                 "tags": [
                     "Onboarding"
                 ],
-                "summary": "POST onboarding/import (multipart `file` or `csv` text) { dry_run?: bool } — preview first, then commit. */",
+                "summary": "POST onboarding/import (multipart `file` — CSV or Excel .xlsx — or `csv` text) { dry_run?: bool } — preview first, then commit. */",
                 "operationId": "post_onboarding_import",
                 "responses": {
                     "201": {
@@ -10357,7 +10413,14 @@
                                     "payment_methods": {
                                         "type": "array",
                                         "items": {
-                                            "type": "string"
+                                            "type": "string",
+                                            "enum": [
+                                                "cash",
+                                                "mobile_money",
+                                                "card",
+                                                "bank",
+                                                "credit"
+                                            ]
                                         }
                                     },
                                     "momo_providers": {
@@ -20357,6 +20420,60 @@
                 ]
             }
         },
+        "/subscription/cancel-change": {
+            "post": {
+                "tags": [
+                    "Subscription"
+                ],
+                "summary": "POST subscription/cancel-change — keep the current plan after all. */",
+                "operationId": "post_subscription_cancel_change",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
         "/subscription/checkout": {
             "post": {
                 "tags": [
@@ -20413,6 +20530,16 @@
                                 "properties": {
                                     "plan_id": {
                                         "type": "integer"
+                                    },
+                                    "interval": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "month",
+                                            "year"
+                                        ]
                                     }
                                 },
                                 "required": [
@@ -20434,8 +20561,164 @@
                 "tags": [
                     "Subscription"
                 ],
-                "summary": "GET subscription/invoices/{id}.pdf */",
+                "summary": "GET subscription/invoices/{id}.pdf — billing permission only. */",
                 "operationId": "get_subscription_invoices_id_pdf",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/subscription/momo": {
+            "post": {
+                "tags": [
+                    "Subscription"
+                ],
+                "summary": "POST subscription/momo — a mobile-money prompt on the owner's phone; poll GET subscription/payments/{invoice}. */",
+                "operationId": "post_subscription_momo",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "plan_id": {
+                                        "type": "integer"
+                                    },
+                                    "interval": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "month",
+                                            "year"
+                                        ]
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "maxLength": 20
+                                    },
+                                    "network": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 20
+                                    }
+                                },
+                                "required": [
+                                    "plan_id",
+                                    "phone"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/subscription/payments/{id}": {
+            "get": {
+                "tags": [
+                    "Subscription"
+                ],
+                "summary": "GET subscription/payments/{id} — where a payment stands (asks Flutterwave while pending). */",
+                "operationId": "get_subscription_payments_id",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -20549,6 +20832,21 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "name": "interval",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "month",
+                                "year"
+                            ]
+                        }
                     }
                 ]
             }
@@ -20600,6 +20898,88 @@
                         "bearer": []
                     }
                 ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/subscription/schedule-change": {
+            "post": {
+                "tags": [
+                    "Subscription"
+                ],
+                "summary": "POST subscription/schedule-change — move to another plan when the paid period ends (\"at the end of my period\"). */",
+                "operationId": "post_subscription_schedule_change",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "plan_id": {
+                                        "type": "integer"
+                                    },
+                                    "interval": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "enum": [
+                                            "month",
+                                            "year"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "plan_id"
+                                ]
+                            }
+                        }
+                    }
+                },
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/DeviceId"

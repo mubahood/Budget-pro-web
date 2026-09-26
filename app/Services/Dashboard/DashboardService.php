@@ -50,17 +50,25 @@ class DashboardService
     public function kpis(int $companyId, string $from, string $to): array
     {
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::sql($companyId);
-        $s = DB::selectOne("SELECT COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS n, COALESCE(SUM(s.total_amount), 0) AS total, COALESCE(SUM(s.profit), 0) AS profit,
+        // One round trip for sales, expenses and returns (plan A6); each derived table is one aggregate row.
+        [$src, $bind] = SalesSource::sql($companyId, 's', $from, $to);
+        [$fWin, $fBind] = SalesSource::window('f.date', 'f.created_at', $from, $to);
+        [$rWin, $rBind] = SalesSource::window('r.created_at', 'r.created_at', $from, $to);
+        $s = DB::selectOne("SELECT a.n, a.total, a.profit, a.on_credit, e.v AS expenses, rt.n AS returns_n, rt.v AS returns_v FROM
+            (SELECT COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS n, COALESCE(SUM(s.total_amount), 0) AS total, COALESCE(SUM(s.profit), 0) AS profit,
                 COALESCE(SUM(s.balance), 0) AS on_credit
-            FROM {$src} WHERE s.sale_date BETWEEN ? AND ?", [...$bind, $from, $to]);
-        $collected = $this->collectedByMethod($companyId, $from, $to);
-        $expenses = (float) DB::selectOne('SELECT COALESCE(SUM(f.amount), 0) AS v FROM financial_records f
+            FROM {$src} WHERE s.sale_date BETWEEN ? AND ?) a
+            CROSS JOIN (SELECT COALESCE(SUM(f.amount), 0) AS v FROM financial_records f
             WHERE f.company_id = ? AND f.type = ? AND COALESCE(f.is_deleted, 0) = 0
-              AND (f.source_type IS NULL OR f.source_type NOT IN (?, ?, ?)) AND '.SalesSource::localDay('f.date', 'f.created_at').' BETWEEN ? AND ?',
-            [$companyId, 'Expense', 'goods_receipt', 'supplier_payment', 'purchase_return', $from, $to])->v;
-        $returns = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(r.value), 0) AS v FROM sale_returns r
-            WHERE r.company_id = ? AND COALESCE(r.is_deleted, 0) = 0 AND DATE(CONVERT_TZ(r.created_at, '+00:00', @tz_offset)) BETWEEN ? AND ?", [$companyId, $from, $to]);
+              AND (f.source_type IS NULL OR f.source_type NOT IN (?, ?, ?)) AND ".SalesSource::localDay('f.date', 'f.created_at')." BETWEEN ? AND ?{$fWin}) e
+            CROSS JOIN (SELECT COUNT(*) AS n, COALESCE(SUM(r.value), 0) AS v FROM sale_returns r
+            WHERE r.company_id = ? AND COALESCE(r.is_deleted, 0) = 0 AND DATE(CONVERT_TZ(r.created_at, '+00:00', @tz_offset)) BETWEEN ? AND ?{$rWin}) rt",
+            [...$bind, $from, $to,
+                $companyId, 'Expense', 'goods_receipt', 'supplier_payment', 'purchase_return', $from, $to, ...$fBind,
+                $companyId, $from, $to, ...$rBind]);
+        $collected = $this->collectedByMethod($companyId, $from, $to);
+        $expenses = (float) $s->expenses;
+        $returns = (object) ['n' => $s->returns_n, 'v' => $s->returns_v];
 
         $n = (int) $s->n;
 
@@ -82,22 +90,25 @@ class DashboardService
     public function collectedByMethod(int $companyId, string $from, string $to): array
     {
         LocalTime::prime($companyId);
+        [$pWin, $pBind] = SalesSource::window('p.received_at', 'p.created_at', $from, $to);
+        [$sWin, $sBind] = SalesSource::window('r.sale_date', 'r.created_at', $from, $to);
+        [$mWin, $mBind] = SalesSource::window('m.date', 'm.created_at', $from, $to);
         $rows = DB::select("
             SELECT x.method, SUM(x.amount) AS amount FROM (
                 SELECT p.method, p.amount FROM payments p
                 WHERE p.company_id = ? AND COALESCE(p.is_deleted, 0) = 0
-                  AND DATE(CONVERT_TZ(COALESCE(p.received_at, p.created_at), '+00:00', @tz_offset)) BETWEEN ? AND ?
+                  AND DATE(CONVERT_TZ(COALESCE(p.received_at, p.created_at), '+00:00', @tz_offset)) BETWEEN ? AND ?{$pWin}
                 UNION ALL
                 SELECT LOWER(COALESCE(NULLIF(r.payment_method, ''), 'cash')), r.amount_paid FROM sale_records r
                 WHERE r.company_id = ? AND r.voided_at IS NULL AND r.status <> 'Voided' AND r.amount_paid > 0
                   AND NOT EXISTS (SELECT 1 FROM payments p2 WHERE p2.sale_record_id = r.id)
-                  AND ".SalesSource::localDay('r.sale_date', 'r.created_at')." BETWEEN ? AND ?
+                  AND ".SalesSource::localDay('r.sale_date', 'r.created_at')." BETWEEN ? AND ?{$sWin}
                 UNION ALL
                 SELECT 'cash', m.total_sales FROM stock_records m
                 WHERE m.company_id = ? AND m.type = 'Sale' AND m.sale_record_id IS NULL AND m.is_reversal = 0
                   AND NOT EXISTS (SELECT 1 FROM stock_records rv WHERE rv.reverses_id = m.id)
-                  AND ".SalesSource::localDay('m.date', 'm.created_at').' BETWEEN ? AND ?
-            ) x GROUP BY x.method ORDER BY amount DESC', [$companyId, $from, $to, $companyId, $from, $to, $companyId, $from, $to]);
+                  AND ".SalesSource::localDay('m.date', 'm.created_at')." BETWEEN ? AND ?{$mWin}
+            ) x GROUP BY x.method ORDER BY amount DESC", [$companyId, $from, $to, ...$pBind, $companyId, $from, $to, ...$sBind, $companyId, $from, $to, ...$mBind]);
 
         $labels = config('onboarding.payment_methods', []);
         $out = [];
@@ -125,7 +136,7 @@ class DashboardService
             return $this->monthly($companyId, $start, $end);
         }
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::sql($companyId);
+        [$src, $bind] = SalesSource::sql($companyId, 's', $start->toDateString(), $end->toDateString());
         $rows = collect(DB::select("SELECT s.sale_date AS d, SUM(s.total_amount) AS v, SUM(s.profit) AS p, COUNT(*) AS n FROM {$src}
             WHERE s.sale_date BETWEEN ? AND ? GROUP BY s.sale_date", [...$bind, $start->toDateString(), $end->toDateString()]))->keyBy('d');
         $out = ['labels' => [], 'sales' => [], 'profit' => [], 'count' => []];
@@ -143,7 +154,7 @@ class DashboardService
     private function monthly(int $companyId, Carbon $start, Carbon $end): array
     {
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::sql($companyId);
+        [$src, $bind] = SalesSource::sql($companyId, 's', $start->toDateString(), $end->toDateString());
         $rows = collect(DB::select("SELECT DATE_FORMAT(s.sale_date, '%Y-%m') AS m, SUM(s.total_amount) AS v, SUM(s.profit) AS p, COUNT(*) AS n FROM {$src}
             WHERE s.sale_date BETWEEN ? AND ? GROUP BY DATE_FORMAT(s.sale_date, '%Y-%m')", [...$bind, $start->toDateString(), $end->toDateString()]))->keyBy('m');
         $out = ['labels' => [], 'sales' => [], 'profit' => [], 'count' => []];
@@ -162,7 +173,7 @@ class DashboardService
     public function topProducts(int $companyId, string $from, string $to, int $limit = 6): array
     {
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::linesSql($companyId);
+        [$src, $bind] = SalesSource::linesSql($companyId, 'l', $from, $to);
 
         return DB::select("SELECT si.id, COALESCE(si.name, MAX(l.item_name)) AS name, SUM(l.quantity) AS quantity, SUM(l.revenue) AS revenue, SUM(l.profit) AS profit
             FROM {$src} LEFT JOIN stock_items si ON si.id = l.stock_item_id

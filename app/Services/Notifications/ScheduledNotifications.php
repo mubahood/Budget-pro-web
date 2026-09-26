@@ -66,11 +66,11 @@ class ScheduledNotifications
     {
         \App\Support\LocalTime::prime((int) $company->id);
         $day = $local->toDateString();
-        [$from, $bind] = SalesSource::sql((int) $company->id);
+        [$from, $bind] = SalesSource::sql((int) $company->id, 's', $day, $day);
         $t = DB::selectOne("SELECT COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS n, COALESCE(SUM(s.total_amount), 0) AS total,
                 COALESCE(SUM(LEAST(s.amount_paid, s.total_amount)), 0) AS cash, COALESCE(SUM(CASE WHEN s.balance > 0 THEN s.balance ELSE 0 END), 0) AS credit
             FROM {$from} WHERE s.sale_date = ?", array_merge($bind, [$day]));
-        [$lines, $lineBind] = SalesSource::linesSql((int) $company->id);
+        [$lines, $lineBind] = SalesSource::linesSql((int) $company->id, 'l', $day, $day);
         $top = DB::selectOne("SELECT COALESCE(l.item_name, p.name) AS name, SUM(l.revenue) AS revenue
             FROM {$lines} LEFT JOIN stock_items p ON p.id = l.stock_item_id
             WHERE l.sale_date = ? GROUP BY COALESCE(l.item_name, p.name) HAVING SUM(l.revenue) > 0 ORDER BY revenue DESC LIMIT 1", array_merge($lineBind, [$day]));
