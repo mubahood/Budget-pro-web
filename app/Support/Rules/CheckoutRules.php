@@ -39,7 +39,9 @@ class CheckoutRules
             'items.*.stock_item_id' => ['required', Rule::exists('stock_items', 'id')->where('company_id', $companyId)],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.markdown_id' => ['nullable', 'integer'], // a scanned markdown label (B4): its reduced price is pre-approved
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.approval_id' => ['nullable', 'integer'], // a supervisor's price-override approval (A5, `approvals` feature)
             'payments' => ['nullable', 'array'],
             'payments.*.method' => ['nullable', 'string', 'max:30'],
             'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01'],
@@ -54,6 +56,7 @@ class CheckoutRules
         if ((float) ($data['discount_amount'] ?? 0) > 0) {
             return true;
         }
+        $departmentKeys = null;
         foreach ($data['items'] ?? [] as $line) {
             if ((float) ($line['discount_amount'] ?? 0) > 0) {
                 return true;
@@ -61,7 +64,19 @@ class CheckoutRules
             if (! isset($line['unit_price'])) {
                 continue;
             }
+            // A markdown label (B4) sells at the markdown's own price: that is not the cashier changing a price.
+            if (! empty($line['markdown_id']) && ($md = \App\Services\Shop\MarkdownService::active($companyId, (int) $line['markdown_id'], (int) $line['stock_item_id']))
+                && empty($line['unit_id']) && abs((float) $line['unit_price'] - $md['price']) < 0.005) {
+                continue;
+            }
             $product = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->find($line['stock_item_id']);
+            // An open-price department key (A4) is priced at the till: typing its price is not a discount.
+            if ($product && $product->open_price) {
+                $departmentKeys ??= \App\Support\StoreFeatures::enabled(\App\Models\Company::withoutGlobalScopes()->find($companyId), 'department_keys');
+                if ($departmentKeys) {
+                    continue;
+                }
+            }
             $factor = ! empty($line['unit_id']) ? (float) (Unit::withoutGlobalScopes()->find($line['unit_id'])?->factor ?: 1) : 1.0;
             if ($product && abs((float) $line['unit_price'] - round((float) $product->selling_price * $factor, 2)) > 0.005) {
                 return true;

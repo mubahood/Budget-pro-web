@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Supermarket phases 1–2 (2026-09-27, docs: budget-pro-new/docs/SUPERMARKET_PLAN.md)
+Every feature is off unless the shop turns on Supermarket mode or the feature (`StoreFeatures`, `companies.store_settings`).
+- **Lane:**
+  - pack barcodes (`product_barcodes`, `BarcodeResolver`);
+  - weighed items (GS1 scale labels, PLU, `sold_by`);
+  - quantity key; department keys; held carts on the server; cash rounding (`rounding_amount`);
+  - customer display; age check; deposits (`DepositService`).
+- **Money:**
+  - supervisor PIN approvals (`ApprovalService`, `approvals`, one use each), for voids, returns, reversals, price overrides, voids after the total and no-sale;
+  - cash drops / pickups / paid-in / paid-out and no-sale (`cash_movements`, `ShiftService::cashMovement`);
+  - X/Z reports (`ZReportService`, `z_reports`, gap-free, immutable, late sales listed);
+  - blind cash-up by denomination.
+- **Tax:** tax classes per product, inclusive or exclusive (`TaxClassService`); tax on sale lines; tax breakdown on receipts; VAT summary uses line tax.
+- **Prices:** price book (`price_changes`, `PriceBookService`, `prices:apply-due` every 5 min); nice-price helper (`NicePrice`); shelf labels with unit price and a label queue (`label_queue`, ZPL).
+- **Stock:**
+  - receive by scanning, with short and over quantities;
+  - short-dated screen and markdowns (`batch_markdowns`, MD barcodes sold at the reduced price from their batch);
+  - aisle counts with recounts; shrink approvals (`ShrinkService`).
+- **Reports:** category margin, basket and hour heatmap, ABC and days of cover, shrink, cash control; a supermarket daily flash.
+- **Fixes:** customer statements date payments and returns by the shop's local day (a payment right after midnight no longer sorts before its sale); SaleFormTest used the UTC date.
+
 ### Buyers typed as names become customers (2026-09-27)
 - **What changed:** `CustomerService::adoptNamedBuyers` turns every buyer name typed on sales (phone app, classic sale form) into a customer account. Names are matched ignoring case and outer spaces, or joined to an existing customer with the same name or phone. The name's sales and their payments are linked and balances recalculated.
 - **What is left alone:** placeholder names such as "Walk-in Customer" or "cash".

@@ -11,6 +11,7 @@ return [
         'discount' => 'Give discounts and change prices',
         'void' => 'Void a sale',
         'refund' => 'Take returns and refund',
+        'approve' => 'Approve voids, refunds and overrides with a till PIN',
         'restock' => 'Receive stock and manage suppliers',
         'adjust' => 'Adjust stock (damage, loss, corrections)',
         'stock_take' => 'Post stock counts',
@@ -28,7 +29,7 @@ return [
 
     'roles' => [
         'owner' => ['label' => 'Owner', 'permissions' => ['*']],
-        'manager' => ['label' => 'Manager', 'permissions' => ['sell', 'discount', 'void', 'refund', 'restock', 'adjust', 'stock_take', 'manage_products', 'view_cost', 'view_profit', 'view_reports', 'manage_finance', 'manage_budget', 'resolve_conflicts']],
+        'manager' => ['label' => 'Manager', 'permissions' => ['sell', 'discount', 'void', 'refund', 'approve', 'restock', 'adjust', 'stock_take', 'manage_products', 'view_cost', 'view_profit', 'view_reports', 'manage_finance', 'manage_budget', 'resolve_conflicts']],
         'cashier' => ['label' => 'Cashier', 'permissions' => ['sell', 'refund']],
         'stock_keeper' => ['label' => 'Stock keeper', 'permissions' => ['restock', 'adjust', 'stock_take', 'manage_products', 'view_cost', 'resolve_conflicts']],
         'accountant' => ['label' => 'Accountant', 'permissions' => ['view_cost', 'view_profit', 'view_reports', 'manage_finance', 'manage_budget']],

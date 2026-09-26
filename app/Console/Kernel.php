@@ -20,6 +20,7 @@ class Kernel extends ConsoleKernel
         \Closure::bind(fn () => self::$stty = false, null, \Symfony\Component\Console\Terminal::class)();
 
         $schedule->call($task('tracking:backfill-location-names'))->name('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->call($task('prices:apply-due'))->name('prices:apply-due')->everyFiveMinutes()->withoutOverlapping();
         $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping();
         $schedule->call($task('customers:adopt-named'))->name('customers:adopt-named')->hourlyAt(40)->withoutOverlapping();
         $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();

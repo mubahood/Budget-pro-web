@@ -87,8 +87,10 @@ class LocationStock
             return;
         }
         // Outbound: First-Expiry-First-Out; anything beyond the batches on hand stays unallocated.
+        // A movement aimed at one batch (writing off a short-dated batch) takes that batch first.
         $need = -$delta;
         $batches = DB::table('stock_batches')->where('stock_item_id', $record->stock_item_id)->where('location_id', $record->location_id)->where('quantity', '>', 0)
+            ->when($record->batchOut, fn ($q) => $q->orderByRaw('id = ? DESC', [(int) $record->batchOut]))
             ->orderByRaw('expiry_date IS NULL')->orderBy('expiry_date')->orderBy('id')->lockForUpdate()->get();
         foreach ($batches as $b) {
             if ($need <= 0) {

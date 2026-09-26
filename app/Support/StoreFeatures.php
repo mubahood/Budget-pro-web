@@ -113,6 +113,66 @@ class StoreFeatures
         return collect(self::FEATURES)->mapWithKeys(fn ($f, $key) => [$key => self::enabled($company, $key)])->all();
     }
 
+    /**
+     * Validation rules for a change passed to update(): {mode?, features?: {key: bool|null}, settings?: {key: value}}.
+     * Every screen and API that edits these settings validates with them.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function rules(): array
+    {
+        return [
+            'mode' => ['sometimes', 'boolean'],
+            'features' => ['sometimes', 'array'],
+            'features.*' => ['nullable', 'boolean'],
+            'settings' => ['sometimes', 'array'],
+            'settings.cash_rounding' => ['nullable', 'numeric', 'min:0', 'max:100000'],
+            'settings.note_buttons' => ['nullable', 'array', 'max:12'],
+            'settings.note_buttons.*' => ['numeric', 'gt:0', 'max:100000000'],
+            'settings.scale_prefixes' => ['nullable', 'array', 'max:10'],
+            'settings.scale_prefixes.*' => ['string', 'regex:/^\d{2}$/'],
+            'settings.scale_format' => ['nullable', 'in:price,weight'],
+            'settings.scale_item_digits' => ['nullable', 'integer', 'min:4', 'max:5'],
+            'settings.scale_value_decimals' => ['nullable', 'integer', 'min:0', 'max:3'],
+            'settings.override_limit_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'settings.waste_limit' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'settings.loyalty_spend_per_point' => ['nullable', 'numeric', 'gt:0', 'max:1000000000'],
+            'settings.loyalty_point_value' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'settings.short_dated_days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'settings.age_min' => ['nullable', 'integer', 'min:0', 'max:99'],
+            'settings.tax_inclusive' => ['nullable', 'boolean'],
+        ];
+    }
+
+    /**
+     * A change checked against rules() (ValidationException on a bad value) and typed like the defaults
+     * (whole numbers stay integers, "0.05" becomes 0.05, lists become lists of numbers / strings), ready for update().
+     */
+    public static function validated(array $change): array
+    {
+        $data = \Illuminate\Support\Facades\Validator::make($change, self::rules(), [], [
+            'settings.cash_rounding' => 'cash rounding', 'settings.note_buttons.*' => 'note', 'settings.scale_prefixes.*' => 'scale prefix',
+            'settings.override_limit_pct' => 'price-cut limit', 'settings.waste_limit' => 'write-off limit', 'settings.short_dated_days' => 'short-dated days',
+            'settings.loyalty_spend_per_point' => 'spend per point', 'settings.loyalty_point_value' => 'point value', 'settings.age_min' => 'minimum age',
+        ])->validate();
+        $num = fn ($v) => (float) $v == (int) $v ? (int) $v : (float) $v;
+        foreach ((array) ($data['settings'] ?? []) as $key => $value) {
+            if ($value === null || ! array_key_exists($key, self::SETTINGS)) {
+                continue;
+            }
+            $default = self::SETTINGS[$key];
+            $data['settings'][$key] = match (true) {
+                $key === 'note_buttons' => array_values(array_map($num, (array) $value)),
+                $key === 'scale_prefixes' => array_values(array_map('strval', (array) $value)),
+                is_bool($default) => (bool) $value,
+                is_int($default) || is_float($default) => $num($value),
+                default => (string) $value,
+            };
+        }
+
+        return $data;
+    }
+
     /** Merge a change (mode / features / settings) into the shop's store_settings and save it. */
     public static function update(Company $company, array $change): Company
     {
@@ -132,6 +192,9 @@ class StoreFeatures
             }
         }
         $company->forceFill(['store_settings' => $data])->save();
+        if (self::enabled($company, 'pack_barcodes')) {
+            \App\Services\Shop\BarcodeService::backfillPrimary((int) $company->id); // idempotent: products' own barcodes join the lookup
+        }
 
         return $company;
     }

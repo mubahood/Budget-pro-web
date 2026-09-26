@@ -26,6 +26,7 @@
             <tr><td>{{ rtrim(rtrim(number_format((float) $i->quantity, 3, '.', ''), '0'), '.') }} × {{ $i->item_name }}</td><td class="r">{{ $f($i->line_total ?: $i->subtotal) }}</td></tr>
         @endforeach
         @if((float) $sale->discount_amount > 0)<tr><td>Discount</td><td class="r">−{{ $f($sale->discount_amount) }}</td></tr>@endif
+        @if(abs((float) $sale->rounding_amount) >= 0.005)<tr><td>Rounding</td><td class="r">{{ (float) $sale->rounding_amount < 0 ? '−' : '' }}{{ $f(abs((float) $sale->rounding_amount)) }}</td></tr>@endif
         <tr class="total"><td>Total ({{ $cur }})</td><td class="r">{{ $f($sale->total_amount) }}</td></tr>
         <tr><td>Paid</td><td class="r">{{ $f($sale->amount_paid) }}</td></tr>
         @if((float) $sale->balance > 0)<tr><td><strong>Balance</strong></td><td class="r"><strong>{{ $f($sale->balance) }}</strong></td></tr>@endif

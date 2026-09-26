@@ -33,6 +33,12 @@ class ReportService
         'movement_audit' => ['Stock movement audit', 'view_reports'],
         'expiry' => ['Expiring stock', 'view_reports'],
         'income_statement' => ['Income statement (profit & loss)', 'view_profit'],
+        // Supermarket insight (budget-pro-new/docs/SUPERMARKET_PLAN.md H2, H3, H4, H6): read-only, for every shop.
+        'category_margin' => ['Category & margin', 'view_profit'],
+        'basket' => ['Basket & busy hours', 'view_reports'],
+        'abc' => ['ABC analysis & days of cover', 'view_reports'],
+        'shrink' => ['Shrink (write-offs)', 'view_cost'],
+        'cash_control' => ['Cash control by cashier', 'view_reports'],
     ];
 
     public const GROUPS = ['day', 'cashier', 'method', 'customer', 'category', 'product'];
@@ -313,20 +319,49 @@ class ReportService
     private function vatSummary(array $o): array
     {
         $rate = (float) (Company::withoutGlobalScopes()->find($this->companyId)?->tax_rate ?? 0);
-        // VAT is not stored per sale; it is worked out from gross sales at the shop's rate, so old-app sales count too.
+        // Sales taxed per line (tax classes, F1) use the tax stored on their lines, net of returns. Every other sale
+        // (older ones, shops without tax classes, old-app movements) is worked out from the gross at the shop's rate.
         [$from, $bind] = $this->saleRows();
-        $sales = (float) DB::selectOne("SELECT COALESCE(SUM(s.total_amount), 0) AS total FROM {$from}", $bind)->total;
+        $taxed = "(SELECT i.sale_record_id, COUNT(i.tax_rate) AS n,
+                SUM(COALESCE(i.tax_amount, 0) * (i.quantity - COALESCE(i.returned_quantity, 0)) / NULLIF(i.quantity, 0)) AS tax
+            FROM sale_record_items i WHERE i.company_id = ? AND COALESCE(i.is_deleted, 0) = 0 GROUP BY i.sale_record_id) t";
+        $sum = DB::selectOne("SELECT COALESCE(SUM(s.total_amount), 0) AS total,
+                COALESCE(SUM(CASE WHEN t.n > 0 THEN s.total_amount END), 0) AS taxed_gross, COALESCE(SUM(CASE WHEN t.n > 0 THEN t.tax END), 0) AS taxed_vat
+            FROM {$from} LEFT JOIN {$taxed} ON t.sale_record_id = s.sale_id", array_merge($bind, [$this->companyId]));
+        $sales = (float) $sum->total;
         $purchases = (float) DB::table('goods_receipts')->where('company_id', $this->companyId)->whereBetween('received_on', [$this->from->toDateString(), $this->to->toDateString()])->sum('total_cost');
         $returns = (float) DB::table('purchase_returns')->where('company_id', $this->companyId)->whereBetween('returned_on', [$this->from->toDateString(), $this->to->toDateString()])->sum('total_value');
         $vat = fn (float $gross) => $rate > 0 ? round($gross * $rate / (100 + $rate), 2) : 0.0;
         $rows = [
-            ['label' => 'Sales (VAT inclusive)', 'gross' => round($sales, 2), 'vat' => $vat($sales)],
+            ['label' => 'Sales (VAT inclusive)', 'gross' => round($sales, 2), 'vat' => round((float) $sum->taxed_vat + $vat($sales - (float) $sum->taxed_gross), 2)],
             ['label' => 'Purchases (VAT inclusive, less returns)', 'gross' => round($purchases - $returns, 2), 'vat' => $vat($purchases - $returns)],
         ];
+        $meta = ['rate' => $rate, 'vat_payable' => round($rows[0]['vat'] - $rows[1]['vat'], 2),
+            'note' => $rate > 0 ? "VAT at {$rate}% included in prices." : 'No VAT rate is set for this shop (Company settings → VAT).'];
+        if ((float) $sum->taxed_gross > 0) {
+            $meta['by_class'] = $this->vatByClass();
+            foreach ($meta['by_class'] as $c) { // after the two rows above (readers use rows 0 and 1): the per-line sales, per class
+                $rows[] = ['label' => 'of which sales at '.$c['class'].' '.\App\Services\Shop\TaxClassService::pct($c['rate']), 'gross' => $c['sales'], 'vat' => $c['vat']];
+            }
+            $meta['note'] = 'Sales with tax classes use the tax worked out on each line; others use '.($rate > 0 ? "VAT at {$rate}% included in prices." : 'no VAT (no rate is set).');
+        }
 
         return ['columns' => [$this->text('label', 'Item'), $this->money('gross', 'Amount'), $this->money('vat', 'VAT')], 'rows' => $rows,
-            'totals' => ['vat' => round($rows[0]['vat'] - $rows[1]['vat'], 2)], 'meta' => ['rate' => $rate, 'vat_payable' => round($rows[0]['vat'] - $rows[1]['vat'], 2),
-                'note' => $rate > 0 ? "VAT at {$rate}% included in prices." : 'No VAT rate is set for this shop (Company settings → VAT).']];
+            'totals' => ['vat' => $meta['vat_payable']], 'meta' => $meta];
+    }
+
+    /** Sales tax per class and rate for the lines taxed per line (net of returns). @return list<array{class: string, rate: float, sales: float, vat: float}> */
+    private function vatByClass(): array
+    {
+        [$from, $bind] = $this->saleRows();
+
+        return collect(DB::select("SELECT COALESCE(tc.name, 'VAT') AS class, i.tax_rate AS rate,
+                SUM(i.line_total * (i.quantity - COALESCE(i.returned_quantity, 0)) / NULLIF(i.quantity, 0)) AS sales,
+                SUM(i.tax_amount * (i.quantity - COALESCE(i.returned_quantity, 0)) / NULLIF(i.quantity, 0)) AS vat
+            FROM {$from} JOIN sale_record_items i ON i.sale_record_id = s.sale_id AND COALESCE(i.is_deleted, 0) = 0
+            LEFT JOIN tax_classes tc ON tc.id = i.tax_class_id
+            WHERE s.sale_id > 0 AND i.tax_rate IS NOT NULL GROUP BY tc.name, i.tax_rate ORDER BY i.tax_rate DESC", $bind))
+            ->map(fn ($r) => ['class' => (string) $r->class, 'rate' => (float) $r->rate, 'sales' => round((float) $r->sales, 2), 'vat' => round((float) $r->vat, 2)])->all();
     }
 
     private function purchaseSummary(array $o): array
@@ -444,5 +479,332 @@ class ReportService
 
         return ['columns' => [$this->text('name', 'Product'), $this->text('batch', 'Batch'), $this->text('expiry', 'Expires'), $this->num('days_left', 'Days left'), $this->num('quantity', 'Quantity'),
             $this->money('value_at_cost', 'Value at cost')], 'rows' => $rows, 'totals' => $this->totals($rows, ['value_at_cost']), 'meta' => ['days' => $days]];
+    }
+
+    // ── Supermarket insight (SUPERMARKET_PLAN.md H2, H3, H4, H6) ──────────────────────────────
+
+    /** Stock-out movement types that are a loss, not a sale, transfer or return to a supplier (H6 shrink). */
+    public const WRITE_OFF_TYPES = ['Damage', 'Expired', 'Lost', 'Internal Use', 'Adjustment Out', 'Other', 'Stock Out'];
+
+    private const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    private function percent(string $key, string $label): array
+    {
+        return ['key' => $key, 'label' => $label, 'type' => 'percent'];
+    }
+
+    /** Local days in the report's range (both ends counted). */
+    private function rangeDays(): int
+    {
+        return (int) round((strtotime($this->to->toDateString()) - strtotime($this->from->toDateString())) / 86400) + 1;
+    }
+
+    /**
+     * Sales and profit of the product lines between two local days, grouped by $label (SQL over l = line,
+     * p = product, c = category, sc = sub-category). SalesSource, so old-app sale movements count once.
+     *
+     * @return array<string, array{sales: float, profit: float}>
+     */
+    private function linesBy(string $from, string $to, string $label): array
+    {
+        [$sql, $bind] = SalesSource::linesSql($this->companyId, 'x', $from, $to);
+        $out = [];
+        foreach (DB::select("SELECT {$label} AS label, SUM(l.revenue) AS sales, SUM(l.profit) AS profit
+            FROM (SELECT x.* FROM {$sql} WHERE x.sale_date BETWEEN ? AND ?) l
+            LEFT JOIN stock_items p ON p.id = l.stock_item_id LEFT JOIN stock_categories c ON c.id = p.stock_category_id
+            LEFT JOIN stock_sub_categories sc ON sc.id = p.stock_sub_category_id
+            GROUP BY {$label}", array_merge($bind, [$from, $to])) as $r) {
+            $out[(string) $r->label] = ['sales' => (float) $r->sales, 'profit' => (float) $r->profit];
+        }
+
+        return $out;
+    }
+
+    /**
+     * H3: sales, cost, margin, share of sales and growth against the previous period of the same length,
+     * by category; a section by sub-category (the shop's brand / line).
+     */
+    private function categoryMargin(array $o): array
+    {
+        $from = $this->from->toDateString();
+        $to = $this->to->toDateString();
+        $days = $this->rangeDays();
+        $prevTo = date('Y-m-d', (int) strtotime($from.' -1 day'));
+        $prevFrom = date('Y-m-d', (int) strtotime($prevTo.' -'.($days - 1).' days'));
+        $cat = 'COALESCE(c.name, "Uncategorised")';
+        $sub = 'CONCAT(COALESCE(c.name, "Uncategorised"), " › ", COALESCE(sc.name, "No sub-category"))';
+
+        $build = function (array $now, array $prev): array {
+            $total = array_sum(array_column($now, 'sales'));
+            $rows = [];
+            foreach (array_keys($now + $prev) as $label) {
+                $sales = round($now[$label]['sales'] ?? 0, 2);
+                $profit = round($now[$label]['profit'] ?? 0, 2);
+                $before = round($prev[$label]['sales'] ?? 0, 2);
+                $rows[] = ['label' => (string) $label, 'sales' => $sales, 'cost' => round($sales - $profit, 2), 'profit' => $profit,
+                    'margin' => $sales > 0 ? round($profit * 100 / $sales, 1) : 0.0, 'share' => $total > 0 ? round($sales * 100 / $total, 1) : 0.0,
+                    'previous' => $before, 'growth' => $before > 0 ? round(($sales - $before) * 100 / $before, 1) : null];
+            }
+            usort($rows, fn ($a, $b) => $b['sales'] <=> $a['sales']);
+            $t = $this->totals($rows, ['sales', 'cost', 'profit', 'previous']);
+            $t['margin'] = $t['sales'] > 0 ? round($t['profit'] * 100 / $t['sales'], 1) : 0.0;
+            $t['growth'] = $t['previous'] > 0 ? round(($t['sales'] - $t['previous']) * 100 / $t['previous'], 1) : null;
+
+            return [$rows, $t];
+        };
+        $columns = fn (string $first) => [$this->text('label', $first), $this->money('sales', 'Sales'), $this->money('cost', 'Cost of goods'), $this->money('profit', 'Gross profit'),
+            $this->percent('margin', 'Margin %'), $this->percent('share', 'Share of sales %'), $this->money('previous', 'Previous period'), $this->percent('growth', 'Growth %')];
+        [$rows, $totals] = $build($this->linesBy($from, $to, $cat), $this->linesBy($prevFrom, $prevTo, $cat));
+        [$subRows, $subTotals] = $build($this->linesBy($from, $to, $sub), $this->linesBy($prevFrom, $prevTo, $sub));
+
+        return ['columns' => $columns('Category'), 'rows' => $rows, 'totals' => $totals,
+            'meta' => ['previous_from' => $prevFrom, 'previous_to' => $prevTo, 'note' => "Growth compares with the {$days} day(s) before: {$prevFrom} to {$prevTo}."],
+            'sections' => [['key' => 'sub_categories', 'title' => 'By sub-category (brand / line)', 'columns' => $columns('Sub-category'), 'rows' => $subRows, 'totals' => $subTotals]]];
+    }
+
+    /**
+     * H2: number of sales, average basket, items per basket; by weekday, a weekday × hour heatmap of the
+     * number of sales (section type "heatmap", shop-local hours) and by hour; best hour and best day.
+     */
+    private function basket(array $o): array
+    {
+        [$from, $bind] = $this->saleRows();
+        // A sale's hour is when it was rung up (created_at, UTC) in the shop's timezone; its weekday is its local sale day.
+        $hour = "HOUR(CONVERT_TZ(COALESCE(r.created_at, m.created_at), '+00:00', COALESCE(@tz_offset, '+00:00')))";
+        $cells = DB::select("SELECT WEEKDAY(s.sale_date) AS wd, {$hour} AS hr, COUNT(*) AS n, SUM(s.total_amount) AS amount
+            FROM {$from} LEFT JOIN sale_records r ON s.sale_id > 0 AND r.id = s.sale_id LEFT JOIN stock_records m ON s.sale_id < 0 AND m.id = -s.sale_id
+            WHERE s.total_amount > 0 GROUP BY wd, hr", $bind);
+        [$lines, $lineBind] = $this->lineRows();
+        $items = [];
+        foreach (DB::select("SELECT WEEKDAY(l.sale_date) AS wd, SUM(l.quantity) AS qty FROM {$lines} GROUP BY wd", $lineBind) as $r) {
+            $items[(int) $r->wd] = (float) $r->qty;
+        }
+
+        $byDay = array_fill(0, 7, ['n' => 0, 'amount' => 0.0]);
+        $byHour = [];
+        $grid = [];
+        foreach ($cells as $c) {
+            $wd = (int) $c->wd;
+            $hr = (int) $c->hr;
+            $byDay[$wd]['n'] += (int) $c->n;
+            $byDay[$wd]['amount'] += (float) $c->amount;
+            $byHour[$hr] ??= ['n' => 0, 'amount' => 0.0];
+            $byHour[$hr]['n'] += (int) $c->n;
+            $byHour[$hr]['amount'] += (float) $c->amount;
+            $grid[$wd][$hr] = ($grid[$wd][$hr] ?? 0) + (int) $c->n;
+        }
+        ksort($byHour);
+        $avg = fn (float $amount, int $n) => $n > 0 ? round($amount / $n, 2) : 0.0;
+
+        $rows = [];
+        foreach (self::WEEKDAYS as $wd => $name) {
+            $n = $byDay[$wd]['n'];
+            $rows[] = ['day' => $name, 'sales' => $n, 'amount' => round($byDay[$wd]['amount'], 2), 'avg_basket' => $avg($byDay[$wd]['amount'], $n),
+                'items_per_basket' => $n > 0 ? round(($items[$wd] ?? 0) / $n, 2) : 0.0];
+        }
+        $count = array_sum(array_column($rows, 'sales'));
+        $amount = array_sum(array_column($rows, 'amount'));
+        $totals = ['sales' => $count, 'amount' => round($amount, 2), 'avg_basket' => $avg($amount, $count),
+            'items_per_basket' => $count > 0 ? round(array_sum($items) / $count, 2) : 0.0];
+
+        // Heatmap: one row per weekday, one column per hour from the first to the last hour with a sale.
+        $heatRows = [];
+        $heatCols = [$this->text('day', 'Day')];
+        if ($byHour !== []) {
+            $hours = range(min(array_keys($byHour)), max(array_keys($byHour)));
+            foreach ($hours as $h) {
+                $heatCols[] = $this->num('h'.sprintf('%02d', $h), sprintf('%02d', $h));
+            }
+            foreach (self::WEEKDAYS as $wd => $name) {
+                $row = ['day' => substr($name, 0, 3)];
+                foreach ($hours as $h) {
+                    $row['h'.sprintf('%02d', $h)] = $grid[$wd][$h] ?? 0;
+                }
+                $heatRows[] = $row;
+            }
+        }
+        $hourRows = [];
+        foreach ($byHour as $h => $v) {
+            $hourRows[] = ['hour' => sprintf('%02d:00–%02d:00', $h, ($h + 1) % 24), 'sales' => $v['n'], 'amount' => round($v['amount'], 2), 'avg_basket' => $avg($v['amount'], $v['n'])];
+        }
+
+        $bestHour = null;
+        foreach ($byHour as $h => $v) {
+            if ($bestHour === null || $v['n'] > $byHour[$bestHour]['n'] || ($v['n'] === $byHour[$bestHour]['n'] && $v['amount'] > $byHour[$bestHour]['amount'])) {
+                $bestHour = $h;
+            }
+        }
+        $bestDay = null;
+        foreach ($rows as $wd => $r) {
+            if ($r['sales'] > 0 && ($bestDay === null || $r['sales'] > $rows[$bestDay]['sales'] || ($r['sales'] === $rows[$bestDay]['sales'] && $r['amount'] > $rows[$bestDay]['amount']))) {
+                $bestDay = $wd;
+            }
+        }
+
+        return ['columns' => [$this->text('day', 'Day'), $this->num('sales', 'Sales'), $this->money('amount', 'Sales value'), $this->money('avg_basket', 'Average basket'),
+            $this->num('items_per_basket', 'Items per basket')], 'rows' => $rows, 'totals' => $totals,
+            'meta' => ['sales_count' => $count, 'avg_basket' => $totals['avg_basket'], 'items_per_basket' => $totals['items_per_basket'],
+                'best_hour' => $bestHour === null ? null : sprintf('%02d:00–%02d:00', $bestHour, ($bestHour + 1) % 24), 'best_day' => $bestDay === null ? null : self::WEEKDAYS[$bestDay],
+                'note' => 'Hours are the shop\'s local time, when each sale was rung up. Fully returned sales are left out.'],
+            'sections' => [
+                ['key' => 'heatmap', 'type' => 'heatmap', 'title' => 'Sales by weekday and hour', 'columns' => $heatCols, 'rows' => $heatRows, 'totals' => []],
+                ['key' => 'hours', 'title' => 'By hour of the day', 'columns' => [$this->text('hour', 'Hour'), $this->num('sales', 'Sales'), $this->money('amount', 'Sales value'),
+                    $this->money('avg_basket', 'Average basket')], 'rows' => $hourRows, 'totals' => $this->totals($hourRows, ['sales', 'amount'])],
+            ]];
+    }
+
+    /**
+     * H4: products ranked by sales value; A = the products making the first 80% of sales, B = the next 15%,
+     * C = the last 5%. Days of cover = stock on hand ÷ average daily units sold over the period.
+     */
+    private function abc(array $o): array
+    {
+        [$from, $bind] = $this->lineRows();
+        $items = DB::select("SELECT l.stock_item_id AS id, COALESCE(MAX(p.name), MAX(l.item_name), 'Item') AS name, MAX(c.name) AS category,
+                SUM(l.quantity) AS quantity, SUM(l.revenue) AS revenue, MAX(p.current_quantity) AS on_hand, MAX(p.track_stock) AS track
+            FROM {$from} GROUP BY l.stock_item_id HAVING SUM(l.revenue) > 0 ORDER BY revenue DESC, name ASC", $bind);
+        $days = $this->rangeDays();
+        $total = array_sum(array_map(fn ($r) => (float) $r->revenue, $items));
+        $rows = [];
+        $count = ['A' => 0, 'B' => 0, 'C' => 0];
+        $value = ['A' => 0.0, 'B' => 0.0, 'C' => 0.0];
+        $cum = 0.0;
+        foreach ($items as $r) {
+            $revenue = (float) $r->revenue;
+            // Classed by where the product starts on the cumulative curve, so the top seller is always A.
+            $class = $cum < 80 ? 'A' : ($cum < 95 ? 'B' : 'C');
+            $share = $total > 0 ? $revenue * 100 / $total : 0.0;
+            $cum += $share;
+            $perDay = (float) $r->quantity / $days;
+            $tracked = $r->id !== null && (bool) $r->track;
+            $count[$class]++;
+            $value[$class] += $revenue;
+            $rows[] = ['name' => (string) $r->name, 'category' => (string) ($r->category ?? ''), 'class' => $class, 'quantity' => round((float) $r->quantity, 3),
+                'sales' => round($revenue, 2), 'share' => round($share, 1), 'cumulative' => round(min(100, $cum), 1),
+                'on_hand' => $tracked ? round((float) $r->on_hand, 3) : null, 'per_day' => round($perDay, 2),
+                'cover' => $tracked && $perDay > 0 ? round(max(0, (float) $r->on_hand) / $perDay, 1) : null];
+        }
+        $t = $this->totals($rows, ['quantity', 'sales']);
+
+        return ['columns' => [$this->text('name', 'Product'), $this->text('category', 'Category'), $this->text('class', 'Class'), $this->num('quantity', 'Sold'),
+            $this->money('sales', 'Sales'), $this->percent('share', 'Share %'), $this->percent('cumulative', 'Cumulative %'), $this->num('on_hand', 'On hand'),
+            $this->num('per_day', 'Sold per day'), $this->num('cover', 'Days of cover')], 'rows' => $rows,
+            'totals' => $t + ['class_a' => $count['A'], 'class_b' => $count['B'], 'class_c' => $count['C']],
+            'meta' => ['days' => $days, 'class_a_sales' => round($value['A'], 2), 'class_b_sales' => round($value['B'], 2), 'class_c_sales' => round($value['C'], 2),
+                'note' => "A: the products that make the first 80% of sales; B: the next 15%; C: the last 5%. Days of cover = on hand ÷ units sold per day over these {$days} day(s)."]];
+    }
+
+    /**
+     * H6: stock written off (damage, expiry, loss and theft, own use, samples, count shortages and other
+     * stock-outs), at cost, by reason, by category and by week, and as a % of the period's sales.
+     * Reversed write-offs are left out.
+     */
+    private function shrink(array $o): array
+    {
+        $f = $this->from->toDateString();
+        $t = $this->to->toDateString();
+        [$win, $winBind] = SalesSource::window('r.date', 'r.created_at', $f, $t);
+        $day = SalesSource::localDay('r.date', 'r.created_at');
+        $in = implode(',', array_fill(0, count(self::WRITE_OFF_TYPES), '?'));
+        $why = "CASE WHEN r.reason = 'theft' THEN 'Stolen' WHEN r.reason = 'gift' THEN 'Sample / gift' WHEN r.type = 'Damage' THEN 'Damaged'
+            WHEN r.type = 'Expired' THEN 'Expired' WHEN r.type = 'Lost' THEN 'Lost' WHEN r.type = 'Internal Use' THEN 'Own use'
+            WHEN r.type = 'Adjustment Out' THEN 'Count shortage' ELSE 'Other stock out' END";
+        $w = "(SELECT r.stock_item_id, {$day} AS local_day, -r.quantity_delta AS qty, -r.quantity_delta * COALESCE(r.unit_cost, r.buying_price, 0) AS value, {$why} AS why
+            FROM stock_records r WHERE r.company_id = ? AND r.type IN ({$in}) AND r.is_reversal = 0 AND COALESCE(r.is_deleted, 0) = 0
+              AND NOT EXISTS (SELECT 1 FROM stock_records rv WHERE rv.reverses_id = r.id){$win}) w";
+        $bind = array_merge([$this->companyId], self::WRITE_OFF_TYPES, $winBind, [$f, $t]);
+
+        [$sales, $salesBind] = $this->saleRows();
+        $salesTotal = (float) DB::selectOne("SELECT COALESCE(SUM(s.total_amount), 0) AS total FROM {$sales}", $salesBind)->total;
+        $pct = fn (float $v, float $of) => $of > 0 ? round($v * 100 / $of, 2) : null;
+
+        $rows = array_map(fn ($r) => ['reason' => (string) $r->why, 'entries' => (int) $r->n, 'quantity' => round((float) $r->qty, 3), 'value' => round((float) $r->value, 2),
+            'pct_sales' => $pct((float) $r->value, $salesTotal)],
+            DB::select("SELECT w.why, COUNT(*) AS n, SUM(w.qty) AS qty, SUM(w.value) AS value FROM {$w} WHERE w.local_day BETWEEN ? AND ? GROUP BY w.why ORDER BY value DESC", $bind));
+        $cats = array_map(fn ($r) => ['category' => (string) $r->category, 'quantity' => round((float) $r->qty, 3), 'value' => round((float) $r->value, 2), 'pct_sales' => $pct((float) $r->value, $salesTotal)],
+            DB::select("SELECT COALESCE(c.name, 'Uncategorised') AS category, SUM(w.qty) AS qty, SUM(w.value) AS value FROM {$w}
+                LEFT JOIN stock_items p ON p.id = w.stock_item_id LEFT JOIN stock_categories c ON c.id = p.stock_category_id
+                WHERE w.local_day BETWEEN ? AND ? GROUP BY COALESCE(c.name, 'Uncategorised') ORDER BY value DESC", $bind));
+        $weekSales = [];
+        foreach (DB::select("SELECT DATE_SUB(s.sale_date, INTERVAL WEEKDAY(s.sale_date) DAY) AS wk, SUM(s.total_amount) AS total FROM {$sales} GROUP BY wk", $salesBind) as $r) {
+            $weekSales[(string) $r->wk] = (float) $r->total;
+        }
+        $weeks = array_map(fn ($r) => ['week' => (string) $r->wk, 'value' => round((float) $r->value, 2), 'sales' => round($weekSales[(string) $r->wk] ?? 0, 2),
+            'pct_sales' => $pct((float) $r->value, $weekSales[(string) $r->wk] ?? 0)],
+            DB::select("SELECT DATE_SUB(w.local_day, INTERVAL WEEKDAY(w.local_day) DAY) AS wk, SUM(w.value) AS value FROM {$w} WHERE w.local_day BETWEEN ? AND ? GROUP BY wk ORDER BY wk", $bind));
+
+        $totals = $this->totals($rows, ['entries', 'quantity', 'value']);
+        $totals['pct_sales'] = $pct($totals['value'], $salesTotal);
+
+        return ['columns' => [$this->text('reason', 'Reason'), $this->num('entries', 'Write-offs'), $this->num('quantity', 'Quantity'), $this->money('value', 'Value at cost'),
+            $this->percent('pct_sales', '% of sales')], 'rows' => $rows, 'totals' => $totals,
+            'meta' => ['sales' => round($salesTotal, 2), 'shrink_pct' => $totals['pct_sales'], 'note' => 'Stock written off at what it cost, against sales for the same days. Reversed write-offs are left out.'],
+            'sections' => [
+                ['key' => 'categories', 'title' => 'By category', 'columns' => [$this->text('category', 'Category'), $this->num('quantity', 'Quantity'), $this->money('value', 'Value at cost'),
+                    $this->percent('pct_sales', '% of sales')], 'rows' => $cats, 'totals' => $this->totals($cats, ['value'])],
+                ['key' => 'weeks', 'title' => 'By week (from Monday)', 'columns' => [$this->text('week', 'Week of'), $this->money('value', 'Value at cost'), $this->money('sales', 'Sales that week'),
+                    $this->percent('pct_sales', '% of that week\'s sales')], 'rows' => $weeks, 'totals' => $this->totals($weeks, ['value'])],
+            ]];
+    }
+
+    /**
+     * H6: per cashier, sales, voids, refunds, price overrides and no-sale drawer opens (when the supermarket
+     * approvals / cash-movement tables exist), and cash over/short of the shifts they opened and closed.
+     */
+    private function cashControl(array $o): array
+    {
+        $utc = [$this->from->copy()->utc(), $this->to->copy()->utc()];
+        $keys = ['sales', 'amount', 'voids', 'voided', 'refunds', 'refunded', 'overrides', 'no_sales', 'shifts', 'over_short'];
+        $by = [];
+        $add = function ($id, array $values) use (&$by, $keys) {
+            $id = (int) $id;
+            $by[$id] ??= array_fill_keys($keys, 0);
+            foreach ($values as $k => $v) {
+                $by[$id][$k] += $v;
+            }
+        };
+        [$from, $bind] = $this->saleRows();
+        foreach (DB::select("SELECT s.created_by_id AS id, COUNT(CASE WHEN s.total_amount > 0 THEN 1 END) AS n, SUM(s.total_amount) AS amount FROM {$from} GROUP BY s.created_by_id", $bind) as $r) {
+            $add($r->id, ['sales' => (int) $r->n, 'amount' => (float) $r->amount]);
+        }
+        foreach (DB::table('sale_records')->where('company_id', $this->companyId)->whereBetween('voided_at', $utc)->groupBy('created_by_id')
+            ->selectRaw('created_by_id AS id, COUNT(*) AS n, COALESCE(SUM(total_amount), 0) AS v')->get() as $r) {
+            $add($r->id, ['voids' => (int) $r->n, 'voided' => (float) $r->v]);
+        }
+        foreach (DB::table('sale_returns')->where('company_id', $this->companyId)->where('is_deleted', 0)->whereBetween('created_at', $utc)->groupBy('created_by_id')
+            ->selectRaw('created_by_id AS id, COUNT(*) AS n, COALESCE(SUM(value), 0) AS v')->get() as $r) {
+            $add($r->id, ['refunds' => (int) $r->n, 'refunded' => (float) $r->v]);
+        }
+        $approvals = \Illuminate\Support\Facades\Schema::hasTable('approvals');
+        if ($approvals) {
+            foreach (DB::table('approvals')->where('company_id', $this->companyId)->where('action', 'price_override')->whereBetween('created_at', $utc)->groupBy('requested_by')
+                ->selectRaw('requested_by AS id, COUNT(*) AS n')->get() as $r) {
+                $add($r->id, ['overrides' => (int) $r->n]);
+            }
+        }
+        $movements = \Illuminate\Support\Facades\Schema::hasTable('cash_movements');
+        if ($movements) {
+            foreach (DB::table('cash_movements')->where('company_id', $this->companyId)->where('type', 'no_sale')->whereBetween('created_at', $utc)->groupBy('created_by')
+                ->selectRaw('created_by AS id, COUNT(*) AS n')->get() as $r) {
+                $add($r->id, ['no_sales' => (int) $r->n]);
+            }
+        }
+        foreach (DB::table('shifts')->where('company_id', $this->companyId)->where('status', 'closed')->whereBetween('closed_at', $utc)->groupBy('opened_by_id')
+            ->selectRaw('opened_by_id AS id, COUNT(*) AS n, COALESCE(SUM(variance), 0) AS v')->get() as $r) {
+            $add($r->id, ['shifts' => (int) $r->n, 'over_short' => (float) $r->v]);
+        }
+        $names = DB::table('admin_users')->whereIn('id', array_keys($by))->pluck('name', 'id');
+        $rows = [];
+        foreach ($by as $id => $v) {
+            $rows[] = ['cashier' => (string) ($names[$id] ?? '—')] + array_map(fn ($x) => is_float($x) ? round($x, 2) : $x, $v);
+        }
+        usort($rows, fn ($a, $b) => [$b['amount'], $b['voids']] <=> [$a['amount'], $a['voids']]);
+
+        return ['columns' => [$this->text('cashier', 'Cashier'), $this->num('sales', 'Sales'), $this->money('amount', 'Sales value'), $this->num('voids', 'Voids'),
+            $this->money('voided', 'Voided value'), $this->num('refunds', 'Returns'), $this->money('refunded', 'Returned value'), $this->num('overrides', 'Price overrides'),
+            $this->num('no_sales', 'No-sales'), $this->num('shifts', 'Shifts closed'), $this->money('over_short', 'Cash over / short')],
+            'rows' => $rows, 'totals' => $this->totals($rows, $keys),
+            'meta' => ['approvals_tracked' => $approvals, 'drawer_tracked' => $movements,
+                'note' => 'Voids count against the cashier who rang the sale; over/short is counted cash minus expected cash of the shifts each person opened. Price overrides and no-sales come from supervisor approvals and drawer opens.']];
     }
 }

@@ -56,7 +56,7 @@ class SaleFormTest extends AdminTestCase
 
     private function postSale(array $data)
     {
-        return $this->asAdmin($this->t['user'])->post('/sale-records', $data + ['sale_date' => now()->toDateString(), 'customer_name' => '', 'customer_phone' => '', 'amount_paid' => '']);
+        return $this->asAdmin($this->t['user'])->post('/sale-records', $data + ['sale_date' => now('Africa/Kampala')->toDateString(), 'customer_name' => '', 'customer_phone' => '', 'amount_paid' => '']);
     }
 
     private function row(StockItem $p, float $qty, array $extra = []): array

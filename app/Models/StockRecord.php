@@ -35,6 +35,9 @@ class StockRecord extends Model
     /** Runtime-only: batches an inbound movement adds (batch_number, expiry_date, quantity) — P4-4. */
     public array $batchIn = [];
 
+    /** Runtime-only: an outbound movement takes this batch first (a write-off of one short-dated batch), then First-Expiry-First-Out. */
+    public ?int $batchOut = null;
+
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);

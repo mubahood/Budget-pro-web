@@ -67,6 +67,7 @@ class ReturnService
                 if ($qty <= 0 || $qty > $returnable) {
                     throw BusinessRuleException::make('invalid_return_quantity', "You can return at most {$returnable} of {$item->item_name}.", ['returnable' => $returnable]);
                 }
+                // The line total carries any tax added on top (tax classes, F1), so the refund takes back its share of the tax too.
                 $lineValue = round((float) $item->line_total * $qty / max((float) $item->quantity, 0.001), 2);
                 $restock = (bool) ($l['restock'] ?? true);
                 $movementId = null;

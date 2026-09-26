@@ -183,6 +183,7 @@ class User extends Administrator
     protected $hidden = [
         'password',
         'remember_token',
+        'pos_pin_hash', // supervisor till PIN (ApprovalService): never serialised
     ];
 
     /**

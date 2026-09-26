@@ -40,6 +40,11 @@ class ScheduledNotifications
                     if ($local->hour >= self::LOW_STOCK_HOUR) {
                         $counts['low_stock'] += (int) Notices::once((int) $company->id, 'low_stock', $local->toDateString(), fn () => $this->lowStock($company));
                     }
+                    // Short-dated batches (SUPERMARKET_PLAN D2): only for shops with FEFO or markdowns on; sent as the stock digest.
+                    if ($local->hour >= self::LOW_STOCK_HOUR && \App\Services\Shop\ShortDatedService::enabled($company)
+                        && Notices::once((int) $company->id, 'short_dated', $local->toDateString(), fn () => $this->shortDated($company))) {
+                        $counts['short_dated'] = ($counts['short_dated'] ?? 0) + 1;
+                    }
                     if ($local->hour >= self::UNSYNCED_HOUR) {
                         $counts['unsynced_device'] += $this->unsyncedDevices($company, $local);
                     }
@@ -97,8 +102,64 @@ class ScheduledNotifications
             ? 'No sales recorded today.'
             : "{$d['count']} sale".($d['count'] > 1 ? 's' : '').', '.number_format($d['total'])." {$cur} (paid ".number_format($d['cash']).', on credit '.number_format($d['credit']).').'
                 .($d['top'] ? " Best seller: {$d['top']}." : '');
+        $data = ['date' => $local->toDateString()] + $d;
+        // Supermarket daily flash (SUPERMARKET_PLAN.md H1): extra lines only when the shop runs in supermarket mode.
+        if (\App\Support\StoreFeatures::mode($company)) {
+            $flash = $this->supermarketFlash($company, $local, $d);
+            $data['flash'] = $flash;
+            $fmt = fn (float $v) => number_format($v)." {$cur}";
+            $lines = ["Customers served: {$flash['customers']}", 'Average basket: '.$fmt($flash['avg_basket'])];
+            if ($flash['shifts_closed'] > 0) {
+                $lines[] = 'Cash over/short: '.($flash['over_short'] > 0 ? '+' : '').$fmt($flash['over_short'])." ({$flash['shifts_closed']} shift".($flash['shifts_closed'] > 1 ? 's' : '').' closed)';
+            }
+            if ($flash['top_voids'] !== null) {
+                $lines[] = "Most voids: {$flash['top_voids']['name']} ({$flash['top_voids']['count']})";
+            }
+            if ($flash['short_dated_value'] !== null) {
+                $lines[] = "Short-dated stock (within {$flash['short_dated_days']} days): ".$fmt($flash['short_dated_value']).' at cost';
+            }
+            $body .= "\n".implode("\n", $lines);
+        }
 
-        return ['title' => "{$company->name} today", 'body' => $body, 'data' => ['date' => $local->toDateString()] + $d];
+        return ['title' => "{$company->name} today", 'body' => $body, 'data' => $data];
+    }
+
+    /**
+     * The supermarket flash for a local day: customers served (sales), average basket, cash over/short of
+     * the shifts closed that day, the cashier with the most voids, and the value at cost of batches that
+     * expire within the shop's short-dated window (when batches are kept).
+     *
+     * @param  array{count: int, total: float}  $d  daySales()
+     * @return array{customers: int, avg_basket: float, shifts_closed: int, over_short: float, top_voids: ?array{name: string, count: int}, short_dated_days: int, short_dated_value: ?float}
+     */
+    public function supermarketFlash(Company $company, Carbon $local, ?array $d = null): array
+    {
+        $d ??= $this->daySales($company, $local);
+        $start = $local->copy()->startOfDay()->utc();
+        $end = $local->copy()->endOfDay()->utc();
+        $shifts = DB::table('shifts')->where('company_id', $company->id)->where('status', 'closed')->whereBetween('closed_at', [$start, $end])
+            ->selectRaw('COUNT(*) AS n, COALESCE(SUM(variance), 0) AS v')->first();
+        $voids = DB::table('sale_records as s')->leftJoin('admin_users as u', 'u.id', '=', 's.created_by_id')->where('s.company_id', $company->id)
+            ->whereBetween('s.voided_at', [$start, $end])->groupBy('s.created_by_id')->selectRaw('MAX(u.name) AS name, COUNT(*) AS n')
+            ->orderByDesc('n')->first();
+        $days = (int) (\App\Support\StoreFeatures::setting($company, 'short_dated_days') ?: 14);
+        $short = null;
+        if (\Illuminate\Support\Facades\Schema::hasTable('stock_batches') && \Illuminate\Support\Facades\Schema::hasColumn('stock_batches', 'expiry_date')) {
+            $cost = \Illuminate\Support\Facades\Schema::hasColumn('stock_batches', 'unit_cost') ? 'COALESCE(NULLIF(b.unit_cost, 0), p.buying_price, 0)' : 'COALESCE(p.buying_price, 0)';
+            $short = round((float) DB::table('stock_batches as b')->join('stock_items as p', 'p.id', '=', 'b.stock_item_id')->where('b.company_id', $company->id)
+                ->where('b.quantity', '>', 0)->whereNotNull('b.expiry_date')->where('b.expiry_date', '<=', $local->copy()->addDays($days)->toDateString())
+                ->sum(DB::raw("b.quantity * {$cost}")), 2);
+        }
+
+        return [
+            'customers' => (int) $d['count'],
+            'avg_basket' => $d['count'] > 0 ? round((float) $d['total'] / $d['count'], 2) : 0.0,
+            'shifts_closed' => (int) ($shifts->n ?? 0),
+            'over_short' => round((float) ($shifts->v ?? 0), 2),
+            'top_voids' => $voids ? ['name' => (string) ($voids->name ?? '—'), 'count' => (int) $voids->n] : null,
+            'short_dated_days' => $days,
+            'short_dated_value' => $short,
+        ];
     }
 
     /**
@@ -142,6 +203,14 @@ class ScheduledNotifications
         $more = $rows->count() > 5 ? ' and '.($rows->count() - 5).' more' : '';
         $exp = $expiring->isEmpty() ? '' : ' Expiring within 30 days: '.$expiring->take(3)->map(fn ($b) => "{$b->name} {$b->batch_number} ({$b->expiry_date})")->implode(', ').'.';
         $this->notifier->notify((int) $company->id, 'low_stock', $rows->count().' product'.($rows->count() > 1 ? 's are' : ' is').' running low', "Reorder soon: {$names}{$more}.{$exp}", ['product_ids' => $rows->pluck('id')->all()]);
+    }
+
+    private function shortDated(Company $company): void
+    {
+        $m = (new \App\Services\Shop\ShortDatedService())->alert($company);
+        if ($m !== null) {
+            $this->notifier->notify((int) $company->id, 'low_stock', $m['title'], $m['body'], $m['data'] + ['kind' => 'short_dated']);
+        }
     }
 
     private function unsyncedDevices(Company $company, Carbon $local): int

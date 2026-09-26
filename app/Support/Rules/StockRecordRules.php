@@ -18,6 +18,18 @@ class StockRecordRules
     public const REASONS = ['damage', 'expired', 'lost', 'theft', 'internal_use', 'correction', 'gift', 'restock', 'return', 'other'];
 
     /**
+     * Supermarket waste reasons (SUPERMARKET_PLAN.md D4). Always accepted; offered in the pickers only
+     * to shops in Supermarket mode (reasonsFor), so every other shop sees the list it had.
+     */
+    public const SHRINK_REASONS = ['stolen', 'own_use', 'sample'];
+
+    /** The reasons a person is offered in this shop. @return list<string> */
+    public static function reasonsFor(?\App\Models\Company $company): array
+    {
+        return (\App\Support\StoreFeatures::mode($company) || \App\Support\StoreFeatures::enabled($company, 'approvals')) ? array_merge(self::REASONS, self::SHRINK_REASONS) : self::REASONS;
+    }
+
+    /**
      * Movement types a person may record by hand on the web. Sales are made on Sales / POS so they get
      * a receipt and payment; deliveries on Receive stock so the cost and what is owed are recorded.
      */
@@ -62,7 +74,7 @@ class StockRecordRules
             'date' => ['nullable', 'date'],
             'selling_price' => ['nullable', 'numeric', 'min:0'],
             'unit_cost' => ['nullable', 'numeric', 'min:0'],
-            'reason' => ['nullable', 'string', 'in:'.implode(',', self::REASONS)],
+            'reason' => ['nullable', 'string', 'in:'.implode(',', array_merge(self::REASONS, self::SHRINK_REASONS))],
             'image' => ['nullable', 'string', 'max:255'],
         ];
     }

@@ -35,6 +35,8 @@ class SaleRecordItem extends Model
         'profit' => 'decimal:2',
         'returned_quantity' => 'decimal:3',
         'unit_factor' => 'decimal:3',
+        'tax_rate' => 'float',
+        'tax_amount' => 'decimal:2',
     ];
 
     protected $fillable = [

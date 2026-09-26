@@ -16,7 +16,7 @@ class ProductBarcode extends Model
 
     protected $fillable = ['uuid', 'company_id', 'stock_item_id', 'barcode', 'unit_id', 'created_by_id'];
 
-    protected $casts = ['is_deleted' => 'boolean'];
+    protected $casts = ['is_deleted' => 'boolean', 'is_primary' => 'boolean'];
 
     protected static function booted(): void
     {

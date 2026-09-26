@@ -55,6 +55,13 @@ class ReceiptService
             $out[] = 'Subtotal: '.$cur.' '.$n($sale->subtotal);
             $out[] = 'Discount: '.$cur.' '.$n($sale->discount_amount);
         }
+        $tax = TaxClassService::breakdown($sale); // tax classes (F1): empty for other sales
+        foreach ($tax['rows'] as $t) {
+            $out[] = ($tax['on_top'] ? 'Tax ' : 'Incl. tax ').$t['label'].': '.$cur.' '.$n($t['tax'], 2);
+        }
+        if (abs((float) $sale->rounding_amount) >= 0.005) {
+            $out[] = 'Rounding: '.$cur.' '.((float) $sale->rounding_amount < 0 ? '-' : '').$n(abs((float) $sale->rounding_amount), 2);
+        }
         $out[] = '*TOTAL: '.$cur.' '.$n($sale->total_amount).'*';
         if ((float) $sale->refunded_amount > 0) {
             $out[] = 'Returned: '.$cur.' '.$n($sale->refunded_amount);

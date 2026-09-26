@@ -13,7 +13,7 @@ class StockTakeItem extends Model
 
     protected $fillable = ['company_id', 'stock_take_id', 'stock_item_id', 'system_quantity', 'counted_quantity', 'delta', 'stock_record_id'];
 
-    protected $casts = ['system_quantity' => 'decimal:3', 'counted_quantity' => 'decimal:3', 'delta' => 'decimal:3'];
+    protected $casts = ['system_quantity' => 'decimal:3', 'counted_quantity' => 'decimal:3', 'delta' => 'decimal:3', 'needs_recount' => 'boolean'];
 
     protected static function booted(): void
     {

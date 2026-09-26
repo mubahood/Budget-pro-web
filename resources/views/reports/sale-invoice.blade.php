@@ -279,6 +279,19 @@
             <div class="totals-label">Subtotal:</div>
             <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->total_amount, 0) }}</div>
         </div>
+        @php $taxBreak = \App\Services\Shop\TaxClassService::breakdown($sale); @endphp
+        @foreach($taxBreak['rows'] as $tb)
+        <div class="totals-row">
+            <div class="totals-label">{{ $taxBreak['on_top'] ? 'Tax' : 'Incl. tax' }} {{ $tb['label'] }} on {{ number_format($tb['net'], 0) }}:</div>
+            <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($tb['tax'], 2) }}</div>
+        </div>
+        @endforeach
+        @if(abs((float) $sale->rounding_amount) >= 0.005)
+        <div class="totals-row">
+            <div class="totals-label">Rounding:</div>
+            <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ (float) $sale->rounding_amount < 0 ? '−' : '' }}{{ number_format(abs((float) $sale->rounding_amount), 2) }}</div>
+        </div>
+        @endif
         <div class="totals-row grand-total">
             <div class="totals-label">TOTAL AMOUNT:</div>
             <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->total_amount, 0) }}</div>

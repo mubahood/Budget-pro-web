@@ -76,45 +76,22 @@ class ProductTemplateSeeder extends Seeder
     public const REGIONAL_NAMES = '/^(mtn |airtel |safaricom )?airtime [0-9]/i';
 
     /** Currencies priced with cents on the shelf ($1.25, €0.45). */
-    public const CENTS = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'AED', 'SAR', 'ZAR', 'GHS', 'ZMW', 'EGP'];
+    public const CENTS = \App\Support\NicePrice::CENTS;
 
-    /** 0.274 → 0.25, 1.37 → 1.40, 12.3 → 12.50, 143 → 145: a shelf price in a currency with cents. */
+    /** 0.274 → 0.25, 1.37 → 1.40, 12.3 → 12.50, 143 → 145: a shelf price in a currency with cents (App\Support\NicePrice). */
     public static function niceCents(float $v): float
     {
-        if ($v <= 0) {
-            return 0;
-        }
-        $step = match (true) {
-            $v < 1 => 0.05,
-            $v < 20 => 0.1,
-            $v < 100 => 0.5,
-            $v < 1000 => 5,
-            default => 10,
-        };
-
-        return round(max($step, round($v / $step) * $step), 2);
+        return \App\Support\NicePrice::niceCents($v);
     }
 
-    /** A price a shop would write on a shelf: 178.6 → 180, 3,493 → 3,500, 38 → 40. */
+    /** A price a shop would write on a shelf: 178.6 → 180, 3,493 → 3,500, 38 → 40 (App\Support\NicePrice). */
     public static function nice(float $v): int
     {
-        if ($v <= 0) {
-            return 0;
-        }
-        $step = self::step($v);
-
-        return (int) max($step, round($v / $step) * $step);
+        return \App\Support\NicePrice::nice($v);
     }
 
     private static function step(float $v): int
     {
-        return match (true) {
-            $v < 10 => 1,
-            $v < 100 => 5,
-            $v < 1000 => 10,
-            $v < 10000 => 50,
-            $v < 100000 => 500,
-            default => 1000,
-        };
+        return \App\Support\NicePrice::step($v);
     }
 }

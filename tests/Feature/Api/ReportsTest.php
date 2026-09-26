@@ -119,7 +119,7 @@ class ReportsTest extends ApiTestCase
         $this->getJson('/api/v1/reports/nope', $this->h)->assertStatus(404);
         $this->getJson('/api/v1/reports/profit?from=2026-02-01&to=2026-01-01', $this->h)->assertStatus(422)->assertJsonPath('errors.code', 'invalid_range');
         $list = $this->getJson('/api/v1/reports', $this->h)->assertOk()->json('data.reports');
-        $this->assertCount(14, $list);
+        $this->assertCount(19, $list);
     }
 
     public function test_roles_limit_which_reports_open(): void
@@ -128,7 +128,7 @@ class ReportsTest extends ApiTestCase
         $token = $this->postJson('/api/v1/invites/'.basename($link).'/accept', ['first_name' => 'S', 'last_name' => 'K', 'password' => 'secret123'])->json('data.token');
         $sk = $this->auth($token);
         $names = array_column($this->getJson('/api/v1/reports', $sk)->json('data.reports'), 'name');
-        $this->assertSame(['stock_valuation', 'purchase_summary'], $names);
+        $this->assertSame(['stock_valuation', 'purchase_summary', 'shrink'], $names);
         $this->getJson('/api/v1/reports/profit', $sk)->assertStatus(403)->assertJsonPath('errors.permission', 'view_profit');
         $this->getJson('/api/v1/reports/stock_valuation', $sk)->assertOk();
     }

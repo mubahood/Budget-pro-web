@@ -27,6 +27,17 @@ class StockItem extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+
+        // Pack barcodes (StoreFeatures `pack_barcodes`): the product's own barcode is mirrored as its primary row.
+        static::saved(function (StockItem $item) {
+            if ($item->wasChanged('barcode') || ($item->wasRecentlyCreated && trim((string) $item->barcode) !== '')) {
+                \App\Services\Shop\BarcodeService::syncPrimary($item);
+            }
+        });
+
+        // Price book and shelf labels (StoreFeatures `price_book`, `shelf_labels`): logs price changes and
+        // queues labels when the shop has them on; otherwise nothing. Never fails the save.
+        static::saved(fn (StockItem $item) => \App\Services\Shop\PriceBookService::observe($item));
     }
 
     /**
@@ -48,6 +59,8 @@ class StockItem extends Model
         'allow_negative_stock' => 'boolean',
         'track_stock' => 'boolean',
         'is_active' => 'boolean',
+        'open_price' => 'boolean',
+        'min_age' => 'integer',
     ];
 
     //fillables
@@ -75,6 +88,13 @@ class StockItem extends Model
         'is_active',
         'unit_id',
         'track_batches',
+        // Supermarket features (StoreFeatures; written only when the shop has them on)
+        'sold_by',
+        'plu_code',
+        'open_price',
+        'min_age',
+        'deposit_item_id',
+        'tax_class_id',
     ];
 
     /**

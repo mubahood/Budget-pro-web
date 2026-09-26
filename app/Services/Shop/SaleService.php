@@ -33,7 +33,7 @@ class SaleService
     /**
      * @param  array<string, mixed>  $data  items[{stock_item_id, quantity, unit_price?, discount_amount?, unit_id?}], payments[], amount_paid, payment_method,
      *                                      discount_*, customer_*, customer_id, shift_id, sale_date, notes, client_uuid, provisional_number, device_id,
-     *                                      allow_negative_stock, payments_explicit, from_sync, location_id
+     *                                      allow_negative_stock, payments_explicit, from_sync, location_id, rounding (A7), age_checked (A10)
      * @return array{sale: SaleRecord, replayed: bool}
      */
     public function checkout(int $companyId, int $userId, array $data): array
@@ -86,8 +86,20 @@ class SaleService
                 }
                 $sale->shift_id = $shift->id;
             }
+            // Supermarket lane (StoreFeatures): cash rounding (A7, checked in finalize) and the age check (A10). Absent = as before.
+            if (isset($data['rounding']) && abs((float) $data['rounding']) >= 0.005) {
+                $sale->rounding_amount = round((float) $data['rounding'], 2);
+            }
+            if (! empty($data['age_checked'])) {
+                $sale->age_checked_by = $userId;
+            }
             $sale->skipNumbering = true; // numbers are assigned in finalize(), inside this transaction
             $sale->save();
+
+            // Supervisor approval for price overrides (A5, `approvals` feature): re-checked here, whatever the till showed.
+            if (empty($data['from_sync'])) {
+                (new PriceOverrideService())->enforce($companyId, $userId, $data['items']);
+            }
 
             foreach ($data['items'] as $line) {
                 $item = new SaleRecordItem();
@@ -106,6 +118,10 @@ class SaleService
                 $item->unit_price = array_key_exists('unit_price', $line) && $line['unit_price'] !== null ? $line['unit_price'] : null;
                 $item->discount_amount = round((float) ($line['discount_amount'] ?? 0), 2);
                 $item->save();
+                // A markdown label (B4): this line's stock comes out of the marked-down batch first.
+                if (! empty($line['markdown_id']) && ($md = MarkdownService::active($companyId, (int) $line['markdown_id'], (int) $item->stock_item_id))) {
+                    $this->batchHints[$item->id] = $md['batch_id'];
+                }
             }
 
             $payments = $data['payments'] ?? null;
@@ -312,6 +328,9 @@ class SaleService
     /** @var array{require_customer: bool, enforce_limit: bool} */
     private array $creditRules = ['require_customer' => false, 'enforce_limit' => false];
 
+    /** @var array<int, int> sale line id => batch to take first (a markdown label's batch, B4) */
+    private array $batchHints = [];
+
     /** customer_id, or find-or-create by phone when a named buyer is given (debt book). */
     private function resolveCustomer(int $companyId, int $userId, array $data): ?\App\Models\Customer
     {
@@ -359,6 +378,12 @@ class SaleService
             }
         }
 
+        // Tax classes (F1, `tax_classes` feature): off = nothing stored, totals as before.
+        $company = Company::withoutGlobalScopes()->find($sale->company_id);
+        $taxRates = TaxClassService::enabled($company) ? (new TaxClassService())->rates((int) $sale->company_id) : null;
+        $taxInclusive = $taxRates === null || TaxClassService::inclusive($company);
+        $taxOnTop = []; // line id => tax added on top of the price (exclusive pricing)
+
         // Line maths.
         $subtotal = 0.0;
         $netBeforeHeaderDiscount = 0.0;
@@ -399,11 +424,32 @@ class SaleService
                 $allocated += $share;
                 $line->line_total = round((float) $line->line_total - $share, 2);
             }
-            $line->profit = round((float) $line->line_total - ((float) $line->unit_cost * (float) $line->quantity), 2);
+            if ($taxRates !== null) {
+                $class = TaxClassService::classFor($taxRates, $products[(int) $line->stock_item_id]->tax_class_id);
+                $tax = TaxClassService::tax((float) $line->line_total, $class['rate'], $taxInclusive);
+                $line->tax_class_id = $class['id'];
+                $line->tax_rate = $class['rate'];
+                $line->tax_amount = $tax;
+                if (! $taxInclusive) { // added on top: part of what the customer pays, not of the shop's takings
+                    $taxOnTop[$line->id] = $tax;
+                    $line->line_total = round((float) $line->line_total + $tax, 2);
+                }
+            }
+            $line->profit = round((float) $line->line_total - ($taxOnTop[$line->id] ?? 0) - ((float) $line->unit_cost * (float) $line->quantity), 2);
             $line->saveQuietlySynced();
         }
 
         $total = round(array_sum($lines->map(fn ($l) => (float) $l->line_total)->all()), 2);
+
+        // Cash rounding (A7): only the shop's own rule, only for a sale paid wholly in cash. It is part of the total.
+        $rounding = round((float) ($sale->rounding_amount ?? 0), 2);
+        if (abs($rounding) >= 0.005) {
+            $expected = \App\Support\CashRounding::appliesTo($payments) ? \App\Support\CashRounding::amount($company, $total) : 0.0;
+            if (abs($expected - $rounding) > 0.005) {
+                throw BusinessRuleException::make('rounding_mismatch', 'The cash rounding on this sale does not match the shop\'s rounding rule. Take payment again.', ['expected' => $expected]);
+            }
+            $total = round($total + $rounding, 2);
+        }
 
         // Credit rules (plan A3): a balance needs a customer; stay within their credit limit.
         $paying = round(array_sum(array_map(fn ($p) => max(0, (float) ($p['amount'] ?? 0)), $payments)), 2);
@@ -436,7 +482,7 @@ class SaleService
                 'stock_item_id' => (int) $line->stock_item_id,
                 'type' => 'Sale',
                 'quantity' => $qty,
-                'selling_price' => $qty > 0 ? round((float) $line->line_total / $qty, 4) : 0,
+                'selling_price' => $qty > 0 ? round(((float) $line->line_total - ($taxOnTop[$line->id] ?? 0)) / $qty, 4) : 0,
                 'unit_cost' => (float) $product->buying_price,
                 'description' => 'Sale '.($sale->receipt_number ?: '#'.$sale->id).' - '.($sale->customer_name ?? 'Walk-in Customer'),
                 'date' => $sale->sale_date,
@@ -446,7 +492,7 @@ class SaleService
                 'sale_record_id' => $sale->id,
                 'location_id' => $locationId,
                 'allow_negative' => $allowNegative || (bool) $products[(int) $line->stock_item_id]->allow_negative_stock,
-            ]);
+            ] + (isset($this->batchHints[$line->id]) ? ['batch_out' => $this->batchHints[$line->id]] : []));
             $line->stock_record_id = $movement->id;
             $line->saveQuietlySynced();
         }

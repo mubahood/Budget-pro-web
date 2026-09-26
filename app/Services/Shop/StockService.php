@@ -43,7 +43,7 @@ class StockService
      *
      * @param  array{stock_item_id:int, type:string, quantity:float|string, description?:string|null, date?:string|\DateTimeInterface|null,
      *               selling_price?:float|null, unit_cost?:float|null, created_by_id?:int|null, client_uuid?:string|null,
-     *               reference_type?:string|null, reference_id?:int|null, sale_record_id?:int|null, allow_negative?:bool, location_id?:int|null, batch_in?:array<int, array<string, mixed>>}  $attrs
+     *               reference_type?:string|null, reference_id?:int|null, sale_record_id?:int|null, allow_negative?:bool, location_id?:int|null, batch_in?:array<int, array<string, mixed>>, batch_out?:int|null}  $attrs
      */
     public function record(array $attrs): StockRecord
     {
@@ -71,6 +71,7 @@ class StockService
         }
         $record->allowNegative = (bool) ($attrs['allow_negative'] ?? false);
         $record->batchIn = $attrs['batch_in'] ?? [];
+        $record->batchOut = ! empty($attrs['batch_out']) ? (int) $attrs['batch_out'] : null;
         $record->save();
 
         return $record;

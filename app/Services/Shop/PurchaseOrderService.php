@@ -142,6 +142,7 @@ class PurchaseOrderService
 
         return DB::transaction(function () use ($po, $userId, $lines, $amountPaid, $paymentMethod, $invoiceRef, $receivedOn, $clientUuid) {
             $items = PurchaseOrderItem::where('purchase_order_id', $po->id)->lockForUpdate()->get()->keyBy('id');
+            $expected = $items->map(fn (PurchaseOrderItem $i) => max(0.0, round((float) $i->outstanding(), 3)))->all(); // before this delivery
             $grnLines = [];
             foreach ($lines as $l) {
                 $item = $items[(int) $l['purchase_order_item_id']] ?? null;
@@ -161,6 +162,7 @@ class PurchaseOrderService
                 throw BusinessRuleException::make('empty_receipt', 'Enter the quantities that arrived.');
             }
             $grn = (new GoodsReceiptService())->receive((int) $po->company_id, $userId, $grnLines, $po->supplier_id, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, 'Against '.$po->number, null, $po->id);
+            $this->recordDiscrepancies($grn, $items, $expected, $lines);
             $open = $items->contains(fn (PurchaseOrderItem $i) => $i->outstanding() > 0);
             $po->status = $open ? 'partially_received' : 'received';
             $po->received_at = $open ? null : now();
@@ -168,6 +170,40 @@ class PurchaseOrderService
 
             return $grn;
         });
+    }
+
+    /**
+     * Receive by scanning (D1, `scan_receiving` on): what arrived short or over against what the order
+     * still expected is kept on the receipt (goods_receipts.discrepancies), per line:
+     * {purchase_order_item_id, stock_item_id, name, expected, received, difference (+ over / − short)}.
+     *
+     * @param  \Illuminate\Support\Collection<int, PurchaseOrderItem>  $items
+     * @param  array<int, float>  $expected
+     */
+    private function recordDiscrepancies(GoodsReceipt $grn, $items, array $expected, array $lines): void
+    {
+        $company = \App\Models\Company::withoutGlobalScopes()->find($grn->company_id);
+        if (! \App\Support\StoreFeatures::enabled($company, 'scan_receiving') || ! \Illuminate\Support\Facades\Schema::hasColumn('goods_receipts', 'discrepancies')) {
+            return;
+        }
+        $got = [];
+        foreach ($lines as $l) {
+            $id = (int) $l['purchase_order_item_id'];
+            $got[$id] = round(($got[$id] ?? 0) + max(0.0, (float) ($l['quantity'] ?? 0)), 3);
+        }
+        $names = \Illuminate\Support\Facades\DB::table('stock_items')->whereIn('id', $items->pluck('stock_item_id')->all())->pluck('name', 'id');
+        $out = [];
+        foreach ($items as $id => $item) {
+            $diff = round(($got[$id] ?? 0) - ($expected[$id] ?? 0), 3);
+            if (abs($diff) >= 0.0005 && ($expected[$id] ?? 0) + ($got[$id] ?? 0) > 0) {
+                $out[] = ['purchase_order_item_id' => (int) $id, 'stock_item_id' => (int) $item->stock_item_id, 'name' => (string) ($names[$item->stock_item_id] ?? ''),
+                    'expected' => $expected[$id] ?? 0.0, 'received' => $got[$id] ?? 0.0, 'difference' => $diff];
+            }
+        }
+        if ($out !== []) {
+            \Illuminate\Support\Facades\DB::table('goods_receipts')->where('id', $grn->id)->update(['discrepancies' => json_encode($out)]);
+            $grn->setAttribute('discrepancies', json_encode($out));
+        }
     }
 
     /** Cancel what is still outstanding; goods already received stay received. */

@@ -166,6 +166,8 @@ class CustomerService
      */
     public function statement(Customer $customer, ?string $from = null, ?string $to = null): array
     {
+        // Sales carry the shop's local day; payments and returns are timestamps (UTC): the statement uses local days for all.
+        $tz = \App\Support\LocalTime::timezone(\App\Models\Company::withoutGlobalScopes()->find($customer->company_id));
         $entries = [];
         $sales = SaleRecord::withoutGlobalScopes()->where('company_id', $customer->company_id)->where('customer_id', $customer->id)->whereNull('voided_at')->get();
         $recorded = $sales->isEmpty() ? collect() : Payment::withoutGlobalScopes()->whereIn('sale_record_id', $sales->pluck('id'))
@@ -178,13 +180,13 @@ class CustomerService
                 $entries[] = ['date' => (string) $s->sale_date->toDateString(), 'at' => $s->created_at, 'type' => 'payment', 'ref' => $s->receipt_number, 'description' => 'Paid at sale', 'debit' => 0.0, 'credit' => $paidAtSale];
             }
             if ((float) $s->refunded_amount > 0) {
-                $entries[] = ['date' => (string) $s->updated_at?->toDateString(), 'at' => $s->updated_at, 'type' => 'return', 'ref' => $s->receipt_number, 'description' => 'Returned goods', 'debit' => 0.0, 'credit' => round((float) $s->refunded_amount, 2)];
+                $entries[] = ['date' => (string) $s->updated_at?->copy()->setTimezone($tz)->toDateString(), 'at' => $s->updated_at, 'type' => 'return', 'ref' => $s->receipt_number, 'description' => 'Returned goods', 'debit' => 0.0, 'credit' => round((float) $s->refunded_amount, 2)];
             }
         }
         $pays = Payment::withoutGlobalScopes()->where('company_id', $customer->company_id)->where('customer_id', $customer->id)->get();
         foreach ($pays as $p) {
             $amt = round((float) $p->amount, 2);
-            $entries[] = ['date' => (string) $p->received_at?->toDateString(), 'at' => $p->received_at, 'type' => $amt < 0 ? 'refund' : 'payment', 'ref' => $p->reference, 'description' => $amt < 0 ? 'Cash refunded' : ($p->notes === PaymentService::PAID_AT_SALE ? 'Paid at sale' : 'Payment ('.\App\Models\Payment::label((string) $p->method).')'), 'debit' => $amt < 0 ? -$amt : 0.0, 'credit' => $amt > 0 ? $amt : 0.0];
+            $entries[] = ['date' => (string) $p->received_at?->copy()->setTimezone($tz)->toDateString(), 'at' => $p->received_at, 'type' => $amt < 0 ? 'refund' : 'payment', 'ref' => $p->reference, 'description' => $amt < 0 ? 'Cash refunded' : ($p->notes === PaymentService::PAID_AT_SALE ? 'Paid at sale' : 'Payment ('.\App\Models\Payment::label((string) $p->method).')'), 'debit' => $amt < 0 ? -$amt : 0.0, 'credit' => $amt > 0 ? $amt : 0.0];
         }
         usort($entries, fn ($a, $b) => [$a['date'], (string) $a['at']] <=> [$b['date'], (string) $b['at']]);
 
