@@ -65,6 +65,7 @@ class Company extends Model
         'license_expire' => 'date',
         'onboarding_state' => 'array',
         'enabled_modules' => 'array',
+        'store_settings' => 'array',
         'payment_methods' => 'array',
         'receipt_channels' => 'array',
     ];
