@@ -30,8 +30,28 @@
             <tfoot><tr>@foreach($report['columns'] as $i => $c)<td class="{{ $c['type'] === 'text' ? '' : 'r' }}">{{ $i === 0 ? 'Total' : (array_key_exists($c['key'], $report['totals']) ? \App\Services\Reports\ReportFormat::cell($report['totals'][$c['key']], $c['type']) : '') }}</td>@endforeach</tr></tfoot>
         @endif
     </table>
+    @if(empty($report['sections']))
     @foreach(($report['meta'] ?? []) as $k => $v)
         @if(!in_array($k, ['note', 'days', 'rate'], true) && is_numeric($v))<p><strong>{{ ucfirst(str_replace('_', ' ', $k)) }}:</strong> {{ number_format((float) $v, 2) }}</p>@endif
+    @endforeach
+    @endif
+    @foreach(($report['sections'] ?? []) as $section)
+        <h2 style="font-size:13px;margin:16px 0 0;">{{ $section['title'] }}</h2>
+        <table>
+            <thead><tr>@foreach($section['columns'] as $c)<th class="{{ $c['type'] === 'text' ? '' : 'r' }}">{{ $c['label'] }}</th>@endforeach</tr></thead>
+            <tbody>
+            @forelse($section['rows'] as $row)
+                <tr>@foreach($section['columns'] as $c)
+                    <td class="{{ $c['type'] === 'text' ? '' : 'r' }}">{{ \App\Services\Reports\ReportFormat::cell($row[$c['key']] ?? null, $c['type']) }}</td>
+                @endforeach</tr>
+            @empty
+                <tr><td colspan="{{ count($section['columns']) }}" class="muted">Nothing in this period.</td></tr>
+            @endforelse
+            </tbody>
+            @if(!empty($section['totals']) && !empty($section['rows']))
+                <tfoot><tr>@foreach($section['columns'] as $i => $c)<td class="{{ $c['type'] === 'text' ? '' : 'r' }}">{{ $i === 0 ? 'Total' : (array_key_exists($c['key'], $section['totals']) ? \App\Services\Reports\ReportFormat::cell($section['totals'][$c['key']], $c['type']) : '') }}</td>@endforeach</tr></tfoot>
+            @endif
+        </table>
     @endforeach
 </body>
 </html>

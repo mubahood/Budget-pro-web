@@ -3,6 +3,7 @@
 namespace App\Support\Rules;
 
 use App\Services\Team\Permissions;
+use Illuminate\Validation\Rule;
 
 /**
  * What a team request may contain: one rule set for the mobile API (TeamController) and the new
@@ -18,6 +19,34 @@ class TeamRules
     public static function invite(): array
     {
         return ['role' => ['required', 'string'], 'phone' => ['nullable', 'string', 'max:30'], 'email' => ['nullable', 'email'], 'name' => ['nullable', 'string', 'max:150']];
+    }
+
+    /**
+     * A member added directly with a login and a password (TeamService::createMember).
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function newMember(): array
+    {
+        return ['name' => ['required', 'string', 'max:150'], 'phone' => ['nullable', 'string', 'max:30'], 'email' => ['nullable', 'email', 'max:191', Rule::unique('admin_users', 'email')],
+            'password' => ['required', 'string', 'min:'.\App\Services\Team\TeamService::MIN_PASSWORD, 'max:191'], 'role' => ['required', 'string']];
+    }
+
+    /**
+     * A member's name and contact details (TeamService::updateDetails). The email is a login, so unique.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function details(?int $ignoreUserId = null): array
+    {
+        return ['name' => ['required', 'string', 'max:150'], 'email' => ['nullable', 'email', 'max:191', Rule::unique('admin_users', 'email')->ignore($ignoreUserId)],
+            'phone' => ['nullable', 'string', 'max:30'], 'phone_2' => ['nullable', 'string', 'max:30'], 'address' => ['nullable', 'string', 'max:500']];
+    }
+
+    /** A new password set for a member (TeamService::setPassword). @return array<string, array<int, mixed>> */
+    public static function password(): array
+    {
+        return ['password' => ['required', 'string', 'min:'.\App\Services\Team\TeamService::MIN_PASSWORD, 'max:191', 'confirmed']];
     }
 
     /** @return array<string, array<int, mixed>> */

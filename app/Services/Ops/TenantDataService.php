@@ -77,7 +77,7 @@ class TenantDataService
     {
         $path = rtrim((string) config('backup.exports_path'), '/').'/'.basename((string) $request->file);
 
-        return $request->status === 'ready' && $request->file && is_file($path) && now()->diffInDays($request->completed_at) <= 7 ? $path : null;
+        return $request->status === 'ready' && $request->file && is_file($path) && \Illuminate\Support\Carbon::parse($request->completed_at)->diffInDays(now()) <= 7 ? $path : null;
     }
 
     public function requestDeletion(Company $company, User $owner, string $password): int

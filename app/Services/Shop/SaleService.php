@@ -241,6 +241,62 @@ class SaleService
         }
     }
 
+    /** The only columns of a recorded sale that may change by hand (who bought it, and notes). */
+    public const EDITABLE_DETAILS = ['customer_id', 'customer_name', 'customer_phone', 'customer_address', 'notes'];
+
+    /**
+     * Change who bought a recorded sale and its notes (the classic admin's edit form). Amounts, status,
+     * dates and numbers are derived and are refused. Moving the sale onto another customer also moves
+     * its payments, and both customers' balances are recalculated.
+     *
+     * @param  array<string, mixed>  $attrs  any of EDITABLE_DETAILS
+     */
+    public function updateDetails(SaleRecord $sale, array $attrs, int $userId): SaleRecord
+    {
+        if ($sale->voided_at !== null || $sale->status === 'Voided') {
+            throw BusinessRuleException::make('sale_voided', 'This sale was voided; its details can no longer be changed.');
+        }
+        $blocked = array_values(array_diff(array_keys($attrs), self::EDITABLE_DETAILS));
+        if ($blocked !== []) {
+            throw BusinessRuleException::make('derived_field', 'The '.str_replace('_', ' ', (string) $blocked[0]).' of a recorded sale cannot be changed here. Receive a payment, return items or void the sale instead.', ['field' => $blocked[0]]);
+        }
+        $companyId = (int) $sale->company_id;
+        if (array_key_exists('customer_id', $attrs)) {
+            $attrs['customer_id'] = $attrs['customer_id'] ? (int) $attrs['customer_id'] : null;
+            if ($attrs['customer_id'] !== null && ! \App\Models\Customer::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->whereKey($attrs['customer_id'])->exists()) {
+                throw BusinessRuleException::make('customer_not_found', 'That customer account was not found.');
+            }
+        }
+        if (array_key_exists('customer_phone', $attrs)) {
+            $phone = preg_replace('/[^0-9+]/', '', trim((string) $attrs['customer_phone'])) ?? '';
+            $attrs['customer_phone'] = $phone !== '' ? $phone : null;
+        }
+        foreach (['customer_name', 'customer_address', 'notes'] as $text) {
+            if (array_key_exists($text, $attrs)) {
+                $attrs[$text] = trim((string) $attrs[$text]) !== '' ? trim((string) $attrs[$text]) : null;
+            }
+        }
+
+        return DB::transaction(function () use ($sale, $attrs, $companyId) {
+            $previous = $sale->customer_id ? (int) $sale->customer_id : null;
+            $sale->fill($attrs);
+            $sale->save();
+            $now = $sale->customer_id ? (int) $sale->customer_id : null;
+            if ($previous !== $now) {
+                // Money received on this sale follows it to the new account (DebtService::adopt does the same).
+                DB::table('payments')->where('company_id', $companyId)->where('sale_record_id', $sale->id)
+                    ->where(fn ($q) => $q->whereNull('customer_id')->when($previous !== null, fn ($w) => $w->orWhere('customer_id', $previous)))
+                    ->update(['customer_id' => $now]);
+                $customers = new CustomerService();
+                foreach (array_filter([$previous, $now]) as $cid) {
+                    $customers->recalc($cid);
+                }
+            }
+
+            return $this->loaded($sale);
+        });
+    }
+
     public function addPayment(SaleRecord $sale, array $attrs, int $userId): Payment
     {
         if ($sale->voided_at !== null) {

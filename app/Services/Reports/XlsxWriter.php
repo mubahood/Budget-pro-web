@@ -56,18 +56,30 @@ class XlsxWriter
         return $s;
     }
 
-    /** Report → rows for build(): header, data, totals. */
+    /** Report → rows for build(): header, data, totals; then each of its `sections` (if any) below, after a blank row and its title. */
     public static function fromReport(array $report): string
     {
-        $cols = $report['columns'];
-        $out = [array_map(fn ($c) => $c['label'], $cols)];
-        foreach ($report['rows'] as $row) {
-            $out[] = array_map(fn ($c) => in_array($c['type'], ['money', 'number', 'percent'], true) ? (float) ($row[$c['key']] ?? 0) : (string) ($row[$c['key']] ?? ''), $cols);
-        }
-        if (! empty($report['totals'])) {
-            $out[] = array_map(fn ($c, $i) => $i === 0 ? 'Total' : (array_key_exists($c['key'], $report['totals']) ? (float) $report['totals'][$c['key']] : ''), $cols, array_keys($cols));
+        $out = self::tableRows($report['columns'], $report['rows'], $report['totals'] ?? []);
+        foreach ($report['sections'] ?? [] as $section) {
+            $out[] = [''];
+            $out[] = [(string) $section['title']];
+            array_push($out, ...self::tableRows($section['columns'], $section['rows'], $section['totals'] ?? []));
         }
 
         return self::build($report['title'], $out);
+    }
+
+    /** @return list<list<string|float>> */
+    private static function tableRows(array $cols, array $rows, array $totals): array
+    {
+        $out = [array_map(fn ($c) => $c['label'], $cols)];
+        foreach ($rows as $row) {
+            $out[] = array_map(fn ($c) => in_array($c['type'], ['money', 'number', 'percent'], true) ? (float) ($row[$c['key']] ?? 0) : (string) ($row[$c['key']] ?? ''), $cols);
+        }
+        if (! empty($totals)) {
+            $out[] = array_map(fn ($c, $i) => $i === 0 ? 'Total' : (array_key_exists($c['key'], $totals) ? (float) $totals[$c['key']] : ''), $cols, array_keys($cols));
+        }
+
+        return $out;
     }
 }

@@ -37,6 +37,12 @@ class FinancialReportService
         return "{$name}_{$companyId}_v{$version}_{$this->day($startDate)}_{$this->day($endDate)}";
     }
 
+    /** Cached for five minutes (the PDF reports), or computed now when $fresh (live screens and ReportService). */
+    private function remember(string $key, bool $fresh, \Closure $compute)
+    {
+        return $fresh ? $compute() : Cache::remember($key, 300, $compute);
+    }
+
     /** Sales rows in a date range (local sale days), aliased "s". */
     private function salesIn(int $companyId, string $from, string $to): array
     {
@@ -59,9 +65,9 @@ class FinancialReportService
     /**
      * Ledger income and expenses (cash in / cash out) for the range.
      */
-    public function calculateFinancialData($companyId, $startDate, $endDate)
+    public function calculateFinancialData($companyId, $startDate, $endDate, bool $fresh = false)
     {
-        return Cache::remember($this->cacheKey('financial_data', $companyId, $startDate, $endDate), 300, function () use ($companyId, $startDate, $endDate) {
+        return $this->remember($this->cacheKey('financial_data', $companyId, $startDate, $endDate), $fresh, function () use ($companyId, $startDate, $endDate) {
             $data = DB::selectOne("
                 SELECT
                     COALESCE(SUM(CASE WHEN type = 'Income' THEN amount ELSE 0 END), 0) as total_income,
@@ -127,9 +133,9 @@ class FinancialReportService
     /**
      * Sales, cost of goods sold and gross profit for the range, plus today's stock value.
      */
-    public function calculateInventoryData($companyId, $startDate, $endDate)
+    public function calculateInventoryData($companyId, $startDate, $endDate, bool $fresh = false)
     {
-        return Cache::remember($this->cacheKey('inventory_data', $companyId, $startDate, $endDate), 300, function () use ($companyId, $startDate, $endDate) {
+        return $this->remember($this->cacheKey('inventory_data', $companyId, $startDate, $endDate), $fresh, function () use ($companyId, $startDate, $endDate) {
             [$sales, $bind] = $this->salesIn((int) $companyId, $this->day($startDate), $this->day($endDate));
             $salesData = DB::selectOne("
                 SELECT COALESCE(SUM(s.total_amount), 0) AS total_sales, COALESCE(SUM(s.profit), 0) AS earned_profit,
@@ -241,10 +247,10 @@ class FinancialReportService
      * Sales income already in the ledger (payments, old sale movements) is not added again, and stock
      * purchases are not deducted as expenses on top of the cost of the goods sold.
      */
-    public function getSummaryStatistics($companyId, $startDate, $endDate)
+    public function getSummaryStatistics($companyId, $startDate, $endDate, bool $fresh = false)
     {
-        $financial = $this->calculateFinancialData($companyId, $startDate, $endDate);
-        $inventory = $this->calculateInventoryData($companyId, $startDate, $endDate);
+        $financial = $this->calculateFinancialData($companyId, $startDate, $endDate, $fresh);
+        $inventory = $this->calculateInventoryData($companyId, $startDate, $endDate, $fresh);
 
         $ledger = DB::selectOne('
             SELECT

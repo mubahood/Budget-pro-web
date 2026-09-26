@@ -32,6 +32,7 @@ class ReportService
         'purchase_summary' => ['Purchases', 'view_cost'],
         'movement_audit' => ['Stock movement audit', 'view_reports'],
         'expiry' => ['Expiring stock', 'view_reports'],
+        'income_statement' => ['Income statement (profit & loss)', 'view_profit'],
     ];
 
     public const GROUPS = ['day', 'cashier', 'method', 'customer', 'category', 'product'];
@@ -351,6 +352,82 @@ class ReportService
 
         return ['columns' => [$this->text('date', 'When'), $this->text('product', 'Product'), $this->text('type', 'Type'), $this->num('change', 'Change'), $this->text('reason', 'Reason'), $this->text('by', 'By')],
             'rows' => $rows, 'totals' => []];
+    }
+
+    /**
+     * The period's profit & loss (classic FinancialReport PDF): sales − cost of goods = gross profit,
+     * + other income − operating expenses = net profit, from FinancialReportService (live figures).
+     * The statement is the main table; `sections` add the ledger by category, the ledger entries,
+     * and sales and profit by stock category and by product. Stock bought is cost of goods (counted
+     * when sold) and sales income in the ledger is not added again.
+     */
+    private function incomeStatement(array $o): array
+    {
+        $fin = new \App\Services\FinancialReportService();
+        $cid = $this->companyId;
+        $from = $this->from->toDateString();
+        $to = $this->to->toDateString();
+        $sum = $fin->getSummaryStatistics($cid, $from, $to, true);
+        $sales = round((float) $sum['inventory']['inventory_total_selling_price'], 2);
+        $cogs = round((float) $sum['inventory']['inventory_total_cost'], 2);
+        $gross = (float) $sum['gross_profit'];
+        $other = (float) $sum['other_income'];
+        $opex = (float) $sum['operating_expenses'];
+        $net = (float) $sum['overall_profit'];
+        $rows = [
+            ['line' => 'Sales (net of returns)', 'amount' => $sales],
+            ['line' => 'Less: cost of the goods sold', 'amount' => -$cogs],
+            ['line' => 'Gross profit', 'amount' => $gross],
+            ['line' => 'Add: other income', 'amount' => $other],
+            ['line' => 'Less: running expenses', 'amount' => -$opex],
+            ['line' => 'Net profit', 'amount' => $net],
+        ];
+
+        // Ledger by category (every entry, as the classic report and categories grid show it).
+        $accounts = array_map(fn ($a) => ['name' => (string) $a->name, 'income' => round((float) $a->total_income, 2), 'expense' => round((float) $a->total_expense, 2),
+            'balance' => round((float) $a->total_income - (float) $a->total_expense, 2), 'entries' => (int) $a->transaction_count], $fin->getFinanceAccounts($cid, $from, $to));
+        $records = $fin->getFinanceRecords($cid, $from, $to)->map(fn ($r) => ['date' => substr((string) $r->date, 0, 10), 'type' => (string) $r->type,
+            'category' => (string) ($r->financial_category?->name ?? ''), 'description' => (string) ($r->description ?: $r->recipient),
+            'method' => ucfirst(str_replace('_', ' ', (string) $r->payment_method)), 'amount' => round((float) $r->amount * ($r->type === 'Expense' ? -1 : 1), 2)])->all();
+
+        // Stock sold, by category (products without one are the remainder, so the rows add up to sales).
+        $cats = array_map(fn ($c) => ['name' => (string) $c->name, 'quantity' => round((float) $c->quantity_sold, 3), 'sales' => round((float) $c->total_sales, 2),
+            'cost' => round((float) $c->total_sales - (float) $c->profit, 2), 'profit' => round((float) $c->profit, 2)], $fin->getInventoryCategories($cid, $from, $to));
+        $catSales = array_sum(array_column($cats, 'sales'));
+        $catProfit = array_sum(array_column($cats, 'profit'));
+        if (abs($sales - $catSales) >= 0.01 || abs($gross - $catProfit) >= 0.01) {
+            $cats[] = ['name' => 'Uncategorised', 'quantity' => 0.0, 'sales' => round($sales - $catSales, 2), 'cost' => round(($sales - $catSales) - ($gross - $catProfit), 2), 'profit' => round($gross - $catProfit, 2)];
+        }
+        $products = [];
+        foreach ($fin->getInventoryProducts($cid, $from, $to) as $p) {
+            if ((float) $p->quantity_sold == 0.0 && (float) $p->revenue == 0.0) {
+                continue;
+            }
+            $products[] = ['name' => (string) $p->name, 'category' => (string) ($p->category_name ?? ''), 'quantity' => round((float) $p->quantity_sold, 3),
+                'sales' => round((float) $p->revenue, 2), 'profit' => round((float) $p->profit, 2)];
+        }
+
+        return [
+            'columns' => [$this->text('line', 'Statement'), $this->money('amount', 'Amount')],
+            'rows' => $rows,
+            'totals' => [],
+            'meta' => ['sales' => $sales, 'cost_of_goods' => $cogs, 'gross_profit' => $gross, 'other_income' => $other, 'operating_expenses' => $opex, 'net_profit' => $net,
+                'note' => 'Stock you bought is counted as cost of goods when it sells, not as an expense; sales money in the ledger is not counted twice.'],
+            'sections' => [
+                ['key' => 'categories', 'title' => 'Income and expenses by category',
+                    'columns' => [$this->text('name', 'Category'), $this->money('income', 'Income'), $this->money('expense', 'Expenses'), $this->money('balance', 'Balance'), $this->num('entries', 'Entries')],
+                    'rows' => $accounts, 'totals' => $this->totals($accounts, ['income', 'expense', 'balance', 'entries'])],
+                ['key' => 'records', 'title' => 'Ledger entries',
+                    'columns' => [$this->text('date', 'Date'), $this->text('type', 'Type'), $this->text('category', 'Category'), $this->text('description', 'What for'), $this->text('method', 'Paid with'), $this->money('amount', 'Amount')],
+                    'rows' => $records, 'totals' => []],
+                ['key' => 'sales_by_category', 'title' => 'Stock sales and profit by category',
+                    'columns' => [$this->text('name', 'Category'), $this->num('quantity', 'Quantity'), $this->money('sales', 'Sales'), $this->money('cost', 'Cost of goods'), $this->money('profit', 'Profit')],
+                    'rows' => $cats, 'totals' => $this->totals($cats, ['sales', 'cost', 'profit'])],
+                ['key' => 'sales_by_product', 'title' => 'Stock sales and profit by product',
+                    'columns' => [$this->text('name', 'Product'), $this->text('category', 'Category'), $this->num('quantity', 'Quantity'), $this->money('sales', 'Sales'), $this->money('profit', 'Profit')],
+                    'rows' => $products, 'totals' => $this->totals($products, ['quantity', 'sales', 'profit'])],
+            ],
+        ];
     }
 
     private function expiry(array $o): array

@@ -150,7 +150,7 @@
                     <p style="font-size: 18px; font-weight: bold; margin: 5px 0; text-transform: uppercase;">
                         {{ $company->name }}
                     </p>
-                    <p style="margin: 3px 0;">TEL: {{ $company->phone_number }}@if($company->chairperson_phone_number), {{ $company->chairperson_phone_number }}@endif</p>
+                    <p style="margin: 3px 0;">TEL: {{ $company->phone_number }}@if($company->phone_number_2 ?: $company->chairperson_phone_number), {{ $company->phone_number_2 ?: $company->chairperson_phone_number }}@endif</p>
                     <p style="margin: 3px 0;">EMAIL: {{ $company->email }}</p>
                     @if($company->address)
                     <p style="margin: 3px 0;">{{ $company->address }}</p>

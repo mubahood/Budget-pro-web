@@ -199,6 +199,159 @@ class TeamService
         Permissions::flush();
     }
 
+    /** Shortest password a login made or reset by the shop may have (the classic Employees form's min:8). */
+    public const MIN_PASSWORD = 8;
+
+    /**
+     * Add a member directly, with a login and a password, without an invite (the classic admin's
+     * Employees form). Same one-account-per-person and seat rules as invite(); the role goes through
+     * setRole(), so the membership row and the web admin role are the invite path's.
+     */
+    public function createMember(Company $company, User $by, string $name, ?string $email, ?string $phone, string $password, string $role): User
+    {
+        if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
+            throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
+        }
+        $name = trim($name);
+        if ($name === '') {
+            throw BusinessRuleException::make('name_required', 'Enter the person’s name.');
+        }
+        $e164 = $phone ? Phone::e164($phone, $company->country ?? 'UG') : null;
+        if ($phone && ! $e164) {
+            throw BusinessRuleException::make('invalid_phone', 'Enter a valid phone number.');
+        }
+        $email = $email ? strtolower(trim($email)) : null;
+        if (! $e164 && ! $email) {
+            throw BusinessRuleException::make('contact_required', 'Enter a phone number or an email: they sign in with it.');
+        }
+        $this->assertLoginFree($company, $email, $e164);
+        $this->assertPassword($password);
+        // Seats: people and open invites both count (Quotas::allows underneath).
+        (new \App\Services\Billing\Quotas())->assertCanAdd($company, 'users');
+
+        $user = DB::transaction(function () use ($company, $by, $name, $email, $e164, $password, $role) {
+            [$first, $last] = self::splitName($name);
+            $user = new User();
+            $user->first_name = $first;
+            $user->last_name = $last;
+            $user->name = $name;
+            $user->email = $email;
+            $user->phone_e164 = $e164;
+            $user->phone_number = $e164;
+            $user->username = $email ?: $e164;
+            $user->password = Hash::make($password);
+            $user->company_id = $company->id;
+            $user->status = 'Active';
+            $user->save();
+            DB::table('company_members')->updateOrInsert(['company_id' => $company->id, 'user_id' => $user->id],
+                ['role' => $role, 'status' => 'active', 'invited_by_id' => $by->id, 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+            $this->setRole($company, $user, $role);
+
+            return $user;
+        });
+        app(\App\Services\Notifications\Notifier::class)->notify((int) $company->id, 'team', 'New team member', "{$user->name} was added as ".config("permissions.roles.{$role}.label").'.');
+
+        return $user->fresh();
+    }
+
+    /**
+     * A new password for a member: stored hashed, and every phone they are signed in on is signed out
+     * (like setActive). Only the owner changes the owner's password.
+     */
+    public function setPassword(Company $company, User $by, User $member, string $password): void
+    {
+        $this->assertMemberOf($company, $member);
+        if ((int) $company->owner_id === (int) $member->id && (int) $by->id !== (int) $member->id) {
+            throw BusinessRuleException::make('owner_password', 'Only the owner can change the owner’s password.');
+        }
+        $this->assertPassword($password);
+        $member->password = Hash::make($password);
+        $member->save();
+        $member->tokens()->delete(); // signed out on every phone
+    }
+
+    /**
+     * A member's name and contact details. The email and phone are sign-in logins, so they stay unique
+     * across every account; only the owner edits the owner's.
+     *
+     * @param  array{name: string, email?: ?string, phone?: ?string, phone_2?: ?string, address?: ?string}  $data
+     */
+    public function updateDetails(Company $company, User $by, User $member, array $data): User
+    {
+        $this->assertMemberOf($company, $member);
+        if ((int) $company->owner_id === (int) $member->id && (int) $by->id !== (int) $member->id) {
+            throw BusinessRuleException::make('owner_details', 'Only the owner can change the owner’s details.');
+        }
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
+            throw BusinessRuleException::make('name_required', 'Enter the person’s name.');
+        }
+        $phone = trim((string) ($data['phone'] ?? ''));
+        $e164 = $phone !== '' ? Phone::e164($phone, $company->country ?? 'UG') : null;
+        if ($phone !== '' && ! $e164) {
+            throw BusinessRuleException::make('invalid_phone', 'Enter a valid phone number.');
+        }
+        $email = trim((string) ($data['email'] ?? '')) !== '' ? strtolower(trim((string) $data['email'])) : null;
+        if (! $e164 && ! $email) {
+            throw BusinessRuleException::make('contact_required', 'Keep a phone number or an email: they sign in with it.');
+        }
+        $this->assertLoginFree($company, $email, $e164, (int) $member->id);
+
+        [$first, $last] = self::splitName($name);
+        $oldPhone = $member->phone_e164;
+        $member->first_name = $first;
+        $member->last_name = $last;
+        $member->name = $name;
+        $member->email = $email;
+        $member->phone_e164 = $e164;
+        $member->phone_number = $e164;
+        $member->phone_number_2 = trim((string) ($data['phone_2'] ?? '')) ?: null;
+        $member->address = trim((string) ($data['address'] ?? '')) ?: null;
+        // A phone-only login's username follows its phone (an email change is followed by User::updating).
+        if (! $email && $oldPhone && $member->username === $oldPhone) {
+            $member->username = $e164;
+        }
+        $member->save();
+
+        return $member->fresh();
+    }
+
+    private function assertMemberOf(Company $company, User $member): void
+    {
+        if ((int) $member->company_id !== (int) $company->id) {
+            throw BusinessRuleException::make('invalid_member', 'Choose a member of this business.');
+        }
+    }
+
+    private function assertPassword(string $password): void
+    {
+        if (mb_strlen($password) < self::MIN_PASSWORD) {
+            throw BusinessRuleException::make('weak_password', 'The password must be at least '.self::MIN_PASSWORD.' characters.');
+        }
+    }
+
+    /** No other account signs in with this email or phone (a login belongs to one person). */
+    private function assertLoginFree(Company $company, ?string $email, ?string $e164, ?int $exceptId = null): void
+    {
+        $taken = User::withoutGlobalScopes()->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
+            ->where(fn ($q) => $q->when($e164, fn ($w) => $w->orWhere('phone_e164', $e164)->orWhere('username', $e164))
+                ->when($email, fn ($w) => $w->orWhereRaw('LOWER(email) = ?', [$email])->orWhereRaw('LOWER(username) = ?', [$email])))
+            ->first();
+        if ($taken) {
+            throw BusinessRuleException::make('already_member', (int) $taken->company_id === (int) $company->id
+                ? 'Someone on your team already signs in with this '.($email && strtolower((string) $taken->email) === $email ? 'email' : 'phone number').'.'
+                : 'This '.($email && strtolower((string) $taken->email) === $email ? 'email' : 'phone number').' already has a '.config('app.name').' account for another business.');
+        }
+    }
+
+    /** @return array{0: string, 1: ?string} first name, last name */
+    private static function splitName(string $name): array
+    {
+        $parts = preg_split('/\s+/', trim($name), 2) ?: [''];
+
+        return [$parts[0], $parts[1] ?? null];
+    }
+
     public function transferOwnership(Company $company, User $owner, User $to, string $password): void
     {
         if (! Hash::check($password, $owner->password)) {

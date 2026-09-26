@@ -17,13 +17,27 @@ class DashboardService
 {
     public const RANGES = ['today' => 'Today', 'yesterday' => 'Yesterday', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'month' => 'This month', 'last_month' => 'Last month', 'year' => 'This year'];
 
+    /**
+     * Presets for reports: RANGES plus calendar weeks, the quarter, last year and the shop's active
+     * financial period (FinancialReport's period types, without its two-day "Yesterday"). The
+     * dashboards keep RANGES; range() accepts every key here.
+     */
+    public const REPORT_RANGES = ['today' => 'Today', 'yesterday' => 'Yesterday', 'week' => 'This week', 'last_week' => 'Last week', '7d' => 'Last 7 days', '30d' => 'Last 30 days',
+        'month' => 'This month', 'last_month' => 'Last month', 'quarter' => 'This quarter', 'year' => 'This year', 'last_year' => 'Last year', 'period' => 'Financial period'];
+
     /** @return array{key: string, label: string, from: string, to: string, prev_from: string, prev_to: string, days: int} */
     public function range(Company $company, ?string $key, ?string $from = null, ?string $to = null): array
     {
         $today = now()->setTimezone(LocalTime::timezone($company))->startOfDay();
-        $key = $key === 'custom' || array_key_exists((string) $key, self::RANGES) ? $key : 'today';
+        $key = $key === 'custom' || array_key_exists((string) $key, self::REPORT_RANGES) ? $key : 'today';
+        $periodLabel = null;
         [$start, $end] = match ($key) {
             'yesterday' => [$today->copy()->subDay(), $today->copy()->subDay()],
+            'week' => [$today->copy()->startOfWeek(Carbon::MONDAY), $today],
+            'last_week' => [$today->copy()->startOfWeek(Carbon::MONDAY)->subWeek(), $today->copy()->startOfWeek(Carbon::MONDAY)->subDay()],
+            'quarter' => [$today->copy()->firstOfQuarter(), $today],
+            'last_year' => [$today->copy()->subYearNoOverflow()->startOfYear(), $today->copy()->subYearNoOverflow()->endOfYear()->startOfDay()],
+            'period' => $this->financialPeriod($company, $today, $periodLabel),
             '7d' => [$today->copy()->subDays(6), $today],
             '30d' => [$today->copy()->subDays(29), $today],
             'month' => [$today->copy()->startOfMonth(), $today],
@@ -38,7 +52,7 @@ class DashboardService
         $days = (int) $start->diffInDays($end) + 1;
         $label = $key === 'custom'
             ? ($days === 1 ? $start->format('D d M Y') : $start->format('d M').' – '.$end->format('d M Y'))
-            : self::RANGES[$key];
+            : ($periodLabel ?? self::REPORT_RANGES[$key]);
 
         return [
             'key' => (string) $key, 'label' => $label, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'days' => $days,
@@ -282,6 +296,28 @@ class DashboardService
     public static function change(float $now, float $before): ?float
     {
         return abs($before) < 0.01 ? null : ($now - $before) / abs($before) * 100;
+    }
+
+    /**
+     * The shop's active financial period as local days (its whole span, as the classic report's
+     * "This financial year"); this year when no period is active.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function financialPeriod(Company $company, Carbon $today, ?string &$label): array
+    {
+        $p = DB::table('financial_periods')->where('company_id', $company->id)->where('status', 'Active')->where('is_deleted', 0)
+            ->orderByDesc('id')->first(['name', 'start_date', 'end_date']);
+        $start = $p ? $this->date(substr((string) $p->start_date, 0, 10)) : null;
+        $end = $p ? $this->date(substr((string) $p->end_date, 0, 10)) : null;
+        if ($start === null || $end === null) {
+            $label = 'This year (no active financial period)';
+
+            return [$today->copy()->startOfYear(), $today];
+        }
+        $label = trim((string) $p->name) !== '' ? (string) $p->name : 'Financial period';
+
+        return [$start->shiftTimezone($today->getTimezone()), $end->shiftTimezone($today->getTimezone())];
     }
 
     private function date(?string $v): ?Carbon

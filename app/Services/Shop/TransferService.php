@@ -75,6 +75,31 @@ class TransferService
     }
 
     /**
+     * Which location a phone sells from (classic Locations "which phone sells where"). Null = the
+     * main location. The phone picks it up on its next sync.
+     */
+    public function assignDevice(int $companyId, int $deviceId, ?int $locationId): void
+    {
+        $device = DB::table('devices')->where('company_id', $companyId)->where('id', $deviceId)->first(['id', 'revoked_at']);
+        if ($device === null) {
+            throw BusinessRuleException::make('device_not_found', 'That phone is not linked to this shop.');
+        }
+        if ($device->revoked_at !== null) {
+            throw BusinessRuleException::make('device_revoked', 'That phone was removed from the shop.');
+        }
+        if ($locationId !== null) {
+            $loc = DB::table('locations')->where('company_id', $companyId)->where('id', $locationId)->first(['id', 'is_active']);
+            if ($loc === null) {
+                throw BusinessRuleException::make('location_not_found', 'Location not found.');
+            }
+            if (! $loc->is_active) {
+                throw BusinessRuleException::make('location_closed', 'That location is closed. Reopen it first.');
+            }
+        }
+        DB::table('devices')->where('id', $deviceId)->update(['location_id' => $locationId, 'updated_at' => now()]);
+    }
+
+    /**
      * @param  array<int, array{stock_item_id: int, quantity: float|string}>  $lines
      */
     public function transfer(int $companyId, int $userId, int $fromId, int $toId, array $lines, ?string $notes = null): int

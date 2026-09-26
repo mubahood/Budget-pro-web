@@ -41,7 +41,7 @@ class RedirectToNewUi
         'financial-records' => '/money/records', 'financial-categories' => '/money/records', 'shifts' => '/money/shifts',
         'financial-periods' => '/money/periods', 'reports' => '/reports', 'financial-reports' => '/reports',
         'companies-edit' => '/settings', 'employees' => '/team', 'billing' => '/plan', 'subscription-expired' => '/plan',
-        'setup' => '/welcome',
+        'setup' => '/welcome', 'engagement' => '/settings', 'duplicates' => '/products', 'your-data' => '/settings/data',
     ];
 
     /** Records the new interface opens with ?peek=<id>. */

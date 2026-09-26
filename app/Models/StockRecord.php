@@ -104,7 +104,8 @@ class StockRecord extends Model
                 );
             }
 
-            $date = $model->date ? \Illuminate\Support\Carbon::parse($model->date) : now();
+            // No date given: the shop's local day (a movement at 01:00 in Kampala is that day's, not yesterday's UTC day).
+            $date = $model->date ? \Illuminate\Support\Carbon::parse($model->date) : \Illuminate\Support\Carbon::parse(\App\Support\LocalDate::today((int) $item->company_id));
             $model->date = $date;
             if (empty($model->financial_period_id)) {
                 $model->financial_period_id = FinancialPeriod::resolveFor((int) $item->company_id, $date)->id;

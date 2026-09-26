@@ -17,7 +17,7 @@ class CompanyRules
 {
     /** The settings screen's sections and the columns each one writes. */
     public const SECTIONS = [
-        'profile' => ['name', 'phone_number', 'email', 'address', 'logo'],
+        'profile' => ['name', 'phone_number', 'phone_number_2', 'email', 'address', 'slogan', 'logo'],
         'money' => ['currency', 'timezone', 'tax_rate'],
         'receipts' => ['receipt_header', 'receipt_footer', 'receipt_channels', 'payment_methods'],
         'stock' => ['low_stock_default', 'negative_stock_policy', 'require_shift'],
@@ -25,7 +25,7 @@ class CompanyRules
         'modules' => ['enabled_modules'],
     ];
 
-    /** Older profile fields the phone app still sends (kept writable for it). */
+    /** Older profile fields the phone app still sends (kept writable for it; phone_number_2 and slogan are also in 'profile'). */
     public const LEGACY = [
         'phone_number_2', 'website', 'about', 'slogan',
         'settings_worker_can_create_stock_item', 'settings_worker_can_create_stock_record', 'settings_worker_can_create_stock_category',

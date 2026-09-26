@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Shop parity with the classic screens (2026-09-27)
+- **Debtors:** `DebtService` puts customer accounts and name-only credit sales ("Member x", made in the phone app without a customer account) in one list. It receives against a name (oldest sale first, never more than owed) and turns a name into a customer account, moving the sales and payments onto it.
+- **New service methods:** `SaleService::updateDetails` (a sale's customer, name, phone, address and notes; both customers recalculated), `TeamService::createMember/setPassword/updateDetails`, `TransferService::assignDevice`.
+- **Reports:** an `income_statement` report (sections by category and product, PDF/XLSX), and report presets for this and last week, this quarter, last year and financial period (`DashboardService::REPORT_RANGES`; `RANGES` is unchanged).
+- **Settings:** `CompanyRules` profile gains slogan and phone 2; receipt and invoice PDFs print phone 2.
+- **Fix:** a stock movement recorded without a date gets the shop's local day, not the UTC day. Between midnight and 03:00 in Kampala such movements used to land on the previous day.
+- **Fix:** Your data exports now really expire after 7 days (Carbon 3 made the difference negative).
+- **Redirect map:** engagement, duplicates and your-data now go to the new interface.
+
 ### Classic screens send shop users to the new interface (2026-09-26)
 - `RedirectToNewUi` (admin middleware, on with `SAAS_REDIRECT_TO_NEW_UI=true`) moves page views of shop users to the same screen at `SAAS_NEW_UI_URL`, opening the same record where there is one (`stock-items/15/edit` → `/products?peek=15`, `sale-records/create` → `/sell`). The classic login page goes to the new login.
 - Stays classic: platform admins, companies without the shop module, screens the new interface lacks (budgets, pledges, poultry, device tracking, data exports, engagement), writes, AJAX, the API, public receipt and invite pages. `?classic=1` keeps a browser session classic (the new interface's "Classic screens" button, platform admin sign-in at `/auth/login?classic=1`).
