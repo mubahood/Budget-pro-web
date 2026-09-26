@@ -249,7 +249,7 @@ class BillingCorrectnessTest extends ApiTestCase
         $c = $this->checkout($t, Plan::where('slug', 'business')->first());
         $this->verify($t, $c);
         $invoice = SubscriptionInvoice::where('provider_invoice_id', $c['tx_ref'])->first();
-        $this->assertEqualsWithDelta(185000 * 18 / 118, (float) $invoice->tax_amount, 0.01);
+        $this->assertEqualsWithDelta(100000 * 18 / 118, (float) $invoice->tax_amount, 0.01);
 
         $cashier = $this->member($t, 'cashier');
         $this->app['auth']->forgetGuards(); // a new request, a new bearer token

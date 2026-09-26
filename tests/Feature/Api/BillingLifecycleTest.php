@@ -118,8 +118,8 @@ class BillingLifecycleTest extends ApiTestCase
 
         $q = $this->getJson("/api/v1/subscription/quote?plan_id={$business->id}", $this->auth($t['token']))->assertOk()->json('data');
         $this->assertTrue($q['change']);
-        $this->assertEqualsWithDelta(35000, $q['credit'], 100);  // half a month of Starter
-        $this->assertEqualsWithDelta(150000, $q['amount'], 100);
+        $this->assertEqualsWithDelta(25000, $q['credit'], 100);  // half a month of Starter
+        $this->assertEqualsWithDelta(75000, $q['amount'], 100);
         $this->pay($t, $business);
         $sub = $this->sub($t['company_id']);
         $this->assertSame($business->id, $sub->plan_id);
@@ -134,7 +134,7 @@ class BillingLifecycleTest extends ApiTestCase
         $this->assertNull($r->json('data.payment_link'));
         $sub->refresh();
         $this->assertSame($starter->id, $sub->plan_id);
-        $this->assertGreaterThan(60, now()->diffInDays($sub->ends_at));
+        $this->assertGreaterThanOrEqual(59, now()->diffInDays($sub->ends_at));
     }
 
     public function test_cancel_keeps_the_plan_until_period_end_then_free_and_resume(): void

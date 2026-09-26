@@ -38,10 +38,10 @@ class BillingTest extends ApiTestCase
 
         $res->assertOk()
             ->assertJsonPath('data.currency', 'UGX')
-            ->assertJsonPath('data.amount', 185000);
+            ->assertJsonPath('data.amount', 100000);
 
         $this->assertSame('UGX', $this->flw->lastPayload['currency']);
-        $this->assertSame(185000.0, (float) $this->flw->lastPayload['amount']);
+        $this->assertSame(100000.0, (float) $this->flw->lastPayload['amount']);
         $this->assertStringContainsString('mobilemoneyuganda', $this->flw->lastPayload['payment_options']);
     }
 
@@ -54,7 +54,7 @@ class BillingTest extends ApiTestCase
 
         $res->assertOk()
             ->assertJsonPath('data.currency', 'USD')
-            ->assertJsonPath('data.amount', 49);
+            ->assertJsonPath('data.amount', 27);
 
         $this->assertSame('USD', $this->flw->lastPayload['currency']);
         $this->assertSame('card', $this->flw->lastPayload['payment_options']);
@@ -68,7 +68,7 @@ class BillingTest extends ApiTestCase
         $checkout = $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']));
         $txRef = $checkout->json('data.tx_ref');
 
-        $this->flw->willVerify($txRef, 185000, 'UGX');
+        $this->flw->willVerify($txRef, 100000, 'UGX');
 
         $this->postJson('/api/v1/subscription/verify', [
             'transaction_id' => 999001, 'tx_ref' => $txRef,
@@ -110,7 +110,7 @@ class BillingTest extends ApiTestCase
         $t = $this->registerTenant(['currency' => 'UGX']);
         $plan = \App\Models\Plan::where('slug', 'business')->first();
         $txRef = $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']))->json('data.tx_ref');
-        $this->flw->willVerify($txRef, 185000, 'UGX');
+        $this->flw->willVerify($txRef, 100000, 'UGX');
 
         $this->postJson('/api/v1/subscription/verify', ['transaction_id' => 999001, 'tx_ref' => $txRef], $this->auth($t['token']))->assertOk();
         $endsFirst = Subscription::where('company_id', $t['company_id'])->first()->ends_at;
@@ -127,11 +127,11 @@ class BillingTest extends ApiTestCase
         $t = $this->registerTenant(['currency' => 'UGX']);
         $plan = \App\Models\Plan::where('slug', 'business')->first();
         $txRef = $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']))->json('data.tx_ref');
-        $this->flw->willVerify($txRef, 185000, 'UGX');
+        $this->flw->willVerify($txRef, 100000, 'UGX');
 
         $this->postJson('/api/v1/webhooks/flutterwave', [
             'event' => 'charge.completed',
-            'data' => ['id' => 999001, 'tx_ref' => $txRef, 'status' => 'successful', 'amount' => 185000, 'currency' => 'UGX'],
+            'data' => ['id' => 999001, 'tx_ref' => $txRef, 'status' => 'successful', 'amount' => 100000, 'currency' => 'UGX'],
         ], ['verif-hash' => 'test-webhook-hash'])->assertOk();
 
         $this->assertSame('paid', SubscriptionInvoice::where('provider_invoice_id', $txRef)->first()->status);
@@ -185,7 +185,7 @@ class BillingTest extends ApiTestCase
         $t = $this->registerTenant(['currency' => 'UGX']);
         $plan = \App\Models\Plan::where('slug', 'business')->first();
         $txRef = $this->postJson('/api/v1/subscription/checkout', ['plan_id' => $plan->id], $this->auth($t['token']))->json('data.tx_ref');
-        $this->flw->willVerify($txRef, 185000, 'UGX');
+        $this->flw->willVerify($txRef, 100000, 'UGX');
 
         $this->get('/payment/callback?status=successful&tx_ref='.$txRef.'&transaction_id=999001')
             ->assertOk()->assertSee('Payment confirmed')->assertSee('Return to the app');

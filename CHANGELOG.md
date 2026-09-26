@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Plan prices (2026-09-26)
+- Starter UGX 50,000, Business UGX 100,000 and Enterprise UGX 150,000 a month (were 70,000 / 185,000 / 560,000). Yearly stays 10 × monthly ("2 months free"). The USD card prices are now 14 / 27 / 40. Migration `2026_10_02_100001_plan_prices_50_100_150` updates existing rows, and `PlanSeeder` has the same figures for fresh installs. Running subscriptions keep what they paid; the new price applies from their next renewal.
+
 ### Phase 0 — Stop the bleeding
 
 #### Security

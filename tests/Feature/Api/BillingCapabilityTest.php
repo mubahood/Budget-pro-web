@@ -55,11 +55,11 @@ class BillingCapabilityTest extends ApiTestCase
         $q = $this->getJson("/api/v1/subscription/quote?plan_id={$business->id}&interval=year", $this->auth($t['token']))->assertOk()->json('data');
         $this->assertSame('year', $q['interval']);
         $this->assertEquals($business->chargeIn('UGX', 'year')['amount'], $q['amount']);
-        $this->assertEqualsWithDelta(185000 * 10, $q['amount'], 0.01);
-        $this->assertEqualsWithDelta(185000 * 2, $q['saving'], 0.01);
-        $this->assertEqualsWithDelta(185000 * 10 / 12, $q['per_month'], 0.01);
-        $this->assertEqualsWithDelta(185000 * 10 / 365, $q['per_day'], 0.01);
-        $this->getJson('/api/v1/plans')->assertOk()->assertJsonFragment(['slug' => 'business', 'price_ugx_annual' => 1850000]);
+        $this->assertEqualsWithDelta(100000 * 10, $q['amount'], 0.01);
+        $this->assertEqualsWithDelta(100000 * 2, $q['saving'], 0.01);
+        $this->assertEqualsWithDelta(100000 * 10 / 12, $q['per_month'], 0.01);
+        $this->assertEqualsWithDelta(100000 * 10 / 365, $q['per_day'], 0.01);
+        $this->getJson('/api/v1/plans')->assertOk()->assertJsonFragment(['slug' => 'business', 'price_ugx_annual' => 1000000]);
 
         $trialEnd = $this->sub($t['company_id'])->ends_at;
         $this->pay($t, $business, 'year');
@@ -86,10 +86,10 @@ class BillingCapabilityTest extends ApiTestCase
         $this->assertSame($r['tx_ref'], $charge['payload']['tx_ref']);
         $this->assertSame('256772123456', $charge['payload']['phone_number']);
         $this->assertSame('MTN', $charge['payload']['network']);
-        $this->assertEquals(70000, $charge['payload']['amount']);
+        $this->assertEquals(50000, $charge['payload']['amount']);
 
         $this->getJson("/api/v1/subscription/payments/{$r['invoice_id']}", $h)->assertOk()->assertJsonPath('data.status', 'pending');
-        $this->flw->customerAnswers($r['tx_ref'], 70000, 'UGX');
+        $this->flw->customerAnswers($r['tx_ref'], 50000, 'UGX');
         $this->getJson("/api/v1/subscription/payments/{$r['invoice_id']}", $h)->assertOk()->assertJsonPath('data.status', 'paid')->assertJsonPath('data.subscription.plan.slug', 'starter');
         $this->assertSame('momo', data_get(SubscriptionInvoice::find($r['invoice_id'])->meta, 'method'));
 
@@ -177,7 +177,7 @@ class BillingCapabilityTest extends ApiTestCase
         $this->assertSame(1, $counts['auto_renew']);
         $this->assertCount(1, $this->flw->tokenCharges);
         $this->assertSame('flw-t1nf-abc', $this->flw->tokenCharges[0]['token']);
-        $this->assertEquals(70000, $this->flw->tokenCharges[0]['amount']);
+        $this->assertEquals(50000, $this->flw->tokenCharges[0]['amount']);
         $this->assertEqualsWithDelta($end->copy()->addMonth()->timestamp, $sub->fresh()->ends_at->timestamp, 5);
         $this->assertSame(2, SubscriptionInvoice::where('company_id', $t['company_id'])->where('status', 'paid')->count());
     }
