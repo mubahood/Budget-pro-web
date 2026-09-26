@@ -182,10 +182,14 @@ class OnboardingService
         return $company;
     }
 
+    /** Older sign-up forms send these names; their pack lives under the current one. */
+    public const PACK_ALIASES = ['restaurant' => 'restaurant_bar'];
+
     /** Template pack for a business type, priced in the company's currency when we have prices for it. */
     public function templates(Company $company, ?string $type = null): array
     {
         $type ??= $company->business_type ?: 'retail';
+        $type = self::PACK_ALIASES[$type] ?? $type;
         $currency = $company->currency ?: 'UGX';
         $rows = DB::table('product_templates')->where('business_type', $type)->where('is_active', true)
             ->where(fn ($q) => $q->whereNull('country')->orWhere('country', $company->country ?: 'UG'))
@@ -242,7 +246,9 @@ class OnboardingService
         }
         $r = $rows === [] ? ['created' => 0, 'skipped' => []] : $this->createProducts($company, $user, $rows);
         if ($r['created'] > 0) {
-            $pack = $company->business_type ?: 'retail';
+            // Every pack the picks came from (a shop can mix, e.g. groceries plus airtime), main one first.
+            $packs = $templates->only(array_column($picks, 'key'))->pluck('business_type')->unique()->values()->all();
+            $pack = implode(',', $packs ?: [$company->business_type ?: 'retail']);
             $this->markStep($company, 'products', false, null, ['template_pack' => $pack]);
             OnboardingEvents::record((int) $company->id, 'template_applied', ['pack' => $pack, 'created' => $r['created'], 'skipped' => count($r['skipped'])]);
         }

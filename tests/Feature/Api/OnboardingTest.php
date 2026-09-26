@@ -25,7 +25,7 @@ class OnboardingTest extends ApiTestCase
         $this->putJson('/api/v1/onboarding/business', ['business_type' => 'retail', 'country' => 'UG'], $h)->assertOk()->assertJsonPath('data.company.currency', 'UGX');
 
         $pack = $this->getJson('/api/v1/onboarding/templates', $h)->assertOk()->json('data');
-        $this->assertCount(40, $pack['items']);
+        $this->assertCount(62, $pack['items']);
         $sugar = collect($pack['items'])->firstWhere('name', 'Sugar 1kg');
         $this->assertSame(5000, $sugar['selling_price']);
         $soda = collect($pack['items'])->firstWhere('name', 'Soda 500ml');

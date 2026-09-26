@@ -17,6 +17,9 @@ class ProductTemplateSeeder extends Seeder
     {
         $data = require database_path('data/product_templates.php');
         foreach ($data['packs'] as $type => $rows) {
+            // A product dropped from a pack is switched off, not deleted (nothing refers to it, but history reads better).
+            DB::table('product_templates')->where(['business_type' => $type, 'country' => 'UG'])
+                ->whereNotIn('name', array_column($rows, 0))->update(['is_active' => false, 'updated_at' => now()]);
             foreach ($rows as $i => $row) {
                 [$name, $cat, $sub, $unit] = $row;
                 DB::table('product_templates')->updateOrInsert(

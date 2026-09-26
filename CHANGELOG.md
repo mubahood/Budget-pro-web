@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Onboarding variety (2026-09-26)
+- 22 business types in groups, each with an icon and a line of example products. New types: supermarket, kiosk/duka, fresh produce, butchery, bakery, liquor store, cosmetics, furniture, spare parts (cars & boda) and stationery/printing.
+- Template packs v3: 1,016 products across 21 packs (35–67 each, 6–11 categories), with real brands and shelf sizes, most common first. The seeder switches off pack rows that were dropped instead of deleting them. The legacy `restaurant` type uses the `restaurant_bar` pack. `template_pack` records every pack the picks came from.
+
 ### Plan prices (2026-09-26)
 - Starter UGX 50,000, Business UGX 100,000 and Enterprise UGX 150,000 a month (were 70,000 / 185,000 / 560,000). Yearly stays 10 × monthly ("2 months free"). The USD card prices are now 14 / 27 / 40. Migration `2026_10_02_100001_plan_prices_50_100_150` updates existing rows, and `PlanSeeder` has the same figures for fresh installs. Running subscriptions keep what they paid; the new price applies from their next renewal.
 
