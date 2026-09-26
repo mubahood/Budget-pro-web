@@ -35,6 +35,14 @@ class Payment extends Model
     }
 
     /** Accept the legacy display labels ("Mobile Money", "Credit Card"...) and normalise. */
+    /** "mobile_money" → "Mobile money" (the shop's method labels), for statements and receipts. */
+    public static function label(string $method): string
+    {
+        $key = self::normalizeMethod($method);
+
+        return (string) (config('onboarding.payment_methods')[$key] ?? ucfirst(str_replace('_', ' ', $key)));
+    }
+
     public static function normalizeMethod(?string $raw): string
     {
         $v = strtolower(trim((string) $raw));

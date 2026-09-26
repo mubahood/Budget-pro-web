@@ -45,10 +45,8 @@ class OnboardingService
     /** The stored JSON as it is, unknown keys included. */
     private function raw(Company $company): array
     {
-        $s = $company->onboarding_state;
-        if (is_string($s)) {
-            $s = json_decode($s, true);
-        }
+        $s = $company->getAttributes()['onboarding_state'] ?? null; // raw JSON, whatever keys it holds
+        $s = is_string($s) ? json_decode($s, true) : $company->onboarding_state;
 
         return is_array($s) ? $s : [];
     }
@@ -58,6 +56,7 @@ class OnboardingService
     {
         $company->onboarding_state = array_merge($this->raw($company), $patch, ['version' => self::STATE_VERSION]);
         $company->saveQuietly();
+        \Illuminate\Support\Facades\Cache::forget(self::v2Key($company));
 
         return $this->state($company);
     }
@@ -400,10 +399,12 @@ class OnboardingService
      *
      * @return array{items: list<array{key: string, label: string, hint: string, action: string, done: bool}>, done: int, total: int, percent: int, dismissed: bool}
      */
-    public function checklistV2(Company $company): array
+    public function checklistV2(Company $company, bool $noteMilestones = true): array
     {
         $sig = $this->signals($company);
-        $this->noteMilestones($company, $sig);
+        if ($noteMilestones) {
+            $this->noteMilestones($company, $sig);
+        }
         $items = [
             ['key' => 'products', 'label' => 'Add your products', 'hint' => 'Load a template pack, import a file or add them one by one.', 'action' => 'products'],
             ['key' => 'prices', 'label' => 'Give every product a price', 'hint' => 'Products without a selling price can\'t be sold.', 'action' => 'prices'],
@@ -414,41 +415,61 @@ class OnboardingService
             ['key' => 'phone_app', 'label' => 'Sign in on the phone app', 'hint' => 'Sell even when the network is down.', 'action' => 'app'],
             ['key' => 'plan', 'label' => 'Choose your plan', 'hint' => 'Pick the plan that fits before the trial ends.', 'action' => 'plan'],
         ];
-        foreach ($items as &$i) {
-            $i['done'] = (bool) $sig[$i['key']];
-        }
-        unset($i);
+        $items = array_map(fn (array $i) => $i + ['done' => (bool) $sig[$i['key']]], $items);
         $done = count(array_filter($items, fn ($i) => $i['done']));
 
         return ['items' => $items, 'done' => $done, 'total' => count($items), 'percent' => (int) round($done * 100 / count($items)),
             'dismissed' => $this->state($company)['dismissed_checklist']];
     }
 
+    /** Note the milestones visible in the data (first sale, invite accepted…) — the web calls it after the page has painted. */
+    public function syncMilestones(Company $company): void
+    {
+        $this->noteMilestones($company, $this->signals($company));
+    }
+
+    /** checklistV2() (without noting milestones) kept for 60 seconds per shop (dashboard and topbar); any onboarding write clears it. */
+    public function checklistV2Cached(Company $company): array
+    {
+        return \Illuminate\Support\Facades\Cache::remember(self::v2Key($company), 60, fn () => $this->checklistV2($company, false));
+    }
+
+    private static function v2Key(Company $company): string
+    {
+        return 'onboarding:checklist-v2:'.$company->id;
+    }
+
     /** @return array{products: bool, prices: bool, first_sale: bool, staff: bool, momo: bool, receipts: bool, phone_app: bool, plan: bool, paid: bool} */
     public function signals(Company $company): array
     {
         $cid = (int) $company->id;
-        $products = DB::table('stock_items')->where('company_id', $cid)->where('is_deleted', false);
-        $hasProducts = (clone $products)->exists();
-        $users = DB::table('admin_users')->where('company_id', $cid)->pluck('id')->all();
-        $sub = DB::table('subscriptions')->where('company_id', $cid)->orderByDesc('id')->first();
-        $paid = false;
-        if ($sub && in_array($sub->status, ['active', 'past_due'], true) && ! in_array((string) $sub->provider, ['trial', 'free'], true) && $sub->plan_id) {
-            $paid = (float) DB::table('plans')->where('id', $sub->plan_id)->value('price_ugx') > 0;
-        }
+        // One round trip: every signal is an EXISTS on an indexed company_id.
+        $r = DB::selectOne(<<<'SQL'
+            SELECT
+              EXISTS(SELECT 1 FROM stock_items WHERE company_id = :c1 AND is_deleted = 0) AS products,
+              EXISTS(SELECT 1 FROM stock_items WHERE company_id = :c2 AND is_deleted = 0 AND (selling_price IS NULL OR selling_price <= 0)) AS unpriced,
+              EXISTS(SELECT 1 FROM sale_records WHERE company_id = :c3) AS first_sale,
+              (EXISTS(SELECT 1 FROM invites WHERE company_id = :c4 AND status = 'accepted')
+                OR EXISTS(SELECT 1 FROM company_members WHERE company_id = :c5 AND status = 'active' AND role <> 'owner')) AS staff,
+              EXISTS(SELECT 1 FROM message_log WHERE company_id = :c6 AND purpose = 'receipt' AND status = 'sent') AS receipts,
+              (EXISTS(SELECT 1 FROM devices WHERE company_id = :c7)
+                OR EXISTS(SELECT 1 FROM personal_access_tokens t JOIN admin_users u ON u.id = t.tokenable_id
+                          WHERE t.tokenable_type = :type AND u.company_id = :c8)) AS phone_app,
+              (SELECT CONCAT_WS('|', s.status, COALESCE(s.provider, ''), COALESCE(p.price_ugx, 0))
+                 FROM subscriptions s LEFT JOIN plans p ON p.id = s.plan_id WHERE s.company_id = :c9 ORDER BY s.id DESC LIMIT 1) AS sub
+            SQL, ['c1' => $cid, 'c2' => $cid, 'c3' => $cid, 'c4' => $cid, 'c5' => $cid, 'c6' => $cid, 'c7' => $cid, 'c8' => $cid, 'c9' => $cid, 'type' => User::class]);
+        [$status, $provider, $price] = $r->sub !== null ? array_pad(explode('|', (string) $r->sub), 3, '') : [null, '', 0];
 
         return [
-            'products' => $hasProducts,
-            'prices' => $hasProducts && ! (clone $products)->where(fn ($q) => $q->whereNull('selling_price')->orWhere('selling_price', '<=', 0))->exists(),
-            'first_sale' => DB::table('sale_records')->where('company_id', $cid)->exists(),
-            'staff' => DB::table('invites')->where('company_id', $cid)->where('status', 'accepted')->exists()
-                || DB::table('company_members')->where('company_id', $cid)->where('status', 'active')->where('role', '!=', 'owner')->exists(),
+            'products' => (bool) $r->products,
+            'prices' => (bool) $r->products && ! $r->unpriced,
+            'first_sale' => (bool) $r->first_sale,
+            'staff' => (bool) $r->staff,
             'momo' => ! empty($company->momo_subaccount_id),
-            'receipts' => DB::table('message_log')->where('company_id', $cid)->where('purpose', 'receipt')->where('status', 'sent')->exists(),
-            'phone_app' => DB::table('devices')->where('company_id', $cid)->exists()
-                || ($users !== [] && DB::table('personal_access_tokens')->where('tokenable_type', User::class)->whereIn('tokenable_id', $users)->exists()),
-            'plan' => $sub !== null && $sub->status !== 'trialing',
-            'paid' => $paid,
+            'receipts' => (bool) $r->receipts,
+            'phone_app' => (bool) $r->phone_app,
+            'plan' => $status !== null && $status !== 'trialing',
+            'paid' => in_array($status, ['active', 'past_due'], true) && ! in_array($provider, ['trial', 'free'], true) && (float) $price > 0,
         ];
     }
 

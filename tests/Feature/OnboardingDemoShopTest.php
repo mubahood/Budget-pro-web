@@ -4,13 +4,13 @@ namespace Tests\Feature;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
+use App\Models\Customer;
 use App\Models\User;
 use App\Services\Billing\Quotas;
 use App\Services\Messaging\Messenger;
 use App\Services\Onboarding\DemoShopService;
 use App\Services\Onboarding\RegistrationService;
 use App\Services\Shop\CustomerService;
-use App\Models\Customer;
 use Database\Seeders\ProductTemplateSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Artisan;

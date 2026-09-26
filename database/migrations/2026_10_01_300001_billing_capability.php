@@ -130,16 +130,22 @@ return new class extends Migration
         }
     }
 
-    /** Known spellings map to their code; an ISO code already allowed is kept (upper-cased); anything else is the default. */
+    /**
+     * Known spellings map to their code; an allowed ISO code is upper-cased; anything else is LEFT AS IT IS
+     * (a real code such as LKR must never be turned into UGX; junk values are for the owner to correct).
+     */
     public static function normalise(?string $raw, array $allowed, string $default): string
     {
+        if (trim((string) $raw) === '') {
+            return $default; // missing, not a choice
+        }
         $key = strtolower(str_replace([' ', '.', '-', '_'], '', trim((string) $raw)));
         if (isset(self::CURRENCY_MAP[$key])) {
             return self::CURRENCY_MAP[$key];
         }
         $upper = strtoupper(trim((string) $raw));
 
-        return in_array($upper, $allowed, true) ? $upper : $default;
+        return in_array($upper, $allowed, true) ? $upper : (string) $raw;
     }
 
     private function hasIndex(string $table, string $name): bool

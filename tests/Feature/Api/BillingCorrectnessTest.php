@@ -173,11 +173,11 @@ class BillingCorrectnessTest extends ApiTestCase
         }
     }
 
-    public function test_free_text_currencies_are_normalised_and_billed_in_ugx(): void
+    public function test_free_text_ugandan_currencies_are_normalised_and_real_codes_are_kept(): void
     {
         $migration = require base_path('database/migrations/2026_10_01_300001_billing_capability.php');
         $allowed = config('saas.currencies');
-        foreach (['ugshs' => 'UGX', 'Uganda shillings' => 'UGX', 'UGX ' => 'UGX', 'ugx' => 'UGX', 'Ushs.' => 'UGX', 'kes' => 'KES', 'Ksh' => 'KES', 'usd' => 'USD', 'fgg' => 'UGX', '' => 'UGX'] as $raw => $want) {
+        foreach (['ugshs' => 'UGX', 'Uganda shillings' => 'UGX', 'UGX ' => 'UGX', 'ugx' => 'UGX', 'Ushs.' => 'UGX', 'kes' => 'KES', 'Ksh' => 'KES', 'usd' => 'USD', 'fgg' => 'fgg', 'LKR' => 'LKR', '' => 'UGX'] as $raw => $want) {
             $this->assertSame($want, $migration::normalise($raw, $allowed, 'UGX'), "'{$raw}'");
         }
         $t = $this->registerTenant(['currency' => 'UGX']);

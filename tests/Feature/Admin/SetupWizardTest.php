@@ -27,8 +27,10 @@ class SetupWizardTest extends AdminTestCase
         $this->asAdmin($u)->post('/setup/skip/team')->assertRedirect(admin_url('setup?step=done'));
         $this->asAdmin($u)->get('/setup?step=done')->assertOk()->assertSee("You're set", false);
 
-        // Setup finished: the dashboard opens, with the getting-started card (3 of 5 done).
-        $this->asAdmin($u)->get('/')->assertOk()->assertSee('Getting started — 3 of 5 done', false);
+        // Setup finished: the dashboard opens, with the getting-started card. Only "add products" is
+        // really done: ticking MoMo/WhatsApp no longer counts until a MoMo number is registered and a
+        // receipt is actually sent (honest checklist, POWER_PLAN §3.1).
+        $this->asAdmin($u)->get('/')->assertOk()->assertSee('Getting started — 1 of 5 done', false);
         $this->asAdmin($u)->post('/setup/dismiss')->assertRedirect();
         $this->asAdmin($u)->get('/')->assertOk()->assertDontSee('Getting started —', false);
         $this->assertSame($page->getStatusCode(), 200);

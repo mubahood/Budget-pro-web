@@ -116,7 +116,7 @@ class CustomerService
         $pays = Payment::withoutGlobalScopes()->where('company_id', $customer->company_id)->where('customer_id', $customer->id)->get();
         foreach ($pays as $p) {
             $amt = round((float) $p->amount, 2);
-            $entries[] = ['date' => (string) $p->received_at?->toDateString(), 'at' => $p->received_at, 'type' => $amt < 0 ? 'refund' : 'payment', 'ref' => $p->reference, 'description' => $amt < 0 ? 'Cash refunded' : ($p->notes === PaymentService::PAID_AT_SALE ? 'Paid at sale' : 'Payment ('.$p->method.')'), 'debit' => $amt < 0 ? -$amt : 0.0, 'credit' => $amt > 0 ? $amt : 0.0];
+            $entries[] = ['date' => (string) $p->received_at?->toDateString(), 'at' => $p->received_at, 'type' => $amt < 0 ? 'refund' : 'payment', 'ref' => $p->reference, 'description' => $amt < 0 ? 'Cash refunded' : ($p->notes === PaymentService::PAID_AT_SALE ? 'Paid at sale' : 'Payment ('.\App\Models\Payment::label((string) $p->method).')'), 'debit' => $amt < 0 ? -$amt : 0.0, 'credit' => $amt > 0 ? $amt : 0.0];
         }
         usort($entries, fn ($a, $b) => [$a['date'], (string) $a['at']] <=> [$b['date'], (string) $b['at']]);
 

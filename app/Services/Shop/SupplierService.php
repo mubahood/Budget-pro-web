@@ -46,7 +46,7 @@ class SupplierService
             }
         }
         foreach (FinancialRecord::withoutGlobalScopes()->where('source_type', 'supplier_payment')->where('source_id', $supplier->id)->get() as $p) {
-            $entries[] = ['date' => (string) $p->date?->toDateString(), 'type' => 'payment', 'ref' => $p->receipt, 'description' => 'Payment ('.$p->payment_method.')', 'debit' => round((float) $p->amount, 2), 'credit' => 0.0];
+            $entries[] = ['date' => (string) $p->date?->toDateString(), 'type' => 'payment', 'ref' => $p->receipt, 'description' => 'Payment ('.\App\Models\Payment::label((string) $p->payment_method).')', 'debit' => round((float) $p->amount, 2), 'credit' => 0.0];
         }
         foreach (\App\Models\PurchaseReturn::withoutGlobalScopes()->where('supplier_id', $supplier->id)->get() as $r) {
             $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'return', 'ref' => $r->number, 'description' => 'Goods returned'.($r->reason ? ": {$r->reason}" : ''), 'debit' => round((float) $r->total_value, 2), 'credit' => 0.0];

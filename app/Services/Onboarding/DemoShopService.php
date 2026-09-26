@@ -88,13 +88,13 @@ class DemoShopService
             return $existing;
         }
 
-        $demo = DB::transaction(function () use ($real, $owner, $days) {
+        $demo = DB::transaction(function () use ($real, $owner) {
             $user = User::withoutGlobalScopes()->where('username', 'demo+'.$owner->id)->first() ?? new User();
             $user->first_name = $owner->first_name ?: 'Demo';
             $user->last_name = 'Demo';
             $user->name = trim(($owner->first_name ?: $owner->name).' (demo)');
             $user->username = 'demo+'.$owner->id;
-            $user->email = null;
+            $user->setAttribute('email', null); // no email: nobody signs in with it but the owner's session
             $user->phone_number = null;
             $user->phone_e164 = null;
             $user->password = Hash::make(Str::random(40));
@@ -224,7 +224,9 @@ class DemoShopService
                 $made = [];
                 for ($d = 0; $d <= $days; $d++) {
                     $day = $start->copy()->addDays($d);
-                    $count = match ((int) $day->dayOfWeek) { 0 => mt_rand(0, 1), 6 => mt_rand(2, 3), default => mt_rand(1, 2) };
+                    $count = match ((int) $day->dayOfWeek) {
+                        0 => mt_rand(0, 1), 6 => mt_rand(2, 3), default => mt_rand(1, 2)
+                    };
                     for ($n = 0; $n < $count; $n++) {
                         $time = $at($day, mt_rand(8, 19), mt_rand(0, 59));
                         if ($time->greaterThan($realNow)) {
