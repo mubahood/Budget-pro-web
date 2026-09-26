@@ -113,4 +113,12 @@ class DashboardTest extends AdminTestCase
         $page = $this->asAdmin($cashier->fresh())->get('/')->assertOk();
         $page->assertSee('New sale')->assertDontSee('Profit on sales')->assertDontSee('Record expense')->assertDontSee('You owe suppliers');
     }
+
+    public function test_the_classic_admin_offers_the_new_interface_when_configured(): void
+    {
+        config(['saas.new_ui_url' => 'https://shop.example.test']);
+        $this->asAdmin($this->t['user'])->get('/')->assertOk()->assertSee('Try the new Budget Pro')->assertSee('https://shop.example.test/login', false);
+        config(['saas.new_ui_url' => '']);
+        $this->asAdmin($this->t['user'])->get('/')->assertOk()->assertDontSee('Try the new Budget Pro');
+    }
 }

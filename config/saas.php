@@ -5,6 +5,9 @@ return [
     // team invites /invite/…) use it, whichever interface created them (budget-pro-new overrides app.url).
     'public_url' => env('SAAS_PUBLIC_URL', env('APP_URL', 'http://localhost')),
 
+    // The new shop interface (budget-pro-new), linked from the classic admin's top bar. Empty = no link.
+    'new_ui_url' => env('SAAS_NEW_UI_URL', ''),
+
     /*
     |--------------------------------------------------------------------------
     | Trial length (days) for newly registered companies
