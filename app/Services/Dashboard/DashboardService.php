@@ -224,34 +224,48 @@ class DashboardService
     /**
      * Things the owner should look at, most urgent first.
      *
-     * @return array<int, array{level: string, text: string, link: string, action: string}>
+     * Each alert has a stable `key` (negative_stock, no_cost, expiring, reorder, open_shifts). The link
+     * comes from `$link($key)`, so each interface points at its own screen; by default the classic admin's.
+     *
+     * @param  (callable(string): string)|null  $link
+     * @return array<int, array{key: string, level: string, text: string, link: string, action: string}>
      */
-    public function alerts(Company $company, array $stock): array
+    public function alerts(Company $company, array $stock, ?callable $link = null): array
     {
+        $link ??= fn (string $key) => admin_url(self::CLASSIC_LINKS[$key]);
         $cid = (int) $company->id;
         $out = [];
+        $add = function (string $key, string $level, string $text, string $action) use (&$out, $link) {
+            $out[] = ['key' => $key, 'level' => $level, 'text' => $text, 'link' => $link($key), 'action' => $action];
+        };
         if ($stock['negative'] > 0) {
-            $out[] = ['level' => 'danger', 'text' => "{$stock['negative']} product(s) show less than zero in stock. Some sales were made without stock recorded — count them and correct.", 'link' => admin_url('stock-takes/create'), 'action' => 'Count stock'];
+            $add('negative_stock', 'danger', "{$stock['negative']} product(s) show less than zero in stock. Some sales were made without stock recorded — count them and correct.", 'Count stock');
         }
         $noCost = DB::table('stock_items')->where('company_id', $cid)->where('is_deleted', 0)->where('buying_price', '<=', 0)->where('selling_price', '>', 0)->count();
         if ($noCost > 0) {
-            $out[] = ['level' => 'warning', 'text' => "{$noCost} product(s) have no buying price, so their profit shows as the full selling price.", 'link' => admin_url('stock-items?_scope_=no_cost'), 'action' => 'Add buying prices'];
+            $add('no_cost', 'warning', "{$noCost} product(s) have no buying price, so their profit shows as the full selling price.", 'Add buying prices');
         }
         $expiring = DB::table('stock_batches')->where('company_id', $cid)->where('quantity', '>', 0)->whereNotNull('expiry_date')
             ->where('expiry_date', '<=', now()->addDays(30)->toDateString())->count();
         if ($expiring > 0) {
-            $out[] = ['level' => 'warning', 'text' => "{$expiring} batch(es) expire within 30 days.", 'link' => admin_url('reports'), 'action' => 'See expiry'];
+            $add('expiring', 'warning', "{$expiring} batch(es) expire within 30 days.", 'See expiry');
         }
         if ($stock['out_of_stock'] > 0 || $stock['low'] > 0) {
-            $out[] = ['level' => 'info', 'text' => "{$stock['out_of_stock']} product(s) out of stock and {$stock['low']} running low.", 'link' => admin_url('reorder-suggestions'), 'action' => 'Reorder list'];
+            $add('reorder', 'info', "{$stock['out_of_stock']} product(s) out of stock and {$stock['low']} running low.", 'Reorder list');
         }
         $openShifts = DB::table('shifts')->where('company_id', $cid)->where('status', 'open')->where('opened_at', '<', now()->subHours(16))->count();
         if ($openShifts > 0) {
-            $out[] = ['level' => 'warning', 'text' => "{$openShifts} till shift(s) have been open for more than 16 hours. Close them to see the cash variance.", 'link' => admin_url('shifts'), 'action' => 'Shifts'];
+            $add('open_shifts', 'warning', "{$openShifts} till shift(s) have been open for more than 16 hours. Close them to see the cash variance.", 'Shifts');
         }
 
         return $out;
     }
+
+    /** Where each alert points in the classic admin. */
+    public const CLASSIC_LINKS = [
+        'negative_stock' => 'stock-takes/create', 'no_cost' => 'stock-items?_scope_=no_cost', 'expiring' => 'reports',
+        'reorder' => 'reorder-suggestions', 'open_shifts' => 'shifts',
+    ];
 
     /** Percentage change (null when there is nothing to compare with). */
     public static function change(float $now, float $before): ?float

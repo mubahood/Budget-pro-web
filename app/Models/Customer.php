@@ -14,9 +14,9 @@ class Customer extends Model
 
     protected $table = 'customers';
 
-    protected $fillable = ['uuid', 'company_id', 'name', 'phone', 'email', 'address', 'credit_limit', 'notes', 'is_active', 'created_by_id'];
+    protected $fillable = ['uuid', 'company_id', 'name', 'phone', 'email', 'address', 'credit_limit', 'payment_terms_days', 'reminders_enabled', 'notes', 'is_active', 'created_by_id'];
 
-    protected $casts = ['credit_limit' => 'decimal:2', 'balance' => 'decimal:2', 'is_active' => 'boolean', 'is_deleted' => 'boolean'];
+    protected $casts = ['credit_limit' => 'decimal:2', 'balance' => 'decimal:2', 'is_active' => 'boolean', 'is_deleted' => 'boolean', 'reminders_enabled' => 'boolean', 'payment_terms_days' => 'integer'];
 
     protected static function booted(): void
     {

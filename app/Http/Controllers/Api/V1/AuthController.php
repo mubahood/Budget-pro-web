@@ -92,21 +92,10 @@ class AuthController extends Controller
         ], $message);
     }
 
-    /** Email (case-insensitive) or phone in any local/international form. */
+    /** Email (case-insensitive) or phone in any local/international form (App\Services\Auth\AccountLookup). */
     private function findByIdentifier(string $raw): ?User
     {
-        $raw = trim($raw);
-        if (str_contains($raw, '@')) {
-            return User::withoutGlobalScopes()->whereRaw('LOWER(email) = ?', [strtolower($raw)])->first();
-        }
-        foreach (array_keys(\App\Support\Phone::COUNTRIES) as $country) {
-            $e164 = \App\Support\Phone::e164($raw, $country);
-            if ($e164 && ($u = User::withoutGlobalScopes()->where('phone_e164', $e164)->first())) {
-                return $u;
-            }
-        }
-
-        return User::withoutGlobalScopes()->where('phone_number', $raw)->first();
+        return \App\Services\Auth\AccountLookup::find($raw);
     }
 
     /** POST auth/otp/request { identifier, purpose: login|register|reset } */
