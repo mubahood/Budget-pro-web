@@ -15,6 +15,74 @@ use Illuminate\Support\Facades\DB;
  */
 class CustomerService
 {
+    /** Names typed at the till that mean "nobody in particular": never turned into customers. */
+    public const PLACEHOLDER_NAMES = ['', 'walk-in customer', 'walk in customer', 'walk-in', 'walk in', 'walkin', 'customer', 'cash', 'cash sale',
+        'cash customer', 'n/a', 'na', 'none', 'unknown', '-', '.', '0'];
+
+    /** The note on customers made from sale names (so they can be told apart, and undone). */
+    public const ADOPTED_NOTE = 'Created from the buyer name on past sales.';
+
+    /**
+     * Buyers who only exist as a name typed on sales (the phone app and classic sale form never made
+     * customer accounts for them) become customers: one per name (ignoring case and outer spaces),
+     * or the existing customer with that name or phone. Every sale under the name without a customer,
+     * and the money received on it, is linked; balances are recalculated. Idempotent: only sales with
+     * no customer are touched, so it can run on deploy, hourly, and when the customer list opens.
+     *
+     * @return array{created: int, linked: int}
+     */
+    public function adoptNamedBuyers(int $companyId, ?int $userId = null): array
+    {
+        $placeholders = self::PLACEHOLDER_NAMES;
+        $groups = DB::table('sale_records')->where('company_id', $companyId)->whereNull('customer_id')
+            ->where(fn ($q) => $q->whereNull('is_deleted')->orWhere('is_deleted', 0))
+            ->whereNotNull('customer_name')
+            ->whereRaw("LOWER(TRIM(customer_name)) NOT IN (".implode(',', array_fill(0, count($placeholders), '?')).')', $placeholders)
+            ->selectRaw('LOWER(TRIM(customer_name)) AS k, MAX(id) AS last_id, COUNT(*) AS n')
+            ->groupBy('k')->get();
+        if ($groups->isEmpty()) {
+            return ['created' => 0, 'linked' => 0];
+        }
+        $userId ??= (int) DB::table('companies')->where('id', $companyId)->value('owner_id') ?: null;
+        $existing = Customer::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->get(['id', 'name', 'phone'])
+            ->keyBy(fn ($c) => mb_strtolower(trim((string) $c->name)));
+        $created = $linked = 0;
+
+        foreach ($groups as $g) {
+            DB::transaction(function () use ($companyId, $g, $userId, $existing, &$created, &$linked) {
+                // The spelling and phone from the latest sale under this name.
+                $last = DB::table('sale_records')->where('id', $g->last_id)->first(['customer_name', 'customer_phone']);
+                $phone = trim((string) DB::table('sale_records')->where('company_id', $companyId)->whereNull('customer_id')
+                    ->whereRaw('LOWER(TRIM(customer_name)) = ?', [$g->k])->whereNotNull('customer_phone')->where('customer_phone', '<>', '')
+                    ->orderByDesc('id')->value('customer_phone')) ?: null;
+                $customer = $existing[$g->k] ?? ($phone ? Customer::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->where('phone', $phone)->first() : null);
+                if ($customer === null) {
+                    $customer = new Customer(['name' => trim((string) $last->customer_name), 'phone' => $phone, 'notes' => self::ADOPTED_NOTE, 'created_by_id' => $userId,
+                        'reminders_enabled' => false]); // no automatic reminder to someone who never gave a number for it; the owner can switch it on
+                    $customer->company_id = $companyId;
+                    $customer->save();
+                    $existing[$g->k] = $customer;
+                    $created++;
+                }
+                $ids = DB::table('sale_records')->where('company_id', $companyId)->whereNull('customer_id')
+                    ->where(fn ($q) => $q->whereNull('is_deleted')->orWhere('is_deleted', 0))
+                    ->whereRaw('LOWER(TRIM(customer_name)) = ?', [$g->k])->pluck('id');
+                foreach ($ids->chunk(200) as $chunk) {
+                    foreach (SaleRecord::withoutGlobalScopes()->whereIn('id', $chunk)->get() as $sale) {
+                        $sale->customer_id = $customer->id;
+                        $sale->saveQuietlySynced(); // phones see the link on their next sync
+                    }
+                    DB::table('payments')->where('company_id', $companyId)->whereIn('sale_record_id', $chunk)->whereNull('customer_id')
+                        ->update(['customer_id' => $customer->id]);
+                }
+                $linked += $ids->count();
+                $this->recalc((int) $customer->id);
+            });
+        }
+
+        return ['created' => $created, 'linked' => $linked];
+    }
+
     public function balance(Customer $customer): float
     {
         $owed = (float) SaleRecord::withoutGlobalScopes()->where('company_id', $customer->company_id)

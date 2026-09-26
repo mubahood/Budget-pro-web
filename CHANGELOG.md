@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Buyers typed as names become customers (2026-09-27)
+- **What changed:** `CustomerService::adoptNamedBuyers` turns every buyer name typed on sales (phone app, classic sale form) into a customer account. Names are matched ignoring case and outer spaces, or joined to an existing customer with the same name or phone. The name's sales and their payments are linked and balances recalculated.
+- **What is left alone:** placeholder names such as "Walk-in Customer" or "cash".
+- **Reminders:** created customers have reminders off and carry `ADOPTED_NOTE`.
+- **When it runs:** once for every shop (migration `2026_10_03_100001`, whose down() undoes it), hourly (`customers:adopt-named`), and when the new interface's customer list opens.
+- **Production at the time:** only HOOD SAT AND ELECTRICALS UG. had such buyers (245 names, 2,021 sales).
+
 ### Shop parity with the classic screens (2026-09-27)
 - **Debtors:** `DebtService` puts customer accounts and name-only credit sales ("Member x", made in the phone app without a customer account) in one list. It receives against a name (oldest sale first, never more than owed) and turns a name into a customer account, moving the sales and payments onto it.
 - **New service methods:** `SaleService::updateDetails` (a sale's customer, name, phone, address and notes; both customers recalculated), `TeamService::createMember/setPassword/updateDetails`, `TransferService::assignDevice`.
