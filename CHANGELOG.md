@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Public demo shop (2026-09-27, config/demo.php)
+- **One shared demo account**, opened from the website in one click (or signed into by hand: `demo@schooldynamics.ug` / `demo2026`, till PIN 1234).
+- **Fresh Corner Market:** a neighbourhood grocery in USD with 45 products (41 with CC0 photos), 6 suppliers, 12 customers, a team of five, and 60 days of trading, all made through the services. It includes:
+  - shifts with cash-ups and safe drops;
+  - card, cash and wallet sales, deals, a coupon, loyalty and gift cards;
+  - credit, an overdue customer, and a café on account;
+  - deliveries with batches and landed costs, and purchase orders;
+  - returns, write-offs, a markdown and stock counts;
+  - a scheduled price change, expenses and team chat.
+- **Looks after itself** (`demo:public`, hourly):
+  - It repairs whatever visitors changed: the sign-in, the shop's settings, deleted products and photos, deactivated staff and deleted customers.
+  - It carries on today's trading up to the minute.
+  - Every 72 hours it rebuilds from scratch *beside* the old shop, moves the account in one transaction, then deletes the old shop.
+- **Locked in the demo:**
+  - changing the currency;
+  - deleting the shop;
+  - paying for a plan;
+  - inviting or adding people;
+  - handing over the shop;
+  - changing or resetting the shared account's password or details.
+- **The owners' private demos:** their hourly clean-up never touches the public demo, which has no `demo_parent_id`.
+- **Money on screen follows the currency:** shillings and similar show whole units; dollars, euros, rand and other currencies with cents show two decimals (`Money::decimals`, the offline till too).
+
 ### Phone app parity, part 2 (2026-09-27)
 - **Chat API:** conversations, messages (images), direct, read, typing, delete, unread, presence (ChatService).
 - **Deliveries:** landed costs on goods receipts and PO receipts; the sync goods_receipt op carries batch number and expiry.

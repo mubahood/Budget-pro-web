@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
         $schedule->call($task('customers:adopt-named'))->name('customers:adopt-named')->hourlyAt(40)->withoutOverlapping();
         $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
         $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();
+        $schedule->call($task('demo:public'))->name('demo:public')->hourlyAt(5)->withoutOverlapping(90);
         $schedule->call($task('shop:product-stats'))->name('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
         $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
         $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();

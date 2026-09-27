@@ -100,3 +100,9 @@ its Appendix H open questions (H1–H10). Every later decision made while execut
 - **E63** (found by the production write smoke test) Voiding a sale reverses every movement on it. A faulty return has no movement, so voiding put the faulty unit back on the shelf. The void now writes those units off again as Damage. Separately, the hidden `company_id` / `created_by_id` / `user_id` fields on web forms are overwritten with the signed-in shop user's own values in `AdminPermission`, so a changed form can't write into another shop.
 
 - **2026-09-26: plan prices 50k / 100k / 150k UGX.** The owner lowered prices to make the paid plans easy to say yes to. The change is a migration, not a seeder edit, because `PlanSeeder` never overwrites prices on existing rows. Enterprise can now be chosen in the shop like the other plans; the public page still offers "talk to us" for chains.
+
+- **2026-09-27: Public demo shop.** There is one shared account rather than one per visitor, because visitors want to see a shop already in use.
+  - **Why it is safe:** tenancy keeps visitors inside the demo. In the services, the demo refuses anything with effects outside itself or that would lock out the next visitor.
+  - **Rebuild:** a new shop is built beside the old one, and the account is then moved in one transaction. A visitor never lands in a half-built shop, and a failed build leaves the old demo live.
+  - **Shop details:** the shop is priced in USD and runs on UTC, so its trading hours line up with visitors in Africa, Europe and the Middle East.
+

@@ -175,6 +175,7 @@ class AuthController extends Controller
         if ($user === null) {
             return $this->error('Account not found.', 404);
         }
+        \App\Services\Onboarding\PublicDemo::guardAccount($user, 'resetting the password');
         $user->password = Hash::make($data['password']);
         $user->save();
         $user->tokens()->delete(); // every session signs in again with the new password
@@ -186,6 +187,7 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
         $user = $request->user();
+        \App\Services\Onboarding\PublicDemo::guardAccount($user, 'changing the demo account');
         $data = $request->validate([
             'first_name' => ['sometimes', 'string', 'max:100'],
             'last_name' => ['sometimes', 'string', 'max:100'],
@@ -343,6 +345,7 @@ class AuthController extends Controller
      */
     public function updatePassword(Request $request)
     {
+        \App\Services\Onboarding\PublicDemo::guardAccount($request->user(), 'changing the password');
         $data = $request->validate([
             'current_password' => ['required', 'string'],
             'new_password' => ['required', 'string', 'min:6', 'max:100', 'confirmed'],

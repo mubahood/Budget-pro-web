@@ -116,6 +116,7 @@ class CurrencyChangeService
      */
     public function change(Company $company, User $user, string $to, string $mode, ?float $rate, string $password): object
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'changing the currency');
         [$to, $mode, $rate] = $this->check($company, $to, $mode, $rate);
         if ((int) $company->owner_id !== (int) $user->id) {
             throw BusinessRuleException::make('owner_only', 'Only the owner can change the currency.');

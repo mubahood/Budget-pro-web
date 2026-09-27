@@ -82,6 +82,7 @@ class TenantDataService
 
     public function requestDeletion(Company $company, User $owner, string $password): int
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'deleting the shop');
         if ((int) $company->owner_id !== (int) $owner->id) {
             throw BusinessRuleException::make('owner_only', 'Only the owner can delete the shop.');
         }

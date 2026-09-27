@@ -122,6 +122,7 @@ class BillingService
      */
     public function checkout(Company $company, User $user, Plan $plan, string $interval = 'month', ?string $redirectUrl = null, ?string $paymentOptions = null): array
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'paying for a plan');
         $quote = $this->quote($company, $plan, $interval);
         if ($quote['immediate']) {
             $this->applyImmediateChange($company, $plan, $quote);
@@ -154,6 +155,7 @@ class BillingService
      */
     public function chargeMobileMoney(Company $company, User $user, Plan $plan, string $phone, ?string $network, string $interval = 'month'): array
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'paying for a plan');
         $quote = $this->quote($company, $plan, $interval);
         if ($quote['immediate']) {
             $this->applyImmediateChange($company, $plan, $quote);
@@ -387,6 +389,7 @@ class BillingService
      */
     public function chargeSavedCard(Company $company): array
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'paying for a plan');
         $sub = $company->subscription;
         $card = $sub?->savedCard();
         if ($sub === null || $card === null || $company->isSuspended()) {

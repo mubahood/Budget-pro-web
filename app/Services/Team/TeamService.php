@@ -24,6 +24,7 @@ class TeamService
     /** @return array{invite: object, link: string} */
     public function invite(User $by, string $role, ?string $phone, ?string $email, ?string $name = null): array
     {
+        \App\Services\Onboarding\PublicDemo::guard((int) $by->company_id, 'inviting people');
         if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
             throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
         }
@@ -241,6 +242,7 @@ class TeamService
      */
     public function createMember(Company $company, User $by, string $name, ?string $email, ?string $phone, string $password, string $role): User
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'adding people');
         if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
             throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
         }
@@ -292,6 +294,7 @@ class TeamService
      */
     public function setPassword(Company $company, User $by, User $member, string $password): void
     {
+        \App\Services\Onboarding\PublicDemo::guardAccount($member, 'changing this password');
         $this->assertMemberOf($company, $member);
         if ((int) $company->owner_id === (int) $member->id && (int) $by->id !== (int) $member->id) {
             throw BusinessRuleException::make('owner_password', 'Only the owner can change the owner’s password.');
@@ -310,6 +313,7 @@ class TeamService
      */
     public function updateDetails(Company $company, User $by, User $member, array $data): User
     {
+        \App\Services\Onboarding\PublicDemo::guardAccount($member, 'changing these sign-in details');
         $this->assertMemberOf($company, $member);
         if ((int) $company->owner_id === (int) $member->id && (int) $by->id !== (int) $member->id) {
             throw BusinessRuleException::make('owner_details', 'Only the owner can change the owner’s details.');
@@ -386,6 +390,7 @@ class TeamService
 
     public function transferOwnership(Company $company, User $owner, User $to, string $password): void
     {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'handing over the shop');
         if (! Hash::check($password, $owner->password)) {
             throw BusinessRuleException::make('wrong_password', 'Your password is not correct.');
         }
