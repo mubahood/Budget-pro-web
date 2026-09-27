@@ -55,7 +55,7 @@ class ApiPermissionMap
         [['PUT', 'PATCH'], '#^company(/settings|/modules)?$#', 'manage_settings'],
         [['GET', 'POST'], '#^company/(data-requests|export|exports/\d+/download|delete|delete/cancel)$#', 'manage_settings'],
         [['POST', 'PUT'], '#^onboarding/(templates/apply|import)$#', 'manage_products'],
-        [['POST', 'PUT'], '#^onboarding/(business|money|steps/[a-z_]+|checklist/dismiss)$#', 'manage_settings'],
+        [['POST', 'PUT'], '#^onboarding/(business|money|steps/[a-z_]+|skip|checklist/dismiss)$#', 'manage_settings'],
         [['POST', 'DELETE'], '#^devices/\d+/revoke$#', 'manage_team'],
     ];
 

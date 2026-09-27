@@ -59,6 +59,14 @@ class OnboardingTest extends ApiTestCase
         $this->assertSame(40, $this->getJson('/api/v1/onboarding', $h)->json('data.state.step_seconds.business'));
     }
 
+    public function test_skip_setup_from_the_phone(): void
+    {
+        $t = $this->registerTenant(['currency' => 'UGX']);
+        $h = $this->auth($t['token']);
+        $this->postJson('/api/v1/onboarding/skip', [], $h)->assertOk();
+        $this->assertNotNull($this->getJson('/api/v1/onboarding', $h)->json('data.state.skipped_at'), 'remembered, as on the web');
+    }
+
     public function test_csv_import_previews_rejects_bad_rows_and_imports(): void
     {
         $t = $this->registerTenant();

@@ -59,6 +59,15 @@ class OnboardingController extends Controller
     }
 
     /** POST onboarding/steps/{step} { skipped?: bool, seconds?: int } */
+    /** "Skip setup" on the phone: the same as the web wizard's (OnboardingService::skipWizard). */
+    public function skip(Request $request)
+    {
+        $company = $this->company($request);
+        $this->onboarding->skipWizard($company, 'mobile');
+
+        return $this->success($this->payload($company->fresh()), 'Setup skipped. The getting-started list stays on your home screen.');
+    }
+
     public function step(Request $request, string $step)
     {
         $data = $request->validate(['skipped' => ['nullable', 'boolean'], 'seconds' => ['nullable', 'integer', 'min:0', 'max:86400']]);

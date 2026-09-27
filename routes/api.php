@@ -187,6 +187,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // Setup wizard, checklist and modules (plan C2/C4).
         Route::get('onboarding', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'show']);
         Route::post('onboarding/steps/{step}', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'step']);
+        Route::post('onboarding/skip', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'skip']);
         Route::put('onboarding/business', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'business']);
         Route::put('onboarding/money', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'money']);
         Route::get('onboarding/templates', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'templates']);
