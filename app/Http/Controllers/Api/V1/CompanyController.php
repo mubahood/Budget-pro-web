@@ -8,6 +8,8 @@ use App\Models\Company;
 use App\Support\Rules\CompanyRules;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 /**
  * The authenticated tenant's own company profile. A user can only ever read or
@@ -47,6 +49,32 @@ class CompanyController extends Controller
         $company->save();
 
         return $this->success(new CompanyResource($company->fresh()), 'Company updated successfully.');
+    }
+
+    /**
+     * POST company/logo (multipart `file`: jpg, jpeg, png or webp, at most 2 MB) — manage_settings (ApiPermissionMap).
+     * Stored like the web Business settings (budget-pro-new Settings\Business::storeLogo): public storage
+     * "images/logo-{company}-{random}.{ext}", saved to company.logo through CompanyRules. Returns {logo, logo_url}.
+     */
+    public function logo(Request $request)
+    {
+        $company = Company::find($request->user()->company_id);
+        if ($company === null) {
+            return $this->notFound('Company not found.');
+        }
+        $request->validate(['file' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048']], [], ['file' => 'logo']);
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'png');
+        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+            $ext = $file->extension() ?: 'png';
+        }
+        $rel = 'images/logo-'.$company->id.'-'.Str::random(12).'.'.$ext;
+        $dest = public_path('storage/'.$rel);
+        File::ensureDirectoryExists(dirname($dest));
+        File::put($dest, $file->get());
+        CompanyRules::apply($company, ['logo' => $rel])->save();
+
+        return $this->success(['logo' => $rel, 'logo_url' => url('storage/'.$rel), 'company' => new CompanyResource($company->fresh())], 'Logo saved.');
     }
 
     /**

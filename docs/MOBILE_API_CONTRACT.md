@@ -102,6 +102,18 @@ Errors (403): `owner_only`.
 
 After a change, synced rows get new `server_seq` values. Pull again; do not bootstrap.
 
+### POST `company/logo` (manage_settings; throttled 10/min)
+Multipart form with one field, `file`: a JPG, PNG or WebP image of at most 2 MB. This POST is the one exception to
+the JSON-body rule: send it as `multipart/form-data`.
+
+The logo is stored the same way as on the web Business settings screen, in public storage as
+`images/logo-{company}-{random}.{ext}`, and saved to `company.logo`.
+
+Response `200 {logo: "images/logo-12-AbC….png", logo_url: "https://…/storage/images/logo-12-AbC….png", company: {…}}`.
+
+- Errors (422): validation on `file` (missing, not an image, too big).
+- To remove the logo, send `PUT company {logo: null}`.
+
 ## 3. Store features
 
 ### GET `store-features` (every member)
@@ -498,9 +510,195 @@ Response:
 ### 7.8 Push permissions (unchanged, plus one)
 `cash_movements` needs sell.
 
-## 8. Files for server maintainers
+## 8. Team chat
+
+Any **active member** of the shop may chat, whatever their role (no permission needed). The routes sit in the
+subscription group like the other shop endpoints (a lapsed plan answers 402). Rules come from
+`App\Services\Chat\ChatService`, the same as the web's Chat screens:
+
+- Another shop's conversation, message or person answers **404**.
+- A conversation of your own shop that you are not in answers **403**.
+- A deactivated member reads nothing and cannot be messaged (`422 chat_not_member`).
+
+Realtime is polling. While a thread is open, call `messages?after=<last id>` about every 3 s. In the background,
+call `chat/unread` about every 20 s. Stop both while the app is in the background.
+
+| Method | Path | Body | Result |
+|---|---|---|---|
+| GET | `chat/conversations` | – | `{conversations: [Conv], members: [Member], unread, me: {id, name}}` |
+| GET | `chat/conversations/{id}/messages?before=&after=&limit=` | – | `{conversation, messages: [Msg], has_more, seen_up_to, typing: [names], others: [...], deleted_ids: [ids]}` |
+| POST | `chat/conversations/{id}/messages` | `{body}`, or multipart `file` (+ optional `body`) | `201` Msg (throttled 60/min) |
+| POST | `chat/direct` | `{user_id}` | `{conversation: {id, type, title, other, members}}`: finds or creates the chat |
+| POST | `chat/conversations/{id}/read` | `{message_id?}` | `{unread}`: the new total for the badge |
+| POST | `chat/conversations/{id}/typing` | `{}` | `{typing: true, seconds: 6}` |
+| DELETE | `chat/messages/{id}` | – | Msg with `deleted: true` (only your own messages) |
+| GET | `chat/unread` | – | `{unread}` |
+| POST | `presence` | `{}` | `{online: true, online_minutes: 5}`. It sets `last_active_at`, written at most once a minute. |
+
+The item shapes:
+
+- **Conv**: `{id, type: "team"|"direct", title, other: {id, name, avatar, online, last_active_at, active}|null,
+  last: {id, mine, sender, body, image, deleted, created_at}|null, unread, last_message_at}`.
+  - Conversations come latest first.
+  - The shop's "Whole team" group is created on the first call. It stays on top until it has a message.
+- **Member**: `{id, name, avatar, online, last_active_at}`. These are the people you can chat with, online first.
+  Use them for the "Online now" row and the new-chat picker.
+  - "Online" means active in the last 5 minutes.
+- **Msg**: `{id, conversation_id, user_id, sender, mine, body, image_url, deleted, created_at}`.
+  - A deleted message keeps its row, with `body` and `image_url` set to null.
+
+How `messages` pages work:
+
+- **Without `before` or `after`:** the latest `limit` messages (default 30, at most 100), oldest first.
+  `has_more` says whether earlier ones exist.
+- **With `before=<id>`:** the page before that message ("Load earlier").
+- **With `after=<id>`:** every newer message, up to 200. This is the poll.
+
+What each answer carries besides the messages:
+
+- `seen_up_to` is the id up to which the other people have read. Show ✓✓ on your messages up to it.
+- `typing` lists who is typing now. Send `typing` at most every 4 s while the user types; it lasts 6 s, and sending
+  a message ends it.
+- `deleted_ids` lists messages deleted in the last 10 minutes, so an open thread can blank them.
+
+`read` without `message_id` marks the whole conversation read. With `message_id` it marks up to that message. The
+pointer never moves back.
+
+Pictures:
+
+- They must be JPG, PNG or WebP, at most 5 MB. The file's content decides the type, not its name.
+- Errors (422): `chat_bad_file`, `chat_file_too_big`, `chat_upload_failed`.
+
+Other errors (422): `chat_empty`, `chat_too_long` (4000 characters), `chat_self`, `chat_not_member`,
+`chat_not_yours`.
+
+## 9. Stock, team and dashboard additions
+
+Everything here is additive. Old requests keep working and get the same answers as before. Remember the hosting
+note: send `{}` as the body of a POST that has nothing to send, such as `approve` or `cancel`.
+
+### 9.1 Goods receipts: landed costs (restock)
+`POST goods-receipts` and `POST purchase-orders/{id}/receive` accept two new optional fields:
+
+- `landed_costs: [{label, amount}]` (at most 10). Lines with amount 0 are dropped. `label` is at most 60 characters.
+- `landed_split: "value"|"quantity"` (default `value`).
+
+They go to `GoodsReceiptService` as its `$options`, the same as the web receiving form. The extra costs are spread
+over the lines only when the shop's `landed_cost` feature is on. The landed unit cost values the stock and becomes
+the product's cost. The supplier's invoice (`total_cost`, what is owed) does not change, and the extras are recorded
+as a paid stock expense of the delivery.
+
+The receipt in the response (`data`, or `data.goods_receipt` for a purchase order) always carries
+`landed_cost_total`, the amount applied (0 when nothing was applied, for example with the feature off). When costs
+were applied, it also carries `landed_costs` (as an array) and `landed_split`, and each item carries
+`landed_unit_cost`.
+
+Errors (422): `invalid_landed_cost`, or validation errors on `landed_costs.*` and `landed_split`.
+
+### 9.2 Stock requests and transfers in transit (writes: adjust)
+This is the web's warehouse-to-stores flow (budget-pro-new `StockRequests`), through `StockRequestService` and
+`TransferService`:
+
+`requested → approved → sent (a transfer "in_transit") → received`. A request can be cancelled while it is
+`requested` or `approved`.
+
+Store scope: with the shop's `store_scoping` feature on, a member who is assigned to a store works for that store
+only. They see only the requests and transfers that involve their store (others answer 404). They can ask only for
+their own store, and send or receive only at their own end (`422 other_store`).
+
+| Method | Path | Body | Result |
+|---|---|---|---|
+| GET | `stock-requests?status=&q=&per_page=` | – | Paged `[{id, number, status, status_label, from_location_id, to_location_id, from_name, to_name, stock_transfer_id, notes, requested_by_name, lines, quantity, created_at, sent_at, received_at}]`. Open requests come first. |
+| GET | `stock-requests/{id}` | – | `{request: {…, from_name, to_name, transfer_number}, items: [{stock_item_id, name, barcode, sku, quantity, approved_quantity, sent_quantity, received_quantity, available}]}`. `available` is what the sending location has on hand. |
+| POST | `stock-requests` | `{from_location_id, to_location_id, lines: [{stock_item_id, quantity}], note?}` | `201`, same shape as GET `{id}` |
+| POST | `stock-requests/{id}/approve` | `{lines?: [{stock_item_id, quantity}]}` | The request. Without `lines`, the asked quantities are approved. A quantity of 0 means the product is not sent. |
+| POST | `stock-requests/{id}/send` | `{lines?: [{stock_item_id, quantity}]}` | The request, with `stock_transfer_id`. Without `lines`, the approved quantities are sent (or the asked ones if the request was never approved). The stock leaves the sender now. |
+| POST | `stock-requests/{id}/cancel` | `{}` | The request |
+| GET | `stock-transfers?status=in_transit\|received&to_location_id=&from_location_id=` | – | The old list, with `status, from_location_id, to_location_id, sent_at, received_at, stock_request_id` added. With `status=in_transit` each row also has `items: [{stock_item_id, name, quantity}]`. `status` is null for a transfer that moved stock at once (`POST stock-transfers`). |
+| GET | `stock-transfers/{id}` | – | `{transfer: {…, from_name, to_name, by}, items: [{stock_item_id, name, barcode, quantity, received_quantity}]}` |
+| POST | `stock-transfers/{id}/receive` | `{lines?: [{stock_item_id, received_quantity}]}` | The transfer, as in GET `{id}`. Without `lines`, everything sent arrived. With `lines`, a product left out arrived as 0. |
+
+Receiving puts the stock on the receiving store's shelf, with its batches. What did not arrive stays off both shelves
+and shows as short. A transfer made for a request is received through the request, which becomes `received` and
+gets its `received_quantity` values.
+
+Errors (422): `same_location`, `empty_request`, `invalid_line`, `too_many_lines`, `product_not_found`,
+`location_not_found`, `invalid_quantity`, `request_status` (the step is not possible in the current status),
+`request_sent` (cancelling a request that is already on its way), `empty_transfer` (every quantity is 0),
+`insufficient_stock`, `not_on_transfer`, `invalid_received`, `transfer_not_in_transit`, `other_store`.
+
+Reads are open to every member, like `GET stock-transfers`.
+
+### 9.3 Stock takes: shelf (aisle) counts and recounts (writes: stock_take)
+- `POST stock-takes` accepts `shelf_location` (at most 40 characters, for example `"A3"`). With the shop's
+  `aisle_counts` feature on, the count covers that aisle. It is stored uppercased (`"A3"` also covers `"A3-B2"`).
+  With the feature off, the field is ignored.
+- `GET stock-takes/shelf-locations` returns the shelf locations in use (`["A3-B1", …]`), with
+  `meta.aisle_counts` (bool).
+- `POST stock-takes/{id}/counts` returns the take with `items[]` (each with `needs_recount`, a bool) and
+  `recount_needed: [stock_item_id…]`. With `aisle_counts` on, a count that is more than 10% and at least 1 unit away
+  from the system quantity is flagged.
+- **Recount:** `POST stock-takes/{id}/recount {counts: [{stock_item_id, counted_quantity}]}`. This is the second
+  count of flagged products. It stands and clears the flag. Its response has the same shape as `counts`. A product
+  that is not flagged answers `422 not_flagged`. (Sending the product again to `counts` also counts as the recount,
+  as on the web.)
+- `POST stock-takes/{id}/post` refuses while a line waits for a recount: `422 recount_needed {count}`.
+- `GET stock-takes/{id}` items also carry `needs_recount` and `first_count`.
+
+### 9.4 GET `stock-items/{id}/supplier-prices` [supplier_prices] (restock or view_reports)
+This shows what each supplier charges for this product, cheapest first (`SupplierPriceService::forProduct`):
+
+```json
+{"stock_item_id":7,"product_uuid":"…","name":"Sugar 1kg","buying_price":5200,
+ "suppliers":[{"supplier_id":3,"supplier":"Cheap Ltd","cost":5000,"since":"2026-09-20","previous":4800,"change_pct":4.2,"source":"receipt",
+   "history":[{"cost":5000,"valid_from":"2026-09-20","source":"receipt"},{"cost":4800,"valid_from":"2026-08-01","source":"manual"}]}]}
+```
+
+`history` is newest first, at most 20 entries. Another shop's product answers 404.
+
+### 9.5 Till PINs [approvals]
+The same rules as the web (`ApprovalService::setPin`). A PIN is 4 to 6 digits and is stored hashed. Both routes
+are throttled to 10 per minute and need the shop's `approvals` feature (`403 feature_off` otherwise).
+
+- **PUT `team/members/{id}/pin` `{pin}`.** Any member may set their own PIN. Setting someone else's needs
+  manage_team (`403 forbidden`, `permission: manage_team`). Only the owner can set the owner's PIN (`403 owner_pin`).
+  A member of another shop answers 404. Response `{user_id, has_pin: true}`.
+- **PUT `me/pin` `{pin, password}`.** This sets your own PIN after checking your account password
+  (`422 wrong_password`). Response `{user_id, has_pin: true}`.
+
+### 9.6 GET `dashboard?from=&to=` (or `?range=`)
+Without parameters, the answer is exactly as before. With `from` and/or `to` (`YYYY-MM-DD`, the shop's local days;
+a single one means that one day) or `range` (`today, yesterday, week, last_week, 7d, 30d, month, last_month, quarter,
+year, last_year, period`), the old keys stay unchanged and these are added (`DashboardService::range` and `kpis`,
+the web dashboard's figures):
+
+```json
+{"range":{"key":"custom","label":"01 Sep – 27 Sep 2026","from":"2026-09-01","to":"2026-09-27","days":27,"prev_from":"2026-08-05","prev_to":"2026-08-31","location_id":null},
+ "kpis":{"sales":250000,"count":41,"avg":6097.56,"profit":61000,"margin":24.4,"collected":230000,"on_credit":20000,"expenses":15000,"net":46000,"returns_count":1,"returns_value":3000},
+ "previous":{…same keys, for prev_from…prev_to},
+ "change":{"sales":12.5,"count":-3.1,"profit":8,"collected":10.2,"expenses":null,"net":7.9}}
+```
+
+- `change` values are percentages, or null when the previous figure is 0.
+- `kpis`, `previous` and `change` are null for a member without view_reports, view_profit or manage_finance
+  (as on the web).
+- A member limited to one store (`store_scoping`) gets that store's figures (`range.location_id`).
+
+### 9.7 Sync: `goods_receipts` op, batches
+Each item of a `goods_receipts` op may carry `batch_number` (at most 60 characters) and `expiry_date`
+(`YYYY-MM-DD`), as the web receiving form does. They are used for products with `track_batches` and ignored for
+others. An expiry that is not a date rejects the op with `validation`. Ops without these fields work as before.
+
+```json
+{"table":"goods_receipts","uuid":"…","action":"insert","data":{"supplier_uuid":"…","amount_paid":"0",
+  "items":[{"product_uuid":"…","quantity":"12","unit_cost":"550","batch_number":"LOT-7","expiry_date":"2027-03-31"}]}}
+```
+
+## 10. Files for server maintainers
 - `app/Services/Sync/SyncRegistry.php`: the tables, including `KIND_SNAPSHOT`, schema guards, and the product and customer store fields and rules.
 - `app/Services/Sync/SyncPuller.php`: snapshots, `pullMany`, keyset bootstrap, history window, `loyalty_points`.
 - `app/Services/Sync/SyncApplier.php`: the new sale fields, tender payments, cash movements, loyalty earn.
-- `app/Http/Controllers/Api/V1/{StoreFeaturesController, DebtController, SupermarketController}.php`
-- `tests/Feature/Api/{SyncSupermarketTest, StoreFeaturesApiTest, DebtsApiTest, SupermarketApiTest}.php`
+- `app/Http/Controllers/Api/V1/{StoreFeaturesController, DebtController, SupermarketController, ChatController}.php`, `app/Services/Chat/ChatService.php`
+- `app/Http/Controllers/Api/V1/{StockRequestController, GoodsReceiptController, StockTakeController, TeamController, CompanyController, DashboardController}.php` (§9)
+- `app/Http/Middleware/ApiPermissionMap.php`: a rule with a null permission is checked in the controller (`team/members/{id}/pin`).
+- `tests/Feature/Api/{SyncSupermarketTest, StoreFeaturesApiTest, DebtsApiTest, SupermarketApiTest, ChatApiTest, StockRequestsApiTest, PhoneParityAdditionsTest}.php`

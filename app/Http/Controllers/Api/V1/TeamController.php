@@ -6,12 +6,15 @@ use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Shop\ApprovalService;
 use App\Services\Team\Permissions;
 use App\Services\Team\TeamService;
 use App\Support\Rules\TeamRules;
+use App\Support\StoreFeatures;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /** Team management (plan C5, P3-4). Guarded by `manage_team` in ApiPermissionMap. */
 class TeamController extends Controller
@@ -109,6 +112,63 @@ class TeamController extends Controller
         }
 
         return $this->index($request);
+    }
+
+    /**
+     * PUT team/members/{userId}/pin { pin } — set a member's till PIN (ApprovalService::setPin, the web Team screen's rule):
+     * the member themself, or a manage_team member for someone else; the owner's PIN only by the owner. Needs the
+     * shop's `approvals` feature. ApiPermissionMap lets this through without manage_team; the rule is checked here.
+     */
+    public function setMemberPin(Request $request, $userId)
+    {
+        $company = $this->company($request);
+        if (! StoreFeatures::enabled($company, 'approvals')) {
+            return $this->pinFeatureOff();
+        }
+        $me = $request->user();
+        if ((int) $me->id !== (int) $userId && ! Permissions::can($me, 'manage_team')) {
+            return $this->error('Your role does not allow this. Ask the shop owner.', 403, ['code' => 'forbidden', 'permission' => 'manage_team']);
+        }
+        $member = User::withoutGlobalScopes()->where('company_id', $company->id)->find($userId);
+        if (! $member) {
+            return $this->notFound('Member not found.');
+        }
+        $data = $request->validate(['pin' => ['required', 'string', 'regex:/^\d{4,6}$/']], ['pin.regex' => 'The PIN must be 4 to 6 digits.']);
+        try {
+            app(ApprovalService::class)->setPin($member, $data['pin'], $me);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), in_array($e->errorCode(), ['forbidden', 'owner_pin'], true) ? 403 : 422, $e->toErrors());
+        }
+
+        return $this->success(['user_id' => (int) $member->id, 'has_pin' => true],
+            (int) $member->id === (int) $me->id ? 'Your till PIN is set.' : "{$member->name}'s till PIN is set. Let them know it privately.");
+    }
+
+    /** PUT me/pin { pin, password } — your own till PIN, after your password (ApprovalService::setPin). Needs `approvals`. */
+    public function setMyPin(Request $request)
+    {
+        if (! StoreFeatures::enabled($this->company($request), 'approvals')) {
+            return $this->pinFeatureOff();
+        }
+        $data = $request->validate(['pin' => ['required', 'string', 'regex:/^\d{4,6}$/'], 'password' => ['required', 'string']], ['pin.regex' => 'The PIN must be 4 to 6 digits.']);
+        $me = $request->user();
+        if (! Hash::check($data['password'], (string) $me->password)) {
+            return $this->error('Your password is incorrect.', 422, ['code' => 'wrong_password']);
+        }
+        try {
+            app(ApprovalService::class)->setPin($me, $data['pin']);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return $this->success(['user_id' => (int) $me->id, 'has_pin' => true], 'Your till PIN is set. Keep it to yourself.');
+    }
+
+    private function pinFeatureOff()
+    {
+        $label = StoreFeatures::FEATURES['approvals'][0] ?? 'approvals';
+
+        return $this->error($label.' is switched off for this shop. The owner can switch it on in Business settings.', 403, ['code' => 'feature_off', 'feature' => 'approvals']);
     }
 
     /** What a member did recently: sales, voids, returns, stock movements. */

@@ -109,15 +109,15 @@ class PurchaseOrderController extends BaseCrudController
         if (! $po instanceof PurchaseOrder) {
             return $this->notFound('Purchase order not found.');
         }
-        $data = $request->validate(\App\Support\Rules\PurchaseOrderRules::receiveRules());
+        $data = $request->validate(\App\Support\Rules\PurchaseOrderRules::receiveRules() + GoodsReceiptController::landedRules());
         try {
             $grn = $this->orders->receive($po, (int) $request->user()->id, $data['items'], (float) ($data['amount_paid'] ?? 0), $data['payment_method'] ?? 'cash',
-                $data['invoice_ref'] ?? null, $data['received_on'] ?? null, $data['client_uuid'] ?? null);
+                $data['invoice_ref'] ?? null, $data['received_on'] ?? null, $data['client_uuid'] ?? null, GoodsReceiptController::landedOptions($data));
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
-        return $this->created(['order' => $this->transform($po->fresh(['supplier', 'items.product'])), 'goods_receipt' => $grn->load('items')], 'Stock received.');
+        return $this->created(['order' => $this->transform($po->fresh(['supplier', 'items.product'])), 'goods_receipt' => GoodsReceiptController::withLanded($grn->load('items'))], 'Stock received.');
     }
 
     public function cancel(Request $request, $id)

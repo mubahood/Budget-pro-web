@@ -97,6 +97,8 @@ class SyncRegistry
                 'refs' => ['sale_uuid' => ['model' => SaleRecord::class, 'column' => 'sale_record_id'], 'ledger_uuid' => ['model' => FinancialRecord::class, 'column' => 'financial_record_id'], 'customer_uuid' => ['model' => Customer::class, 'column' => 'customer_id'], 'shift_uuid' => ['model' => Shift::class, 'column' => 'shift_id']]],
             'sale_returns' => ['model' => SaleReturn::class, 'kind' => self::KIND_EVENT, 'handler' => 'return',
                 'refs' => ['sale_uuid' => ['model' => SaleRecord::class, 'column' => 'sale_record_id'], 'shift_uuid' => ['model' => Shift::class, 'column' => 'shift_id']]],
+            // grn op data: {supplier_uuid?, invoice_ref?, amount_paid?, payment_method?, received_on?, notes?,
+            //   items: [{product_uuid, quantity, unit_cost, batch_number?, expiry_date?}]} (batch fields: track_batches products).
             'goods_receipts' => ['model' => GoodsReceipt::class, 'kind' => self::KIND_EVENT, 'handler' => 'grn',
                 'refs' => ['supplier_uuid' => ['model' => Supplier::class, 'column' => 'supplier_id']]],
             'stock_takes' => ['model' => StockTake::class, 'kind' => self::KIND_EVENT, 'handler' => 'stock_take',

@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
+use App\Services\Dashboard\DashboardService;
+use App\Services\Team\Permissions;
+use App\Support\StoreScope;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,12 +71,49 @@ class DashboardController extends Controller
             ->limit(5)
             ->get(['id', 'customer_name', 'total_amount', 'amount_paid', 'payment_status', 'sale_date']);
 
-        return $this->success([
+        $out = [
             'inventory' => $inventory,
             'sales' => $sales,
             'finance' => $finance,
             'budget' => $budget,
             'recent_sales' => $recentSales,
-        ], 'Dashboard loaded.');
+        ];
+        if ($request->filled('from') || $request->filled('to') || $request->filled('range')) {
+            $out += $this->ranged($request);
+        }
+
+        return $this->success($out, 'Dashboard loaded.');
+    }
+
+    /**
+     * ?from=&to= (the shop's local days) or ?range=today|7d|month|… (DashboardService::REPORT_RANGES): the web dashboard's
+     * figures for that range and the same length just before it (DashboardService::range/kpis), for the member's own
+     * store when they are limited to one (StoreScope). Money figures only for view_reports, view_profit or manage_finance
+     * (as on the web): `kpis` and `previous` are null otherwise.
+     */
+    private function ranged(Request $request): array
+    {
+        $data = $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d'],
+            'range' => ['nullable', 'in:custom,'.implode(',', array_keys(DashboardService::REPORT_RANGES))],
+        ]);
+        $user = $request->user();
+        $company = Company::withoutGlobalScopes()->findOrFail($user->company_id);
+        $dash = app(DashboardService::class);
+        $key = ! empty($data['from']) || ! empty($data['to']) ? 'custom' : ($data['range'] ?? 'today');
+        $range = $dash->range($company, $key, $data['from'] ?? $data['to'] ?? null, $data['to'] ?? $data['from'] ?? null);
+        $location = StoreScope::forUser($user, $company);
+        $seesMoney = Permissions::can($user, 'view_reports') || Permissions::can($user, 'view_profit') || Permissions::can($user, 'manage_finance');
+        $kpis = $seesMoney ? $dash->kpis((int) $company->id, $range['from'], $range['to'], $location) : null;
+        $prev = $seesMoney ? $dash->kpis((int) $company->id, $range['prev_from'], $range['prev_to'], $location) : null;
+        $change = null;
+        if ($kpis !== null) {
+            foreach (['sales', 'count', 'profit', 'collected', 'expenses', 'net'] as $k) {
+                $pct = DashboardService::change((float) $kpis[$k], (float) $prev[$k]);
+                $change[$k] = $pct === null ? null : round($pct, 1);
+            }
+        }
+
+        return ['range' => $range + ['location_id' => $location], 'kpis' => $kpis, 'previous' => $prev, 'change' => $change];
     }
 }

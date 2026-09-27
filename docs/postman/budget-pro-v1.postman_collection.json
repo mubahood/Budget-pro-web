@@ -1351,6 +1351,252 @@
             ]
         },
         {
+            "name": "Chat",
+            "item": [
+                {
+                    "name": "GET chat/conversations */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/conversations",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "conversations"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET chat/conversations/{id}/messages?before=&after=&limit= */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/conversations/:id/messages",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "conversations",
+                                ":id",
+                                "messages"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST chat/conversations/{id}/messages — JSON {body}, or multipart with `file` (a picture) and an optional `body`. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/conversations/:id/messages",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "conversations",
+                                ":id",
+                                "messages"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"body\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST chat/conversations/{id}/read {message_id?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/conversations/:id/read",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "conversations",
+                                ":id",
+                                "read"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"message_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST chat/conversations/{id}/typing {} — \"typing…\" for the next few seconds. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/conversations/:id/typing",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "conversations",
+                                ":id",
+                                "typing"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST chat/direct {user_id} — finds or starts the direct chat with a member of one's shop. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/direct",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "direct"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"user_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "DELETE chat/messages/{id} — one's own message: the words and the picture go, the row stays. */",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/messages/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "messages",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET chat/unread — the badge count. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/chat/unread",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "unread"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Company",
             "item": [
                 {
@@ -1662,6 +1908,40 @@
                                 ":id",
                                 "download"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST company/logo (multipart `file`: jpg, jpeg, png or webp, at most 2 MB) — manage_settings (ApiPermissionMap).",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/company/logo",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "company",
+                                "logo"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"file\": \"\"\n}"
                         }
                     }
                 },
@@ -4387,6 +4667,45 @@
             ]
         },
         {
+            "name": "Me",
+            "item": [
+                {
+                    "name": "PUT me/pin { pin, password } — your own till PIN, after your password (ApprovalService::setPin). Needs `approvals`. */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/me/pin",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "me",
+                                "pin"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"pin\": \"\",\n    \"password\": \"\"\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Members",
             "item": [
                 {
@@ -4729,7 +5048,33 @@
                     }
                 },
                 {
-                    "name": "POST onboarding/steps/{step} { skipped?: bool, seconds?: int } */",
+                    "name": "\"Skip setup\" on the phone: the same as the web wizard's (OnboardingService::skipWizard). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/onboarding/skip",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "onboarding",
+                                "skip"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /onboarding/steps/{step}",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -5359,6 +5704,36 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"table\": \"\",\n    \"uuid\": \"\",\n    \"json\": [],\n    \"is_delete\": true\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Presence",
+            "item": [
+                {
+                    "name": "POST presence {} — \"online\" (last_active_at is written at most once a minute). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/presence",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "presence"
+                            ]
                         }
                     }
                 }
@@ -7568,6 +7943,33 @@
                             ]
                         }
                     }
+                },
+                {
+                    "name": "GET stock-items/{id}/supplier-prices — what each supplier charges for this product, cheapest first",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-items/:id/supplier-prices",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-items",
+                                ":id",
+                                "supplier-prices"
+                            ]
+                        }
+                    }
                 }
             ]
         },
@@ -7892,6 +8294,192 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"reason\": \"\"\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Stock requests",
+            "item": [
+                {
+                    "name": "GET /stock-requests",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-requests",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-requests"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /stock-requests",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-requests",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-requests"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"from_location_id\": 1,\n    \"to_location_id\": 1,\n    \"lines\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000\n        }\n    ],\n    \"note\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET /stock-requests/{id}",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-requests/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-requests",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /stock-requests/{id}/approve",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-requests/:id/approve",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-requests",
+                                ":id",
+                                "approve"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"lines\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000\n        }\n    ]\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST /stock-requests/{id}/cancel",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-requests/:id/cancel",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-requests",
+                                ":id",
+                                "cancel"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /stock-requests/{id}/send",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-requests/:id/send",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-requests",
+                                ":id",
+                                "send"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"lines\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000\n        }\n    ]\n}"
                         }
                     }
                 }
@@ -8246,6 +8834,32 @@
                     }
                 },
                 {
+                    "name": "GET stock-takes/shelf-locations — the shelf locations in use, for the aisle picker. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-takes/shelf-locations",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-takes",
+                                "shelf-locations"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET /stock-takes/{id}",
                     "request": {
                         "method": "GET",
@@ -8437,6 +9051,41 @@
                             ]
                         }
                     }
+                },
+                {
+                    "name": "POST stock-takes/{id}/recount { counts } — the second count of products flagged `needs_recount`; it stands",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-takes/:id/recount",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-takes",
+                                ":id",
+                                "recount"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"counts\": [\n        {\n            \"stock_item_id\": 1,\n            \"counted_quantity\": 1000\n        }\n    ]\n}"
+                        }
+                    }
                 }
             ]
         },
@@ -8498,6 +9147,67 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"from_location_id\": 1,\n    \"to_location_id\": 1,\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000\n        }\n    ]\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "One transfer with its lines: sent and (once received) received quantities. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-transfers/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-transfers",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "The receiving store takes delivery of a transfer in transit. A transfer made for a stock request is received",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/stock-transfers/:id/receive",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "stock-transfers",
+                                ":id",
+                                "receive"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"lines\": [\n        {\n            \"stock_item_id\": 1,\n            \"received_quantity\": 1000\n        }\n    ]\n}"
                         }
                     }
                 }
@@ -9668,6 +10378,42 @@
                                 ":userId",
                                 "activity"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT team/members/{userId}/pin { pin } — set a member's till PIN (ApprovalService::setPin, the web Team screen's rule):",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/team/members/:userId/pin",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "team",
+                                "members",
+                                ":userId",
+                                "pin"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"pin\": \"\"\n}"
                         }
                     }
                 },

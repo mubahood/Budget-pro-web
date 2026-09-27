@@ -576,7 +576,14 @@ class SyncApplier
             if ($productId === null) {
                 return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'product_uuid'];
             }
-            $lines[] = ['stock_item_id' => (int) $productId, 'quantity' => $l['quantity'] ?? 0, 'unit_cost' => $l['unit_cost'] ?? 0];
+            // Optional per line (a track_batches product; ignored for others, as on the web): batch_number, expiry_date.
+            $batch = trim((string) ($l['batch_number'] ?? ''));
+            $expiry = trim((string) ($l['expiry_date'] ?? ''));
+            if ($expiry !== '' && strtotime($expiry) === false) {
+                return ['status' => 'rejected', 'code' => 'validation', 'message' => 'A goods receipt line has an expiry date that is not a date.'];
+            }
+            $lines[] = ['stock_item_id' => (int) $productId, 'quantity' => $l['quantity'] ?? 0, 'unit_cost' => $l['unit_cost'] ?? 0,
+                'batch_number' => $batch !== '' ? mb_substr($batch, 0, 60) : null, 'expiry_date' => $expiry !== '' ? date('Y-m-d', strtotime($expiry)) : null];
             $touchedProducts[] = (int) $productId;
         }
         $grn = (new \App\Services\Shop\GoodsReceiptService())->receive($companyId, $userId, $lines, $supplierId, $data['invoice_ref'] ?? null, (float) ($data['amount_paid'] ?? 0),

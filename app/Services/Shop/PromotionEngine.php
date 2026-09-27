@@ -104,7 +104,8 @@ final class PromotionEngine
         return [
             'id' => (int) ($p['id'] ?? 0), 'name' => (string) ($p['name'] ?? 'Promotion'), 'type' => (string) ($p['type'] ?? ''), 'rules' => $rules,
             'starts_at' => $p['starts_at'] ?? null, 'ends_at' => $p['ends_at'] ?? null, 'window' => is_array($window) ? $window : null,
-            'member_only' => (bool) ($p['member_only'] ?? false), 'stackable' => ($p['type'] ?? '') === 'coupon' || (bool) ($p['stackable'] ?? false), // a coupon always adds to the deals the customer already has 'priority' => (int) ($p['priority'] ?? 0),
+            'member_only' => (bool) ($p['member_only'] ?? false), 'stackable' => ($p['type'] ?? '') === 'coupon' || (bool) ($p['stackable'] ?? false), // a coupon always adds to the deals the customer already has
+            'priority' => (int) ($p['priority'] ?? 0),
             'per_sale_limit' => isset($p['per_sale_limit']) && (int) $p['per_sale_limit'] > 0 ? (int) $p['per_sale_limit'] : null,
             'is_active' => (bool) ($p['is_active'] ?? true), 'code' => $code,
             'targets' => array_values(array_map(fn ($t) => ['type' => (string) ($t['type'] ?? $t['target_type'] ?? ''), 'id' => (int) ($t['id'] ?? $t['target_id'] ?? 0)], (array) ($p['targets'] ?? []))),

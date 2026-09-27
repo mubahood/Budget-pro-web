@@ -211,6 +211,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::patch('team/members/{userId}', [\App\Http\Controllers\Api\V1\TeamController::class, 'updateMember'])->whereNumber('userId');
         Route::get('team/members/{userId}/activity', [\App\Http\Controllers\Api\V1\TeamController::class, 'activity'])->whereNumber('userId');
         Route::post('team/transfer-ownership', [\App\Http\Controllers\Api\V1\TeamController::class, 'transferOwnership']);
+        // Till PINs (ApprovalService::setPin, the `approvals` feature): a member's own, or a manage_team member's for someone else.
+        Route::put('team/members/{userId}/pin', [\App\Http\Controllers\Api\V1\TeamController::class, 'setMemberPin'])->whereNumber('userId')->middleware('throttle:10,1');
+        Route::put('me/pin', [\App\Http\Controllers\Api\V1\TeamController::class, 'setMyPin'])->middleware('throttle:10,1');
+        Route::post('company/logo', [CompanyController::class, 'logo'])->middleware('throttle:10,1');
     });
 
     // Invite links (public, rate-limited): see who invited you, then accept with a password.
@@ -273,6 +277,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         apiCrud('stock-sub-categories', StockSubCategoryController::class);
         apiCrud('stock-items', StockItemController::class);
         Route::get('stock-items/by-barcode/{code}', [StockItemController::class, 'byBarcode']);
+        Route::get('stock-items/{id}/supplier-prices', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'productSupplierPrices'])->whereNumber('id');
         Route::get('stock-records/types', [StockRecordController::class, 'types']);
         apiCrud('stock-records', StockRecordController::class);
         Route::post('stock-records/{id}/reverse', [StockRecordController::class, 'reverse']);
@@ -307,7 +312,9 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('shifts/open', [ShiftController::class, 'open']);
         Route::post('shifts/{id}/close', [ShiftController::class, 'close'])->whereNumber('id');
         apiCrud('shifts', ShiftController::class);
+        Route::get('stock-takes/shelf-locations', [StockTakeController::class, 'shelfLocations']);
         apiCrud('stock-takes', StockTakeController::class);
+        Route::post('stock-takes/{id}/recount', [StockTakeController::class, 'recount'])->whereNumber('id');
         Route::post('stock-takes/{id}/counts', [StockTakeController::class, 'counts'])->whereNumber('id');
         Route::post('stock-takes/{id}/post', [StockTakeController::class, 'post'])->whereNumber('id');
         Route::post('stock-takes/{id}/cancel', [StockTakeController::class, 'cancel'])->whereNumber('id');
@@ -325,6 +332,15 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::get('stock-levels', [\App\Http\Controllers\Api\V1\LocationController::class, 'levels']);
         Route::get('stock-transfers', [\App\Http\Controllers\Api\V1\LocationController::class, 'transfersIndex']);
         Route::post('stock-transfers', [\App\Http\Controllers\Api\V1\LocationController::class, 'transfer']);
+        // Warehouse to stores (G2): stock requests and transfers in transit (StockRequestService / TransferService).
+        Route::get('stock-transfers/{id}', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'transfer'])->whereNumber('id');
+        Route::post('stock-transfers/{id}/receive', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'receive'])->whereNumber('id');
+        Route::get('stock-requests', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'index']);
+        Route::post('stock-requests', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'store']);
+        Route::get('stock-requests/{id}', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'show'])->whereNumber('id');
+        Route::post('stock-requests/{id}/approve', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'approve'])->whereNumber('id');
+        Route::post('stock-requests/{id}/send', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'send'])->whereNumber('id');
+        Route::post('stock-requests/{id}/cancel', [\App\Http\Controllers\Api\V1\StockRequestController::class, 'cancel'])->whereNumber('id');
         Route::put('devices/{id}/location', [\App\Http\Controllers\Api\V1\LocationController::class, 'deviceLocation'])->whereNumber('id');
         Route::get('duplicates', [\App\Http\Controllers\Api\V1\DuplicateController::class, 'index']);
         Route::post('duplicates/merge', [\App\Http\Controllers\Api\V1\DuplicateController::class, 'merge']);
@@ -366,6 +382,16 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::get('reorder-suggestions', [\App\Http\Controllers\Api\V1\ReorderController::class, 'index']);
         Route::post('reorder-suggestions/orders', [\App\Http\Controllers\Api\V1\ReorderController::class, 'orders']);
 
+        // Team chat (ChatService; any active member, whatever the role). Another shop's id answers 404, a chat one is not in 403.
+        Route::get('chat/conversations', [\App\Http\Controllers\Api\V1\ChatController::class, 'index']);
+        Route::get('chat/conversations/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'messages'])->whereNumber('id');
+        Route::post('chat/conversations/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'send'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post('chat/conversations/{id}/read', [\App\Http\Controllers\Api\V1\ChatController::class, 'read'])->whereNumber('id');
+        Route::post('chat/conversations/{id}/typing', [\App\Http\Controllers\Api\V1\ChatController::class, 'typing'])->whereNumber('id');
+        Route::post('chat/direct', [\App\Http\Controllers\Api\V1\ChatController::class, 'direct']);
+        Route::delete('chat/messages/{id}', [\App\Http\Controllers\Api\V1\ChatController::class, 'destroy'])->whereNumber('id');
+        Route::get('chat/unread', [\App\Http\Controllers\Api\V1\ChatController::class, 'unread']);
+        Route::post('presence', [\App\Http\Controllers\Api\V1\ChatController::class, 'presence']);
         // Finance
         apiCrud('financial-categories', FinancialCategoryController::class);
         apiCrud('financial-periods', FinancialPeriodController::class);

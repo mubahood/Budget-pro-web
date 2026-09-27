@@ -532,6 +532,32 @@ class SupermarketController extends Controller
         return $this->success($rows, 'Supplier prices.');
     }
 
+    /**
+     * GET stock-items/{id}/supplier-prices — what each supplier charges for this product, cheapest first
+     * (SupplierPriceService::forProduct: cost in force today, since, previous, change_pct, source), each with its
+     * price history, newest first.
+     */
+    public function productSupplierPrices(Request $request, $id)
+    {
+        if ($off = $this->featureOff($request, 'supplier_prices')) {
+            return $off;
+        }
+        if ($deny = $this->needsAny($request, 'restock', 'view_reports')) {
+            return $deny;
+        }
+        $cid = $this->cid($request);
+        $item = DB::table('stock_items')->where('company_id', $cid)->where('is_deleted', 0)->where('id', (int) $id)->first(['id', 'uuid', 'name', 'buying_price']);
+        if ($item === null) {
+            return $this->notFound('Stock item not found.');
+        }
+        $svc = new SupplierPriceService();
+        $suppliers = array_map(fn ($row) => $row + ['history' => array_map(fn ($h) => ['cost' => (float) $h->cost, 'valid_from' => (string) $h->valid_from, 'source' => (string) $h->source],
+            $svc->history($cid, (int) $row['supplier_id'], (int) $item->id))], $svc->forProduct($cid, (int) $item->id));
+
+        return $this->success(['stock_item_id' => (int) $item->id, 'product_uuid' => $item->uuid, 'name' => $item->name, 'buying_price' => (float) $item->buying_price,
+            'suppliers' => $suppliers], 'Supplier prices.');
+    }
+
     /** GET suppliers/{id}/scorecard?days=90 */
     public function scorecard(Request $request, $id)
     {

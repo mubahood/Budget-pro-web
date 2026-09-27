@@ -43,6 +43,15 @@ class PromotionEngineTest extends TestCase
         return PromotionEngine::apply($promos, $lines, $context + ['now' => $this->now()]);
     }
 
+    public function test_on_an_exact_tie_the_higher_priority_promotion_wins(): void
+    {
+        $lines = ['a' => $this->line(1, 1, 1000)];
+        $low = $this->promo(1, 'percent_off', ['percent' => 10], [['product', 1]], ['name' => 'Low', 'priority' => 0]);
+        $high = $this->promo(2, 'amount_off', ['amount' => 100], [['product', 1]], ['name' => 'High', 'priority' => 5]);
+        $r = $this->go([$low, $high], $lines);
+        $this->assertSame(['High'], array_column($r['applied'], 'name'), 'both save 100: priority decides');
+    }
+
     public function test_percent_off_a_category(): void
     {
         $r = $this->go([$this->promo(1, 'percent_off', ['percent' => 10], [['category', self::DRINKS]])],

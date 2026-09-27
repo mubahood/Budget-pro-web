@@ -14,8 +14,11 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ApiPermissionMap
 {
-    /** [methods, uri regex (after api/v1/), permission] — first match wins. */
+    /** [methods, uri regex (after api/v1/), permission] — first match wins. A null permission: checked in the controller. */
     public const RULES = [
+        // A member may set their own till PIN; someone else's needs manage_team (TeamController::setMemberPin).
+        [['PUT'], '#^team/members/\d+/pin$#', null],
+        [['POST'], '#^company/logo$#', 'manage_settings'],
         // Supermarket / phone parity (reads needing "any of" several permissions are checked in the controllers).
         [['PUT'], '#^store-features$#', 'manage_settings'],
         [['POST'], '#^company/currency(/preview)?$#', 'manage_settings'],
@@ -40,9 +43,10 @@ class ApiPermissionMap
         [['GET', 'POST'], '#^reorder-suggestions(/orders)?$#', 'restock'],
         [['POST', 'PUT'], '#^locations(/\d+)?$#', 'manage_settings'],
         [['PUT'], '#^devices/\d+/location$#', 'manage_settings'],
-        [['POST'], '#^stock-transfers$#', 'adjust'],
+        [['POST'], '#^stock-transfers(/\d+/receive)?$#', 'adjust'],
+        [['POST'], '#^stock-requests(/\d+/(approve|send|cancel))?$#', 'adjust'],
         [['GET', 'POST'], '#^duplicates(/merge)?$#', 'manage_products'],
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^stock-takes(/\d+(/counts|/post|/cancel)?)?$#', 'stock_take'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^stock-takes(/\d+(/counts|/recount|/post|/cancel)?)?$#', 'stock_take'],
         [['POST'], '#^stock-records/\d+/reverse$#', 'adjust'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(stock-items|stock-categories|stock-sub-categories|units|product-barcodes)(/\d+)?$#', 'manage_products'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(financial-records|financial-categories|financial-periods)(/\d+)?$#', 'manage_finance'],
@@ -64,7 +68,7 @@ class ApiPermissionMap
         $uri = preg_replace('#^api/v1/#', '', $request->path());
         foreach (self::RULES as [$methods, $pattern, $permission]) {
             if (in_array($request->method(), $methods, true) && preg_match($pattern, $uri)) {
-                if (! Permissions::can($request->user(), $permission)) {
+                if ($permission !== null && ! Permissions::can($request->user(), $permission)) {
                     return response()->json(['code' => 0, 'message' => 'Your role does not allow this. Ask the shop owner.', 'data' => null,
                         'errors' => ['code' => 'forbidden', 'permission' => $permission]], 403);
                 }

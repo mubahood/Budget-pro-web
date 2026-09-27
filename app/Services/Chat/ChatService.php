@@ -275,11 +275,15 @@ class ChatService
         return $message;
     }
 
-    /** Marks everything in the conversation as read by the user. Returns whether anything changed. */
-    public function markRead(ChatConversation $conversation, User $user): bool
+    /**
+     * Marks the conversation as read by the user: everything, or up to the message $upTo (a phone that
+     * has shown only part of it). The pointer never moves back. Returns whether anything changed.
+     */
+    public function markRead(ChatConversation $conversation, User $user, ?int $upTo = null): bool
     {
         $this->assertCanRead($conversation, $user);
-        $last = DB::table('chat_messages')->where('conversation_id', $conversation->id)->max('id');
+        $last = DB::table('chat_messages')->where('conversation_id', $conversation->id)
+            ->when($upTo !== null, fn ($q) => $q->where('id', '<=', $upTo))->max('id');
         if ($last === null) {
             return false;
         }

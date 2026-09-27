@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Phone app parity, part 2 (2026-09-27)
+- **Chat API:** conversations, messages (images), direct, read, typing, delete, unread, presence (ChatService).
+- **Deliveries:** landed costs on goods receipts and PO receipts; the sync goods_receipt op carries batch number and expiry.
+- **Stock requests and in-transit transfers:** list, create, approve, send, cancel, receive.
+- **Stock takes:** aisle-scoped counts, recount flags and recount.
+- **Product supplier prices**, the team member's and own till PIN, company logo upload, and dashboard ranges (`from`/`to`).
+- **Fix:** `PromotionEngine` read a promotion's priority inside a comment (tie-breaks between equal savings ignored priority).
+
 ### API for the phone app (2026-09-27, docs/MOBILE_API_CONTRACT.md)
 - **Store features:** `store-features` endpoint, also returned as `store` in `auth/me` and CompanyResource.
 - **Onboarding:** `business_type_details` (group, icon, hint, modules), `has_sales`, product quota.
