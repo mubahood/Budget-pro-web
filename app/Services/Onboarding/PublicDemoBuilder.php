@@ -992,7 +992,9 @@ class PublicDemoBuilder
     private function photo(string $key): ?string
     {
         $src = dirname(__DIR__, 3)."/database/data/demo-photos/{$key}.jpg";
-        $root = rtrim((string) (config('budgetpro.media_root') ?: dirname(__DIR__, 3).'/storage/app/public'), '/');
+        // Where uploads are served from: the web app's configured media root, else budget-pro's admin
+        // disk (public/storage, which on some hosts is a real folder rather than a link to storage/app/public).
+        $root = rtrim((string) (config('budgetpro.media_root') ?: config('filesystems.disks.admin.root') ?: dirname(__DIR__, 3).'/public/storage'), '/');
         $dest = "{$root}/images/demo/{$key}.jpg";
         if (! is_file($src)) {
             return null;
