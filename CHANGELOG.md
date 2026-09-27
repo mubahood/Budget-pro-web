@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Supermarket phase 3: the customer (2026-09-27)
+- **Price levels and quantity breaks:** `product_prices` and `customers.price_level`, priced by `PriceLevelService`.
+- **Promotions:** percent or amount off, fixed price, buy X get Y, mix and match, bundle, spend and save, coupons, time windows, member-only.
+  - `PromotionEngine` is pure and server-authoritative; allocations are stored in `promo_discount` and `sale_promotions`.
+  - Coupons always add to the other deals.
+  - The `promotion_results` report shows how each promotion did.
+- **Tenders:** loyalty points, gift cards and store credit (`TenderService`, `LoyaltyService`, `GiftCardService`).
+  - A sold gift card is a liability (income category "Gift cards sold", source payment) and never a sale.
+  - The `gift_cards` report shows the liability.
+- **Returns and exchanges:** exchanges pay only the difference; a return without a receipt needs a supervisor PIN and is priced at the lowest price of the last 30 days.
+- **Consent:** customers can opt in to marketing or opt out of all messages (`CustomerConsent`, applied in `Messenger`).
+  - Skipped messages are logged, and customer messages carry a signed stop link.
+  - The till and sales screens say when a customer asked for no messages.
+
 ### Supermarket phases 1–2 (2026-09-27, docs: budget-pro-new/docs/SUPERMARKET_PLAN.md)
 Every feature is off unless the shop turns on Supermarket mode or the feature (`StoreFeatures`, `companies.store_settings`).
 - **Lane:**

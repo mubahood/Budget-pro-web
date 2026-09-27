@@ -71,6 +71,44 @@ class PaymentService
         });
     }
 
+    /**
+     * A tender that is not money coming in (Payment::TENDERS: gift card, points, store credit, exchange credit),
+     * written by TenderService only: a payment row on the sale with no Income row (the money came in earlier,
+     * or never does). Negative = value given back to that tender (a refund).
+     *
+     * @param  array<string, mixed>  $attrs  reference, received_by_id, shift_id, notes
+     */
+    public function recordTender(SaleRecord $sale, string $tender, float $amount, array $attrs = []): Payment
+    {
+        if (! isset(Payment::TENDERS[$tender]) || round($amount, 2) == 0.0) {
+            throw BusinessRuleException::make('invalid_tender', 'Unknown way to pay, or nothing to pay.');
+        }
+
+        return DB::transaction(function () use ($sale, $tender, $amount, $attrs) {
+            $this->adoptPaidAtSale($sale);
+            $p = new Payment();
+            $p->company_id = $sale->company_id;
+            $p->sale_record_id = $sale->id;
+            $p->customer_id = $sale->customer_id;
+            $p->shift_id = $attrs['shift_id'] ?? $sale->shift_id;
+            $p->method = $tender;
+            $p->reference = $attrs['reference'] ?? null;
+            $p->amount = round($amount, 2);
+            $p->currency = $sale->currency;
+            $p->received_at = now();
+            $p->received_by_id = $attrs['received_by_id'] ?? $sale->created_by_id;
+            $p->notes = $attrs['notes'] ?? null;
+            $p->save();
+
+            $this->syncSaleTotals($sale);
+            if ($sale->customer_id) {
+                (new CustomerService())->recalc((int) $sale->customer_id);
+            }
+
+            return $p;
+        });
+    }
+
     /** Contra payment + contra ledger row. */
     public function reverse(Payment $payment, ?string $reason = null, ?int $userId = null): Payment
     {
@@ -107,6 +145,10 @@ class PaymentService
                     $contra->financial_record_id = $ledger->id;
                     $contra->saveQuietlySynced();
                 }
+            }
+
+            if (TenderService::isTender($payment->method)) {
+                (new TenderService())->onReverse($payment, $contra, $userId); // the gift card / points / credit get their value back
             }
 
             if ($payment->sale_record_id) {

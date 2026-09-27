@@ -91,12 +91,16 @@ class SaleController extends BaseCrudController
         $data = $request->validate(['phone' => ['nullable', 'string', 'max:30']]);
         try {
             $delivery = app(\App\Services\Engage\ReceiptDelivery::class);
-            $delivery->send($sale, $data['phone'] ?? null);
+            $logId = $delivery->send($sale, $data['phone'] ?? null);
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
-        return $this->success(['link' => $delivery->link($sale), 'sent_at' => $sale->receipt_sent_at], 'Receipt sent.');
+        $status = (string) \Illuminate\Support\Facades\DB::table('message_log')->where('id', $logId)->value('status');
+        $refused = str_starts_with($status, 'skipped_'); // plan C4: the customer asked for no messages
+
+        return $this->success(['link' => $delivery->link($sale), 'sent_at' => $sale->receipt_sent_at, 'status' => $status],
+            $refused ? \App\Services\Engage\CustomerConsent::reason($status) : 'Receipt sent.');
     }
 
     /** POST sales/{id}/momo-request { phone, network?, amount? } — ask the customer to pay by mobile money (Part E3). */

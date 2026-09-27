@@ -47,10 +47,15 @@ class ReceiptDelivery
         $number = $sale->receipt_number ?: ('#'.$sale->id);
         $total = Money::format($sale->total_amount, 0, (int) $company->id);
         $link = $this->link($sale);
-        $text = "Thank you for shopping at {$company->name}!\nReceipt {$number}: {$total}".((float) $sale->balance > 0 ? ' (balance '.Money::format($sale->balance, 0, (int) $company->id).')' : '')."\n{$link}";
-        $id = app(Messenger::class)->send($to, $text, ['whatsapp', 'sms'], ['company_id' => $company->id, 'purpose' => 'receipt', 'options' => [
+        // Plan C4: the customer who owns this number (the sale's, or the shop's record of it) decides; no record = as before.
+        $customer = app(CustomerConsent::class)->forPhone((int) $company->id, $to, $sale->customer);
+        $text = "Thank you for shopping at {$company->name}!\nReceipt {$number}: {$total}".((float) $sale->balance > 0 ? ' (balance '.Money::format($sale->balance, 0, (int) $company->id).')' : '')."\n{$link}".CustomerConsent::footer($customer);
+        $id = app(Messenger::class)->send($to, $text, ['whatsapp', 'sms'], ['company_id' => $company->id, 'customer_id' => $customer?->id, 'purpose' => 'receipt', 'options' => [
             'whatsapp' => ['template' => config('messaging.whatsapp.meta.receipt_template', 'sale_receipt'), 'params' => [$company->name, $number, $total, $link]],
         ]]);
+        if (str_starts_with((string) \Illuminate\Support\Facades\DB::table('message_log')->where('id', $id)->value('status'), 'skipped_')) {
+            return $id; // refused by CustomerConsent (logged): not sent, never an error at the till
+        }
         $sale->receipt_sent_at = now();
         if (! $sale->customer_phone) {
             $sale->customer_phone = $to;

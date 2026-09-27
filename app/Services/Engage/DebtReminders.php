@@ -60,7 +60,16 @@ class DebtReminders
         if ($manual && $customer->last_reminded_at && now()->diffInHours($customer->last_reminded_at) < 20) {
             throw BusinessRuleException::make('reminded_recently', 'A reminder was already sent today.');
         }
-        $id = app(Messenger::class)->send($to, $this->message($customer, $company, $pos['owed']), ['whatsapp', 'sms'], ['company_id' => $company->id, 'purpose' => 'debt_reminder']);
+        $id = app(Messenger::class)->send($to, $this->message($customer, $company, $pos['owed']).CustomerConsent::footer($customer), ['whatsapp', 'sms'],
+            ['company_id' => $company->id, 'customer_id' => $customer->id, 'purpose' => 'debt_reminder']);
+        if ($customer->messages_opt_out) {
+            // Plan C4: logged as skipped_opt_out by Messenger; a person who asked gets a clear answer.
+            if ($manual) {
+                throw BusinessRuleException::make('messages_opt_out', CustomerConsent::reason(CustomerConsent::STATUS_OPT_OUT, $customer->name));
+            }
+
+            return $id;
+        }
         $customer->last_reminded_at = now();
         $customer->saveQuietlySynced();
 
@@ -76,7 +85,7 @@ class DebtReminders
             if ($local->hour < 10) {
                 continue;
             }
-            $customers = Customer::withoutGlobalScopes()->where('company_id', $company->id)->where('is_deleted', false)->where('reminders_enabled', true)
+            $customers = Customer::withoutGlobalScopes()->where('company_id', $company->id)->where('is_deleted', false)->where('reminders_enabled', true)->where('messages_opt_out', false)
                 ->whereNotNull('phone')->where('phone', '!=', '')->where('balance', '>', 0)->get();
             foreach ($customers as $c) {
                 if ($c->last_reminded_at && now()->diffInDays($c->last_reminded_at) < self::EVERY_DAYS) {

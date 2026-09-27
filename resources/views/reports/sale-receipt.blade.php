@@ -237,6 +237,13 @@
             <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($tb['tax'], 2) }}</div>
         </div>
         @endforeach
+        @php $promoBreak = \App\Services\Shop\PromotionService::forSale($sale); @endphp
+        @foreach($promoBreak['rows'] as $pr)
+        <div class="totals-row">
+            <div class="totals-label">{{ $pr['name'] }}:</div>
+            <div class="totals-value">− {{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($pr['amount'], 0) }}</div>
+        </div>
+        @endforeach
         @if(abs((float) $sale->rounding_amount) >= 0.005)
         <div class="totals-row">
             <div class="totals-label">Rounding:</div>
@@ -247,6 +254,12 @@
             <div class="totals-label">TOTAL AMOUNT:</div>
             <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->total_amount, 0) }}</div>
         </div>
+        @if($promoBreak['saved'] > 0)
+        <div class="totals-row">
+            <div class="totals-label">You saved:</div>
+            <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($promoBreak['saved'], 0) }}</div>
+        </div>
+        @endif
         <div class="totals-row" style="margin-top: 15px;">
             <div class="totals-label">Amount Paid:</div>
             <div class="totals-value">{{ \App\Support\Money::symbol($sale->company_id) }} {{ number_format($sale->amount_paid, 0) }}</div>

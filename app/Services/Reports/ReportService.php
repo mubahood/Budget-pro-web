@@ -39,6 +39,10 @@ class ReportService
         'abc' => ['ABC analysis & days of cover', 'view_reports'],
         'shrink' => ['Shrink (write-offs)', 'view_cost'],
         'cash_control' => ['Cash control by cashier', 'view_reports'],
+        // Supermarket plan H5: what each promotion gave and did to its products' sales (for every shop; empty without promotions).
+        'promotion_results' => ['Promotion results', 'view_profit'],
+        // Supermarket plan C1/C2: money owed to customers (gift cards, store credit) and loyalty points (empty without them).
+        'gift_cards' => ['Gift cards, store credit & points', 'view_reports'],
     ];
 
     public const GROUPS = ['day', 'cashier', 'method', 'customer', 'category', 'product'];
@@ -127,7 +131,7 @@ class ReportService
         [$from, $bind] = $this->saleRows();
         $byMethod = [];
         $add = function (string $method, int $sales, float $amount) use (&$byMethod) {
-            $key = \App\Models\Payment::normalizeMethod($method);
+            $key = \App\Models\Payment::methodKey($method); // gift card / points / store credit stay apart (C1, C2)
             $byMethod[$key] ??= ['sales' => 0, 'amount' => 0.0];
             $byMethod[$key]['sales'] += $sales;
             $byMethod[$key]['amount'] += $amount;
@@ -806,5 +810,125 @@ class ReportService
             'rows' => $rows, 'totals' => $this->totals($rows, $keys),
             'meta' => ['approvals_tracked' => $approvals, 'drawer_tracked' => $movements,
                 'note' => 'Voids count against the cashier who rang the sale; over/short is counted cash minus expected cash of the shifts each person opened. Price overrides and no-sales come from supervisor approvals and drawer opens.']];
+    }
+
+    /**
+     * H5: per promotion, the sales that got it, the discount given, and the units, sales and margin of its
+     * products while it ran (within the chosen range), against the same number of days just before.
+     */
+    private function promotionResults(array $o): array
+    {
+        $columns = [$this->text('name', 'Promotion'), $this->text('type', 'Type'), $this->num('sales_count', 'Sales'), $this->num('units', 'Units sold'),
+            $this->money('discount', 'Discount given'), $this->money('sales', 'Sales of its products'), $this->percent('margin', 'Margin %'),
+            $this->money('before', 'Sales before'), $this->percent('before_margin', 'Margin before %'), $this->percent('growth', 'Growth %')];
+        if (! \Illuminate\Support\Facades\Schema::hasTable('promotions')) {
+            return ['columns' => $columns, 'rows' => [], 'totals' => [], 'meta' => []];
+        }
+        $from = $this->from->toDateString();
+        $to = $this->to->toDateString();
+        $tz = $this->from->getTimezone();
+        $given = DB::table('sale_promotions as sp')->join('sale_records as r', 'r.id', '=', 'sp.sale_id')
+            ->where('sp.company_id', $this->companyId)->whereNull('r.voided_at')->where('r.status', '<>', 'Voided')->whereBetween('r.sale_date', [$from, $to])
+            ->groupBy('sp.promotion_id')->selectRaw('sp.promotion_id, COUNT(DISTINCT sp.sale_id) AS n, SUM(sp.amount) AS amount')->get()->keyBy('promotion_id');
+        $targets = DB::table('promotion_targets')->whereIn('promotion_id', DB::table('promotions')->where('company_id', $this->companyId)->select('id'))->get()->groupBy('promotion_id');
+        $rows = [];
+        foreach (DB::table('promotions')->where('company_id', $this->companyId)->orderBy('id')->get() as $p) {
+            $start = $p->starts_at ? max($from, Carbon::parse($p->starts_at, 'UTC')->setTimezone($tz)->toDateString()) : $from;
+            $end = $p->ends_at ? min($to, Carbon::parse($p->ends_at, 'UTC')->setTimezone($tz)->toDateString()) : $to;
+            $g = $given[$p->id] ?? null;
+            if ($start > $end && $g === null) {
+                continue; // did not run in this range
+            }
+            if ($start > $end) {
+                [$start, $end] = [$from, $to];
+            }
+            $days = (int) Carbon::parse($start)->diffInDays(Carbon::parse($end)) + 1;
+            $beforeTo = Carbon::parse($start)->subDay()->toDateString();
+            $beforeFrom = Carbon::parse($beforeTo)->subDays($days - 1)->toDateString();
+            $t = $targets[$p->id] ?? collect();
+            $now = $this->promotionTargetSales($t, $start, $end);
+            $prev = $this->promotionTargetSales($t, $beforeFrom, $beforeTo);
+            $rows[] = ['name' => (string) $p->name, 'type' => \App\Services\Shop\PromotionEngine::TYPES[$p->type] ?? $p->type,
+                'sales_count' => (int) ($g->n ?? 0), 'units' => round($now['units'], 3), 'discount' => round((float) ($g->amount ?? 0), 2),
+                'sales' => round($now['sales'], 2), 'margin' => $now['sales'] > 0 ? round($now['profit'] * 100 / $now['sales'], 1) : 0.0,
+                'before' => round($prev['sales'], 2), 'before_margin' => $prev['sales'] > 0 ? round($prev['profit'] * 100 / $prev['sales'], 1) : 0.0,
+                'growth' => $prev['sales'] > 0 ? round(($now['sales'] - $prev['sales']) * 100 / $prev['sales'], 1) : null,
+                'from' => $start, 'to' => $end, 'before_from' => $beforeFrom, 'before_to' => $beforeTo];
+        }
+        usort($rows, fn ($a, $b) => $b['discount'] <=> $a['discount'] ?: $b['sales'] <=> $a['sales']);
+
+        return ['columns' => $columns, 'rows' => $rows, 'totals' => $this->totals($rows, ['sales_count', 'units', 'discount', 'sales', 'before']),
+            'meta' => ['note' => 'Sales, units and margin are those of each promotion\'s products (all products for a whole-cart promotion) while it ran in this range, against the same number of days just before it.']];
+    }
+
+    /** Units, sales and profit of a promotion's products (every product when it has no targets) on these local days. @return array{units: float, sales: float, profit: float} */
+    private function promotionTargetSales($targets, string $from, string $to): array
+    {
+        [$sql, $bind] = SalesSource::linesSql($this->companyId, 'x', $from, $to);
+        $where = '';
+        $wb = [];
+        if ($targets->isNotEmpty()) {
+            $parts = [];
+            foreach (['product' => 'p.id', 'category' => 'p.stock_category_id', 'sub_category' => 'p.stock_sub_category_id'] as $type => $col) {
+                $ids = $targets->where('target_type', $type)->pluck('target_id')->map(fn ($v) => (int) $v)->all();
+                if ($ids !== []) {
+                    $parts[] = $col.' IN ('.implode(',', array_fill(0, count($ids), '?')).')';
+                    $wb = array_merge($wb, $ids);
+                }
+            }
+            $where = $parts !== [] ? ' AND ('.implode(' OR ', $parts).')' : ' AND 1 = 0';
+        }
+        $r = DB::selectOne("SELECT COALESCE(SUM(l.quantity), 0) AS units, COALESCE(SUM(l.revenue), 0) AS sales, COALESCE(SUM(l.profit), 0) AS profit
+            FROM (SELECT x.* FROM {$sql} WHERE x.sale_date BETWEEN ? AND ?) l LEFT JOIN stock_items p ON p.id = l.stock_item_id WHERE 1 = 1{$where}",
+            array_merge($bind, [$from, $to], $wb));
+
+        return ['units' => (float) $r->units, 'sales' => (float) $r->sales, 'profit' => (float) $r->profit];
+    }
+
+    /**
+     * C1/C2: what the shop owes its customers — each gift card with money on it, store credit per customer,
+     * and loyalty points at their value — plus gift cards sold and used in the range. Gift cards sold are
+     * money received (cash-up, ledger) but never sales or profit.
+     */
+    private function giftCards(array $o): array
+    {
+        $columns = [$this->text('card', 'Card'), $this->text('customer', 'Customer'), $this->text('issued', 'Issued'), $this->text('expires', 'Expires'),
+            $this->text('status', 'Status'), $this->money('balance', 'Balance owed')];
+        if (! \Illuminate\Support\Facades\Schema::hasTable('gift_cards')) {
+            return ['columns' => $columns, 'rows' => [], 'totals' => [], 'meta' => []];
+        }
+        $cid = $this->companyId;
+        $now = now();
+        $rows = DB::table('gift_cards as g')->leftJoin('customers as c', 'c.id', '=', 'g.customer_id')->where('g.company_id', $cid)->where('g.balance', '<>', 0)
+            ->orderByDesc('g.balance')->limit(2000)->get(['g.last4', 'g.balance', 'g.expires_at', 'g.is_active', 'g.created_at', 'g.source', 'c.name as customer'])
+            ->map(fn ($g) => ['card' => '•••• '.$g->last4.($g->source === 'refund' ? ' (refund)' : ''), 'customer' => (string) ($g->customer ?? ''),
+                'issued' => substr((string) $g->created_at, 0, 10), 'expires' => $g->expires_at ? substr((string) $g->expires_at, 0, 10) : '',
+                'status' => ! $g->is_active ? 'Stopped' : ($g->expires_at && $g->expires_at < $now ? 'Expired' : 'Active'), 'balance' => round((float) $g->balance, 2)])->all();
+
+        $from = $this->from->copy()->utc();
+        $to = $this->to->copy()->utc();
+        $moved = DB::table('gift_card_ledger')->where('company_id', $cid)->whereBetween('created_at', [$from, $to])
+            ->selectRaw("COALESCE(SUM(CASE WHEN reason = 'issue' THEN amount ELSE 0 END), 0) AS sold, COALESCE(SUM(CASE WHEN reason = 'redeem' THEN -amount ELSE 0 END), 0) AS used,
+                COALESCE(SUM(CASE WHEN reason = 'refund' THEN amount ELSE 0 END), 0) AS refunded")->first();
+        $credit = DB::table('customers')->where('company_id', $cid)->where('is_deleted', 0)->where('balance', '<', 0)->orderBy('balance')->limit(2000)
+            ->get(['name', 'phone', 'balance'])->map(fn ($c) => ['name' => (string) $c->name, 'phone' => (string) $c->phone, 'credit' => round(-(float) $c->balance, 2)])->all();
+        $pointValue = \App\Services\Shop\LoyaltyService::pointValue(Company::withoutGlobalScopes()->find($cid));
+        $points = DB::table('loyalty_ledger as l')->join('customers as c', 'c.id', '=', 'l.customer_id')->where('l.company_id', $cid)
+            ->groupBy('l.customer_id', 'c.name', 'c.phone')->havingRaw('SUM(l.points) > 0')->orderByRaw('SUM(l.points) DESC')->limit(2000)
+            ->get(['c.name', 'c.phone', DB::raw('SUM(l.points) AS points')])
+            ->map(fn ($p) => ['name' => (string) $p->name, 'phone' => (string) $p->phone, 'points' => (int) $p->points, 'value' => round((int) $p->points * $pointValue, 2)])->all();
+        $cards = round(array_sum(array_map(fn ($r) => $r['status'] === 'Active' ? $r['balance'] : 0, $rows)), 2);
+
+        return ['columns' => $columns, 'rows' => $rows, 'totals' => $this->totals($rows, ['balance']),
+            'meta' => ['gift_cards_owed' => $cards, 'store_credit_owed' => round(array_sum(array_column($credit, 'credit')), 2),
+                'points_value' => round(array_sum(array_column($points, 'value')), 2),
+                'sold' => round((float) $moved->sold, 2), 'used' => round((float) $moved->used, 2), 'refunded_to_cards' => round((float) $moved->refunded, 2),
+                'note' => 'Gift cards sold are money received and owed to the card holder: they are in cash-up and the ledger, never in sales or profit. Sold, used and refunded are for the chosen dates; balances are now.'],
+            'sections' => [
+                ['key' => 'store_credit', 'title' => 'Store credit (customers in credit)', 'columns' => [$this->text('name', 'Customer'), $this->text('phone', 'Phone'), $this->money('credit', 'Credit owed')],
+                    'rows' => $credit, 'totals' => $this->totals($credit, ['credit'])],
+                ['key' => 'points', 'title' => 'Loyalty points', 'columns' => [$this->text('name', 'Customer'), $this->text('phone', 'Phone'), $this->num('points', 'Points'), $this->money('value', 'Worth')],
+                    'rows' => $points, 'totals' => $this->totals($points, ['points', 'value'])],
+            ]];
     }
 }

@@ -111,6 +111,7 @@ class DashboardService
             SELECT x.method, SUM(x.amount) AS amount FROM (
                 SELECT p.method, p.amount FROM payments p
                 WHERE p.company_id = ? AND COALESCE(p.is_deleted, 0) = 0
+                  AND p.method NOT IN ('gift_card', 'points', 'store_credit', 'exchange')
                   AND DATE(CONVERT_TZ(COALESCE(p.received_at, p.created_at), '+00:00', @tz_offset)) BETWEEN ? AND ?{$pWin}
                 UNION ALL
                 SELECT LOWER(COALESCE(NULLIF(r.payment_method, ''), 'cash')), r.amount_paid FROM sale_records r

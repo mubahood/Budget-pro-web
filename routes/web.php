@@ -38,6 +38,10 @@ Route::view('api/docs', 'api-docs');
 Route::get('r/{token}', [\App\Http\Controllers\PublicReceiptController::class, 'show'])->where('token', '[A-Za-z0-9]{32}')->middleware('throttle:60,1');
 Route::get('r/{token}/pdf', [\App\Http\Controllers\PublicReceiptController::class, 'pdf'])->where('token', '[A-Za-z0-9]{32}')->middleware('throttle:30,1');
 
+// "Stop messages" link at the end of customer messages (supermarket plan C4): asks, then stops.
+Route::get('stop/{customer}/{token}', [\App\Http\Controllers\PublicUnsubscribeController::class, 'show'])->whereNumber('customer')->where('token', '[a-f0-9]{16}')->middleware('throttle:30,1')->name('customer.unsubscribe');
+Route::post('stop/{customer}/{token}', [\App\Http\Controllers\PublicUnsubscribeController::class, 'stop'])->whereNumber('customer')->where('token', '[a-f0-9]{16}')->middleware('throttle:10,1');
+
 // Team invite links (plan C5).
 Route::get('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'show'])->middleware('throttle:30,1')->name('invite.show');
 Route::post('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'accept'])->middleware('throttle:10,1')->name('invite.accept');

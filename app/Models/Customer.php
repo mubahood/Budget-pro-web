@@ -14,13 +14,14 @@ class Customer extends Model
 
     protected $table = 'customers';
 
-    protected $fillable = ['uuid', 'company_id', 'name', 'phone', 'email', 'address', 'credit_limit', 'payment_terms_days', 'reminders_enabled', 'notes', 'is_active', 'created_by_id'];
+    protected $fillable = ['uuid', 'company_id', 'name', 'phone', 'email', 'address', 'credit_limit', 'payment_terms_days', 'reminders_enabled', 'notes', 'is_active', 'created_by_id', 'marketing_opt_in', 'messages_opt_out', 'price_level'];
 
-    protected $casts = ['credit_limit' => 'decimal:2', 'balance' => 'decimal:2', 'is_active' => 'boolean', 'is_deleted' => 'boolean', 'reminders_enabled' => 'boolean', 'payment_terms_days' => 'integer'];
+    protected $casts = ['credit_limit' => 'decimal:2', 'balance' => 'decimal:2', 'is_active' => 'boolean', 'is_deleted' => 'boolean', 'reminders_enabled' => 'boolean', 'payment_terms_days' => 'integer', 'marketing_opt_in' => 'boolean', 'messages_opt_out' => 'boolean', 'marketing_opt_in_at' => 'datetime', 'messages_opt_out_at' => 'datetime'];
 
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        static::saving(fn (Customer $c) => \App\Services\Engage\CustomerConsent::stamp($c)); // consent "since" dates (plan C4)
     }
 
     public function sales(): HasMany

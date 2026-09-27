@@ -42,21 +42,31 @@ class CheckoutRules
             'items.*.markdown_id' => ['nullable', 'integer'], // a scanned markdown label (B4): its reduced price is pre-approved
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.approval_id' => ['nullable', 'integer'], // a supervisor's price-override approval (A5, `approvals` feature)
+            'coupon_code' => ['nullable', 'string', 'max:40'], // a promotion's coupon (B3): checkout decides what, if anything, it gives
             'payments' => ['nullable', 'array'],
             'payments.*.method' => ['nullable', 'string', 'max:30'],
             'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01'],
             'payments.*.reference' => ['nullable', 'string', 'max:191'],
             'payments.*.provider' => ['nullable', 'string', 'max:50'],
+            // Tenders that are not money (supermarket C1, C2): checked and priced by budget-pro's TenderService, off unless the feature is on.
+            'payments.*.tender' => ['nullable', 'string', 'in:gift_card,points,store_credit'],
+            'payments.*.code' => ['nullable', 'string', 'max:64'],
+            'payments.*.points' => ['nullable', 'integer', 'min:1'],
         ];
     }
 
-    /** A discount, or a unit price different from the product's price in that unit (needs the `discount` permission). */
+    /**
+     * A discount, or a unit price different from the product's price in that unit (needs the `discount` permission).
+     * Promotions (B3) are never in the request (checkout works them out), and a line sent at its level price or
+     * quantity break (B2, `price_levels` on) is the catalogue price, so neither counts as the cashier changing a price.
+     */
     public static function changesPrices(int $companyId, array $data): bool
     {
         if ((float) ($data['discount_amount'] ?? 0) > 0) {
             return true;
         }
         $departmentKeys = null;
+        $levels = null;
         foreach ($data['items'] ?? [] as $line) {
             if ((float) ($line['discount_amount'] ?? 0) > 0) {
                 return true;
@@ -79,6 +89,12 @@ class CheckoutRules
             }
             $factor = ! empty($line['unit_id']) ? (float) (Unit::withoutGlobalScopes()->find($line['unit_id'])?->factor ?: 1) : 1.0;
             if ($product && abs((float) $line['unit_price'] - round((float) $product->selling_price * $factor, 2)) > 0.005) {
+                $levels ??= \App\Services\Shop\PriceLevelService::enabled($companyId);
+                if ($levels && abs((float) $line['unit_price'] - \App\Services\Shop\PriceLevelService::price($companyId, (int) $product->id, ! empty($line['unit_id']) ? (int) $line['unit_id'] : null,
+                    (float) ($line['quantity'] ?? 0), \App\Services\Shop\PriceLevelService::levelOf($companyId, ! empty($data['customer_id']) ? (int) $data['customer_id'] : null))) < 0.005) {
+                    continue;
+                }
+
                 return true;
             }
         }

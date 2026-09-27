@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 class CustomerRules
 {
     /** Fields a person may edit (balance is derived by CustomerService, never typed). */
-    public const WRITABLE = ['name', 'phone', 'email', 'address', 'credit_limit', 'payment_terms_days', 'reminders_enabled', 'notes', 'is_active'];
+    public const WRITABLE = ['name', 'phone', 'email', 'address', 'credit_limit', 'payment_terms_days', 'reminders_enabled', 'notes', 'is_active', 'marketing_opt_in', 'messages_opt_out', 'price_level'];
 
     /** @return array<string, array<int, mixed>> */
     public static function rules(int $companyId, ?int $ignoreId = null, bool $partial = false): array
@@ -26,6 +26,9 @@ class CustomerRules
             'reminders_enabled' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:500'],
             'is_active' => ['nullable', 'boolean'],
+            'marketing_opt_in' => ['nullable', 'boolean'], // agrees to offers and news (plan C4)
+            'messages_opt_out' => ['nullable', 'boolean'], // asked for no messages at all
+            'price_level' => ['nullable', 'string', 'max:40'], // the level they buy at (B2, `price_levels`): empty = retail
         ];
     }
 }

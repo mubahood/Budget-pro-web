@@ -97,8 +97,11 @@ class SaleService
             $sale->save();
 
             // Supervisor approval for price overrides (A5, `approvals` feature): re-checked here, whatever the till showed.
+            // Price levels and promotions (B2, B3): worked out here from the shop's own rules, never taken from the request.
+            // Off (or an offline sale synced later, already priced at its till) = null, and the sale is priced as before.
+            $this->pricing = empty($data['from_sync']) ? $this->pricingFor($companyId, $sale, $data) : null;
             if (empty($data['from_sync'])) {
-                (new PriceOverrideService())->enforce($companyId, $userId, $data['items']);
+                (new PriceOverrideService())->enforce($companyId, $userId, $data['items'], $this->pricing['level'] ?? null);
             }
 
             foreach ($data['items'] as $line) {
@@ -117,7 +120,11 @@ class SaleService
                 $item->quantity = $line['quantity'];
                 $item->unit_price = array_key_exists('unit_price', $line) && $line['unit_price'] !== null ? $line['unit_price'] : null;
                 $item->discount_amount = round((float) ($line['discount_amount'] ?? 0), 2);
+                $eligible = $this->pricing !== null ? $this->priceLine($item, $line) : false;
                 $item->save();
+                if ($eligible) {
+                    $this->promoLines[$item->id] = true;
+                }
                 // A markdown label (B4): this line's stock comes out of the marked-down batch first.
                 if (! empty($line['markdown_id']) && ($md = MarkdownService::active($companyId, (int) $line['markdown_id'], (int) $item->stock_item_id))) {
                     $this->batchHints[$item->id] = $md['batch_id'];
@@ -160,6 +167,7 @@ class SaleService
         }
 
         return DB::transaction(function () use ($sale, $payments, $userId) {
+            $this->pricing = null; // lines persisted elsewhere keep their own prices (no levels or promotions here)
             if ($payments === null) {
                 $amountPaid = round((float) $sale->amount_paid, 2);
                 $payments = $amountPaid > 0 ? [['method' => $sale->payment_method ?? 'Cash', 'amount' => $amountPaid]] : [];
@@ -205,6 +213,7 @@ class SaleService
             foreach ($payments as $payment) {
                 $this->payments->reverse($payment, $reason ?? 'Sale voided', $userId);
             }
+            (new LoyaltyService())->reverseForSale($sale, null, $userId); // points the sale earned (none written = nothing)
 
             $sale->status = 'Voided';
             $sale->voided_at = now();
@@ -331,6 +340,83 @@ class SaleService
     /** @var array<int, int> sale line id => batch to take first (a markdown label's batch, B4) */
     private array $batchHints = [];
 
+    /** @var array{levels: bool, promos: bool, level: ?string, customer_id: ?int, coupon: ?string, rows: array, products: array, dept_keys: bool}|null price levels / promotions for this checkout (B2, B3); null = off */
+    private ?array $pricing = null;
+
+    /** @var array<int, true> sale line ids promotions may look at */
+    private array $promoLines = [];
+
+    /** What this checkout needs to price its lines by level and promotion, or null when the shop uses neither. */
+    private function pricingFor(int $companyId, SaleRecord $sale, array $data): ?array
+    {
+        $company = Company::withoutGlobalScopes()->find($companyId);
+        $levels = PriceLevelService::enabled($company);
+        $promos = PromotionService::enabled($company);
+        if (! $levels && ! $promos) {
+            return null;
+        }
+        $ids = array_map(fn ($l) => (int) ($l['stock_item_id'] ?? 0), $data['items'] ?? []);
+        $customerId = $sale->customer_id ? (int) $sale->customer_id : null;
+
+        return ['levels' => $levels, 'promos' => $promos, 'level' => $levels ? PriceLevelService::levelOf($companyId, $customerId) : null, 'customer_id' => $customerId,
+            'coupon' => isset($data['coupon_code']) && trim((string) $data['coupon_code']) !== '' ? trim((string) $data['coupon_code']) : null,
+            'rows' => $levels ? PriceLevelService::rowsFor($companyId, $ids) : [], 'products' => PromotionService::products($companyId, $ids),
+            'dept_keys' => \App\Support\StoreFeatures::enabled($company, 'department_keys')];
+    }
+
+    /**
+     * A line without its own price gets the level price / quantity break (B2). Returns whether promotions may
+     * look at it (PromotionService::eligible: not re-priced, discounted, a markdown or an open-price key).
+     */
+    private function priceLine(SaleRecordItem $item, array $line): bool
+    {
+        $p = $this->pricing['products'][(int) $item->stock_item_id] ?? null;
+        if ($p === null) {
+            return false;
+        }
+        $factor = max(0.001, (float) ($item->unit_factor ?: 1));
+        $unitId = $item->unit_id ? (int) $item->unit_id : null;
+        $catalogue = ($this->pricing['levels'] ? PriceLevelService::pick($this->pricing['rows'][(int) $p->id] ?? [], $unitId, $factor, (float) $item->quantity, $this->pricing['level']) : null)
+            ?? round((float) $p->selling_price * $factor, 2);
+        $explicit = $item->unit_price !== null ? round((float) $item->unit_price, 2) : null;
+        if ($explicit === null && $this->pricing['levels']) {
+            $item->unit_price = $catalogue;
+        }
+
+        return $this->pricing['promos'] && PromotionService::eligible($explicit, $catalogue, (float) $item->discount_amount, ! empty($line['markdown_id']), $this->pricing['dept_keys'] && $p->open_price);
+    }
+
+    /**
+     * Promotions (B3) on the priced lines: each line's share of a promotion's discount becomes part of its
+     * discount (promo_discount says how much), so totals, tax, profit and returns all follow; the sale keeps
+     * the promotions it got by name (sale_promotions). Returns the lines' net before the header discount.
+     */
+    private function applyPromotions(SaleRecord $sale, $lines, array $products, float $net): float
+    {
+        if ($this->pricing === null || ! $this->pricing['promos']) {
+            return $net;
+        }
+        $cart = [];
+        foreach ($lines as $line) {
+            $cart[$line->id] = PromotionService::lineFor($products[(int) $line->stock_item_id], (float) $line->quantity, max(0.001, (float) ($line->unit_factor ?: 1)),
+                (float) $line->unit_price, isset($this->promoLines[$line->id]));
+        }
+        $r = PromotionService::run((int) $sale->company_id, $cart, ['customer_id' => $this->pricing['customer_id'], 'level' => $this->pricing['level'], 'coupon' => $this->pricing['coupon']]);
+        foreach ($lines as $line) {
+            $promo = min(round((float) ($r['lines'][$line->id]['discount'] ?? 0), 2), (float) $line->line_total);
+            if ($promo < 0.005) {
+                continue;
+            }
+            $line->promo_discount = $promo;
+            $line->discount_amount = round((float) $line->discount_amount + $promo, 2);
+            $line->line_total = round((float) $line->line_total - $promo, 2);
+            $net -= $promo;
+        }
+        PromotionService::record((int) $sale->company_id, (int) $sale->id, $r['applied']);
+
+        return $net;
+    }
+
     /** customer_id, or find-or-create by phone when a named buyer is given (debt book). */
     private function resolveCustomer(int $companyId, int $userId, array $data): ?\App\Models\Customer
     {
@@ -411,6 +497,8 @@ class SaleService
             $subtotal += $lineSub;
             $netBeforeHeaderDiscount += $line->line_total;
         }
+        // Promotions (B3, `promotions` feature): part of each line's discount, before the whole-sale discount.
+        $netBeforeHeaderDiscount = $this->applyPromotions($sale, $lines, $products, $netBeforeHeaderDiscount);
 
         // Header discount allocated pro-rata; the last line absorbs rounding.
         $headerDiscount = min(round((float) $sale->discount_amount, 2), round($netBeforeHeaderDiscount, 2));
@@ -450,6 +538,9 @@ class SaleService
             }
             $total = round($total + $rounding, 2);
         }
+
+        // Gift card / points / store credit / exchange rows (C1, C2, A9): checked and priced first. None = unchanged.
+        $payments = (new TenderService())->prepare($sale, $payments, $total);
 
         // Credit rules (plan A3): a balance needs a customer; stay within their credit limit.
         $paying = round(array_sum(array_map(fn ($p) => max(0, (float) ($p['amount'] ?? 0)), $payments)), 2);
@@ -521,7 +612,9 @@ class SaleService
                 continue;
             }
             $applied = min($amount, max($remaining, 0));
-            if ($applied > 0) {
+            if ($applied > 0 && ! empty($p['tender'])) {
+                (new TenderService())->apply($sale, $p + ['shift_id' => $sale->shift_id], $applied, $userId); // no income: value already held
+            } elseif ($applied > 0) {
                 $this->payments->record($sale, array_merge($p, ['amount' => $applied, 'received_by_id' => $userId]));
             }
             $remaining = round($remaining - $amount, 2);
@@ -537,6 +630,7 @@ class SaleService
         }
         if ($sale->customer_id) {
             (new CustomerService())->recalc((int) $sale->customer_id);
+            (new LoyaltyService())->earnForSale($sale, $userId); // loyalty points (C1): nothing unless the feature is on
         }
 
         return $sale;

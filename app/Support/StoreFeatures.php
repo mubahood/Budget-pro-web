@@ -34,6 +34,7 @@ class StoreFeatures
         'shelf_labels' => ['Shelf-edge labels and the label queue', 'B6'],
         'loyalty' => ['Loyalty points', 'C1'],
         'gift_cards' => ['Gift cards and store credit', 'C2'],
+        'exchanges' => ['Exchanges and returns without a receipt', 'A9'],
         'scan_receiving' => ['Receive deliveries by scanning', 'D1'],
         'fefo' => ['Sell the first-to-expire batch first', 'D2'],
         'aisle_counts' => ['Shelf locations and aisle counts', 'D3'],
@@ -56,6 +57,8 @@ class StoreFeatures
         'waste_limit' => 0,                // write-off value above this needs a supervisor (0 = always)
         'loyalty_spend_per_point' => 1000, // currency per point earned
         'loyalty_point_value' => 10,       // currency one point is worth when redeemed
+        'loyalty_silver_spend' => 1000000, // spend in the last 12 months for Silver (0 = no tiers)
+        'loyalty_gold_spend' => 5000000,   // … and for Gold
         'short_dated_days' => 14,
         'age_min' => 18,
         'tax_inclusive' => true,
@@ -138,6 +141,8 @@ class StoreFeatures
             'settings.waste_limit' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
             'settings.loyalty_spend_per_point' => ['nullable', 'numeric', 'gt:0', 'max:1000000000'],
             'settings.loyalty_point_value' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'settings.loyalty_silver_spend' => ['nullable', 'numeric', 'min:0', 'max:100000000000'],
+            'settings.loyalty_gold_spend' => ['nullable', 'numeric', 'min:0', 'max:100000000000'],
             'settings.short_dated_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'settings.age_min' => ['nullable', 'integer', 'min:0', 'max:99'],
             'settings.tax_inclusive' => ['nullable', 'boolean'],
@@ -153,7 +158,7 @@ class StoreFeatures
         $data = \Illuminate\Support\Facades\Validator::make($change, self::rules(), [], [
             'settings.cash_rounding' => 'cash rounding', 'settings.note_buttons.*' => 'note', 'settings.scale_prefixes.*' => 'scale prefix',
             'settings.override_limit_pct' => 'price-cut limit', 'settings.waste_limit' => 'write-off limit', 'settings.short_dated_days' => 'short-dated days',
-            'settings.loyalty_spend_per_point' => 'spend per point', 'settings.loyalty_point_value' => 'point value', 'settings.age_min' => 'minimum age',
+            'settings.loyalty_spend_per_point' => 'spend per point', 'settings.loyalty_point_value' => 'point value', 'settings.loyalty_silver_spend' => 'Silver spend', 'settings.loyalty_gold_spend' => 'Gold spend', 'settings.age_min' => 'minimum age',
         ])->validate();
         $num = fn ($v) => (float) $v == (int) $v ? (int) $v : (float) $v;
         foreach ((array) ($data['settings'] ?? []) as $key => $value) {

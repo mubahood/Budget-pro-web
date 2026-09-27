@@ -59,10 +59,17 @@ class ReceiptService
         foreach ($tax['rows'] as $t) {
             $out[] = ($tax['on_top'] ? 'Tax ' : 'Incl. tax ').$t['label'].': '.$cur.' '.$n($t['tax'], 2);
         }
+        $promos = PromotionService::forSale($sale); // promotions (B3): empty for other sales
+        foreach ($promos['rows'] as $pr) {
+            $out[] = $pr['name'].': -'.$n($pr['amount']);
+        }
         if (abs((float) $sale->rounding_amount) >= 0.005) {
             $out[] = 'Rounding: '.$cur.' '.((float) $sale->rounding_amount < 0 ? '-' : '').$n(abs((float) $sale->rounding_amount), 2);
         }
         $out[] = '*TOTAL: '.$cur.' '.$n($sale->total_amount).'*';
+        if ($promos['saved'] > 0) {
+            $out[] = 'You saved: '.$cur.' '.$n($promos['saved']);
+        }
         if ((float) $sale->refunded_amount > 0) {
             $out[] = 'Returned: '.$cur.' '.$n($sale->refunded_amount);
         }
@@ -75,6 +82,9 @@ class ReceiptService
         }
         if ($sale->voided_at) {
             $out[] = '*** VOIDED ***';
+        }
+        if ($pts = (new LoyaltyService())->receiptLine($sale)) { // loyalty (C1): only sales with points rows
+            $out[] = 'Points earned: '.$pts['earned'].($pts['redeemed'] > 0 ? ' · used: '.$pts['redeemed'] : '').' · balance: '.$pts['balance'];
         }
         $out[] = '';
         $out[] = trim((string) ($company?->receipt_footer ?: 'Thank you for your business!'));

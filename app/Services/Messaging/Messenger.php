@@ -34,6 +34,12 @@ class Messenger
             'company_id' => $meta['company_id'] ?? null, 'user_id' => $meta['user_id'] ?? null, 'channel' => $channels[0] ?? 'log',
             'to' => $to, 'purpose' => $meta['purpose'] ?? null, 'body' => $text, 'status' => 'queued', 'created_at' => now(), 'updated_at' => now(),
         ]);
+        if (! empty($meta['customer_id']) && ($refusal = self::consentRefusal((int) $meta['customer_id'], $meta['purpose'] ?? null)) !== null) {
+            // Plan C4: the customer asked for no messages, or never agreed to offers. Logged, never thrown.
+            DB::table('message_log')->where('id', $id)->update(['status' => $refusal[0], 'error' => $refusal[1], 'updated_at' => now()]);
+
+            return $id;
+        }
         if (self::isDemo($meta['company_id'] ?? null)) {
             // Demo shops (DemoShopService) never message anyone: their customers are made up.
             DB::table('message_log')->where('id', $id)->update(['status' => 'skipped', 'error' => 'demo shop', 'updated_at' => now()]);
@@ -73,6 +79,15 @@ class Messenger
         DB::table('message_log')->where('id', $logId)->update(['status' => $errors === [] ? 'skipped' : 'failed', 'error' => mb_substr(implode('; ', $errors), 0, 500), 'updated_at' => now()]);
 
         return false;
+    }
+
+    /** @return array{0: string, 1: string}|null [status, reason] when CustomerConsent refuses this message */
+    private static function consentRefusal(int $customerId, ?string $purpose): ?array
+    {
+        $customer = \App\Models\Customer::withoutGlobalScopes()->find($customerId);
+        $status = app(\App\Services\Engage\CustomerConsent::class)->refusal($customer, $purpose);
+
+        return $status === null ? null : [$status, \App\Services\Engage\CustomerConsent::reason($status, $customer?->name)];
     }
 
     private static function isDemo(mixed $companyId): bool

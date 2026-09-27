@@ -48,14 +48,16 @@ class PriceOverrideService
      * fails gives it back).
      *
      * @param  list<array<string, mixed>>  $items  checkout items (stock_item_id, quantity, unit_id?, unit_price?, discount_amount?, approval_id?)
+     * @param  ?string  $level  the customer's price level (B2): with price levels on, a cut is measured from the level price / quantity break
      */
-    public function enforce(int $companyId, int $userId, array $items): void
+    public function enforce(int $companyId, int $userId, array $items, ?string $level = null): void
     {
         $company = Company::withoutGlobalScopes()->find($companyId);
         if (! StoreFeatures::enabled($company, 'approvals')) {
             return;
         }
         $departmentKeys = StoreFeatures::enabled($company, 'department_keys');
+        $levels = PriceLevelService::enabled($company);
         foreach ($items as $line) {
             $hasPrice = array_key_exists('unit_price', $line) && $line['unit_price'] !== null;
             if (! $hasPrice && (float) ($line['discount_amount'] ?? 0) <= 0) {
@@ -71,7 +73,9 @@ class PriceOverrideService
                 continue; // an open-price key is priced at the till
             }
             $factor = ! empty($line['unit_id']) ? max(0.001, (float) (Unit::withoutGlobalScopes()->where('company_id', $companyId)->find($line['unit_id'])?->factor ?: 1)) : 1.0;
-            $catalogue = round((float) $product->selling_price * $factor, 2);
+            $catalogue = $levels ? PriceLevelService::price($companyId, (int) $product->id, ! empty($line['unit_id']) ? (int) $line['unit_id'] : null, (float) ($line['quantity'] ?? 0), $level)
+                : round((float) $product->selling_price * $factor, 2);
+            // Promotions (B3) never reach here: checkout works them out itself, after this check, and they need no supervisor.
             $price = self::effective($hasPrice ? (float) $line['unit_price'] : $catalogue, (float) ($line['quantity'] ?? 0), (float) ($line['discount_amount'] ?? 0));
             $why = $this->reason($company, $catalogue, $price, round((float) $product->buying_price * $factor, 2));
             if ($why === null) {
