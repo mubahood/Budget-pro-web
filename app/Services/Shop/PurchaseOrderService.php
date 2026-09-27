@@ -68,6 +68,9 @@ class PurchaseOrderService
         $po->save();
         $total = 0.0;
         $seen = [];
+        // Supplier price lists (D7, `supplier_prices`): a line with no cost starts at this supplier's latest price.
+        $supplierPrices = $supplierId && SupplierPriceService::on((int) $po->company_id)
+            ? (new SupplierPriceService())->currentMany((int) $po->company_id, $supplierId, array_map(fn ($l) => (int) $l['stock_item_id'], $lines)) : [];
         foreach ($lines as $l) {
             $qty = round((float) $l['quantity'], 3);
             $product = StockItem::withoutGlobalScopes()->where('company_id', $po->company_id)->find($l['stock_item_id']);
@@ -81,7 +84,7 @@ class PurchaseOrderService
                 throw BusinessRuleException::make('duplicate_line', "{$product->name} is on the order twice.");
             }
             $seen[$product->id] = true;
-            $cost = isset($l['unit_cost']) && $l['unit_cost'] !== '' ? round((float) $l['unit_cost'], 2) : round((float) $product->buying_price, 2);
+            $cost = isset($l['unit_cost']) && $l['unit_cost'] !== '' ? round((float) $l['unit_cost'], 2) : round((float) ($supplierPrices[(int) $product->id] ?? $product->buying_price), 2);
             PurchaseOrderItem::create(['company_id' => $po->company_id, 'purchase_order_id' => $po->id, 'stock_item_id' => $product->id, 'quantity' => $qty, 'unit_cost' => $cost]);
             $total += $qty * $cost;
         }
@@ -134,13 +137,13 @@ class PurchaseOrderService
      *
      * @param  array<int, array{purchase_order_item_id: int, quantity?: float|string|null, unit_cost?: float|string|null, batch_number?: string|null, expiry_date?: string|null}>  $lines
      */
-    public function receive(PurchaseOrder $po, int $userId, array $lines, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $invoiceRef = null, ?string $receivedOn = null, ?string $clientUuid = null): GoodsReceipt
+    public function receive(PurchaseOrder $po, int $userId, array $lines, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $invoiceRef = null, ?string $receivedOn = null, ?string $clientUuid = null, array $options = []): GoodsReceipt
     {
         if (! in_array($po->status, ['draft', 'sent', 'partially_received'], true)) {
             throw BusinessRuleException::make('po_closed', 'This order was already received or cancelled.');
         }
 
-        return DB::transaction(function () use ($po, $userId, $lines, $amountPaid, $paymentMethod, $invoiceRef, $receivedOn, $clientUuid) {
+        return DB::transaction(function () use ($po, $userId, $lines, $amountPaid, $paymentMethod, $invoiceRef, $receivedOn, $clientUuid, $options) {
             $items = PurchaseOrderItem::where('purchase_order_id', $po->id)->lockForUpdate()->get()->keyBy('id');
             $expected = $items->map(fn (PurchaseOrderItem $i) => max(0.0, round((float) $i->outstanding(), 3)))->all(); // before this delivery
             $grnLines = [];
@@ -161,7 +164,7 @@ class PurchaseOrderService
             if ($grnLines === []) {
                 throw BusinessRuleException::make('empty_receipt', 'Enter the quantities that arrived.');
             }
-            $grn = (new GoodsReceiptService())->receive((int) $po->company_id, $userId, $grnLines, $po->supplier_id, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, 'Against '.$po->number, null, $po->id);
+            $grn = (new GoodsReceiptService())->receive((int) $po->company_id, $userId, $grnLines, $po->supplier_id, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, 'Against '.$po->number, null, $po->id, null, $options);
             $this->recordDiscrepancies($grn, $items, $expected, $lines);
             $open = $items->contains(fn (PurchaseOrderItem $i) => $i->outstanding() > 0);
             $po->status = $open ? 'partially_received' : 'received';

@@ -25,8 +25,11 @@ class SupplierService
         // Goods sent back lower what we owe; a cash refund from the supplier settles that credit.
         $returns = \App\Models\PurchaseReturn::withoutGlobalScopes()->where('company_id', $supplier->company_id)->where('supplier_id', $supplier->id);
         $returned = (float) (clone $returns)->sum('total_value') - (float) (clone $returns)->sum('refund_amount');
+        // Consignment (D8): consigned goods sold and settled are owed like a delivery.
+        $settled = \Illuminate\Support\Facades\Schema::hasTable('consignment_settlements')
+            ? (float) DB::table('consignment_settlements')->where('company_id', $supplier->company_id)->where('supplier_id', $supplier->id)->sum('amount') : 0.0;
 
-        return round($unpaid - $paid - $returned, 2);
+        return round($unpaid + $settled - $paid - $returned, 2);
     }
 
     /**
@@ -52,6 +55,11 @@ class SupplierService
             $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'return', 'ref' => $r->number, 'description' => 'Goods returned'.($r->reason ? ": {$r->reason}" : ''), 'debit' => round((float) $r->total_value, 2), 'credit' => 0.0];
             if ((float) $r->refund_amount > 0) {
                 $entries[] = ['date' => (string) $r->returned_on->toDateString(), 'type' => 'refund', 'ref' => $r->number, 'description' => 'Refund received', 'debit' => 0.0, 'credit' => round((float) $r->refund_amount, 2)];
+            }
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('consignment_settlements')) {
+            foreach (DB::table('consignment_settlements')->where('company_id', $supplier->company_id)->where('supplier_id', $supplier->id)->get() as $c) {
+                $entries[] = ['date' => (string) $c->settled_on, 'type' => 'consignment', 'ref' => $c->number, 'description' => 'Consigned stock sold '.$c->number, 'debit' => 0.0, 'credit' => round((float) $c->amount, 2)];
             }
         }
         usort($entries, fn ($a, $b) => strcmp($a['date'], $b['date']));

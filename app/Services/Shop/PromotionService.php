@@ -130,7 +130,9 @@ class PromotionService
         $levels = PriceLevelService::enabled($company);
         $promos = self::enabled($company);
         $out = ['lines' => [], 'applied' => [], 'saved' => 0.0, 'coupon' => null];
-        if ((! $levels && ! $promos) || $items === []) {
+        // Store prices (G1): with context location_id, the store's own prices replace the selling price, as at checkout.
+        $location = ! empty($context['location_id']) && PriceLevelService::storePricesOn($company) ? (int) $context['location_id'] : null;
+        if ((! $levels && ! $promos && $location === null) || $items === []) {
             return $out;
         }
         $customerId = ! empty($context['customer_id']) ? (int) $context['customer_id'] : null;
@@ -138,6 +140,7 @@ class PromotionService
         $ids = array_map(fn ($i) => (int) $i['stock_item_id'], $items);
         $products = self::products($companyId, $ids);
         $rows = $levels ? PriceLevelService::rowsFor($companyId, $ids) : [];
+        $store = $location !== null ? PriceLevelService::locationRows($companyId, $location, $ids) : [];
         $deptKeys = StoreFeatures::enabled($company, 'department_keys');
         $engine = [];
         foreach ($items as $key => $i) {
@@ -148,7 +151,8 @@ class PromotionService
             $factor = max(0.001, (float) ($i['unit_factor'] ?? 1));
             $unitId = ! empty($i['unit_id']) ? (int) $i['unit_id'] : null;
             $qty = (float) ($i['quantity'] ?? 0);
-            $catalogue = ($levels ? PriceLevelService::pick($rows[(int) $p->id] ?? [], $unitId, $factor, $qty, $level) : null) ?? round((float) $p->selling_price * $factor, 2);
+            $catalogue = ($levels ? PriceLevelService::pick($rows[(int) $p->id] ?? [], $unitId, $factor, $qty, $level) : null)
+                ?? PriceLevelService::storeBase($store[(int) $p->id] ?? null, (float) $p->selling_price, $unitId, $factor);
             $explicit = isset($i['unit_price']) && $i['unit_price'] !== null ? round((float) $i['unit_price'], 2) : null;
             $open = ! empty($i['open_price']) || ($deptKeys && $p->open_price);
             $eligible = self::eligible($explicit, $catalogue, (float) ($i['discount_amount'] ?? 0), ! empty($i['markdown_id']), $open);

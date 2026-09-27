@@ -290,6 +290,8 @@
         @endif
     </table>
 
+    @include('reports.partials.fiscal')
+
     <div class="signature-section">
         <div class="signature-box">
             <div class="signature-line"></div>

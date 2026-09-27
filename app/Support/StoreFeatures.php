@@ -27,6 +27,8 @@ class StoreFeatures
         'age_check' => ['Age check for restricted items', 'A10'],
         'deposits' => ['Container deposits (crates, bottles)', 'A11'],
         'offline_till' => ['Web till keeps selling offline', 'A12'],
+        'training_mode' => ['Training mode on the till (nothing is recorded)', 'J'],
+        'hardware' => ['Till hardware: receipt printer, cash drawer, scale, label printer', 'I'],
         'price_book' => ['Price history and scheduled price changes', 'B1'],
         'price_levels' => ['Price levels and quantity breaks', 'B2'],
         'promotions' => ['Promotions', 'B3'],
@@ -39,11 +41,23 @@ class StoreFeatures
         'fefo' => ['Sell the first-to-expire batch first', 'D2'],
         'aisle_counts' => ['Shelf locations and aisle counts', 'D3'],
         'break_packs' => ['Open cartons automatically', 'D6'],
+        'smart_reorder' => ['Smarter reordering: weekday demand, packs, supplier minimums, scorecard', 'D5'],
+        'supplier_prices' => ['Supplier price lists with history', 'D7'],
+        'landed_cost' => ['Landed cost: spread transport, duty and handling over a delivery', 'D7'],
+        'consignment' => ['Consignment (sale-or-return) stock', 'D8'],
         'cash_control' => ['Cash drops, paid-in/out, X and Z reports', 'E1'],
         'blind_cashup' => ['Blind cash-up with note counting', 'E3'],
         'tax_classes' => ['Tax classes per product', 'F1'],
         'fiscal' => ['Fiscal receipts / e-invoicing', 'F2'],
+        'store_prices' => ['Local prices and availability per store', 'G1'],
+        'store_scoping' => ['Store managers see only their own store', 'G3'],
     ];
+
+    /**
+     * Features a shop must switch on itself: Supermarket mode does not turn them on.
+     * The offline web till keeps a copy of the signed-in till on the computer (A12), a choice for the owner.
+     */
+    public const OPT_IN = ['offline_till'];
 
     /** Setting => default. */
     public const SETTINGS = [
@@ -93,6 +107,9 @@ class StoreFeatures
             return false;
         }
         $own = self::data($company)['features'][$feature] ?? null;
+        if ($own === null && in_array($feature, self::OPT_IN, true)) {
+            return false; // never switched on by Supermarket mode alone
+        }
 
         return $own !== null ? (bool) $own : self::mode($company);
     }

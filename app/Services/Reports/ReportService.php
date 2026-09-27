@@ -43,9 +43,21 @@ class ReportService
         'promotion_results' => ['Promotion results', 'view_profit'],
         // Supermarket plan C1/C2: money owed to customers (gift cards, store credit) and loyalty points (empty without them).
         'gift_cards' => ['Gift cards, store credit & points', 'view_reports'],
+        // Supermarket plan D5: how each supplier delivers (fill rate, days late, cost changes); for every shop.
+        'supplier_scorecard' => ['Supplier scorecard', 'view_reports'],
     ];
 
     public const GROUPS = ['day', 'cashier', 'method', 'customer', 'category', 'product'];
+
+    /**
+     * Reports that can show one store (option `location_id`, SUPERMARKET_PLAN.md G3): sales by the sale's store
+     * (App\Support\StoreScope), stock by the store's shelf. Other reports are about the whole business
+     * (customers, suppliers, the ledger) and ignore the option.
+     */
+    public const LOCATION_AWARE = ['sales_summary', 'profit', 'stock_valuation', 'low_stock', 'fast_movers', 'category_margin', 'basket', 'abc'];
+
+    /** One store only (null = every store: results exactly as without the option). */
+    private ?int $locationId = null;
 
     private int $companyId;
 
@@ -59,6 +71,10 @@ class ReportService
             throw BusinessRuleException::make('unknown_report', 'Unknown report.', ['reports' => array_keys(self::REPORTS)]);
         }
         $this->companyId = $companyId;
+        $this->locationId = ! empty($options['location_id']) && in_array($name, self::LOCATION_AWARE, true) ? (int) $options['location_id'] : null;
+        if ($this->locationId !== null && ! DB::table('locations')->where('company_id', $companyId)->where('id', $this->locationId)->exists()) {
+            throw BusinessRuleException::make('location_not_found', 'Location not found.');
+        }
         $company = Company::withoutGlobalScopes()->findOrFail($companyId);
         $tz = \App\Support\LocalTime::timezone($company);
         $this->to = $to ? Carbon::parse($to, $tz)->endOfDay() : now($tz)->endOfDay();
@@ -69,6 +85,9 @@ class ReportService
         \App\Support\LocalTime::prime($companyId); // SalesSource works in the shop's local days
         $method = lcfirst(str_replace('_', '', ucwords($name, '_')));
         $r = $this->{$method}($options);
+        if ($this->locationId !== null) {
+            $r['meta'] = ($r['meta'] ?? []) + ['location_id' => $this->locationId, 'location' => (string) DB::table('locations')->where('id', $this->locationId)->value('name')];
+        }
 
         return $r + ['name' => $name, 'title' => self::REPORTS[$name][0], 'from' => $this->from->toDateString(), 'to' => $this->to->toDateString(),
             'currency' => $company->currency, 'company' => $company->name, 'generated_at' => now($tz)->format('Y-m-d H:i')];
@@ -97,7 +116,7 @@ class ReportService
      */
     private function saleRows(): array
     {
-        [$from, $bind] = SalesSource::sql($this->companyId, 'x', $this->from->toDateString(), $this->to->toDateString());
+        [$from, $bind] = SalesSource::sql($this->companyId, 'x', $this->from->toDateString(), $this->to->toDateString(), $this->locationId);
 
         return ["(SELECT x.* FROM {$from} WHERE x.sale_date BETWEEN ? AND ?) s", array_merge($bind, [$this->from->toDateString(), $this->to->toDateString()])];
     }
@@ -109,7 +128,7 @@ class ReportService
      */
     private function lineRows(): array
     {
-        [$from, $bind] = SalesSource::linesSql($this->companyId, 'x', $this->from->toDateString(), $this->to->toDateString());
+        [$from, $bind] = SalesSource::linesSql($this->companyId, 'x', $this->from->toDateString(), $this->to->toDateString(), $this->locationId);
 
         return ["(SELECT x.* FROM {$from} WHERE x.sale_date BETWEEN ? AND ?) l LEFT JOIN stock_items p ON p.id = l.stock_item_id LEFT JOIN stock_categories c ON c.id = p.stock_category_id",
             array_merge($bind, [$this->from->toDateString(), $this->to->toDateString()])];
@@ -203,6 +222,10 @@ class ReportService
     /** Operating expenses in the range: stock bought is cost of goods (counted when sold), not an expense. */
     private function operatingExpenses(): float
     {
+        if ($this->locationId !== null) {
+            return 0.0; // expenses belong to the business, not to one store
+        }
+
         return (float) DB::table('financial_records')->where('company_id', $this->companyId)->where('type', 'Expense')->where('is_deleted', 0)
             ->where(fn ($q) => $q->whereNull('source_type')->orWhereNotIn('source_type', ['goods_receipt', 'supplier_payment']))
             ->whereBetween('date', [$this->from->toDateString(), $this->to->toDateString()])->sum('amount');
@@ -235,10 +258,17 @@ class ReportService
         return DB::table('stock_items as p')->where('p.company_id', $this->companyId)->where('p.is_deleted', false);
     }
 
+    /** SQL for a product's on-hand quantity: the product total, or one store's shelf. */
+    private function onHandSql(string $alias = 'p'): string
+    {
+        return $this->locationId === null ? "{$alias}.current_quantity"
+            : "(SELECT COALESCE(SUM(sl.quantity), 0) FROM stock_levels sl WHERE sl.stock_item_id = {$alias}.id AND sl.location_id = ".(int) $this->locationId.')';
+    }
+
     private function stockValuation(array $o): array
     {
         $rows = $this->products()->where('p.track_stock', true)->leftJoin('stock_categories as c', 'c.id', '=', 'p.stock_category_id')
-            ->orderBy('c.name')->orderBy('p.name')->get(['p.name', 'c.name as category', 'p.current_quantity', 'p.buying_price', 'p.selling_price'])
+            ->orderBy('c.name')->orderBy('p.name')->get(['p.name', 'c.name as category', DB::raw($this->onHandSql().' AS current_quantity'), 'p.buying_price', 'p.selling_price'])
             ->map(fn ($r) => ['name' => $r->name, 'category' => $r->category, 'quantity' => round((float) $r->current_quantity, 3), 'unit_cost' => (float) $r->buying_price,
                 'value_at_cost' => round(max(0, (float) $r->current_quantity) * (float) $r->buying_price, 2), 'value_at_price' => round(max(0, (float) $r->current_quantity) * (float) $r->selling_price, 2)])->all();
 
@@ -249,8 +279,9 @@ class ReportService
     private function lowStock(array $o): array
     {
         $default = (float) (Company::withoutGlobalScopes()->find($this->companyId)?->low_stock_default ?? config('saas.low_stock_threshold', 10));
-        $rows = $this->products()->where('p.track_stock', true)->whereRaw('p.current_quantity <= COALESCE(p.min_stock, ?)', [$default])->orderBy('p.current_quantity')
-            ->get(['p.name', 'p.current_quantity', 'p.min_stock'])
+        $onHand = $this->onHandSql();
+        $rows = $this->products()->where('p.track_stock', true)->whereRaw("{$onHand} <= COALESCE(p.min_stock, ?)", [$default])->orderByRaw($onHand)
+            ->get(['p.name', DB::raw("{$onHand} AS current_quantity"), 'p.min_stock'])
             ->map(fn ($r) => ['name' => $r->name, 'quantity' => round((float) $r->current_quantity, 3), 'minimum' => $r->min_stock === null ? $default : (float) $r->min_stock])->all();
 
         return ['columns' => [$this->text('name', 'Product'), $this->num('quantity', 'On hand'), $this->num('minimum', 'Minimum')], 'rows' => $rows, 'totals' => []];
@@ -305,6 +336,29 @@ class ReportService
             ->map(fn ($r) => ['name' => $r->name, 'phone' => $r->phone, 'terms' => (int) $r->payment_terms_days, 'balance' => round((float) $r->balance, 2)])->all();
 
         return ['columns' => [$this->text('name', 'Supplier'), $this->text('phone', 'Phone'), $this->num('terms', 'Terms (days)'), $this->money('balance', 'We owe')], 'rows' => $rows, 'totals' => $this->totals($rows, ['balance'])];
+    }
+
+    /** D5: per supplier with orders or deliveries in the range, SmartReorderService::scorecard over the range. */
+    private function supplierScorecard(array $o): array
+    {
+        $from = $this->from->toDateString();
+        $to = $this->to->toDateString();
+        $active = DB::table('suppliers as s')->where('s.company_id', $this->companyId)->where('s.is_deleted', false)
+            ->where(fn ($q) => $q->whereExists(fn ($e) => $e->from('purchase_orders as p')->whereColumn('p.supplier_id', 's.id')->whereNull('p.deleted_at')->whereBetween('p.order_date', [$from, $to.' 23:59:59']))
+                ->orWhereExists(fn ($e) => $e->from('goods_receipts as g')->whereColumn('g.supplier_id', 's.id')->where('g.is_deleted', 0)->whereBetween('g.received_on', [$from, $to.' 23:59:59'])))
+            ->orderBy('s.name')->pluck('s.id');
+        $svc = new \App\Services\Shop\SmartReorderService();
+        $rows = [];
+        foreach (\App\Models\Supplier::withoutGlobalScopes()->whereIn('id', $active)->orderBy('name')->get() as $s) {
+            $c = $svc->scorecard($s, 90, $from, $to);
+            $rows[] = ['name' => (string) $s->name, 'orders' => $c['orders'], 'fill_rate' => $c['fill_rate'], 'lead_time' => $c['lead_time_days'], 'avg_lead' => $c['avg_lead_days'],
+                'avg_days_late' => $c['avg_days_late'], 'on_time' => $c['on_time_pct'], 'price_changes' => $c['price_changes'], 'price_change_pct' => $c['price_change_pct']];
+        }
+
+        return ['columns' => [$this->text('name', 'Supplier'), $this->num('orders', 'Orders'), $this->percent('fill_rate', 'Fill rate %'), $this->num('lead_time', 'Promised days'),
+            $this->num('avg_lead', 'Took (days)'), $this->num('avg_days_late', 'Days late'), $this->percent('on_time', 'On time %'), $this->num('price_changes', 'Cost changes'),
+            $this->percent('price_change_pct', 'Average change %')], 'rows' => $rows, 'totals' => [],
+            'meta' => ['note' => 'Fill rate is what arrived of what was ordered (orders received, part received, or overdue). Days late count from the expected date, or the order date plus the supplier\'s delivery time; negative is early. Cost changes compare each product\'s cost from the supplier at the start and end of the range.']];
     }
 
     private function cashUp(array $o): array
@@ -511,7 +565,7 @@ class ReportService
      */
     private function linesBy(string $from, string $to, string $label): array
     {
-        [$sql, $bind] = SalesSource::linesSql($this->companyId, 'x', $from, $to);
+        [$sql, $bind] = SalesSource::linesSql($this->companyId, 'x', $from, $to, $this->locationId);
         $out = [];
         foreach (DB::select("SELECT {$label} AS label, SUM(l.revenue) AS sales, SUM(l.profit) AS profit
             FROM (SELECT x.* FROM {$sql} WHERE x.sale_date BETWEEN ? AND ?) l
@@ -665,7 +719,7 @@ class ReportService
     {
         [$from, $bind] = $this->lineRows();
         $items = DB::select("SELECT l.stock_item_id AS id, COALESCE(MAX(p.name), MAX(l.item_name), 'Item') AS name, MAX(c.name) AS category,
-                SUM(l.quantity) AS quantity, SUM(l.revenue) AS revenue, MAX(p.current_quantity) AS on_hand, MAX(p.track_stock) AS track
+                SUM(l.quantity) AS quantity, SUM(l.revenue) AS revenue, MAX({$this->onHandSql()}) AS on_hand, MAX(p.track_stock) AS track
             FROM {$from} GROUP BY l.stock_item_id HAVING SUM(l.revenue) > 0 ORDER BY revenue DESC, name ASC", $bind);
         $days = $this->rangeDays();
         $total = array_sum(array_map(fn ($r) => (float) $r->revenue, $items));

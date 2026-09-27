@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Supermarket phase 4: chains, fiscal, purchasing, till platform (2026-09-27)
+- **Several stores:**
+  - store prices and availability (`location_prices`, `StorePriceService`);
+  - stock requests, and transfers in transit (`stock_requests`, `TransferService` send/receive);
+  - store-scoped members (`company_members.location_id`, `StoreScope`), with an optional location filter in SalesSource, the dashboard and reports.
+- **Fiscal / e-invoicing:**
+  - `FiscalAdapter` framework with a queue (`fiscal_submissions`, `fiscal:submit-due`), a manual adapter and a Uganda EFRIS connector;
+  - the EFRIS connector must be certified on URA's sandbox with the shop's credentials first;
+  - encrypted settings, QR codes on receipts (bacon/bacon-qr-code is vendored).
+- **Purchasing:**
+  - smart reorder (weekday demand, promotion-weighted, packs, supplier minimum order) and a supplier scorecard report;
+  - supplier price lists; landed cost on deliveries;
+  - consignment (sale-or-return) with settlements.
+- **Till platform (web):**
+  - offline web till (opt-in: `StoreFeatures::OPT_IN`): service worker, IndexedDB cart and a sync endpoint (idempotent on client_uuid);
+  - ESC/POS printing and cash drawer, a Web Serial scale, and ZPL to label printers;
+  - keyboard map (F8 stays hold; F10 is price check); training mode (rolled back, writes nothing); large text;
+  - `lang`/`dir` on the page, and en/fr/sw/lg strings for the till.
+- **Performance:** the store switch reads the store list only when `store_scoping` is on.
+
 ### Supermarket phase 3: the customer (2026-09-27)
 - **Price levels and quantity breaks:** `product_prices` and `customers.price_level`, priced by `PriceLevelService`.
 - **Promotions:** percent or amount off, fixed price, buy X get Y, mix and match, bundle, spend and save, coupons, time windows, member-only.

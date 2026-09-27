@@ -40,6 +40,8 @@ class PurchaseReturnService
             $ret->created_by_id = $userId;
             $ret->save();
             $total = 0.0;
+            $consigned = 0.0;
+            $consignOn = $supplierId && ConsignmentService::on($companyId);
             foreach ($lines as $l) {
                 $qty = round((float) $l['quantity'], 3);
                 $product = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->find($l['stock_item_id']);
@@ -53,9 +55,16 @@ class PurchaseReturnService
                     'date' => $ret->returned_on,
                 ]);
                 PurchaseReturnItem::create(['company_id' => $companyId, 'purchase_return_id' => $ret->id, 'stock_item_id' => $product->id, 'quantity' => $qty, 'unit_cost' => $cost, 'stock_record_id' => $movement->id]);
-                $total += $qty * $cost;
+                if ($consignOn && (int) ($product->consignment_supplier_id ?? 0) === (int) $supplierId) {
+                    $consigned += $qty * $cost; // the supplier's own unsold stock going back: nothing to credit (D8)
+                } else {
+                    $total += $qty * $cost;
+                }
             }
             $ret->total_value = round($total, 2);
+            if ($consigned > 0) {
+                $ret->consignment_value = round($consigned, 2);
+            }
             $ret->refund_amount = min(round(max($refundAmount, 0), 2), $ret->total_value);
             $ret->save();
 

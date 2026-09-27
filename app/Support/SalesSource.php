@@ -38,10 +38,11 @@ class SalesSource
      *
      * @return array{0: string, 1: array<int, int|string>} [SQL for a FROM clause (aliased), bindings]
      */
-    public static function sql(int $companyId, string $alias = 's', ?string $from = null, ?string $to = null): array
+    public static function sql(int $companyId, string $alias = 's', ?string $from = null, ?string $to = null, ?int $locationId = null): array
     {
         [$saleWin, $saleBind] = self::window('r.sale_date', 'r.created_at', $from, $to);
         [$moveWin, $moveBind] = self::window('m.date', 'm.created_at', $from, $to);
+        [$saleWin, $saleBind, $moveWin, $moveBind] = self::atStore($companyId, $locationId, $saleWin, $saleBind, $moveWin, $moveBind);
         $saleDay = self::localDay('r.sale_date', 'r.created_at');
         $moveDay = self::localDay('m.date', 'm.created_at');
         $sql = "(
@@ -68,10 +69,11 @@ class SalesSource
      *
      * @return array{0: string, 1: array<int, int|string>}
      */
-    public static function linesSql(int $companyId, string $alias = 'l', ?string $from = null, ?string $to = null): array
+    public static function linesSql(int $companyId, string $alias = 'l', ?string $from = null, ?string $to = null, ?int $locationId = null): array
     {
         [$saleWin, $saleBind] = self::window('r.sale_date', 'r.created_at', $from, $to);
         [$moveWin, $moveBind] = self::window('m.date', 'm.created_at', $from, $to);
+        [$saleWin, $saleBind, $moveWin, $moveBind] = self::atStore($companyId, $locationId, $saleWin, $saleBind, $moveWin, $moveBind);
         $saleDay = self::localDay('r.sale_date', 'r.created_at');
         $moveDay = self::localDay('m.date', 'm.created_at');
         $sql = "(
@@ -89,6 +91,22 @@ class SalesSource
         ) {$alias}";
 
         return [$sql, [$companyId, ...$saleBind, $companyId, ...$moveBind]];
+    }
+
+    /**
+     * One store's sales only ($locationId, SUPERMARKET_PLAN.md G3): a sale document at its store (StoreScope), an
+     * old-app sale movement at its own location. Null = every store, and the SQL is unchanged.
+     *
+     * @return array{0: string, 1: array<int, mixed>, 2: string, 3: array<int, mixed>}
+     */
+    private static function atStore(int $companyId, ?int $locationId, string $saleWin, array $saleBind, string $moveWin, array $moveBind): array
+    {
+        if ($locationId === null) {
+            return [$saleWin, $saleBind, $moveWin, $moveBind];
+        }
+
+        return [$saleWin.' AND '.StoreScope::saleLocationSql('r', $companyId).' = ?', [...$saleBind, $locationId],
+            $moveWin.' AND m.location_id = ?', [...$moveBind, $locationId]];
     }
 
     /**

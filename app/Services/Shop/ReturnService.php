@@ -134,6 +134,7 @@ class ReturnService
                 $return->refund_method = $to;
             }
             $return->saveQuietlySynced();
+            \App\Services\Fiscal\FiscalService::queueReturn($return); // F2: credit note after commit, where the country needs one; off = nothing
 
             return $return->load('items');
         });

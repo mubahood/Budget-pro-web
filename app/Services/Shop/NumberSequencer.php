@@ -25,6 +25,7 @@ class NumberSequencer
         'refund' => 'RFD',
         'purchase_return' => 'PRT',
         'transfer' => 'TRF',
+        'stock_request' => 'REQ',
     ];
 
     public static function next(int $companyId, string $kind, ?\DateTimeInterface $on = null): string

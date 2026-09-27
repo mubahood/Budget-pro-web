@@ -22,6 +22,7 @@ class StoreFeaturesTest extends AdminTestCase
         StoreFeatures::update($c, ['mode' => true, 'features' => ['promotions' => false, 'nonsense' => true], 'settings' => ['cash_rounding' => 50, 'bogus' => 1]]);
         $c = $c->fresh();
         $this->assertTrue(StoreFeatures::enabled($c, 'loyalty'));
+        $this->assertFalse(StoreFeatures::enabled($c, 'offline_till'), 'opt-in only: Supermarket mode never turns it on');
         $this->assertFalse(StoreFeatures::enabled($c, 'promotions'));
         $this->assertFalse(StoreFeatures::enabled($c, 'nonsense'));
         $this->assertSame(50, StoreFeatures::setting($c, 'cash_rounding'));

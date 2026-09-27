@@ -342,6 +342,8 @@
         @endif
     </div>
 
+    @include('reports.partials.fiscal')
+
     <div class="footer">
         <p><strong>Thank you for your business!</strong></p>
         <p>This is a computer-generated invoice and does not require a signature.</p>

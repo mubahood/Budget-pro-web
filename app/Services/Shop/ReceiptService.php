@@ -86,6 +86,9 @@ class ReceiptService
         if ($pts = (new LoyaltyService())->receiptLine($sale)) { // loyalty (C1): only sales with points rows
             $out[] = 'Points earned: '.$pts['earned'].($pts['redeemed'] > 0 ? ' · used: '.$pts['redeemed'] : '').' · balance: '.$pts['balance'];
         }
+        if ($fiscal = \App\Services\Fiscal\FiscalService::forReceipt($sale)) { // F2: only sales queued for fiscalisation
+            $out[] = $fiscal['status'] === 'sent' ? 'Fiscal no: *'.$fiscal['number'].'*'.($fiscal['code'] ? "\nVerification code: ".$fiscal['code'] : '') : 'Fiscal receipt pending';
+        }
         $out[] = '';
         $out[] = trim((string) ($company?->receipt_footer ?: 'Thank you for your business!'));
 

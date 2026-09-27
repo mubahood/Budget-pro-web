@@ -21,6 +21,7 @@ class Notifier
         'cash_variance' => ['Cash-up difference', ['in_app'], true],
         'billing' => ['Plan and payment reminders', ['whatsapp', 'mail', 'in_app'], true],
         'team' => ['Team changes', ['in_app'], true],
+        'fiscal' => ['Receipts that could not be fiscalised', ['in_app'], true],
     ];
 
     public function __construct(private readonly Messenger $messenger = new Messenger())

@@ -82,6 +82,9 @@ class ProductStatsService
                 'runs_out_in_days' => $forecasting && $avg > 0 ? (int) floor(max(0, $onHand) / $avg) : null,
             ];
         }
+        if (SmartReorderService::on($companyId)) {
+            return (new SmartReorderService())->refine($company, $out, $default); // D5: weekday demand, packs, supplier minimums
+        }
 
         return $out;
     }
@@ -92,7 +95,7 @@ class ProductStatsService
      * @param  array<int, int>  $itemIds
      * @return array<int, object{id: int, name: string, lead_time_days: int|null}> stock item id => supplier
      */
-    private function lastSuppliers(array $itemIds): array
+    public function lastSuppliers(array $itemIds): array
     {
         $out = [];
         foreach (array_chunk($itemIds, 1000) as $chunk) {
@@ -122,8 +125,17 @@ class ProductStatsService
             $groups[(int) ($p['supplier_id'] ?? 0)][] = ['stock_item_id' => (int) $p['stock_item_id'], 'quantity' => $p['quantity'], 'unit_cost' => $p['unit_cost'] ?? null];
         }
         $orders = [];
+        $smart = SmartReorderService::on($companyId) ? new SmartReorderService() : null;
         foreach ($groups as $supplierId => $lines) {
-            $orders[] = (new PurchaseOrderService())->create($companyId, $userId, $lines, $supplierId ?: null, null, 'From the reorder list');
+            $expected = null;
+            if ($smart) { // D5: whole packs, and the day the supplier should deliver
+                foreach ($lines as $i => $l) {
+                    $lines[$i]['quantity'] = $smart->roundToPacks($companyId, $l['stock_item_id'], (float) $l['quantity']);
+                }
+                $lead = $supplierId ? \Illuminate\Support\Facades\DB::table('suppliers')->where('company_id', $companyId)->where('id', $supplierId)->value('lead_time_days') : null;
+                $expected = $lead !== null ? \App\Support\LocalDate::today($companyId)->addDays((int) $lead)->toDateString() : null;
+            }
+            $orders[] = (new PurchaseOrderService())->create($companyId, $userId, $lines, $supplierId ?: null, $expected, 'From the reorder list');
         }
 
         return $orders;

@@ -101,7 +101,7 @@ class SaleService
             // Off (or an offline sale synced later, already priced at its till) = null, and the sale is priced as before.
             $this->pricing = empty($data['from_sync']) ? $this->pricingFor($companyId, $sale, $data) : null;
             if (empty($data['from_sync'])) {
-                (new PriceOverrideService())->enforce($companyId, $userId, $data['items'], $this->pricing['level'] ?? null);
+                (new PriceOverrideService())->enforce($companyId, $userId, $data['items'], $this->pricing['level'] ?? null, $this->pricing['location'] ?? null);
             }
 
             foreach ($data['items'] as $line) {
@@ -151,6 +151,7 @@ class SaleService
 
             return $this->finalize($sale->fresh(), $payments, $userId, (bool) ($data['allow_negative_stock'] ?? false), $location);
         });
+        \App\Services\Fiscal\FiscalService::queueSale($sale); // F2: queued after commit; nothing when `fiscal` is off; never throws
 
         return ['sale' => $this->loaded($sale), 'replayed' => false];
     }
@@ -352,13 +353,20 @@ class SaleService
         $company = Company::withoutGlobalScopes()->find($companyId);
         $levels = PriceLevelService::enabled($company);
         $promos = PromotionService::enabled($company);
-        if (! $levels && ! $promos) {
+        $ids = array_map(fn ($l) => (int) ($l['stock_item_id'] ?? 0), $data['items'] ?? []);
+        // Store prices (G1, `store_prices`): the sale's store's own prices replace the selling price; a product it does not sell is refused.
+        $location = StorePriceService::enabled($company) ? StorePriceService::saleLocation($companyId, $data) : null;
+        if ($location !== null) {
+            StorePriceService::assertAvailable($companyId, $location, $ids);
+        }
+        $store = $location !== null ? PriceLevelService::locationRows($companyId, $location, $ids) : [];
+        if (! $levels && ! $promos && $store === []) {
             return null;
         }
-        $ids = array_map(fn ($l) => (int) ($l['stock_item_id'] ?? 0), $data['items'] ?? []);
         $customerId = $sale->customer_id ? (int) $sale->customer_id : null;
 
-        return ['levels' => $levels, 'promos' => $promos, 'level' => $levels ? PriceLevelService::levelOf($companyId, $customerId) : null, 'customer_id' => $customerId,
+        return ['location' => $location, 'store' => $store,
+            'levels' => $levels, 'promos' => $promos, 'level' => $levels ? PriceLevelService::levelOf($companyId, $customerId) : null, 'customer_id' => $customerId,
             'coupon' => isset($data['coupon_code']) && trim((string) $data['coupon_code']) !== '' ? trim((string) $data['coupon_code']) : null,
             'rows' => $levels ? PriceLevelService::rowsFor($companyId, $ids) : [], 'products' => PromotionService::products($companyId, $ids),
             'dept_keys' => \App\Support\StoreFeatures::enabled($company, 'department_keys')];
@@ -376,10 +384,11 @@ class SaleService
         }
         $factor = max(0.001, (float) ($item->unit_factor ?: 1));
         $unitId = $item->unit_id ? (int) $item->unit_id : null;
+        $storeRow = $this->pricing['store'][(int) $p->id] ?? null; // the sale's store's own price (G1), before levels
         $catalogue = ($this->pricing['levels'] ? PriceLevelService::pick($this->pricing['rows'][(int) $p->id] ?? [], $unitId, $factor, (float) $item->quantity, $this->pricing['level']) : null)
-            ?? round((float) $p->selling_price * $factor, 2);
+            ?? PriceLevelService::storeBase($storeRow, (float) $p->selling_price, $unitId, $factor);
         $explicit = $item->unit_price !== null ? round((float) $item->unit_price, 2) : null;
-        if ($explicit === null && $this->pricing['levels']) {
+        if ($explicit === null && ($this->pricing['levels'] || $storeRow !== null)) {
             $item->unit_price = $catalogue;
         }
 

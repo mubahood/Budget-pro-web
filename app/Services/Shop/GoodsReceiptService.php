@@ -27,9 +27,17 @@ class GoodsReceiptService
      * A blank unit_cost means "same as the product's buying price"; the buying price follows a
      * new cost only when that cost is above zero (free goods never wipe the product's cost).
      *
+     * Supermarket options (SUPERMARKET_PLAN.md D7/D8, each off unless the shop has the feature):
+     *  - landed_costs: [{label, amount}] and landed_split 'value'|'quantity' (`landed_cost`): spread over the
+     *    lines; the landed unit cost values the stock and becomes the product's cost; the extras are a paid
+     *    stock expense of this delivery (not owed to the supplier);
+     *  - products consigned from this supplier (`consignment`) arrive owing nothing (consignment_value);
+     *  - the supplier's price list follows each cost received (`supplier_prices`).
+     *
      * @param  array<int, array{stock_item_id: int, quantity: float|string, unit_cost?: float|string|null, purchase_order_item_id?: int|null, expected_unit_cost?: float|string|null, batch_number?: string|null, expiry_date?: string|null}>  $lines
+     * @param  array{landed_costs?: list<array{label?: string, amount: float|string}>, landed_split?: string}  $options
      */
-    public function receive(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $invoiceRef = null, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $receivedOn = null, ?string $clientUuid = null, ?string $notes = null, ?string $deviceId = null, ?int $purchaseOrderId = null, ?int $locationId = null): GoodsReceipt
+    public function receive(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $invoiceRef = null, float $amountPaid = 0, string $paymentMethod = 'cash', ?string $receivedOn = null, ?string $clientUuid = null, ?string $notes = null, ?string $deviceId = null, ?int $purchaseOrderId = null, ?int $locationId = null, array $options = []): GoodsReceipt
     {
         if ($clientUuid) {
             $existing = GoodsReceipt::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $clientUuid)->first();
@@ -44,7 +52,7 @@ class GoodsReceiptService
             throw BusinessRuleException::make('supplier_not_found', 'Supplier not found.');
         }
 
-        return DB::transaction(function () use ($companyId, $userId, $lines, $supplierId, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, $notes, $deviceId, $purchaseOrderId, $locationId) {
+        return DB::transaction(function () use ($companyId, $userId, $lines, $supplierId, $invoiceRef, $amountPaid, $paymentMethod, $receivedOn, $clientUuid, $notes, $deviceId, $purchaseOrderId, $locationId, $options) {
             if ($locationId) {
                 LocationStock::assertLocation($companyId, $locationId);
             }
@@ -65,7 +73,11 @@ class GoodsReceiptService
             $grn->save();
 
             $total = 0.0;
-            foreach ($lines as $l) {
+            $landed = LandedCost::forReceipt($companyId, $lines, $options);
+            $consigned = 0.0;
+            $consignOn = $supplierId && ConsignmentService::on($companyId);
+            $received = []; // stock item id => cost, for the supplier's price list
+            foreach ($lines as $key => $l) {
                 $qty = round((float) $l['quantity'], 3);
                 $product = StockItem::withoutGlobalScopes()->where('company_id', $companyId)->find($l['stock_item_id']);
                 if ($product === null) {
@@ -78,23 +90,42 @@ class GoodsReceiptService
                 if ($qty <= 0 || $cost < 0) {
                     throw BusinessRuleException::make('invalid_line', 'Quantity must be positive and cost cannot be negative.');
                 }
+                $unitCost = $landed !== null ? round($cost + ($landed['per_unit'][$key] ?? 0), 2) : $cost;
+                $isConsigned = $consignOn && (int) ($product->consignment_supplier_id ?? 0) === (int) $supplierId;
                 $movement = $this->stock->record([
-                    'stock_item_id' => $product->id, 'type' => 'Purchase', 'quantity' => $qty, 'unit_cost' => $cost,
+                    'stock_item_id' => $product->id, 'type' => 'Purchase', 'quantity' => $qty, 'unit_cost' => $unitCost,
                     'description' => 'Received '.$grn->number.($invoiceRef ? ' (inv '.$invoiceRef.')' : ''), 'created_by_id' => $userId,
                     'reference_type' => 'goods_receipt', 'reference_id' => $grn->id, 'date' => $grn->received_on, 'location_id' => $locationId,
                     'batch_in' => ! empty($l['batch_number']) ? [['batch_number' => (string) $l['batch_number'], 'expiry_date' => $l['expiry_date'] ?? null, 'quantity' => $qty]] : [],
                 ]);
-                if ($cost > 0 && round((float) $product->buying_price, 2) !== $cost) {
+                if ($unitCost > 0 && round((float) $product->buying_price, 2) !== $unitCost) {
                     DB::table('stock_items')->where('id', $product->id)->update([
-                        'buying_price' => $cost, 'server_seq' => \App\Support\Sync\SyncSequence::next(), 'version' => DB::raw('version + 1'), 'updated_at' => now(),
+                        'buying_price' => $unitCost, 'server_seq' => \App\Support\Sync\SyncSequence::next(), 'version' => DB::raw('version + 1'), 'updated_at' => now(),
                     ]);
                 }
-                GoodsReceiptItem::create(['company_id' => $companyId, 'goods_receipt_id' => $grn->id, 'stock_item_id' => $product->id, 'quantity' => $qty, 'unit_cost' => $cost, 'stock_record_id' => $movement->id,
+                $item = new GoodsReceiptItem(['company_id' => $companyId, 'goods_receipt_id' => $grn->id, 'stock_item_id' => $product->id, 'quantity' => $qty, 'unit_cost' => $cost, 'stock_record_id' => $movement->id,
                     'purchase_order_item_id' => $l['purchase_order_item_id'] ?? null, 'expected_unit_cost' => isset($l['expected_unit_cost']) ? round((float) $l['expected_unit_cost'], 2) : null,
                     'batch_number' => $l['batch_number'] ?? null, 'expiry_date' => $l['expiry_date'] ?? null]);
-                $total += $qty * $cost;
+                $item->forceFill(($landed !== null ? ['landed_unit_cost' => round($cost + ($landed['per_unit'][$key] ?? 0), 4)] : []) + ($isConsigned ? ['is_consignment' => true] : []));
+                $item->save();
+                if ($isConsigned) {
+                    $consigned += $qty * $cost; // supplier-owned until sold: nothing owed now
+                } else {
+                    $total += $qty * $cost;
+                }
+                if ($cost > 0) {
+                    $received[(int) $product->id] = $cost;
+                }
             }
             $grn->total_cost = round($total, 2);
+            if ($landed !== null) {
+                $grn->landed_costs = json_encode($landed['costs']);
+                $grn->landed_cost_total = $landed['total'];
+                $grn->landed_split = $landed['split'];
+            }
+            if ($consigned > 0) {
+                $grn->consignment_value = round($consigned, 2);
+            }
             $grn->amount_paid = min(round(max($amountPaid, 0), 2), $grn->total_cost);
             $grn->saveQuietlySynced();
 
@@ -117,11 +148,47 @@ class GoodsReceiptService
                 $row->currency = Company::withoutGlobalScopes()->find($companyId)?->currency;
                 $row->save();
             }
+            if ($landed !== null) {
+                $this->recordLandedCosts($grn, $landed['costs'], $landed['total'], $userId);
+            }
+            if ($supplierId && $received !== [] && SupplierPriceService::on($companyId)) {
+                $prices = new SupplierPriceService();
+                foreach ($received as $itemId => $cost) {
+                    $prices->record($companyId, $supplierId, $itemId, $cost, $grn->received_on->toDateString(), null, 'receipt', (int) $grn->id, $userId);
+                }
+            }
             if ($supplierId) {
                 (new SupplierService())->recalc($supplierId);
             }
 
             return $grn->load('items');
         });
+    }
+
+    /**
+     * Landed cost extras (transport, duty, handling) are paid on delivery: one Purchase expense for the
+     * delivery (source goods_receipt, so it counts with stock purchases, not running expenses).
+     *
+     * @param  list<array{label: string, amount: float}>  $costs
+     */
+    private function recordLandedCosts(GoodsReceipt $grn, array $costs, float $total, int $userId): void
+    {
+        $row = new FinancialRecord();
+        $row->financial_category_id = SupplierService::purchaseCategory((int) $grn->company_id)->id;
+        $row->company_id = $grn->company_id;
+        $row->user_id = $userId;
+        $row->created_by_id = $userId;
+        $row->amount = $total;
+        $row->quantity = 1;
+        $row->type = 'Expense';
+        $row->payment_method = $grn->payment_method;
+        $row->recipient = implode(', ', array_column($costs, 'label'));
+        $row->receipt = $grn->number;
+        $row->date = $grn->received_on;
+        $row->description = 'Delivery costs '.$grn->number.' ('.implode(', ', array_column($costs, 'label')).')';
+        $row->source_type = 'goods_receipt';
+        $row->source_id = $grn->id;
+        $row->currency = Company::withoutGlobalScopes()->find($grn->company_id)?->currency;
+        $row->save();
     }
 }

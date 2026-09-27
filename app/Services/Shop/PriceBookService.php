@@ -38,7 +38,7 @@ class PriceBookService
     /**
      * Schedule a price change for later (starts_at in UTC, in the future).
      */
-    public function schedule(int $companyId, int $itemId, string $field, float $new, CarbonInterface|string $startsAt, ?string $reason = null, ?int $userId = null, ?int $unitId = null): PriceChange
+    public function schedule(int $companyId, int $itemId, string $field, float $new, CarbonInterface|string $startsAt, ?string $reason = null, ?int $userId = null, ?int $unitId = null, ?int $locationId = null): PriceChange
     {
         $this->check($field, $new);
         $item = $this->item($companyId, $itemId);
@@ -50,7 +50,7 @@ class PriceBookService
         return PriceChange::create([
             'company_id' => $companyId, 'stock_item_id' => $item->id, 'unit_id' => $unitId, 'field' => $field,
             'old' => null, 'new' => round($new, 2), 'starts_at' => $at, 'reason' => self::clean($reason), 'created_by' => $userId,
-        ]);
+        ] + ($locationId !== null ? ['location_id' => $locationId] : [])); // one store's price (G1, StorePriceService)
     }
 
     /**
@@ -98,6 +98,13 @@ class PriceBookService
 
                         return;
                     }
+                    if (! empty($row->location_id)) { // one store's price (G1): the store's row, not the product
+                        $old = (new StorePriceService())->setPrice((int) $row->company_id, (int) $row->location_id, (int) $item->id, $row->unit_id ? (int) $row->unit_id : null, (float) $row->new);
+                        $row->forceFill(['old' => $old, 'applied_at' => now()])->save();
+                        $applied++;
+
+                        return;
+                    }
                     $column = self::FIELDS[$row->field] ?? null;
                     if ($column === null) {
                         $row->forceFill(['cancelled_at' => now()])->save();
@@ -124,7 +131,7 @@ class PriceBookService
     }
 
     /** Log a change that has already happened (applied now). */
-    public function record(int $companyId, int $itemId, string $field, ?float $old, float $new, ?string $reason = null, ?int $userId = null, ?int $unitId = null): PriceChange
+    public function record(int $companyId, int $itemId, string $field, ?float $old, float $new, ?string $reason = null, ?int $userId = null, ?int $unitId = null, ?int $locationId = null): PriceChange
     {
         $at = now();
 
@@ -132,7 +139,7 @@ class PriceBookService
             'company_id' => $companyId, 'stock_item_id' => $itemId, 'unit_id' => $unitId, 'field' => $field,
             'old' => $old === null ? null : round($old, 2), 'new' => round($new, 2), 'starts_at' => $at, 'applied_at' => $at,
             'reason' => self::clean($reason), 'created_by' => $userId,
-        ]);
+        ] + ($locationId !== null ? ['location_id' => $locationId] : []));
     }
 
     /**
@@ -229,6 +236,7 @@ class PriceBookService
     {
         return DB::table('price_changes as p')->leftJoin('admin_users as u', 'u.id', '=', 'p.created_by')
             ->where('p.company_id', $companyId)->where('p.stock_item_id', $itemId)->whereIn('p.field', $fields)
+            ->when(self::hasLocations(), fn ($q) => $q->whereNull('p.location_id')) // a store's own prices are listed with the store prices (G1)
             ->select(['p.id', 'p.field', 'p.old', 'p.new', 'p.starts_at', 'p.applied_at', 'p.reason', 'u.name as who']);
     }
 
@@ -273,6 +281,14 @@ class PriceBookService
         }
 
         return null;
+    }
+
+    private static ?bool $locations = null;
+
+    /** price_changes can hold one store's price (G1 migration). */
+    public static function hasLocations(): bool
+    {
+        return self::$locations ??= Schema::hasColumn('price_changes', 'location_id');
     }
 
     /** The tables exist (a database that has not been migrated yet must still save products). */

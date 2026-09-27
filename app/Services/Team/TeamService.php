@@ -184,6 +184,38 @@ class TeamService
         Permissions::flush();
     }
 
+    /**
+     * The store a member works at (SUPERMARKET_PLAN.md G3): null = every store. With the shop's `store_scoping`
+     * on, a member with a store sees only that store's figures (App\Support\StoreScope). The owner sees everything.
+     */
+    public function setStore(Company $company, User $member, ?int $locationId): void
+    {
+        $this->assertMemberOf($company, $member);
+        if ((int) $company->owner_id === (int) $member->id) {
+            throw BusinessRuleException::make('owner_store', 'The owner always sees every store.');
+        }
+        if (! \App\Support\StoreScope::ready()) {
+            throw BusinessRuleException::make('not_ready', 'Stores for members are not set up yet. Try again after the update.');
+        }
+        if ($locationId !== null) {
+            $loc = DB::table('locations')->where('company_id', $company->id)->where('id', $locationId)->first(['id', 'is_active']);
+            if ($loc === null) {
+                throw BusinessRuleException::make('location_not_found', 'Location not found.');
+            }
+            if (! $loc->is_active) {
+                throw BusinessRuleException::make('location_closed', 'That location is closed. Reopen it first.');
+            }
+        }
+        $row = DB::table('company_members')->where('company_id', $company->id)->where('user_id', $member->id)->first(['id']);
+        if ($row) {
+            DB::table('company_members')->where('id', $row->id)->update(['location_id' => $locationId, 'updated_at' => now()]);
+        } else { // staff from before roles (manager by default, DECISIONS E30): the membership row keeps that role
+            DB::table('company_members')->insert(['company_id' => $company->id, 'user_id' => $member->id, 'role' => Permissions::roleOf($member), 'status' => 'active',
+                'location_id' => $locationId, 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        }
+        Permissions::flush();
+    }
+
     public function setActive(Company $company, User $member, bool $active): void
     {
         if ((int) $company->owner_id === (int) $member->id) {

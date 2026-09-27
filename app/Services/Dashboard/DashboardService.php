@@ -61,11 +61,14 @@ class DashboardService
     }
 
     /** Headline figures for a range: sales, profit, money in, expenses, net, returns. */
-    public function kpis(int $companyId, string $from, string $to): array
+    public function kpis(int $companyId, string $from, string $to, ?int $locationId = null): array
     {
         LocalTime::prime($companyId);
         // One round trip for sales, expenses and returns (plan A6); each derived table is one aggregate row.
-        [$src, $bind] = SalesSource::sql($companyId, 's', $from, $to);
+        // One store ($locationId, G3): its sales and the returns of its sales; expenses belong to no store, so none.
+        [$src, $bind] = SalesSource::sql($companyId, 's', $from, $to, $locationId);
+        $storeRet = $locationId !== null ? ' AND EXISTS (SELECT 1 FROM sale_records rs WHERE rs.id = r.sale_record_id AND '.\App\Support\StoreScope::saleLocationSql('rs', $companyId).' = ?)' : '';
+        $storeExp = $locationId !== null ? ' AND 1 = 0' : '';
         [$fWin, $fBind] = SalesSource::window('f.date', 'f.created_at', $from, $to);
         [$rWin, $rBind] = SalesSource::window('r.created_at', 'r.created_at', $from, $to);
         $s = DB::selectOne("SELECT a.n, a.total, a.profit, a.on_credit, e.v AS expenses, rt.n AS returns_n, rt.v AS returns_v FROM
@@ -74,13 +77,13 @@ class DashboardService
             FROM {$src} WHERE s.sale_date BETWEEN ? AND ?) a
             CROSS JOIN (SELECT COALESCE(SUM(f.amount), 0) AS v FROM financial_records f
             WHERE f.company_id = ? AND f.type = ? AND COALESCE(f.is_deleted, 0) = 0
-              AND (f.source_type IS NULL OR f.source_type NOT IN (?, ?, ?)) AND ".SalesSource::localDay('f.date', 'f.created_at')." BETWEEN ? AND ?{$fWin}) e
+              AND (f.source_type IS NULL OR f.source_type NOT IN (?, ?, ?)) AND ".SalesSource::localDay('f.date', 'f.created_at')." BETWEEN ? AND ?{$fWin}{$storeExp}) e
             CROSS JOIN (SELECT COUNT(*) AS n, COALESCE(SUM(r.value), 0) AS v FROM sale_returns r
-            WHERE r.company_id = ? AND COALESCE(r.is_deleted, 0) = 0 AND DATE(CONVERT_TZ(r.created_at, '+00:00', @tz_offset)) BETWEEN ? AND ?{$rWin}) rt",
+            WHERE r.company_id = ? AND COALESCE(r.is_deleted, 0) = 0 AND DATE(CONVERT_TZ(r.created_at, '+00:00', @tz_offset)) BETWEEN ? AND ?{$rWin}{$storeRet}) rt",
             [...$bind, $from, $to,
                 $companyId, 'Expense', 'goods_receipt', 'supplier_payment', 'purchase_return', $from, $to, ...$fBind,
-                $companyId, $from, $to, ...$rBind]);
-        $collected = $this->collectedByMethod($companyId, $from, $to);
+                $companyId, $from, $to, ...$rBind, ...($locationId !== null ? [$locationId] : [])]);
+        $collected = $this->collectedByMethod($companyId, $from, $to, $locationId);
         $expenses = (float) $s->expenses;
         $returns = (object) ['n' => $s->returns_n, 'v' => $s->returns_v];
 
@@ -101,12 +104,20 @@ class DashboardService
      *
      * @return array<int, array{method: string, label: string, amount: float}>
      */
-    public function collectedByMethod(int $companyId, string $from, string $to): array
+    public function collectedByMethod(int $companyId, string $from, string $to, ?int $locationId = null): array
     {
         LocalTime::prime($companyId);
         [$pWin, $pBind] = SalesSource::window('p.received_at', 'p.created_at', $from, $to);
         [$sWin, $sBind] = SalesSource::window('r.sale_date', 'r.created_at', $from, $to);
         [$mWin, $mBind] = SalesSource::window('m.date', 'm.created_at', $from, $to);
+        if ($locationId !== null) { // one store (G3): payments on its sales, its sales, its old-app movements
+            $pWin .= ' AND EXISTS (SELECT 1 FROM sale_records ps WHERE ps.id = p.sale_record_id AND '.\App\Support\StoreScope::saleLocationSql('ps', $companyId).' = ?)';
+            $pBind[] = $locationId;
+            $sWin .= ' AND '.\App\Support\StoreScope::saleLocationSql('r', $companyId).' = ?';
+            $sBind[] = $locationId;
+            $mWin .= ' AND m.location_id = ?';
+            $mBind[] = $locationId;
+        }
         $rows = DB::select("
             SELECT x.method, SUM(x.amount) AS amount FROM (
                 SELECT p.method, p.amount FROM payments p
@@ -140,7 +151,7 @@ class DashboardService
      *
      * @return array{labels: array<int, string>, sales: array<int, float>, profit: array<int, float>, count: array<int, int>}
      */
-    public function daily(int $companyId, string $from, string $to): array
+    public function daily(int $companyId, string $from, string $to, ?int $locationId = null): array
     {
         $end = Carbon::parse($to);
         $start = Carbon::parse($from);
@@ -148,10 +159,10 @@ class DashboardService
             $start = $end->copy()->subDays(13);
         }
         if ($start->diffInDays($end) > 92) {
-            return $this->monthly($companyId, $start, $end);
+            return $this->monthly($companyId, $start, $end, $locationId);
         }
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::sql($companyId, 's', $start->toDateString(), $end->toDateString());
+        [$src, $bind] = SalesSource::sql($companyId, 's', $start->toDateString(), $end->toDateString(), $locationId);
         $rows = collect(DB::select("SELECT s.sale_date AS d, SUM(s.total_amount) AS v, SUM(s.profit) AS p, COUNT(*) AS n FROM {$src}
             WHERE s.sale_date BETWEEN ? AND ? GROUP BY s.sale_date", [...$bind, $start->toDateString(), $end->toDateString()]))->keyBy('d');
         $out = ['labels' => [], 'sales' => [], 'profit' => [], 'count' => []];
@@ -166,10 +177,10 @@ class DashboardService
         return $out;
     }
 
-    private function monthly(int $companyId, Carbon $start, Carbon $end): array
+    private function monthly(int $companyId, Carbon $start, Carbon $end, ?int $locationId = null): array
     {
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::sql($companyId, 's', $start->toDateString(), $end->toDateString());
+        [$src, $bind] = SalesSource::sql($companyId, 's', $start->toDateString(), $end->toDateString(), $locationId);
         $rows = collect(DB::select("SELECT DATE_FORMAT(s.sale_date, '%Y-%m') AS m, SUM(s.total_amount) AS v, SUM(s.profit) AS p, COUNT(*) AS n FROM {$src}
             WHERE s.sale_date BETWEEN ? AND ? GROUP BY DATE_FORMAT(s.sale_date, '%Y-%m')", [...$bind, $start->toDateString(), $end->toDateString()]))->keyBy('m');
         $out = ['labels' => [], 'sales' => [], 'profit' => [], 'count' => []];
@@ -185,10 +196,10 @@ class DashboardService
     }
 
     /** Best sellers in the range by money taken (returns netted). */
-    public function topProducts(int $companyId, string $from, string $to, int $limit = 6): array
+    public function topProducts(int $companyId, string $from, string $to, int $limit = 6, ?int $locationId = null): array
     {
         LocalTime::prime($companyId);
-        [$src, $bind] = SalesSource::linesSql($companyId, 'l', $from, $to);
+        [$src, $bind] = SalesSource::linesSql($companyId, 'l', $from, $to, $locationId);
 
         return DB::select("SELECT si.id, COALESCE(si.name, MAX(l.item_name)) AS name, SUM(l.quantity) AS quantity, SUM(l.revenue) AS revenue, SUM(l.profit) AS profit
             FROM {$src} LEFT JOIN stock_items si ON si.id = l.stock_item_id
@@ -196,9 +207,10 @@ class DashboardService
     }
 
     /** The latest sales with what is still owed on each. */
-    public function recentSales(int $companyId, int $limit = 8): array
+    public function recentSales(int $companyId, int $limit = 8, ?int $locationId = null): array
     {
         return DB::table('sale_records')->where('company_id', $companyId)->orderByDesc('id')->limit($limit)
+            ->when($locationId !== null, fn ($q) => $q->whereRaw(\App\Support\StoreScope::saleLocationSql('sale_records', $companyId).' = ?', [$locationId]))
             ->get(['id', 'receipt_number', 'customer_name', 'total_amount', 'refunded_amount', 'balance', 'payment_status', 'status', 'voided_at', 'created_at'])->all();
     }
 
@@ -227,10 +239,15 @@ class DashboardService
     }
 
     /** Stock value and the products that need attention. */
-    public function stock(Company $company): array
+    public function stock(Company $company, ?int $locationId = null): array
     {
         $default = (float) ($company->low_stock_default ?? config('saas.low_stock_threshold', 10));
         $base = DB::table('stock_items')->where('company_id', $company->id)->where('is_deleted', 0)->where('track_stock', 1);
+        if ($locationId !== null) { // one store (G3): its shelf (stock_levels) stands in for the product total
+            $base = DB::table(DB::raw('(SELECT p.id, p.name, p.min_stock, p.buying_price, p.selling_price, COALESCE(sl.quantity, 0) AS current_quantity
+                FROM stock_items p LEFT JOIN stock_levels sl ON sl.stock_item_id = p.id AND sl.location_id = '.(int) $locationId.'
+                WHERE p.company_id = '.(int) $company->id.' AND p.is_deleted = 0 AND p.track_stock = 1) stock_items'));
+        }
         $sum = (clone $base)->selectRaw('COUNT(*) AS items,
             COALESCE(SUM(GREATEST(current_quantity, 0) * buying_price), 0) AS cost_value,
             COALESCE(SUM(GREATEST(current_quantity, 0) * selling_price), 0) AS sale_value,

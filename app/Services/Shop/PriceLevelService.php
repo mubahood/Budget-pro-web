@@ -51,15 +51,77 @@ class PriceLevelService
     }
 
     /**
-     * The catalogue price of one line, per sold unit.
+     * The catalogue price of one line, per sold unit. With a store ($locationId, `store_prices` on) the
+     * store's own price replaces the selling price before levels (G1).
      */
-    public static function price(int $companyId, int $productId, ?int $unitId, float $qty, ?string $level): float
+    public static function price(int $companyId, int $productId, ?int $unitId, float $qty, ?string $level, ?int $locationId = null): float
     {
         $p = DB::table('stock_items')->where('company_id', $companyId)->where('id', $productId)->first(['selling_price']);
         $factor = $unitId ? max(0.001, (float) (DB::table('units')->where('company_id', $companyId)->where('id', $unitId)->value('factor') ?: 1)) : 1.0;
         $fallback = round((float) ($p->selling_price ?? 0) * $factor, 2);
+        if ($locationId !== null && self::storePricesOn($companyId)) {
+            $fallback = self::storeBase(self::locationRows($companyId, $locationId, [$productId])[$productId] ?? null, (float) ($p->selling_price ?? 0), $unitId, $factor);
+        }
 
         return self::pick(self::rowsFor($companyId, [$productId])[$productId] ?? [], $unitId, $factor, $qty, $level) ?? $fallback;
+    }
+
+    // ── Store prices (SUPERMARKET_PLAN.md G1, `store_prices`) ──────────────────
+
+    private static ?bool $storeTable = null;
+
+    /** Store prices are on for this shop (and the table exists). */
+    public static function storePricesOn(Company|int|null $company): bool
+    {
+        $company = is_int($company) ? Company::withoutGlobalScopes()->find($company) : $company;
+
+        return StoreFeatures::enabled($company, 'store_prices') && (self::$storeTable ??= Schema::hasTable('location_prices'));
+    }
+
+    /**
+     * One store's own prices and availability for these products, one query:
+     * [product id => ['available' => bool, 'prices' => [unit id or 0 => price]]]. Products without a row are absent.
+     *
+     * @param  list<int>  $productIds
+     * @return array<int, array{available: bool, prices: array<int, float>}>
+     */
+    public static function locationRows(int $companyId, ?int $locationId, array $productIds): array
+    {
+        if (! $locationId || $productIds === [] || ! (self::$storeTable ??= Schema::hasTable('location_prices'))) {
+            return [];
+        }
+        $out = [];
+        foreach (DB::table('location_prices')->where('company_id', $companyId)->where('location_id', $locationId)
+            ->whereIn('stock_item_id', array_values(array_unique($productIds)))->get(['stock_item_id', 'unit_id', 'price', 'is_available']) as $r) {
+            $pid = (int) $r->stock_item_id;
+            $out[$pid] ??= ['available' => true, 'prices' => []];
+            if ($r->unit_id === null && ! $r->is_available) {
+                $out[$pid]['available'] = false;
+            }
+            if ($r->price !== null) {
+                $out[$pid]['prices'][(int) ($r->unit_id ?? 0)] = (float) $r->price;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * A line's price before levels at a store, per sold unit: the store's price for that pack unit, else its
+     * base-unit price × the pack factor, else the selling price × the factor (as without store prices).
+     *
+     * @param  array{available: bool, prices: array<int, float>}|null  $row
+     */
+    public static function storeBase(?array $row, float $sellingPrice, ?int $unitId, float $factor): float
+    {
+        if ($row !== null && $unitId !== null && isset($row['prices'][$unitId])) {
+            return round($row['prices'][$unitId], 2);
+        }
+        if ($row !== null && isset($row['prices'][0])) {
+            return round($row['prices'][0] * ($unitId !== null ? $factor : 1), 2);
+        }
+
+        return round($sellingPrice * $factor, 2);
     }
 
     /**
