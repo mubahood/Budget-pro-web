@@ -25,6 +25,20 @@ class SyncSequence
         return $value;
     }
 
+    /** Reserve $n consecutive values at once; returns the first (the block is first..first+n-1). */
+    public static function reserve(int $n): int
+    {
+        if ($n <= 0) {
+            return self::current() + 1;
+        }
+        $first = self::next(); // makes sure the row exists
+        if ($n > 1) {
+            DB::table('sync_sequence')->where('id', 1)->update(['last_seq' => DB::raw('last_seq + '.($n - 1))]);
+        }
+
+        return $first;
+    }
+
     public static function current(): int
     {
         return (int) (DB::table('sync_sequence')->where('id', 1)->value('last_seq') ?? 0);

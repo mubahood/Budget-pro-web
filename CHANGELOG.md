@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Change the currency (2026-09-27)
+- `CurrencyChangeService`: the owner can change a shop's currency even after sales, confirmed with their password.
+  - **Correct:** a relabel only; amounts stay the same.
+  - **Convert:** every stored amount across shop, budget and poultry records, JSON money in promotions, deliveries and held carts, and money settings, is multiplied by one rate.
+  - Left as they were: subscription and mobile money records, and closed Z reports.
+  - Each change is logged in `currency_changes`. Changed synced rows get fresh unique `server_seq` values (`SyncSequence::reserve`), so phones pull them again.
+
 ### Supermarket phase 4: chains, fiscal, purchasing, till platform (2026-09-27)
 - **Several stores:**
   - store prices and availability (`location_prices`, `StorePriceService`);
