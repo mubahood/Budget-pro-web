@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### API for the phone app (2026-09-27, docs/MOBILE_API_CONTRACT.md)
+- **Store features:** `store-features` endpoint, also returned as `store` in `auth/me` and CompanyResource.
+- **Onboarding:** `business_type_details` (group, icon, hint, modules), `has_sales`, product quota.
+- **Debtors & creditors:** `debts` endpoints (DebtService).
+- **Supermarket endpoints:** approvals, X and Z reports, gift cards, held carts, short-dated and markdowns, label queue, tax classes, supplier prices and scorecard, cash movements, currency change.
+- **Sync:**
+  - `sync/pull-many`;
+  - snapshot tables (tax_classes, locations, product_prices, location_prices, promotions, stock_batches, batch_markdowns);
+  - `cash_movements` as an event table (`server_seq`);
+  - new product and customer fields;
+  - bootstrap with keyset paging and a 90-day history window for event tables (unpaid sales, open shifts and draft counts always included).
+- **Synced sale op:** accepts rounding, age check, coupon, promotions, markdown, price level and tenders; loyalty points are earned.
+- **Fix:** the legacy synced sale's payment id now fits its 36-character column.
+
 ### Change the currency (2026-09-27)
 - `CurrencyChangeService`: the owner can change a shop's currency even after sales, confirmed with their password.
   - **Correct:** a relabel only; amounts stay the same.

@@ -22,7 +22,8 @@ use Illuminate\Support\Str;
  *
  *  POST /sync/push                      batches of ops, one transaction per batch, idempotent
  *  GET  /sync/pull?table=&since_seq=&limit=   (or tables=a,b,c) seq cursor + paging
- *  POST /sync/bootstrap                 first-install snapshot, paged
+ *  POST /sync/pull-many                 {tables: {table: since_seq}, limit}: many tables in one response
+ *  POST /sync/bootstrap                 first-install snapshot, keyset-paged, event history windowed
  *  GET  /sync/conflicts                 conflict inbox
  *  POST /sync/conflicts/{id}/resolve    { choice: mine|server|merged|counted|ignore, data? }
  *
@@ -104,7 +105,7 @@ class SyncController extends Controller
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
-        if ($device = $this->device($request, $company)) {
+        if (empty($res['snapshot']) && empty($res['unchanged']) && ($device = $this->device($request, $company))) {
             $device->forceFill(['last_pull_seq' => max((int) $device->last_pull_seq, $res['next_seq'])])->saveQuietly();
         }
 
@@ -118,12 +119,43 @@ class SyncController extends Controller
             'tables.*' => ['string'],
             'page' => ['nullable', 'integer', 'min:1'],
             'page_size' => ['nullable', 'integer', 'min:1', 'max:1000'],
+            'after' => ['nullable', 'array'],
+            'after.*' => ['integer', 'min:0'],
+            'upto' => ['nullable', 'integer', 'min:0'],
+            'history_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
         ]);
         $company = $this->company($request);
         $tables = $data['tables'] ?? SyncRegistry::keys();
-        $out = app(SyncPuller::class)->bootstrap((int) $company->id, $tables, (int) ($data['page'] ?? 1), (int) ($data['page_size'] ?? 500));
+        // Older apps page by number: the next page's keyset position is remembered per device (or user).
+        $scope = (string) ($request->header('X-Device-Id') ?: $request->input('device_id') ?: 'u'.$request->user()->id);
+        $out = app(SyncPuller::class)->bootstrap((int) $company->id, $tables, (int) ($data['page'] ?? 1), (int) ($data['page_size'] ?? 500), [
+            'after' => $data['after'] ?? [], 'upto' => $data['upto'] ?? null, 'history_days' => $data['history_days'] ?? null, 'scope' => $scope,
+        ]);
 
         return $this->success($out + ['server_time' => SyncSequence::nowMs(), 'tables_order' => SyncRegistry::keys()], 'Bootstrap snapshot.');
+    }
+
+    /** POST sync/pull-many { tables: {table: since_seq}, limit? } — every table's page and next cursor in one response. */
+    public function pullMany(Request $request)
+    {
+        $data = $request->validate([
+            'tables' => ['required', 'array', 'min:1', 'max:80'],
+            'tables.*' => ['nullable', 'integer', 'min:0'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:'.SyncPuller::MAX_LIMIT],
+        ]);
+        $company = $this->company($request);
+        $out = app(SyncPuller::class)->pullMany((int) $company->id, $data['tables'], (int) ($data['limit'] ?? 500));
+        if ($device = $this->device($request, $company)) {
+            $seqs = [0];
+            foreach ($out as $name => $t) {
+                if ((SyncRegistry::get((string) $name)['kind'] ?? SyncRegistry::KIND_SNAPSHOT) !== SyncRegistry::KIND_SNAPSHOT) {
+                    $seqs[] = (int) $t['next_seq']; // a snapshot cursor is a fingerprint, not a seq
+                }
+            }
+            $device->forceFill(['last_pull_seq' => max((int) $device->last_pull_seq, ...$seqs)])->saveQuietly();
+        }
+
+        return $this->success(['tables' => $out, 'server_time' => SyncSequence::nowMs()], 'Pulled.');
     }
 
     public function conflicts(Request $request)

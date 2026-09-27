@@ -134,6 +134,21 @@ class StoreFeatures
     }
 
     /**
+     * The whole block a client needs, as one value: {mode, features: {key: bool}, settings: {key: value}}.
+     * Settings are resolved (note_buttons from the currency when the shop set none).
+     *
+     * @return array{mode: bool, features: array<string, bool>, settings: array<string, mixed>}
+     */
+    public static function payload(?Company $company): array
+    {
+        return [
+            'mode' => self::mode($company),
+            'features' => self::all($company),
+            'settings' => collect(array_keys(self::SETTINGS))->mapWithKeys(fn ($key) => [$key => self::setting($company, $key)])->all(),
+        ];
+    }
+
+    /**
      * Validation rules for a change passed to update(): {mode?, features?: {key: bool|null}, settings?: {key: value}}.
      * Every screen and API that edits these settings validates with them.
      *

@@ -164,6 +164,11 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
         Route::get('company', [CompanyController::class, 'show']);
         Route::put('company', [CompanyController::class, 'update']);
+        Route::post('company/currency/preview', [CompanyController::class, 'currencyPreview']);
+        Route::post('company/currency', [CompanyController::class, 'currency'])->middleware('throttle:10,1');
+        // Supermarket mode, features and settings (App\Support\StoreFeatures), as on the web Business settings.
+        Route::get('store-features', [\App\Http\Controllers\Api\V1\StoreFeaturesController::class, 'show']);
+        Route::put('store-features', [\App\Http\Controllers\Api\V1\StoreFeaturesController::class, 'update']);
 
         // Billing — reachable even when the subscription has lapsed, so a
         // customer can always pay to reactivate.
@@ -250,6 +255,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('devices/{id}/revoke', [DeviceController::class, 'revoke'])->whereNumber('id');
         Route::post('sync/push', [SyncController::class, 'push']);
         Route::get('sync/pull', [SyncController::class, 'pull']);
+        Route::post('sync/pull-many', [SyncController::class, 'pullMany']);
         Route::post('sync/bootstrap', [SyncController::class, 'bootstrap']);
         Route::get('sync/conflicts', [SyncController::class, 'conflicts']);
         Route::post('sync/conflicts/{id}/resolve', [SyncController::class, 'resolve'])->whereNumber('id');
@@ -323,6 +329,39 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('duplicates/merge', [\App\Http\Controllers\Api\V1\DuplicateController::class, 'merge']);
         Route::get('reports', [\App\Http\Controllers\Api\V1\ReportController::class, 'index']);
         Route::get('reports/{name}', [\App\Http\Controllers\Api\V1\ReportController::class, 'show'])->where('name', '[a-z_]+');
+        // Debtors & creditors (DebtService). A debtor key ('c:12', 'n:thembo') goes URL-encoded in the path, or as `key` in the query/body.
+        Route::get('debts', [\App\Http\Controllers\Api\V1\DebtController::class, 'index']);
+        Route::get('debts/sales', [\App\Http\Controllers\Api\V1\DebtController::class, 'sales']);
+        Route::post('debts/receive', [\App\Http\Controllers\Api\V1\DebtController::class, 'receive']);
+        Route::post('debts/adopt', [\App\Http\Controllers\Api\V1\DebtController::class, 'adopt']);
+        Route::get('debts/{key}/sales', [\App\Http\Controllers\Api\V1\DebtController::class, 'sales'])->where('key', '[^/]+');
+        Route::post('debts/{key}/receive', [\App\Http\Controllers\Api\V1\DebtController::class, 'receive'])->where('key', '[^/]+');
+        Route::post('debts/{key}/adopt', [\App\Http\Controllers\Api\V1\DebtController::class, 'adopt'])->where('key', '[^/]+');
+
+        // Supermarket till & back office (StoreFeatures-gated: 403 feature_off when the switch is off).
+        Route::post('approvals', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'approve'])->middleware('throttle:30,1');
+        Route::get('x-report', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'xReport']);
+        Route::get('z-reports', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'zIndex']);
+        Route::post('z-reports', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'zClose']);
+        Route::get('z-reports/{id}', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'zShow'])->whereNumber('id');
+        Route::get('gift-cards', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'giftCard'])->middleware('throttle:30,1');
+        Route::get('gift-cards/{code}', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'giftCard'])->where('code', '[^/]+')->middleware('throttle:30,1');
+        Route::post('gift-cards', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'sellGiftCard']);
+        Route::get('held-carts', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'heldIndex']);
+        Route::post('held-carts', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'hold']);
+        Route::post('held-carts/{id}/take', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'take'])->whereNumber('id');
+        Route::delete('held-carts/{id}', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'discard'])->whereNumber('id');
+        Route::get('expiring', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'expiring']);
+        Route::post('batches/{id}/markdown', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'markdown'])->whereNumber('id');
+        Route::post('batches/{id}/write-off', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'writeOff'])->whereNumber('id');
+        Route::get('label-queue', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'labelQueue']);
+        Route::post('label-queue/printed', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'labelsPrinted']);
+        Route::get('tax-classes', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'taxClasses']);
+        Route::put('tax-classes', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'saveTaxClasses']);
+        Route::get('suppliers/{id}/prices', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'supplierPrices'])->whereNumber('id');
+        Route::get('suppliers/{id}/scorecard', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'scorecard'])->whereNumber('id');
+        Route::post('cash-movements', [\App\Http\Controllers\Api\V1\SupermarketController::class, 'cashMovement']);
+
         Route::get('reorder-suggestions', [\App\Http\Controllers\Api\V1\ReorderController::class, 'index']);
         Route::post('reorder-suggestions/orders', [\App\Http\Controllers\Api\V1\ReorderController::class, 'orders']);
 

@@ -43,6 +43,44 @@
             ]
         },
         {
+            "name": "Approvals",
+            "item": [
+                {
+                    "name": "POST approvals {action, pin, context?: {amount?, pct?, original?, price?, sale_id?, reason?}} → {approval_id, approver} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/approvals",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "approvals"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"action\": \".implode(\",\n    \"pin\": \"\",\n    \"context\": []\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Auth",
             "item": [
                 {
@@ -489,6 +527,81 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"channel\": \"phone\"\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Batches",
+            "item": [
+                {
+                    "name": "POST batches/{id}/markdown {pct} → the markdown (its MD barcode prints on the label). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/batches/:id/markdown",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "batches",
+                                ":id",
+                                "markdown"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"pct\": 1000\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST batches/{id}/write-off {qty, reason: Expired|Damage|Lost|Internal Use, note?, approval_id?} — beyond the waste limit: 422 approval_required first",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/batches/:id/write-off",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "batches",
+                                ":id",
+                                "write-off"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"qty\": 1000,\n    \"reason\": \"\",\n    \"note\": \"\",\n    \"approval_id\": 1\n}"
                         }
                     }
                 }
@@ -1021,7 +1134,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-26\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-27\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1133,7 +1246,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-26\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-27\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1167,7 +1280,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-26\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-09-27\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1194,6 +1307,44 @@
                                 "budget-programs",
                                 ":id"
                             ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Cash movements",
+            "item": [
+                {
+                    "name": "POST cash-movements {type: drop|pickup|paid_in|paid_out|no_sale, amount, reason, shift_id, approval_id?, category_id?, client_uuid?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/cash-movements",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "cash-movements"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"type\": \".implode(\",\n    \"amount\": 1000,\n    \"reason\": \"\",\n    \"shift_id\": 1,\n    \"approval_id\": 1,\n    \"category_id\": 1,\n    \"client_uuid\": \"\"\n}"
                         }
                     }
                 }
@@ -1249,6 +1400,75 @@
                             "path": [
                                 "company"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST company/currency { to, mode: relabel|convert, rate? (1 old = rate new), password } — owner only.",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/company/currency",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "company",
+                                "currency"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"to\": \"\",\n    \"mode\": \"relabel\",\n    \"rate\": 1000,\n    \"password\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST /company/currency/preview",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/company/currency/preview",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "company",
+                                "currency",
+                                "preview"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"to\": \"\",\n    \"mode\": \"relabel\",\n    \"rate\": 1000,\n    \"password\": \"\"\n}"
                         }
                     }
                 },
@@ -1807,7 +2027,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true,\n    \"marketing_opt_in\": true,\n    \"messages_opt_out\": true,\n    \"price_level\": \"\"\n}"
                         }
                     }
                 },
@@ -1919,7 +2139,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true,\n    \"marketing_opt_in\": true,\n    \"messages_opt_out\": true,\n    \"price_level\": \"\"\n}"
                         }
                     }
                 },
@@ -1953,7 +2173,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"address\": \"\",\n    \"credit_limit\": 1000,\n    \"payment_terms_days\": 1,\n    \"reminders_enabled\": true,\n    \"notes\": \"\",\n    \"is_active\": true,\n    \"marketing_opt_in\": true,\n    \"messages_opt_out\": true,\n    \"price_level\": \"\"\n}"
                         }
                     }
                 },
@@ -2098,6 +2318,227 @@
                             ],
                             "path": [
                                 "dashboard"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Debts",
+            "item": [
+                {
+                    "name": "GET debts?tab=debtors|creditors&q= */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST debts/{key}/adopt (or debts/adopt {key}) {name, phone?} — a name becomes a customer account; its sales move onto it. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts/adopt",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts",
+                                "adopt"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts/receive",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts",
+                                "receive"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"amount\": 1000,\n    \"method\": \".implode(\",\n    \"reference\": \"\",\n    \"shift_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET debts/{key}/sales (or debts/sales?key=) — the open sales behind a debtor, oldest first. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts/sales",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts",
+                                "sales"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST debts/{key}/adopt (or debts/adopt {key}) {name, phone?} — a name becomes a customer account; its sales move onto it. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts/:key/adopt",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts",
+                                ":key",
+                                "adopt"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts/:key/receive",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts",
+                                ":key",
+                                "receive"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"amount\": 1000,\n    \"method\": \".implode(\",\n    \"reference\": \"\",\n    \"shift_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET debts/{key}/sales (or debts/sales?key=) — the open sales behind a debtor, oldest first. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/debts/:key/sales",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "debts",
+                                ":key",
+                                "sales"
                             ]
                         }
                     }
@@ -2289,6 +2730,36 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"kind\": \"\",\n    \"keep_id\": 1,\n    \"merge_ids\": [\n        1\n    ]\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Expiring",
+            "item": [
+                {
+                    "name": "GET expiring?days=&q= — batches on hand expiring within `days` (default: the shop's short_dated_days), soonest first. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/expiring",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "expiring"
+                            ]
                         }
                     }
                 }
@@ -2624,7 +3095,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-27\",\n    \"end_date\": \"2026-09-27\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2736,7 +3207,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-27\",\n    \"end_date\": \"2026-09-27\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2770,7 +3241,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-09-27\",\n    \"end_date\": \"2026-09-27\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -2859,7 +3330,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-26\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-27\"\n}"
                         }
                     }
                 },
@@ -2971,7 +3442,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-26\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-27\"\n}"
                         }
                     }
                 },
@@ -3005,7 +3476,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-26\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-09-27\"\n}"
                         }
                     }
                 },
@@ -3094,7 +3565,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-27\",\n    \"end_date\": \"2026-09-27\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -3206,7 +3677,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-27\",\n    \"end_date\": \"2026-09-27\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -3240,7 +3711,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-26\",\n    \"end_date\": \"2026-09-26\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-09-27\",\n    \"end_date\": \"2026-09-27\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -3266,6 +3737,95 @@
                             "path": [
                                 "financial-reports",
                                 ":id"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Gift cards",
+            "item": [
+                {
+                    "name": "GET gift-cards/{code} (or ?code=) → {balance, status, last4, expires_at} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/gift-cards",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "gift-cards"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST gift-cards {amount, method, customer_id?, code?, shift_id?, reference?, client_uuid?} — sell a card; the code is shown once. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/gift-cards",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "gift-cards"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"customer_id\": 1,\n    \"code\": \"\",\n    \"shift_id\": 1,\n    \"reference\": \"\",\n    \"client_uuid\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET gift-cards/{code} (or ?code=) → {balance, status, last4, expires_at} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/gift-cards/:code",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "gift-cards",
+                                ":code"
                             ]
                         }
                     }
@@ -3329,7 +3889,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"invoice_ref\": \"\",\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"received_on\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"client_uuid\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-26\"\n        }\n    ],\n    \"location_id\": 1\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"invoice_ref\": \"\",\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"received_on\": \"2026-09-27\",\n    \"notes\": \"\",\n    \"client_uuid\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-27\"\n        }\n    ],\n    \"location_id\": 1\n}"
                         }
                     }
                 },
@@ -3492,6 +4052,122 @@
             ]
         },
         {
+            "name": "Held carts",
+            "item": [
+                {
+                    "name": "GET /held-carts",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/held-carts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "held-carts"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST held-carts {state: {lines: [...], ...}, label, customer_id?, location_id?, total?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/held-carts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "held-carts"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"state\": [],\n    \"label\": \"\",\n    \"customer_id\": 1,\n    \"location_id\": 1,\n    \"total\": 1000\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "DELETE /held-carts/{id}",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/held-carts/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "held-carts",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST held-carts/{id}/take → the cart's state (it leaves the list: two tills can never both resume it). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/held-carts/:id/take",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "held-carts",
+                                ":id",
+                                "take"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Invites",
             "item": [
                 {
@@ -3544,6 +4220,70 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"first_name\": \"\",\n    \"last_name\": \"\",\n    \"password\": \"\",\n    \"device_name\": \"\"\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Label queue",
+            "item": [
+                {
+                    "name": "GET /label-queue",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/label-queue",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "label-queue"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST label-queue/printed {ids?: [..]} — no ids = every waiting label. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/label-queue/printed",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "label-queue",
+                                "printed"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"ids\": [\n        1\n    ]\n}"
                         }
                     }
                 }
@@ -4916,7 +5656,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-27\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5028,7 +5768,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-27\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5062,7 +5802,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-09-27\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5150,7 +5890,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"items\": [\n        {\n            \"purchase_order_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-26\"\n        }\n    ],\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"invoice_ref\": \"\",\n    \"received_on\": \"2026-09-26\",\n    \"client_uuid\": \"\"\n}"
+                            "raw": "{\n    \"items\": [\n        {\n            \"purchase_order_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-09-27\"\n        }\n    ],\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"invoice_ref\": \"\",\n    \"received_on\": \"2026-09-27\",\n    \"client_uuid\": \"\"\n}"
                         }
                     }
                 },
@@ -5240,7 +5980,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"goods_receipt_id\": 1,\n    \"reason\": \"\",\n    \"refund_amount\": 1000,\n    \"refund_method\": \"\",\n    \"returned_on\": \"2026-09-26\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"goods_receipt_id\": 1,\n    \"reason\": \"\",\n    \"refund_amount\": 1000,\n    \"refund_method\": \"\",\n    \"returned_on\": \"2026-09-27\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5613,7 +6353,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"customer_name\": \"\",\n    \"customer_phone\": \"\",\n    \"customer_address\": \"\",\n    \"payment_method\": \"\",\n    \"amount_paid\": 1000,\n    \"discount_amount\": 1000,\n    \"discount_reason\": \"\",\n    \"sale_date\": \"2026-09-26\",\n    \"notes\": \"\",\n    \"allow_negative_stock\": true,\n    \"customer_id\": 1,\n    \"shift_id\": 1,\n    \"location_id\": 1,\n    \"items\": [\n        {\n            \"unit_id\": 1,\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_price\": 1000,\n            \"discount_amount\": 1000\n        }\n    ],\n    \"payments\": [\n        {\n            \"method\": \"\",\n            \"amount\": 1000,\n            \"reference\": \"\",\n            \"provider\": \"\"\n        }\n    ]\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"customer_name\": \"\",\n    \"customer_phone\": \"\",\n    \"customer_address\": \"\",\n    \"payment_method\": \"\",\n    \"amount_paid\": 1000,\n    \"discount_amount\": 1000,\n    \"discount_reason\": \"\",\n    \"sale_date\": \"2026-09-27\",\n    \"notes\": \"\",\n    \"allow_negative_stock\": true,\n    \"customer_id\": 1,\n    \"shift_id\": 1,\n    \"location_id\": 1,\n    \"items\": [\n        {\n            \"unit_id\": 1,\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_price\": 1000,\n            \"markdown_id\": 1,\n            \"discount_amount\": 1000,\n            \"approval_id\": 1\n        }\n    ],\n    \"coupon_code\": \"\",\n    \"payments\": [\n        {\n            \"method\": \"\",\n            \"amount\": 1000,\n            \"reference\": \"\",\n            \"provider\": \"\",\n            \"tender\": \"gift_card\",\n            \"code\": \"\",\n            \"points\": 1\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -5855,7 +6595,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"provider\": \"\",\n    \"received_at\": \"2026-09-26\",\n    \"notes\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"provider\": \"\",\n    \"received_at\": \"2026-09-27\",\n    \"notes\": \"\"\n}"
                         }
                     }
                 },
@@ -6918,7 +7658,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-26\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-27\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -7056,7 +7796,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-26\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-27\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -7090,7 +7830,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-26\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-09-27\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -7764,6 +8504,61 @@
             ]
         },
         {
+            "name": "Store features",
+            "item": [
+                {
+                    "name": "GET store-features → {mode, features: {key: bool}, settings: {...}, labels: {key: label}} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/store-features",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "store-features"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT store-features {mode?, features?: {key: bool|null}, settings?: {key: value}} — null un-sets a feature (it follows the mode again). */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/store-features",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "store-features"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Subscription",
             "item": [
                 {
@@ -8356,6 +9151,60 @@
                     }
                 },
                 {
+                    "name": "GET suppliers/{id}/prices — the supplier's price in force today for each product it has one for. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/suppliers/:id/prices",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "suppliers",
+                                ":id",
+                                "prices"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET suppliers/{id}/scorecard?days=90 */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/suppliers/:id/scorecard",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "suppliers",
+                                ":id",
+                                "scorecard"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET /suppliers/{id}/statement",
                     "request": {
                         "method": "GET",
@@ -8417,7 +9266,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"tables\": [\n        \"\"\n    ],\n    \"page\": 1,\n    \"page_size\": 1\n}"
+                            "raw": "{\n    \"tables\": [\n        \"\"\n    ],\n    \"page\": 1,\n    \"page_size\": 1,\n    \"after\": [\n        1\n    ],\n    \"upto\": 1,\n    \"history_days\": 1\n}"
                         }
                     }
                 },
@@ -8510,6 +9359,40 @@
                     }
                 },
                 {
+                    "name": "POST sync/pull-many { tables: {table: since_seq}, limit? } — every table's page and next cursor in one response. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sync/pull-many",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sync",
+                                "pull-many"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"tables\": [\n        1\n    ],\n    \"limit\": 1\n}"
+                        }
+                    }
+                },
+                {
                     "name": "POST /sync/push",
                     "request": {
                         "method": "POST",
@@ -8540,6 +9423,69 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"batches\": [\n        {\n            \"batch_uuid\": \"\",\n            \"ops\": [\n                {\n                    \"table\": \"\",\n                    \"uuid\": \"\",\n                    \"action\": \"insert\"\n                }\n            ]\n        }\n    ]\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Tax classes",
+            "item": [
+                {
+                    "name": "GET /tax-classes",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/tax-classes",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "tax-classes"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT tax-classes {classes: [{id?, name, code, rate, is_default?}], delete?: [ids]} — manage_settings. */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/tax-classes",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "tax-classes"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"classes\": [\n        {\n            \"id\": 1,\n            \"name\": \"\",\n            \"code\": \"\",\n            \"rate\": 1000,\n            \"is_default\": true\n        }\n    ],\n    \"delete\": [\n        1\n    ]\n}"
                         }
                     }
                 }
@@ -9287,6 +10233,125 @@
                             "path": [
                                 "webhooks",
                                 "flutterwave"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "X report",
+            "item": [
+                {
+                    "name": "GET x-report?scope=shift|day&shift_id=&date=&location_id= */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/x-report",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "x-report"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Z reports",
+            "item": [
+                {
+                    "name": "GET z-reports?from=&to= — newest first (60 at most). */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/z-reports",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "z-reports"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST z-reports {date, location_id?} — close a shop day (view_reports + manage_finance, like the web). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/z-reports",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "z-reports"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"date\": \"\",\n    \"location_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET z-reports/{id} (JSON) or ?format=pdf (80 mm PDF). */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/z-reports/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "z-reports",
+                                ":id"
                             ]
                         }
                     }

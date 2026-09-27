@@ -87,6 +87,7 @@ class PaymentService
         return DB::transaction(function () use ($sale, $tender, $amount, $attrs) {
             $this->adoptPaidAtSale($sale);
             $p = new Payment();
+            $p->client_uuid = $attrs['client_uuid'] ?? null; // a synced tender payment is idempotent on its op uuid
             $p->company_id = $sale->company_id;
             $p->sale_record_id = $sale->id;
             $p->customer_id = $sale->customer_id;

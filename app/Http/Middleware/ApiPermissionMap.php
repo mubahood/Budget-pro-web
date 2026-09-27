@@ -16,6 +16,15 @@ class ApiPermissionMap
 {
     /** [methods, uri regex (after api/v1/), permission] — first match wins. */
     public const RULES = [
+        // Supermarket / phone parity (reads needing "any of" several permissions are checked in the controllers).
+        [['PUT'], '#^store-features$#', 'manage_settings'],
+        [['POST'], '#^company/currency(/preview)?$#', 'manage_settings'],
+        [['POST'], '#^debts(/[^/]+)?/(receive|adopt)$#', 'sell'],
+        [['POST'], '#^gift-cards$#', 'sell'],
+        [['POST', 'DELETE'], '#^held-carts(/\d+(/take)?)?$#', 'sell'],
+        [['POST'], '#^batches/\d+/(markdown|write-off)$#', 'adjust'],
+        [['PUT'], '#^tax-classes$#', 'manage_settings'],
+        [['POST'], '#^cash-movements$#', 'sell'],
         [['POST'], '#^sales/\d+/void$#', 'void'],
         [['POST'], '#^sales/\d+/returns$#', 'refund'],
         [['POST'], '#^sales/[0-9A-Fa-f-]+/(send-receipt|momo-request)$#', 'sell'],

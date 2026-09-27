@@ -86,6 +86,16 @@ class MasterDataService
 
         $allowed = $config['fields'] ?? [];
         $changed = is_array($op['changed_fields'] ?? null) ? $op['changed_fields'] : null;
+        // Fields with rules of their own (the supermarket product / customer fields) are checked like the web form checks them.
+        if (isset($config['rules']) && is_callable($config['rules'])) {
+            $rules = array_intersect_key(($config['rules'])($companyId, $existing?->getKey()), array_flip(array_intersect($allowed, array_keys($data))));
+            if ($rules !== []) {
+                $v = \Illuminate\Support\Facades\Validator::make($data, $rules);
+                if ($v->fails()) {
+                    return ['status' => 'rejected', 'code' => 'validation', 'message' => $v->errors()->first(), 'errors' => $v->errors()->toArray()];
+                }
+            }
+        }
         foreach ($allowed as $field) {
             if (! array_key_exists($field, $data)) {
                 continue;

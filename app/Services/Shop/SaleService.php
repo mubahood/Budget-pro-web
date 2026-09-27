@@ -100,6 +100,7 @@ class SaleService
             // Price levels and promotions (B2, B3): worked out here from the shop's own rules, never taken from the request.
             // Off (or an offline sale synced later, already priced at its till) = null, and the sale is priced as before.
             $this->pricing = empty($data['from_sync']) ? $this->pricingFor($companyId, $sale, $data) : null;
+            $this->fromSync = ! empty($data['from_sync']);
             if (empty($data['from_sync'])) {
                 (new PriceOverrideService())->enforce($companyId, $userId, $data['items'], $this->pricing['level'] ?? null, $this->pricing['location'] ?? null);
             }
@@ -120,6 +121,10 @@ class SaleService
                 $item->quantity = $line['quantity'];
                 $item->unit_price = array_key_exists('unit_price', $line) && $line['unit_price'] !== null ? $line['unit_price'] : null;
                 $item->discount_amount = round((float) ($line['discount_amount'] ?? 0), 2);
+                if (! empty($data['from_sync']) && (float) ($line['promo_discount'] ?? 0) >= 0.005) {
+                    // An offline sale priced by its till (B3): the promotions' share of this line's discount, as the till worked it out.
+                    $item->promo_discount = min(round((float) $line['promo_discount'], 2), (float) $item->discount_amount);
+                }
                 $eligible = $this->pricing !== null ? $this->priceLine($item, $line) : false;
                 $item->save();
                 if ($eligible) {
@@ -169,6 +174,7 @@ class SaleService
 
         return DB::transaction(function () use ($sale, $payments, $userId) {
             $this->pricing = null; // lines persisted elsewhere keep their own prices (no levels or promotions here)
+            $this->fromSync = false;
             if ($payments === null) {
                 $amountPaid = round((float) $sale->amount_paid, 2);
                 $payments = $amountPaid > 0 ? [['method' => $sale->payment_method ?? 'Cash', 'amount' => $amountPaid]] : [];
@@ -346,6 +352,9 @@ class SaleService
 
     /** @var array<int, true> sale line ids promotions may look at */
     private array $promoLines = [];
+
+    /** An offline sale synced from a phone: already priced and rounded at its till (only sanity-checked here). */
+    private bool $fromSync = false;
 
     /** What this checkout needs to price its lines by level and promotion, or null when the shop uses neither. */
     private function pricingFor(int $companyId, SaleRecord $sale, array $data): ?array
@@ -540,7 +549,13 @@ class SaleService
 
         // Cash rounding (A7): only the shop's own rule, only for a sale paid wholly in cash. It is part of the total.
         $rounding = round((float) ($sale->rounding_amount ?? 0), 2);
-        if (abs($rounding) >= 0.005) {
+        if (abs($rounding) >= 0.005 && $this->fromSync) {
+            // Synced from a till that rounded offline (its payments are separate ops): accepted unless it makes no sense.
+            if ($total + $rounding < 0 || abs($rounding) > $total) {
+                throw BusinessRuleException::make('rounding_mismatch', 'The cash rounding on this sale is larger than the sale.', ['rounding' => $rounding]);
+            }
+            $total = round($total + $rounding, 2);
+        } elseif (abs($rounding) >= 0.005) {
             $expected = \App\Support\CashRounding::appliesTo($payments) ? \App\Support\CashRounding::amount($company, $total) : 0.0;
             if (abs($expected - $rounding) > 0.005) {
                 throw BusinessRuleException::make('rounding_mismatch', 'The cash rounding on this sale does not match the shop\'s rounding rule. Take payment again.', ['expected' => $expected]);

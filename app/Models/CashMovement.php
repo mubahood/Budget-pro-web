@@ -34,8 +34,21 @@ class CashMovement extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        // Phones pull cash movements by server_seq (sync table `cash_movements`); older schemas have no column.
+        static::creating(function (CashMovement $m) {
+            if (self::hasSeq() && empty($m->server_seq)) {
+                $m->server_seq = \App\Support\Sync\SyncSequence::next();
+            }
+        });
         static::updating(fn () => throw BusinessRuleException::make('cash_movement_locked', 'A cash movement cannot be changed. Record a new one to correct it.'));
         static::deleting(fn () => throw BusinessRuleException::make('cash_movement_locked', 'A cash movement cannot be deleted. Record a new one to correct it.'));
+    }
+
+    public static function hasSeq(): bool
+    {
+        static $has = null;
+
+        return $has ??= \Illuminate\Support\Facades\Schema::hasColumn('cash_movements', 'server_seq');
     }
 
     public function shift(): BelongsTo

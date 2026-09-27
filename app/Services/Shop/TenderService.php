@@ -147,7 +147,7 @@ class TenderService
     {
         $kind = (string) $p['tender'];
         $payment = (new PaymentService())->recordTender($sale, $kind, $amount, [
-            'reference' => $p['reference'] ?? null, 'received_by_id' => $userId, 'shift_id' => $p['shift_id'] ?? null,
+            'reference' => $p['reference'] ?? null, 'received_by_id' => $userId, 'shift_id' => $p['shift_id'] ?? null, 'client_uuid' => $p['client_uuid'] ?? null,
         ]);
         $this->post($sale, $payment, $userId, $p);
 

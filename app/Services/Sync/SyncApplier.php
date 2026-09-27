@@ -88,6 +88,7 @@ class SyncApplier
             $derived = ['products' => [], 'customers' => []];
             $stockExceptions = [];
             $touchedProducts = [];
+            $paidSales = [];
             $failed = false;
             $actor = \App\Models\User::withoutGlobalScopes()->find($userId);
 
@@ -133,11 +134,26 @@ class SyncApplier
                     $failed = true;
                     break;
                 }
+                if ($r['status'] === 'applied' && isset($r['model']) && in_array($table, ['sales', 'payments'], true)) {
+                    $saleId = $r['model'] instanceof SaleRecord ? $r['model']->id : $r['model']->getAttribute('sale_record_id');
+                    if ($saleId) {
+                        $paidSales[(int) $saleId] = true;
+                    }
+                }
             }
 
             if ($failed) {
                 // One bad op rolls the whole batch back (A.2); the verdict travels out in the exception.
                 throw new BatchRejected($ops);
+            }
+            // Loyalty points (C1) for the synced sales now that their payment ops are in: once per sale, nothing unless loyalty is on.
+            if ($paidSales !== [] && \App\Services\Shop\LoyaltyService::enabled($company)) {
+                $loyalty = new \App\Services\Shop\LoyaltyService();
+                foreach (array_keys($paidSales) as $saleId) {
+                    if ($sale = SaleRecord::withoutGlobalScopes()->find($saleId)) {
+                        $loyalty->earnForSale($sale, $userId);
+                    }
+                }
             }
 
             $status = collect($ops)->contains(fn ($o) => $o['status'] === 'conflict') ? 'conflict' : 'applied';
@@ -210,6 +226,7 @@ class SyncApplier
             'return' => $this->applyReturn($companyId, $userId, $uuid, $data, $touchedProducts),
             'grn' => $this->applyGoodsReceipt($companyId, $deviceId, $userId, $uuid, $data, $touchedProducts),
             'stock_take' => $this->applyStockTake($companyId, $deviceId, $userId, $uuid, $action, $data, $touchedProducts),
+            'cash_movement' => $this->applyCashMovement($companyId, $userId, $uuid, $action, $data),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
     }
@@ -253,7 +270,29 @@ class SyncApplier
                     return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'unit_uuid'];
                 }
             }
-            $items[] = ['stock_item_id' => (int) $productId, 'quantity' => $line['quantity'] ?? 0, 'unit_price' => $line['unit_price'] ?? null, 'discount_amount' => $line['discount_amount'] ?? 0, 'unit_id' => $unitId];
+            // Priced at the till (never re-priced here): the manual discount plus the promotions' share (promo_discount), a markdown label's id.
+            $discount = round((float) ($line['discount_amount'] ?? 0), 2);
+            $promo = round((float) ($line['promo_discount'] ?? 0), 2);
+            if ($discount < 0 || $promo < 0 || (isset($line['unit_price']) && $line['unit_price'] !== null && (float) $line['unit_price'] < 0)) {
+                return ['status' => 'rejected', 'code' => 'validation', 'message' => 'A sale line cannot have a negative price or discount.'];
+            }
+            $items[] = ['stock_item_id' => (int) $productId, 'quantity' => $line['quantity'] ?? 0, 'unit_price' => $line['unit_price'] ?? null,
+                'discount_amount' => round($discount + $promo, 2), 'promo_discount' => $promo, 'unit_id' => $unitId,
+                'markdown_id' => ! empty($line['markdown_id']) ? (int) $line['markdown_id'] : null];
+        }
+        $promotions = [];
+        foreach ((array) ($data['promotions'] ?? []) as $p) {
+            $amount = round((float) ($p['amount'] ?? 0), 2);
+            $promotionId = (int) ($p['promotion_id'] ?? $p['id'] ?? 0);
+            if ($amount < 0) {
+                return ['status' => 'rejected', 'code' => 'validation', 'message' => 'A promotion cannot add to the price.'];
+            }
+            $name = $promotionId > 0 && SyncRegistry::columns('promotions') !== []
+                ? \Illuminate\Support\Facades\DB::table('promotions')->where('company_id', $companyId)->where('id', $promotionId)->value('name') : null;
+            $promotions[] = ['promotion_id' => $name !== null ? $promotionId : 0, 'name' => (string) ($name ?? $p['name'] ?? 'Promotion'), 'amount' => $amount];
+        }
+        if ((float) ($data['discount_amount'] ?? 0) < 0) {
+            return ['status' => 'rejected', 'code' => 'validation', 'message' => 'A sale cannot have a negative discount.'];
         }
         $customerId = null;
         if (! empty($data['customer_uuid'])) {
@@ -296,8 +335,16 @@ class SyncApplier
             'location_id' => self::deviceLocation($companyId, $deviceId), // the phone's shop (P4-4)
             'from_sync' => true, // offline sales are never rejected for credit limits or closed shifts
             'allow_negative_stock' => true, // a completed offline sale is never rejected for stock (Appendix E)
+            // Supermarket lane (optional; absent = as before): cash rounding (A7), age check (A10), coupon (B3), level (B2).
+            'rounding' => $data['rounding'] ?? null,
+            'age_checked' => ! empty($data['age_checked']),
+            'coupon_code' => $data['coupon_code'] ?? null,
+            'price_level' => $data['price_level'] ?? null,
         ]);
         $sale = $result['sale'];
+        if (! $result['replayed'] && $promotions !== [] && SyncRegistry::columns('sale_promotions') !== []) {
+            \App\Services\Shop\PromotionService::record($companyId, (int) $sale->id, $promotions); // what each promotion gave, for the receipt and reports
+        }
         if (! $result['replayed']) {
             app(\App\Services\Engage\ReceiptDelivery::class)->auto($sale); // offline sale synced: WhatsApp receipt if the shop chose it
         }
@@ -305,7 +352,8 @@ class SyncApplier
         // Older clients: no payment ops, just amount_paid on the sale.
         $legacyPaid = round((float) ($data['amount_paid'] ?? 0), 2);
         if ($legacyPaid > 0 && empty($data['has_payment_ops'])) {
-            $this->payments->record($sale, ['client_uuid' => $uuid.'-pay', 'amount' => min($legacyPaid, (float) $sale->total_amount), 'method' => $data['payment_method'] ?? 'cash', 'received_by_id' => $userId, 'received_at' => $occurredAt]);
+            $this->payments->record($sale, ['client_uuid' => SyncSequence::childUuid($uuid, 'pay'), // fits CHAR(36) ("<uuid>-pay" did not)
+                'amount' => min($legacyPaid, (float) $sale->total_amount), 'method' => $data['payment_method'] ?? 'cash', 'received_by_id' => $userId, 'received_at' => $occurredAt]);
             $sale = $sale->fresh();
         }
 
@@ -355,6 +403,10 @@ class SyncApplier
         if ($sale === null) {
             return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'sale_uuid'];
         }
+        $tender = ['loyalty' => 'points', 'points' => 'points', 'gift_card' => 'gift_card', 'store_credit' => 'store_credit'][strtolower((string) ($data['method'] ?? ''))] ?? null;
+        if ($tender !== null) {
+            return $this->applyTender($sale, $userId, $uuid, $tender, $data);
+        }
         $payment = $this->sales->addPayment($sale, [
             'client_uuid' => $uuid, 'amount' => $data['amount'] ?? 0, 'method' => $data['method'] ?? null, 'reference' => $data['reference'] ?? null,
             'provider' => $data['provider'] ?? null, 'notes' => $data['notes'] ?? null,
@@ -362,6 +414,46 @@ class SyncApplier
         ], $userId);
 
         return ['status' => 'applied', 'model' => $payment];
+    }
+
+    /**
+     * A payment op paid with points ('loyalty'/'points'), a gift card ({code}) or store credit: checked and applied
+     * by TenderService exactly as at an online till (no income row; the tender's balance goes down).
+     */
+    private function applyTender(SaleRecord $sale, int $userId, string $uuid, string $tender, array $data): array
+    {
+        $due = round((float) $sale->balance, 2);
+        if ($due <= 0) {
+            return ['status' => 'rejected', 'code' => 'nothing_due', 'message' => 'Nothing is left to pay on this sale.'];
+        }
+        $row = array_filter(['tender' => $tender, 'amount' => $data['amount'] ?? null, 'code' => $data['code'] ?? null,
+            'points' => isset($data['points']) && is_numeric($data['points']) ? (int) $data['points'] : null], fn ($v) => $v !== null);
+        $svc = new \App\Services\Shop\TenderService();
+        $prepared = $svc->prepare($sale, [$row], $due)[0];
+        $shiftId = ! empty($data['shift_uuid']) ? \App\Models\Shift::withoutGlobalScopes()->where('company_id', $sale->company_id)->where('uuid', $data['shift_uuid'])->value('id') : null;
+        $payment = $svc->apply($sale, $prepared + ['client_uuid' => $uuid, 'shift_id' => $shiftId ?? $sale->shift_id], (float) $prepared['amount'], $userId);
+
+        return ['status' => 'applied', 'model' => $payment];
+    }
+
+    /** A drawer cash movement made on the phone (drop, pickup, paid-in/out, no-sale): ShiftService::cashMovement, idempotent on its uuid. */
+    private function applyCashMovement(int $companyId, int $userId, string $uuid, string $action, array $data): array
+    {
+        if ($action !== 'insert' && $action !== 'upsert') {
+            return ['status' => 'rejected', 'code' => 'immutable_event', 'message' => 'A cash movement cannot be changed. Record a new one to correct it.'];
+        }
+        $existing = \App\Models\CashMovement::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $shift = ! empty($data['shift_uuid']) ? \App\Models\Shift::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['shift_uuid'])->first() : null;
+        if ($shift === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'shift_uuid'];
+        }
+        $m = (new \App\Services\Shop\ShiftService())->cashMovement($shift, (string) ($data['type'] ?? ''), (float) ($data['amount'] ?? 0), (string) ($data['reason'] ?? ''),
+            $userId, ! empty($data['approval_id']) ? (int) $data['approval_id'] : null, $uuid, ! empty($data['category_id']) ? (int) $data['category_id'] : null);
+
+        return ['status' => 'applied', 'model' => $m];
     }
 
     private function applyMovement(Company $company, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array &$touchedProducts, array &$stockExceptions): array
@@ -538,7 +630,7 @@ class SyncApplier
 
         return match ($table) {
             'sales' => $action === 'void' ? 'void' : 'sell',
-            'payments', 'customers', 'shifts' => 'sell',
+            'payments', 'customers', 'shifts', 'cash_movements' => 'sell',
             'sale_returns' => 'refund',
             'stock_movements' => match (true) {
                 $movement === 'sale' => 'sell',

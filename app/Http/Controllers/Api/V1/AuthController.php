@@ -332,6 +332,9 @@ class AuthController extends Controller
             'entitlements' => $company ? Entitlements::for($company) : null,
             'role' => \App\Services\Team\Permissions::roleOf($user),
             'permissions' => \App\Services\Team\Permissions::of($user),
+            // Supermarket features (same block as company.store) and when this token expires (refresh before then).
+            'store' => \App\Support\StoreFeatures::payload($company),
+            'expires_at' => ($t = $user->currentAccessToken()) instanceof \Laravel\Sanctum\PersonalAccessToken ? optional($t->expires_at)->toIso8601String() : null,
         ], 'Profile loaded.');
     }
 

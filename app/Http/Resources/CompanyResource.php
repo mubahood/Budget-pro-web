@@ -22,6 +22,8 @@ class CompanyResource extends JsonResource
             'about' => $this->about,
             'slogan' => $this->slogan,
             'currency' => $this->currency,
+            // Once there are sales the currency changes only through POST company/currency (relabel or convert).
+            'currency_locked' => \App\Support\Rules\CompanyRules::currencyLocked($this->resource),
             'country' => $this->country,
             'locale' => $this->locale,
             'business_type' => $this->business_type,
@@ -44,7 +46,11 @@ class CompanyResource extends JsonResource
                 'low_stock_default' => $this->low_stock_default === null ? null : (float) $this->low_stock_default,
                 'require_shift' => (bool) $this->require_shift,
                 'timezone' => $this->timezone,
+                'credit_terms_days' => $this->credit_terms_days === null ? null : (int) $this->credit_terms_days,
+                'debt_reminders_enabled' => (bool) $this->debt_reminders_enabled,
             ],
+            // Supermarket features and their settings (App\Support\StoreFeatures): {mode, features, settings}.
+            'store' => \App\Support\StoreFeatures::payload($this->resource),
             'settings' => [
                 'worker_can_create_stock_item' => $this->settings_worker_can_create_stock_item,
                 'worker_can_create_stock_record' => $this->settings_worker_can_create_stock_record,

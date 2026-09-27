@@ -27,14 +27,25 @@ class OnboardingController extends Controller
 
     private function payload(Company $company): array
     {
+        $quotas = app(\App\Services\Billing\Quotas::class);
+        $firstSale = \Illuminate\Support\Facades\DB::table('sale_records')->where('company_id', $company->id)->min('created_at');
+
         return [
+            // Has the shop sold anything yet (the currency locks, the checklist moves on)? First sale time in UTC ISO-8601.
+            'has_sales' => \App\Support\Rules\CompanyRules::hasSales((int) $company->id),
+            'first_sale_at' => $firstSale ? \Illuminate\Support\Carbon::parse($firstSale)->toIso8601String() : null,
+            // Products the plan allows (max null = no limit).
+            'quota' => ['used' => $quotas->used($company, 'products'), 'max' => $quotas->limit($company, 'products')],
             'state' => $this->onboarding->state($company),
             'checklist' => $this->onboarding->checklist($company),
             'checklist_v2' => $this->onboarding->checklistV2($company),
             'company' => new CompanyResource($company),
             'presets' => [
                 'countries' => config('onboarding.countries'),
-                'business_types' => collect(config('onboarding.business_types'))->map(fn ($t) => $t['label']),
+                'business_types' => collect(config('onboarding.business_types'))->map(fn ($t) => $t['label']), // key => label (older apps show the value as text)
+                'business_type_details' => collect(config('onboarding.business_types'))->map(fn ($t) => [
+                    'label' => $t['label'], 'group' => $t['group'] ?? null, 'icon' => $t['icon'] ?? null, 'hint' => $t['hint'] ?? null, 'modules' => $t['modules'] ?? [],
+                ]),
                 'modules' => config('onboarding.modules'),
                 'payment_methods' => config('onboarding.payment_methods'),
                 'steps' => config('onboarding.steps'),
