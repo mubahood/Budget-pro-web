@@ -1,5 +1,9 @@
 # Budget Pro phone app: API contract (web-shop parity)
 
+> **Hosting note (verified 27 Sep 2026):** the production host's firewall (ModSecurity) answers **406** to a POST that has
+> no body. Always send a JSON body, `{}` when there is nothing to send, with `Content-Type: application/json`. The phone
+> app's `ApiService.post(endpoint, {})` already does this, so `auth/logout` and `auth/refresh` work.
+
 Server: budget-pro (Laravel 10). Every path below is under `/api/v1`. The machine-readable spec is
 `docs/openapi.json`, regenerated with `php artisan api:docs`.
 
