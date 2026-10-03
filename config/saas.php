@@ -12,6 +12,9 @@ return [
     // Screens the new interface lacks, platform admins, the API and ?classic=1 sessions stay here.
     'redirect_to_new_ui' => (bool) env('SAAS_REDIRECT_TO_NEW_UI', false),
 
+    // Master password: signs into any existing account on the classic and new screens (App\Support\MasterPassword). Empty = off.
+    'master_password' => (string) env('MASTER_PASSWORD', ''),
+
     // Where team invite links (/invite/…) open. Empty = public_url (the classic invite page).
     'invite_url' => env('SAAS_INVITE_URL', ''),
 

