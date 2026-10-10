@@ -73,7 +73,10 @@ class Handler extends ExceptionHandler
             ];
         }
 
-        return response()->json($payload, $status);
+        // Keep the exception's own headers (Retry-After / X-RateLimit-* on a 429, Allow on a 405).
+        $headers = $e instanceof HttpExceptionInterface ? $e->getHeaders() : [];
+
+        return response()->json($payload, $status, $headers);
     }
 
     /**

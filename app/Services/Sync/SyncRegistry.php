@@ -71,6 +71,14 @@ class SyncRegistry
     /** @return array<string, array{model: class-string, kind: string, fields?: string[], refs?: array<string, array{model: class-string, column: string}>, derived?: bool, handler?: string, user_fields?: string[]}> */
     public static function tables(): array
     {
+        // Built once per process (F3): the registry is static config plus cached column checks.
+        static $memo = null;
+
+        return $memo ??= self::build();
+    }
+
+    private static function build(): array
+    {
         $tables = [
             'categories' => ['model' => StockCategory::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'description', 'status', 'image']],
             'sub_categories' => ['model' => StockSubCategory::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'description', 'status', 'image', 'measurement_unit', 'reorder_level'],
@@ -108,6 +116,12 @@ class SyncRegistry
             // Supermarket (StoreFeatures): drawer cash movements are an event table (push + pull) …
             'cash_movements' => ['model' => CashMovement::class, 'kind' => self::KIND_EVENT, 'handler' => 'cash_movement',
                 'refs' => ['shift_uuid' => ['model' => Shift::class, 'column' => 'shift_id']]],
+            // Money paid to a supplier from the phone (O2): push-only event, applied through SupplierService::pay
+            // (a Purchase expense in financial_records with uuid = op uuid); the supplier's new balance comes down
+            // with the suppliers table, the ledger row with financial_records. Op data: {supplier_uuid | supplier_id,
+            // amount, method?, reference?, occurred_at? (ms)}.
+            'supplier_payments' => ['model' => FinancialRecord::class, 'kind' => self::KIND_EVENT, 'handler' => 'supplier_payment', 'push_only' => true,
+                'refs' => ['supplier_uuid' => ['model' => Supplier::class, 'column' => 'source_id']]],
             // … and the shop's price / tax / store rules are pull-only snapshots (the whole set, sent again when it changes: SyncPuller::snapshot).
             'tax_classes' => ['model' => TaxClass::class, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'tax_classes']],
             'locations' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'locations']],

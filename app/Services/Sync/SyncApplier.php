@@ -77,7 +77,47 @@ class SyncApplier
             $this->log($companyId, $deviceId, $userId, $batch, $batchUuid, 'rejected', $result);
 
             return $result;
+        } catch (\Throwable $e) {
+            // S2: one bad batch never fails the whole push. DB::transaction has already rolled this batch back.
+            return $this->unexpected($companyId, $deviceId, $userId, $batch, $batchUuid, $e);
         }
+    }
+
+    /**
+     * A batch that threw something other than a rejection: a unique-key clash (the same batch applied by a
+     * concurrent request, or a provisional number taken) answers `replayed` when every row it writes is now
+     * there, else `retry_later`; anything else is logged and answered `retry_later` so the phone defers the
+     * batch and keeps sending the others. Nothing is recorded for retry_later, so a resend applies it afresh.
+     */
+    private function unexpected(int $companyId, ?string $deviceId, int $userId, array $batch, string $batchUuid, \Throwable $e): array
+    {
+        $unique = $e instanceof \Illuminate\Database\UniqueConstraintViolationException
+            || ($e instanceof \Illuminate\Database\QueryException && (int) ($e->errorInfo[1] ?? 0) === 1062);
+        if ($unique) {
+            $ops = [];
+            foreach ($batch['ops'] ?? [] as $op) {
+                $table = (string) ($op['table'] ?? '');
+                $model = SyncRegistry::get($table)['model'] ?? null;
+                $row = $model && ! empty($op['uuid']) ? $model::withoutGlobalScopes()->where('uuid', (string) $op['uuid'])
+                    ->when(in_array('company_id', SyncRegistry::columns((new $model)->getTable()), true), fn ($q) => $q->where('company_id', $companyId))->first() : null;
+                if ($row === null) {
+                    $ops = null;
+                    break;
+                }
+                $ops[] = ['op_uuid' => (string) ($op['op_uuid'] ?? $op['uuid']), 'table' => $table, 'uuid' => $op['uuid'], 'status' => 'replayed',
+                    'server_seq' => (int) $row->server_seq, 'id' => $row->getKey(), 'version' => (int) $row->version];
+            }
+            if ($ops !== null && $ops !== []) {
+                return ['batch_uuid' => $batchUuid, 'status' => 'replayed', 'replayed' => true, 'ops' => $ops, 'server_seq_max' => SyncSequence::current(),
+                    'assigned' => [], 'derived' => ['products' => [], 'customers' => []], 'stock_exceptions' => []];
+            }
+        } else {
+            \Illuminate\Support\Facades\Log::error('sync batch failed', ['company_id' => $companyId, 'device_id' => $deviceId, 'batch_uuid' => $batchUuid,
+                'exception' => get_class($e), 'message' => $e->getMessage(), 'at' => $e->getFile().':'.$e->getLine()]);
+        }
+
+        return ['batch_uuid' => $batchUuid, 'status' => 'rejected', 'code' => 'retry_later', 'retry' => true, 'ops' => [], 'server_seq_max' => SyncSequence::current(),
+            'message' => $unique ? 'This record clashed with one saved at the same moment. It will be sent again.' : 'The server could not save this batch just now. It will be sent again.'];
     }
 
     private function applyInTransaction(Company $company, int $companyId, ?string $deviceId, int $userId, array $batch, string $batchUuid): array
@@ -227,6 +267,7 @@ class SyncApplier
             'grn' => $this->applyGoodsReceipt($companyId, $deviceId, $userId, $uuid, $data, $touchedProducts),
             'stock_take' => $this->applyStockTake($companyId, $deviceId, $userId, $uuid, $action, $data, $touchedProducts),
             'cash_movement' => $this->applyCashMovement($companyId, $userId, $uuid, $action, $data),
+            'supplier_payment' => $this->applySupplierPayment($companyId, $userId, $uuid, $action, $data),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
     }
@@ -456,6 +497,29 @@ class SyncApplier
         return ['status' => 'applied', 'model' => $m];
     }
 
+    /** O2: money paid to a supplier on the phone: SupplierService::pay, idempotent on the op uuid (the ledger row's uuid). */
+    private function applySupplierPayment(int $companyId, int $userId, string $uuid, string $action, array $data): array
+    {
+        if ($action !== 'insert' && $action !== 'upsert') {
+            return ['status' => 'rejected', 'code' => 'immutable_event', 'message' => 'A supplier payment cannot be changed. Record a correction instead.'];
+        }
+        $existing = \App\Models\FinancialRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $supplier = \App\Models\Supplier::withoutGlobalScopes()->where('company_id', $companyId)
+            ->when(! empty($data['supplier_uuid']), fn ($q) => $q->where('uuid', (string) $data['supplier_uuid']), fn ($q) => $q->where('id', (int) ($data['supplier_id'] ?? 0)))
+            ->first();
+        if ($supplier === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'supplier_uuid'];
+        }
+        $date = isset($data['occurred_at']) && is_numeric($data['occurred_at']) ? \App\Support\LocalDate::fromMs($companyId, (int) $data['occurred_at']) : null;
+        $reference = isset($data['reference']) ? mb_substr((string) $data['reference'], 0, 191) : null;
+        $row = (new \App\Services\Shop\SupplierService())->pay($supplier, (float) ($data['amount'] ?? 0), (string) ($data['method'] ?? 'cash'), $userId, $reference, $uuid, $date);
+
+        return ['status' => 'applied', 'model' => $row];
+    }
+
     private function applyMovement(Company $company, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array &$touchedProducts, array &$stockExceptions): array
     {
         $companyId = (int) $company->id;
@@ -646,7 +710,7 @@ class SyncApplier
                 in_array($movement, ['stock_in', 'purchase', 'purchase_receipt', 'opening', 'transfer_in'], true) => 'restock',
                 default => 'adjust',
             },
-            'goods_receipts', 'suppliers' => 'restock',
+            'goods_receipts', 'suppliers', 'supplier_payments' => 'restock',
             'stock_takes' => 'stock_take',
             'categories', 'sub_categories', 'products', 'units', 'product_barcodes' => 'manage_products',
             'financial_periods', 'financial_categories', 'financial_records' => 'manage_finance',

@@ -74,7 +74,7 @@ class MasterDataService
                 continue;
             }
             $refQuery = $ref['model']::query()->withoutGlobalScopes()->where('uuid', $refUuid);
-            if (\Illuminate\Support\Facades\Schema::hasColumn((new $ref['model'])->getTable(), 'company_id')) {
+            if (in_array('company_id', SyncRegistry::columns((new $ref['model'])->getTable()), true)) {
                 $refQuery->where('company_id', $companyId);
             }
             $localId = $refQuery->value('id');
@@ -111,7 +111,7 @@ class MasterDataService
                 $model->device_id = $deviceId;
             }
             $userId = (int) ($op['_user_id'] ?? 0);
-            if ($userId > 0 && empty($model->getAttribute('created_by_id')) && \Illuminate\Support\Facades\Schema::hasColumn($model->getTable(), 'created_by_id')) {
+            if ($userId > 0 && empty($model->getAttribute('created_by_id')) && in_array('created_by_id', SyncRegistry::columns($model->getTable()), true)) {
                 $model->setAttribute('created_by_id', $userId);
             }
         }

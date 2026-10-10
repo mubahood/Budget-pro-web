@@ -45,7 +45,8 @@ class SyncController extends Controller
             return null;
         }
         $device = Device::withoutGlobalScopes()->where('company_id', $company->id)->where('device_id', $id)->first();
-        if ($device) {
+        // F6: the seen time is written at most once a minute per device (every sync call reads it).
+        if ($device && ($device->last_seen_at === null || \Illuminate\Support\Carbon::parse($device->last_seen_at)->lt(now()->subMinute()))) {
             $device->forceFill(['last_seen_at' => now()])->saveQuietly();
         }
 

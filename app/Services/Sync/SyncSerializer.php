@@ -42,9 +42,36 @@ class SyncSerializer
         return $wire;
     }
 
+    /**
+     * F3: load the reference uuids a page of rows needs with one whereIn per referenced model, so row()
+     * does not query once per foreign key.
+     *
+     * @param  iterable<Model>  $models
+     */
+    public function preload(string $table, iterable $models): void
+    {
+        $want = [];
+        foreach (SyncRegistry::get($table)['refs'] ?? [] as $ref) {
+            foreach ($models as $model) {
+                $id = (int) $model->getAttribute($ref['column']);
+                if ($id > 0 && ! array_key_exists($id, $this->uuidCache[$ref['model']] ?? [])) {
+                    $want[$ref['model']][$id] = true;
+                }
+            }
+        }
+        foreach ($want as $modelClass => $ids) {
+            foreach (array_chunk(array_keys($ids), 1000) as $chunk) {
+                $found = $modelClass::query()->withoutGlobalScopes()->whereIn('id', $chunk)->pluck('uuid', 'id')->all();
+                foreach ($chunk as $id) {
+                    $this->uuidCache[$modelClass][$id] = $found[$id] ?? null;
+                }
+            }
+        }
+    }
+
     public function uuidOf(string $modelClass, int $id): ?string
     {
-        if (! isset($this->uuidCache[$modelClass][$id])) {
+        if (! array_key_exists($id, $this->uuidCache[$modelClass] ?? [])) {
             $this->uuidCache[$modelClass][$id] = $modelClass::query()->withoutGlobalScopes()->where('id', $id)->value('uuid');
         }
 

@@ -78,7 +78,7 @@ class DebtController extends Controller
             ['key' => $key, 'owed' => round((float) $rows->sum('balance'), 2)]);
     }
 
-    /** POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?} */
+    /** POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?, client_uuid?} */
     public function receive(Request $request, ?string $key = null)
     {
         $data = $request->validate([
@@ -86,17 +86,24 @@ class DebtController extends Controller
             'method' => ['required', 'string', 'in:'.implode(',', array_keys(array_diff_key(config('onboarding.payment_methods', ['cash' => 'Cash']), ['credit' => 1])))],
             'reference' => ['nullable', 'string', 'max:100'],
             'shift_id' => ['nullable', 'integer'],
+            'client_uuid' => ['nullable', 'uuid'],
         ]);
         $cid = (int) $this->company($request)->id;
         $key = $this->key($request, $key);
         if (! preg_match('/^[cn]:/', $key)) {
             return $this->error('Unknown debtor.', 422, ['code' => 'invalid_key']);
         }
+        // S6: a retry with a client_uuid already used answers with what was received then, never a second payment.
+        if (! empty($data['client_uuid']) && ($done = $this->debts->receivedFor($cid, $data['client_uuid'])) !== null) {
+            $debtor = collect($this->debts->debtors($cid))->firstWhere('key', $key);
+
+            return $this->success(['received' => $done, 'debtor' => $debtor, 'owed' => $debtor['owed'] ?? 0.0, 'replayed' => true], 'Payment already received.');
+        }
         if (! empty($data['shift_id']) && ! DB::table('shifts')->where('company_id', $cid)->where('id', $data['shift_id'])->exists()) {
             return $this->error('Shift not found.', 422, ['code' => 'shift_not_found']);
         }
         try {
-            $applied = $this->debts->receive($cid, $key, (float) $data['amount'], $data['method'], (int) $request->user()->id, $data['reference'] ?? null, $data['shift_id'] ?? null);
+            $applied = $this->debts->receive($cid, $key, (float) $data['amount'], $data['method'], (int) $request->user()->id, $data['reference'] ?? null, $data['shift_id'] ?? null, $data['client_uuid'] ?? null);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return $this->notFound('Debtor not found.');
         } catch (BusinessRuleException $e) {

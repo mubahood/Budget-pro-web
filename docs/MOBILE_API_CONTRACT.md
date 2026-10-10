@@ -193,7 +193,7 @@ Returns the open sales, oldest first:
 with `meta: {key, owed}`.
 
 ### POST `debts/{key}/receive` (or `debts/receive` with `key` in the body) (sell)
-Request `{amount, method, reference?, shift_id?}`. `method` is any shop payment method except `credit`.
+Request `{amount, method, reference?, shift_id?, client_uuid?}`. `method` is any shop payment method except `credit`. `client_uuid`: §9a.4.
 
 Response: `{received: 3500, debtor: {…row…}|null, owed: 1500}`.
 
@@ -693,6 +693,59 @@ others. An expiry that is not a date rejects the op with `validation`. Ops witho
 {"table":"goods_receipts","uuid":"…","action":"insert","data":{"supplier_uuid":"…","amount_paid":"0",
   "items":[{"product_uuid":"…","quantity":"12","unit_cost":"550","batch_number":"LOT-7","expiry_date":"2027-03-31"}]}}
 ```
+
+## 9a. Sync reliability, offline supplier payments, idempotent money calls
+
+### 9a.1 `supplier_payments` (new event op: push only)
+Money paid to a supplier on the phone, queued offline. Permission `restock`. The server applies it with
+`SupplierService::pay`, exactly like `POST suppliers/{id}/payments`: a Purchase expense in the ledger whose
+`uuid` is the op `uuid`, and the supplier's `balance` (what we owe) goes down.
+
+Push op:
+```json
+{"batch_uuid":"5d0c…","kind":"supplier_payment","ops":[
+  {"op_uuid":"9e1f…","table":"supplier_payments","uuid":"<payment uuid>","action":"insert",
+   "data":{"supplier_uuid":"<supplier uuid>","amount":"25000","method":"mobile_money","reference":"MM 77812","occurred_at":1791640800000}}]}
+```
+
+| field | required | notes |
+|---|---|---|
+| `uuid` (op) | yes | the payment's id. A second push with it answers `replayed`, nothing is paid twice. |
+| `supplier_uuid` | yes, or `supplier_id` | the supplier (`supplier_id` = server id, used only when `supplier_uuid` is absent). |
+| `amount` | yes | > 0, rounded to 2 places. |
+| `method` | no | any shop payment method; default `cash`. |
+| `reference` | no | max 191 characters; kept in the ledger row's `receipt`. |
+| `occurred_at` | no | ms timestamp; the ledger date is that day in the shop's timezone (default today). |
+
+- Op result: `applied` (with `id` and `server_seq` of the ledger row) or `replayed`.
+- Rejections (the batch is rolled back): `missing_parent` (`parent: supplier_uuid`), `invalid_amount`,
+  `immutable_event` (an action other than insert/upsert), `forbidden` (no `restock`).
+- There is nothing to pull from `supplier_payments` (pull returns no rows). The effect comes down with the
+  `suppliers` row (new `balance`, `server_seq` bumped) and the `financial_records` row (`uuid` = the op uuid).
+
+### 9a.2 A bad batch never fails the push
+Each batch is still one transaction. If one throws something unexpected, only that batch is rolled back and
+the other batches in the same request are applied. Its result is one of:
+- `{"batch_uuid":"…","status":"replayed","replayed":true,"ops":[{… "status":"replayed","id":…,"server_seq":…}]}`:
+  a unique-key clash where every row of the batch is already on the server (the same batch saved by a
+  parallel request). Treat as done.
+- `{"batch_uuid":"…","status":"rejected","code":"retry_later","retry":true,"ops":[],"message":"…"}`: a clash
+  whose rows are not there, or any other server error. Keep the batch, send it again later (back off), and
+  carry on with the others. Nothing is recorded for it, so a resend applies it afresh.
+
+### 9a.3 Rate limits
+`sync/push`, `sync/pull`, `sync/pull-many` and `sync/bootstrap` allow 300 requests a minute per user and
+`X-Device-Id`. Other API calls keep 60 a minute per user. A `429` carries `Retry-After` (seconds) and
+`X-RateLimit-Limit` / `X-RateLimit-Remaining`. Stop the round and wait that long.
+
+### 9a.4 `client_uuid` on online money calls
+Send a fresh uuid per user action, and the same one on every retry of that action. A retry whose
+`client_uuid` was already used answers `200` with the original result and `"replayed": true` (where the body
+is an object) instead of doing it again.
+- `POST suppliers/{id}/payments {amount, method?, reference?, client_uuid?}`: `201` first time; a retry
+  answers `200 {ledger, supplier, replayed: true}`. The ledger row's `uuid` is the `client_uuid`.
+- `POST debts/{key}/receive {…, client_uuid?}`: a retry answers `200 {received, debtor, owed, replayed: true}`.
+- `POST purchase-orders {…, client_uuid?}`: `201` first time; a retry answers `200` with the same order.
 
 ## 10. Files for server maintainers
 - `app/Services/Sync/SyncRegistry.php`: the tables, including `KIND_SNAPSHOT`, schema guards, and the product and customer store fields and rules.

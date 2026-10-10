@@ -39,6 +39,10 @@ class SyncPuller
         if ($config['kind'] === SyncRegistry::KIND_SNAPSHOT) {
             return ['table' => $table] + $this->snapshot($companyId, $table, $config, $sinceSeq);
         }
+        if (! empty($config['push_only'])) {
+            // A push-only op (supplier_payments): its effect comes down with other tables.
+            return ['table' => $table, 'rows' => [], 'next_seq' => $sinceSeq, 'has_more' => false];
+        }
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $model = $config['model'];
 
@@ -50,6 +54,7 @@ class SyncPuller
         $hasMore = $rows->count() > $limit;
         $rows = $rows->take($limit);
 
+        $this->serializer->preload($table, $rows);
         $wire = [];
         $next = $sinceSeq;
         foreach ($rows as $row) {
@@ -126,6 +131,11 @@ class SyncPuller
 
                 continue;
             }
+            if (! empty($config['push_only'])) {
+                $out[$table] = ['rows' => [], 'next_page' => null, 'has_more' => false, 'next_after' => null, 'cursor' => $upto ?? SyncSequence::current()];
+
+                continue;
+            }
             $model = $config['model'];
             $query = $model::query()->withoutGlobalScopes()->orderBy('server_seq');
             if ($config['kind'] !== SyncRegistry::KIND_REFERENCE) {
@@ -161,6 +171,7 @@ class SyncPuller
             if ($hasMore && $scope !== null && $from !== null) {
                 Cache::put($cacheKey($table, $page + 1), ['after' => $last, 'upto' => $upto], now()->addHours(2));
             }
+            $this->serializer->preload($table, $rows);
             $wire = $rows->map(fn ($r) => $this->serializer->row($table, $r))->values()->all();
             $out[$table] = [
                 'rows' => $this->enrich($companyId, $table, $wire),

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Phone sync, safer and faster (2026-10-10, docs/MOBILE_API_CONTRACT.md §9a)
+- **One bad batch never fails a push:** an error inside a batch is rolled back and answered `retry_later` (a duplicate key whose rows exist is `replayed`); the other batches still apply.
+- **Sync has its own rate limit** (300/min per user and device); API 429s now carry `Retry-After`.
+- **No double payments on retry:** optional `client_uuid` on supplier payments, debt receive and purchase-order create (new `purchase_orders.client_uuid`).
+- **Supplier payments offline:** new push-only `supplier_payments` sync op.
+- **Faster pulls:** reference uuids preloaded per page, the sync registry memoized, column checks cached; device seen time written at most once a minute.
+
 ### Public demo shop (2026-09-27, config/demo.php)
 - **One shared demo account**, opened from the website in one click (or signed into by hand: `demo@schooldynamics.ug` / `demo2026`, till PIN 1234).
 - **Fresh Corner Market:** a neighbourhood grocery in USD with 45 products (41 with CC0 photos), 6 suppliers, 12 customers, a team of five, and 60 days of trading, all made through the services. It includes:

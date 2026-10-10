@@ -88,15 +88,25 @@ class SupplierService
         return $s;
     }
 
-    public function pay(Supplier $supplier, float $amount, string $method, int $userId, ?string $reference = null): FinancialRecord
+    /**
+     * Money paid to a supplier. With $clientUuid (a phone retry, or the supplier_payments sync op) the ledger
+     * row takes that uuid, and a second call with it returns the first row (wasRecentlyCreated = false).
+     */
+    public function pay(Supplier $supplier, float $amount, string $method, int $userId, ?string $reference = null, ?string $clientUuid = null, ?\DateTimeInterface $date = null): FinancialRecord
     {
+        if ($clientUuid && ($existing = $this->paymentByUuid((int) $supplier->company_id, $clientUuid)) !== null) {
+            return $existing;
+        }
         $amount = round($amount, 2);
         if ($amount <= 0) {
             throw BusinessRuleException::make('invalid_amount', 'Payment amount must be greater than zero.');
         }
 
-        return DB::transaction(function () use ($supplier, $amount, $method, $userId, $reference) {
+        return DB::transaction(function () use ($supplier, $amount, $method, $userId, $reference, $clientUuid, $date) {
             $row = new FinancialRecord();
+            if ($clientUuid) {
+                $row->uuid = $clientUuid;
+            }
             $row->financial_category_id = self::purchaseCategory((int) $supplier->company_id)->id;
             $row->company_id = $supplier->company_id;
             $row->user_id = $userId;
@@ -107,7 +117,7 @@ class SupplierService
             $row->payment_method = \App\Models\Payment::normalizeMethod($method);
             $row->recipient = $supplier->name;
             $row->receipt = $reference ?? '';
-            $row->date = \App\Support\LocalDate::today((int) $supplier->company_id);
+            $row->date = $date ?? \App\Support\LocalDate::today((int) $supplier->company_id);
             $row->description = 'Payment to supplier '.$supplier->name;
             $row->source_type = 'supplier_payment';
             $row->source_id = $supplier->id;
@@ -117,6 +127,17 @@ class SupplierService
 
             return $row;
         });
+    }
+
+    /** A supplier payment already recorded under this uuid; a uuid used by another kind of ledger row is refused. */
+    private function paymentByUuid(int $companyId, string $uuid): ?FinancialRecord
+    {
+        $row = FinancialRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
+        if ($row !== null && $row->source_type !== 'supplier_payment') {
+            throw BusinessRuleException::make('duplicate_uuid', 'This client_uuid was already used for another record.');
+        }
+
+        return $row;
     }
 
     public static function purchaseCategory(int $companyId): FinancialCategory

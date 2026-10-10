@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 
 /**
  * Purchase orders (plan A5, P4-1).
- *  POST purchase-orders { supplier_id?, expected_date?, notes?, items: [{stock_item_id, quantity, unit_cost?}] }
+ *  POST purchase-orders { supplier_id?, expected_date?, notes?, client_uuid?, items: [{stock_item_id, quantity, unit_cost?}] }
  *  POST purchase-orders/{id}/send { via_api? } → { text, whatsapp_url }
  *  POST purchase-orders/{id}/receive { items: [{purchase_order_item_id, quantity, unit_cost?}], amount_paid?, payment_method?, invoice_ref?, received_on?, client_uuid? }
  *  POST purchase-orders/{id}/cancel
@@ -47,11 +47,20 @@ class PurchaseOrderController extends BaseCrudController
     public function store(Request $request)
     {
         $companyId = $this->companyId($request);
-        $data = $this->lines($request, $companyId);
+        $data = $this->lines($request, $companyId) + $request->validate(['client_uuid' => ['nullable', 'uuid']]);
+        $create = fn () => $this->orders->create($companyId, (int) $request->user()->id, $data['items'], $data['supplier_id'] ?? null, $data['expected_date'] ?? null, $data['notes'] ?? null, $data['client_uuid'] ?? null);
         try {
-            $po = $this->orders->create($companyId, (int) $request->user()->id, $data['items'], $data['supplier_id'] ?? null, $data['expected_date'] ?? null, $data['notes'] ?? null);
+            try {
+                $po = $create();
+            } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+                $po = $create(); // the same client_uuid saved by a concurrent retry: answer with that order
+            }
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+        // S6: a retry with a client_uuid already used answers with the original order (200, not a second one).
+        if (! $po->wasRecentlyCreated) {
+            return $this->success($this->transform($po->load(['supplier', 'items.product'])), 'Purchase order already saved.');
         }
 
         return $this->created($this->transform($po->load(['supplier', 'items.product'])), 'Purchase order saved as draft.');

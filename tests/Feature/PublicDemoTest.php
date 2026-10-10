@@ -51,7 +51,9 @@ class PublicDemoTest extends TestCase
         $this->assertSame(6, DB::table('admin_users')->where('company_id', $cid)->count(), 'the demo account and five staff');
         $this->assertSame('manager', DB::table('company_members')->where('company_id', $cid)->where('user_id', '!=', $owner->id)->orderBy('id')->value('role'));
         $this->assertEquals(0, DB::table('stock_items')->where('company_id', $cid)->where('name', 'Wireless Headphones')->value('current_quantity'), 'sold out, on order');
-        $this->assertEquals(3, DB::table('stock_items')->where('company_id', $cid)->where('name', 'Wildflower Honey 450g')->value('current_quantity'), 'below its reorder level');
+        // Three jars on the shelf this morning; today's trading (it depends on the time the test runs) may sell one.
+        $honey = (float) DB::table('stock_items')->where('company_id', $cid)->where('name', 'Wildflower Honey 450g')->value('current_quantity');
+        $this->assertTrue($honey > 0 && $honey <= 3, "below its reorder level, not sold out (has {$honey})");
         $this->assertSame(['ready' => true, 'email' => 'demo@schooldynamics.ug', 'password' => 'demo2026', 'pin' => '1234'],
             array_intersect_key(PublicDemo::status(), array_flip(['ready', 'email', 'password', 'pin'])));
     }

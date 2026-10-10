@@ -46,11 +46,21 @@ class SupplierController extends BaseCrudController
         if ($s === null) {
             return $this->notFound('Supplier not found.');
         }
-        $data = $request->validate(SupplierRules::paymentRules());
+        $data = $request->validate(SupplierRules::paymentRules() + ['client_uuid' => ['nullable', 'uuid']]);
+        $svc = new SupplierService();
+        $pay = fn () => $svc->pay($s, (float) $data['amount'], $data['method'] ?? 'cash', (int) $request->user()->id, $data['reference'] ?? null, $data['client_uuid'] ?? null);
         try {
-            $row = (new SupplierService())->pay($s, (float) $data['amount'], $data['method'] ?? 'cash', (int) $request->user()->id, $data['reference'] ?? null);
+            try {
+                $row = $pay();
+            } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+                $row = $pay(); // the same client_uuid saved by a concurrent retry: answer with that payment
+            }
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+        // S6: a retry with a client_uuid already used answers with the original payment (200, not a second one).
+        if (! $row->wasRecentlyCreated) {
+            return $this->success(['ledger' => $row, 'supplier' => $s->fresh(), 'replayed' => true], 'Payment already recorded.');
         }
 
         return $this->created(['ledger' => $row, 'supplier' => $s->fresh()], 'Payment recorded.');

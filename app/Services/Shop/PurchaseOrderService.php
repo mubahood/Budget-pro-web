@@ -25,11 +25,20 @@ class PurchaseOrderService
     /**
      * @param  array<int, array{stock_item_id: int, quantity: float|string, unit_cost?: float|string|null}>  $lines
      */
-    public function create(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $expectedDate = null, ?string $notes = null): PurchaseOrder
+    /** With $clientUuid (S6) a second call returns the order the first one made (wasRecentlyCreated = false). */
+    public function create(int $companyId, int $userId, array $lines, ?int $supplierId = null, ?string $expectedDate = null, ?string $notes = null, ?string $clientUuid = null): PurchaseOrder
     {
-        return DB::transaction(function () use ($companyId, $userId, $lines, $supplierId, $expectedDate, $notes) {
+        $hasUuid = $clientUuid && in_array('client_uuid', \App\Services\Sync\SyncRegistry::columns('purchase_orders'), true);
+        if ($hasUuid && ($existing = PurchaseOrder::withoutGlobalScopes()->where('company_id', $companyId)->where('client_uuid', $clientUuid)->first()) !== null) {
+            return $existing->load('items');
+        }
+
+        return DB::transaction(function () use ($companyId, $userId, $lines, $supplierId, $expectedDate, $notes, $clientUuid, $hasUuid) {
             $po = new PurchaseOrder();
             $po->company_id = $companyId;
+            if ($hasUuid) {
+                $po->client_uuid = $clientUuid;
+            }
             $po->number = NumberSequencer::next($companyId, 'purchase_order');
             $po->status = 'draft';
             $po->order_date = now();

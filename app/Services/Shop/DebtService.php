@@ -93,15 +93,26 @@ class DebtService
      * Money received from a debtor. For a name, it pays the open sales oldest first and may not exceed
      * what is owed (there is no account to keep credit on). Returns the amount applied.
      */
-    public function receive(int $companyId, string $key, float $amount, string $method, int $userId, ?string $reference = null, ?int $shiftId = null): float
+    /** S6: what a receive with this client_uuid already took in (null when the uuid is new). Payments carry `[uuid]` in their notes. */
+    public function receivedFor(int $companyId, string $clientUuid): ?float
     {
+        $rows = \App\Models\Payment::withoutGlobalScopes()->where('company_id', $companyId)->where('notes', 'like', '%['.$clientUuid.']%');
+
+        return (clone $rows)->exists() ? round((float) $rows->sum('amount'), 2) : null;
+    }
+
+    public function receive(int $companyId, string $key, float $amount, string $method, int $userId, ?string $reference = null, ?int $shiftId = null, ?string $clientUuid = null): float
+    {
+        if ($clientUuid && ($done = $this->receivedFor($companyId, $clientUuid)) !== null) {
+            return $done;
+        }
         $amount = round($amount, 2);
         if ($amount <= 0) {
             throw BusinessRuleException::make('invalid_amount', 'Type how much was paid.');
         }
         if (str_starts_with($key, 'c:')) {
             $customer = Customer::withoutGlobalScopes()->where('company_id', $companyId)->findOrFail((int) substr($key, 2));
-            $this->customers->receivePayment($customer, $amount, $method, $userId, $reference, null, $shiftId);
+            $this->customers->receivePayment($customer, $amount, $method, $userId, $reference, $clientUuid, $shiftId);
 
             return $amount;
         }
@@ -114,15 +125,16 @@ class DebtService
             throw BusinessRuleException::make('overpayment', 'Only '.number_format($owed).' is owed. Receive that much, or make them a customer to keep extra as credit.');
         }
 
-        return DB::transaction(function () use ($companyId, $open, $amount, $method, $userId, $reference, $shiftId) {
+        return DB::transaction(function () use ($companyId, $open, $amount, $method, $userId, $reference, $shiftId, $clientUuid) {
             $left = $amount;
-            foreach ($open as $row) {
+            foreach ($open as $i => $row) {
                 if ($left <= 0) {
                     break;
                 }
                 $pay = min($left, round((float) $row->balance, 2));
                 $sale = SaleRecord::withoutGlobalScopes()->where('company_id', $companyId)->findOrFail($row->id);
-                $this->sales->addPayment($sale, ['amount' => $pay, 'method' => $method, 'reference' => $reference, 'shift_id' => $shiftId], $userId);
+                $this->sales->addPayment($sale, ['amount' => $pay, 'method' => $method, 'reference' => $reference, 'shift_id' => $shiftId]
+                    + ($clientUuid ? ['client_uuid' => \App\Support\Sync\SyncSequence::childUuid($clientUuid, (string) $i), 'notes' => 'Debt payment ['.$clientUuid.']'] : []), $userId);
                 $left = round($left - $pay, 2);
             }
 
