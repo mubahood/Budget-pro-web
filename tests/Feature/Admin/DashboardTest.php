@@ -59,6 +59,10 @@ class DashboardTest extends AdminTestCase
             DB::table('financial_records')->insert(['company_id' => $cid, 'financial_category_id' => $catId, 'user_id' => $uid, 'created_by_id' => $uid, 'amount' => $amount, 'type' => 'Expense',
                 'date' => now('Africa/Kampala')->toDateString(), 'source_type' => $source, 'is_deleted' => $deleted, 'created_at' => now(), 'updated_at' => now()]);
         }
+        // The phone's poultry farm posts its feed to its own category: the farm's cost, not the shop's.
+        $farmCat = DB::table('financial_categories')->insertGetId(['company_id' => $cid, 'name' => DashboardService::FARM_EXPENSE_CATEGORY, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('financial_records')->insert(['company_id' => $cid, 'financial_category_id' => $farmCat, 'user_id' => $uid, 'created_by_id' => $uid, 'amount' => 180000, 'type' => 'Expense',
+            'date' => now('Africa/Kampala')->toDateString(), 'is_deleted' => 0, 'created_at' => now(), 'updated_at' => now()]);
 
         $dash = new DashboardService();
         $r = $dash->range($this->t['company'], 'today');

@@ -60,6 +60,14 @@ class DashboardService
         ];
     }
 
+    /**
+     * The ledger category the phone's poultry farm posts its costs to (budget-pro-mobo finance_bridge.dart). The
+     * shop's Expenses and Net profit leave it out: the farm's income is not in the shop's sales, so its feed and
+     * drugs would make the shop look as if it lost money. The farm has its own dashboard card (PoultrySummary),
+     * and the Income & expenses ledger and the income statement still show everything.
+     */
+    public const FARM_EXPENSE_CATEGORY = 'Poultry Farm';
+
     /** Headline figures for a range: sales, profit, money in, expenses, net, returns. */
     public function kpis(int $companyId, string $from, string $to, ?int $locationId = null): array
     {
@@ -76,12 +84,14 @@ class DashboardService
                 COALESCE(SUM(s.balance), 0) AS on_credit
             FROM {$src} WHERE s.sale_date BETWEEN ? AND ?) a
             CROSS JOIN (SELECT COALESCE(SUM(f.amount), 0) AS v FROM financial_records f
+            LEFT JOIN financial_categories fc ON fc.id = f.financial_category_id
             WHERE f.company_id = ? AND f.type = ? AND COALESCE(f.is_deleted, 0) = 0
-              AND (f.source_type IS NULL OR f.source_type NOT IN (?, ?, ?)) AND ".SalesSource::localDay('f.date', 'f.created_at')." BETWEEN ? AND ?{$fWin}{$storeExp}) e
+              AND (f.source_type IS NULL OR f.source_type NOT IN (?, ?, ?)) AND (fc.name IS NULL OR fc.name <> ?)
+              AND ".SalesSource::localDay('f.date', 'f.created_at')." BETWEEN ? AND ?{$fWin}{$storeExp}) e
             CROSS JOIN (SELECT COUNT(*) AS n, COALESCE(SUM(r.value), 0) AS v FROM sale_returns r
             WHERE r.company_id = ? AND COALESCE(r.is_deleted, 0) = 0 AND DATE(CONVERT_TZ(r.created_at, '+00:00', @tz_offset)) BETWEEN ? AND ?{$rWin}{$storeRet}) rt",
             [...$bind, $from, $to,
-                $companyId, 'Expense', 'goods_receipt', 'supplier_payment', 'purchase_return', $from, $to, ...$fBind,
+                $companyId, 'Expense', 'goods_receipt', 'supplier_payment', 'purchase_return', self::FARM_EXPENSE_CATEGORY, $from, $to, ...$fBind,
                 $companyId, $from, $to, ...$rBind, ...($locationId !== null ? [$locationId] : [])]);
         $collected = $this->collectedByMethod($companyId, $from, $to, $locationId);
         $expenses = (float) $s->expenses;
