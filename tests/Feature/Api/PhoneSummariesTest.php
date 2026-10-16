@@ -75,8 +75,9 @@ class PhoneSummariesTest extends ApiTestCase
         $this->assertSame('application/pdf', $pdf->headers->get('Content-Type'));
         $this->assertStringStartsWith('%PDF', (string) $pdf->getContent());
 
-        // Default window: 90 days back. By id too; another shop's customer is a 404; a guest is a 401.
-        $this->assertSame(now()->subDays(90)->toDateString(), $this->getJson("/api/v1/customers/{$c['id']}/summary", $this->h)->assertOk()->json('data.statement.from'));
+        // Default window: 90 days back from the shop's own day (its time zone, not the server's).
+        // By id too; another shop's customer is a 404; a guest is a 401.
+        $this->assertSame(\App\Support\LocalDate::today((int) $this->t['company_id'])->subDays(90)->toDateString(), $this->getJson("/api/v1/customers/{$c['id']}/summary", $this->h)->assertOk()->json('data.statement.from'));
         $this->getJson("/api/v1/customers/{$c['uuid']}/summary", $this->auth($this->registerTenant()['token']))->assertStatus(404);
         $this->getJson("/api/v1/customers/{$c['uuid']}/summary")->assertStatus(401);
     }
