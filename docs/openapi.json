@@ -1138,6 +1138,21 @@
                                             "fundraising"
                                         ]
                                     },
+                                    "modules": {
+                                        "type": [
+                                            "array",
+                                            "null"
+                                        ],
+                                        "items": {
+                                            "type": "string",
+                                            "enum": [
+                                                "shop",
+                                                "finance",
+                                                "budget",
+                                                "poultry"
+                                            ]
+                                        }
+                                    },
                                     "timezone": {
                                         "type": [
                                             "string",
@@ -3458,6 +3473,68 @@
                 ]
             }
         },
+        "/budget-programs/{id}/print-link": {
+            "post": {
+                "tags": [
+                    "Budget programs"
+                ],
+                "summary": "POST budget-programs/{id}/print-link — a 30-minute link to this event's budget PDF (routes/web.php",
+                "operationId": "post_budget_programs_id_print_link",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
         "/cash-movements": {
             "post": {
                 "tags": [
@@ -4900,7 +4977,7 @@
                 "tags": [
                     "Company"
                 ],
-                "summary": "PUT company/modules { modules: [...] } — hidden modules keep their data. */",
+                "summary": "PUT company/modules { modules: [...] }: at least one of shop, poultry or budget. Hidden modules keep their data. */",
                 "operationId": "put_company_modules",
                 "responses": {
                     "200": {
@@ -4952,7 +5029,13 @@
                                     "modules": {
                                         "type": "array",
                                         "items": {
-                                            "type": "string"
+                                            "type": "string",
+                                            "enum": [
+                                                "shop",
+                                                "finance",
+                                                "budget",
+                                                "poultry"
+                                            ]
                                         }
                                     }
                                 },
@@ -5269,6 +5352,79 @@
                         "bearer": []
                     }
                 ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/contribution-records/print-link": {
+            "post": {
+                "tags": [
+                    "Contribution records"
+                ],
+                "summary": "POST contribution-records/print-link { category_id } — a 30-minute link to the printable pledge",
+                "operationId": "post_contribution_records_print_link",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "category_id": {
+                                        "type": "string",
+                                        "maxLength": 191
+                                    }
+                                },
+                                "required": [
+                                    "category_id"
+                                ]
+                            }
+                        }
+                    }
+                },
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/DeviceId"

@@ -404,7 +404,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"first_name\": \"\",\n    \"last_name\": \"\",\n    \"name\": \"\",\n    \"email\": \"\",\n    \"phone_number\": \"\",\n    \"password\": \"\",\n    \"company_name\": \"\",\n    \"organisation_name\": \"\",\n    \"company_phone\": \"\",\n    \"company_address\": \"\",\n    \"currency\": \"UGX\",\n    \"country\": \"UG\",\n    \"business_type\": \"retail\",\n    \"timezone\": \"\",\n    \"verification_token\": \"\",\n    \"device_name\": \"\"\n}"
+                            "raw": "{\n    \"first_name\": \"\",\n    \"last_name\": \"\",\n    \"name\": \"\",\n    \"email\": \"\",\n    \"phone_number\": \"\",\n    \"password\": \"\",\n    \"company_name\": \"\",\n    \"organisation_name\": \"\",\n    \"company_phone\": \"\",\n    \"company_address\": \"\",\n    \"currency\": \"UGX\",\n    \"country\": \"UG\",\n    \"business_type\": \"retail\",\n    \"modules\": [\n        \"shop\"\n    ],\n    \"timezone\": \"\",\n    \"verification_token\": \"\",\n    \"device_name\": \"\"\n}"
                         }
                     }
                 },
@@ -1309,6 +1309,33 @@
                             ]
                         }
                     }
+                },
+                {
+                    "name": "POST budget-programs/{id}/print-link — a 30-minute link to this event's budget PDF (routes/web.php",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/print-link",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "print-link"
+                            ]
+                        }
+                    }
                 }
             ]
         },
@@ -1946,7 +1973,7 @@
                     }
                 },
                 {
-                    "name": "PUT company/modules { modules: [...] } — hidden modules keep their data. */",
+                    "name": "PUT company/modules { modules: [...] }: at least one of shop, poultry or budget. Hidden modules keep their data. */",
                     "request": {
                         "method": "PUT",
                         "header": [
@@ -1975,7 +2002,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"modules\": [\n        \"\"\n    ]\n}"
+                            "raw": "{\n    \"modules\": [\n        \"shop\"\n    ]\n}"
                         }
                     }
                 },
@@ -2099,6 +2126,40 @@
                                 "contribution-records",
                                 "options"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST contribution-records/print-link { category_id } — a 30-minute link to the printable pledge",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/contribution-records/print-link",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "contribution-records",
+                                "print-link"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"category_id\": \"\"\n}"
                         }
                     }
                 },

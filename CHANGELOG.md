@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### One account, four apps (2026-10-17, budget-pro-new docs/FAMILY_PLAN.md)
+- **Modules at sign-up:** `POST /api/v1/auth/register` and `PUT /api/v1/onboarding/business` accept an optional `modules` list.
+  - It needs at least one of shop, poultry or budget, and `finance` is added. The business type follows: the shop's type, or `poultry` / `fundraising` without a shop.
+  - Without `modules`, the type decides the modules as before.
+  - `CompanyRules` refuses a module list with no core module, wherever modules are saved.
+- **Setup follows the modules:** an account without Shop skips the products, money and first-sale steps, and its getting-started checklist has no shop items.
+- **Portal summaries:** `PoultrySummary` (birds alive, eggs, lay rate, deaths, feed days left, the month's sales and expenses) and `BudgetSummary` (per event: budget and spent, pledged, paid, owed, still needed and per week to the day) feed the web portal's dashboard cards. They use the same definitions as the phone.
+- **Private pledge lists and budget PDFs:**
+  - The phone's pledge-list link (`data-exports-print?id=<category>&company_id=`) used to show any company's pledges to anyone who guessed its number. It now needs a 30-minute signed link from `POST /api/v1/contribution-records/print-link`.
+  - The budget PDF opens from the phone through `POST /api/v1/budget-programs/{id}/print-link`. Before, it landed on the classic sign-in.
+  - An unsigned link shows "This page is private".
+- **Poultry sync:** a second phone's daily card for the same batch and day folds into the server's card (newest write wins), and the phone is told to swap its copy. Before, it failed on the unique key and retried forever.
+- **Pledges keep their category** (family, friends, church…) when they sync from the phone.
+- **`demo:family`** (local only) builds a Mukono layers farm, the Brian & Grace wedding and an all-in-one account for the public site's screenshots.
+
 ### Phone app APIs, next round (2026-10-17, budget-pro-mobo docs/MOBILE_EXCELLENCE_PLAN.md phase D)
 - **`GET /api/v1/meta`:** what the app needs to fit this server, in one call:
   - the business (name, logo, brand colour, money format), the edition and the plan badge;

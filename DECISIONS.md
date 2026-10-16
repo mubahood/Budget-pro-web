@@ -114,4 +114,9 @@ its Appendix H open questions (H1–H10). Every later decision made while execut
   - **Safeguards:** each link is recorded by the hash of its nonce and used up in one atomic update. It can only land on a plain path of the web portal (never `/login`, `/logout` or another host), and the portal applies its normal sign-in refusals.
   - **Why:** web-only screens (promotions, price book, transfers) stay one tap away without a second password.
 - **2026-10-17: The plan chip and the shop menu moved into the kernel (`PlanBadge`, `ShopMenu`).** The web topbar and the phone's `meta` read the same code, so they cannot disagree about a shop's plan or its pages.
-
+- **2026-10-17: One account, four apps (Budget Pro, Shelfie, Kuku Tally, Pledge & Budget) on one backend and one web portal.** The modules already existed (`enabled_modules`), so an app is a view of the account, not a separate product: each phone app shows only its module, and Budget Pro shows all.
+  - **Sign-up:** the person picks shop, poultry or budget (at least one), and `finance` comes with any of them.
+  - **One plan covers every app:** plans have no module dimension. Prices per module are left to the owner.
+  - **Where the apps live:** `config/apps.php` in budget-pro-new and `lib/core/app_flavor.dart` in budget-pro-mobo.
+- **2026-10-17: Pages opened in the phone's browser from the app use short signed links, never a company number in the address.** The phone's browser has no session, so pledge lists and budget PDFs open from a 30-minute relative-signed URL. It is made for the signed-in person's own company and is relative so the host's http/https proxy can't break it. An old app's unsigned link gets an explanation, not the data.
+- **2026-10-17: Natural-key twins merge in poultry sync.** A model may declare `$syncNaturalKey` (the daily card: batch + date). A push under a new uuid that matches an existing row updates that row, with the same newest-write-wins rule, and answers as a conflict carrying the server's row. The phone then replaces its copy instead of retrying a duplicate.
