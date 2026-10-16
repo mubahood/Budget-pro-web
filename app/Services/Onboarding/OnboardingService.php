@@ -478,7 +478,7 @@ class OnboardingService
             'prices' => (bool) $r->products && ! $r->unpriced,
             'first_sale' => (bool) $r->first_sale,
             'staff' => (bool) $r->staff,
-            'momo' => ! empty($company->momo_subaccount_id),
+            'momo' => app(\App\Services\Engage\MomoCollections::class)->ready($company),
             'receipts' => (bool) $r->receipts,
             'phone_app' => (bool) $r->phone_app,
             'plan' => $status !== null && $status !== 'trialing',

@@ -12,6 +12,13 @@
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
+    <!-- Slow: a real install of a whole release in a subprocess (about 75 s), left out of the usual run.
+         Run it on demand with the options "group slow" and "exclude-group none" (see ReleaseProofTest). -->
+    <groups>
+        <exclude>
+            <group>slow</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>

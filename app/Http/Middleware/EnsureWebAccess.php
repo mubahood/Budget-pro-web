@@ -25,7 +25,7 @@ class EnsureWebAccess
     public function handle(Request $request, Closure $next): Response
     {
         $user = Admin::user();
-        if ($user === null || PlatformAdminOnly::isPlatformAdmin($user) || $request->is(...self::ALWAYS_ALLOWED)) {
+        if ($user === null || PlatformAdminOnly::isPlatformAdmin($user) || \App\Support\ClassicPath::is($request, ...self::ALWAYS_ALLOWED)) {
             return $next($request);
         }
 

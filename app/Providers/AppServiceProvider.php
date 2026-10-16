@@ -25,5 +25,7 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Database\Events\MigrationsEnded::class, fn () => \App\Scopes\CompanyScope::flushColumnCache());
         // LocalTime::prime() reuses the timezone of a company this request already loaded.
         \App\Support\LocalTime::listen();
+        // Standalone: the buyer's own mail, SMS, WhatsApp and Flutterwave keys (Settings › Connections) over .env.
+        \App\Support\InstallSettings::overlay();
     }
 }

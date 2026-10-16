@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\SaleRecord;
 use App\Services\FlutterwaveService;
 use App\Services\Shop\PaymentService;
+use App\Support\Edition;
 use App\Support\Phone;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,11 +17,27 @@ use Illuminate\Support\Str;
  * money should reach (a Flutterwave subaccount); the cashier requests the
  * amount from the customer's phone; when Flutterwave confirms (webhook or a
  * status check) the payment is recorded on the sale — once.
+ *
+ * On a standalone copy (docs/STANDALONE_EDITION_PLAN.md §13) the Flutterwave account is the buyer's
+ * own (Settings › Connections): the money lands straight in its balance, with no subaccount and no
+ * platform fee. The SaaS path is unchanged.
  */
 class MomoCollections
 {
     public function __construct(private readonly FlutterwaveService $flw)
     {
+    }
+
+    /** Standalone: collections go straight to the buyer's own Flutterwave account. */
+    public static function direct(): bool
+    {
+        return Edition::isStandalone();
+    }
+
+    /** Whether the till may send this shop's customers a request: its subaccount (SaaS), or the buyer's keys (standalone). */
+    public function ready(Company $company): bool
+    {
+        return self::direct() ? filled(config('flutterwave.secret_key')) : (bool) $company->momo_subaccount_id;
     }
 
     public function networks(Company $company): array
@@ -30,6 +47,9 @@ class MomoCollections
 
     public function setup(Company $company, string $phone, string $network): Company
     {
+        if (self::direct()) {
+            throw BusinessRuleException::make('momo_direct', 'On this copy mobile money goes straight to your own Flutterwave account: add its keys in Settings › Connections.');
+        }
         $cur = strtoupper((string) $company->currency);
         $codes = config("flutterwave.momo.networks.{$cur}", []);
         if (! isset($codes[strtoupper($network)])) {
@@ -60,8 +80,10 @@ class MomoCollections
     public function request(SaleRecord $sale, string $phone, ?string $network, ?float $amount, int $userId): object
     {
         $company = Company::withoutGlobalScopes()->findOrFail($sale->company_id);
-        if (! $company->momo_subaccount_id) {
-            throw BusinessRuleException::make('momo_not_set_up', 'Set up the mobile money number that receives payments first (Settings → Mobile money).');
+        if (! $this->ready($company)) {
+            throw BusinessRuleException::make('momo_not_set_up', self::direct()
+                ? 'Connect your Flutterwave account first (Settings › Connections).'
+                : 'Set up the mobile money number that receives payments first (Settings → Mobile money).');
         }
         if ($sale->voided_at !== null) {
             throw BusinessRuleException::make('sale_voided', 'This sale was voided.');
@@ -86,7 +108,7 @@ class MomoCollections
         $r = $this->flw->chargeMobileMoney($type, array_filter([
             'tx_ref' => $txRef, 'amount' => $amount, 'currency' => $cur, 'phone_number' => ltrim($e164, '+'), 'network' => $network,
             'email' => $company->email ?: 'shop'.$company->id.'@'.parse_url((string) config('app.url'), PHP_URL_HOST), 'fullname' => $sale->customer_name ?: 'Customer',
-            'subaccounts' => [['id' => $company->momo_subaccount_id]], 'meta' => ['company_id' => $company->id, 'sale_id' => $sale->id],
+            'subaccounts' => self::direct() ? null : [['id' => $company->momo_subaccount_id]], 'meta' => ['company_id' => $company->id, 'sale_id' => $sale->id],
         ], fn ($v) => $v !== null));
         DB::table('momo_requests')->where('id', $id)->update($r['success']
             ? ['provider_id' => $r['id'] ?? null, 'redirect_url' => $r['redirect'] ?? null, 'updated_at' => now()]

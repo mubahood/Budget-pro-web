@@ -23,7 +23,14 @@ class FillDemoShop implements ShouldQueue
 
     public function handle(DemoShopService $demos): void
     {
+        // A web request filling a demo needs the room; a limit set here stays on the whole process,
+        // so it is put back afterwards (a long queue worker or the test suite must not inherit it).
+        $previous = (int) ini_get('max_execution_time');
         @set_time_limit(300);
-        $demos->fillById($this->demoId, $this->days);
+        try {
+            $demos->fillById($this->demoId, $this->days);
+        } finally {
+            @set_time_limit($previous);
+        }
     }
 }

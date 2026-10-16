@@ -42,6 +42,21 @@ $app->singleton(
 );
 
 /*
+| A standalone copy is served from the buyer's web folder (docs/STANDALONE_EDITION_PLAN.md §8.2), not
+| from public/: the installer writes that folder to APP_PUBLIC_PATH. Set before any configuration is
+| read, so public_path() (the admin disk, /storage) points there in web requests, artisan and the
+| cached configuration alike. Unset (the SaaS) changes nothing.
+*/
+if (is_file($environmentFile = $app->basePath('.env'))
+    && str_contains($environment = (string) file_get_contents($environmentFile), 'APP_PUBLIC_PATH=')) {
+    $publicPath = Dotenv\Dotenv::parse($environment)['APP_PUBLIC_PATH'] ?? null;
+    if (is_string($publicPath) && $publicPath !== '' && is_dir($publicPath)) {
+        $app->usePublicPath(realpath($publicPath));
+    }
+}
+unset($environmentFile, $environment, $publicPath);
+
+/*
 |--------------------------------------------------------------------------
 | Return The Application
 |--------------------------------------------------------------------------

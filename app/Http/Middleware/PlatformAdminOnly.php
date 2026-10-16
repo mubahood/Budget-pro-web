@@ -40,6 +40,9 @@ class PlatformAdminOnly
         'gens', 'gens/*', 'gen', 'gen/*',
         'product-templates', 'product-templates/*',
         'system-health', 'system-health/*',
+        'standalone-releases', 'standalone-releases/*',
+        'standalone-products', 'standalone-products/*',
+        'standalone-licences', 'standalone-licences/*',
     ];
 
     public function handle(Request $request, Closure $next, string $mode = 'paths'): Response
@@ -49,7 +52,7 @@ class PlatformAdminOnly
             return $next($request);
         }
 
-        if ($mode === 'all' || $request->is(...self::PLATFORM_PATHS)) {
+        if ($mode === 'all' || \App\Support\ClassicPath::is($request, ...self::PLATFORM_PATHS)) {
             abort(403, 'This area is reserved for platform administrators.');
         }
 

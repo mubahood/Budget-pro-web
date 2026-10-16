@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### One-off (standalone) edition: install, release, update, sell (2026-10-17, docs/STANDALONE_EDITION_PLAN.md)
+- **Package:** one ZIP with both apps (`budget_pro/`, `budget_pro_web/`), a web folder (`web_root_files/`) and a signed `PACKAGE.json`; one front controller serves both apps from one address (`/api`, `/classic`, receipts → kernel; the rest → the shop screens).
+- **Installer:** pre-Laravel `install.php` for cPanel (checks every file's signature, InnoDB, an empty database), writes both `.env` files with one key, migrates in short steps, creates the one business and its owner; `standalone:install` for the command line.
+- **Releases (platform screens):** stage a version from the browser, built from the deployed commits of both repos (`git archive`), allow-list and secret scan, signed, and proved by a clean install on an empty database before Publish. Worker: `releases:work`.
+- **Updates on a buyer's server:** Settings › Licence & updates (version, licence, scheduler, backups, QR code for phones); Check now / Back up and update / Upload and update, run by the scheduler with automatic rollback of code and database; nightly backups.
+- **Selling:** `/own` (card or mobile money through Flutterwave, idempotent settlement), buyer page `/my-licence` (24-hour link, download, licence file, guide, renew, change address), offline issuing and licence management in the platform screens, update feed for installed copies.
+- **Buyer's own accounts:** Settings › Connections for email, SMS, WhatsApp and Flutterwave (encrypted, with test buttons); mobile money straight to the buyer with no platform fee.
+- **Brand:** the business's colour, logos and name on its sign-in page, screens, emails, receipts and error pages on its own server; owner banners for licence, scheduler, backups and messaging.
+- **Fix:** classic platform screens' permission checks under a URL prefix; a demo job's time limit no longer stays on the whole process.
+
 ### One-off (standalone) edition, foundation (2026-10-16, docs/STANDALONE_EDITION_PLAN.md)
 - **One codebase, two editions:** `APP_EDITION=saas|standalone` (config/edition.php, `App\Support\Edition`, `edition:` route middleware in both apps). On standalone, the public site, sign-up, plans and billing, platform screens, demos, PingPin, the legacy API and the master password are off; `/` is the sign-in.
 - **One business per installation:** `companies.standalone_slot` (unique), a model guard and database triggers (`SingleBusinessGuard`); every company-creation path refuses a second.

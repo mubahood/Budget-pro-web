@@ -68,7 +68,11 @@ class Messenger
             if ($ch === null) {
                 continue;
             }
-            $r = $ch->send($row->to, $row->body, $meta['options'][$kind] ?? []);
+            $options = $meta['options'][$kind] ?? [];
+            if ($kind === 'mail' && ! empty($meta['company_id'])) {
+                $options += ['company_id' => (int) $meta['company_id']]; // whose brand the email wears (standalone)
+            }
+            $r = $ch->send($row->to, $row->body, $options);
             if ($r['ok']) {
                 DB::table('message_log')->where('id', $logId)->update(['channel' => $kind, 'status' => 'sent', 'provider_id' => $r['provider_id'] ?? null, 'error' => null, 'updated_at' => now()]);
 

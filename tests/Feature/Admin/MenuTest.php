@@ -196,7 +196,7 @@ class MenuTest extends AdminTestCase
 
     public function test_every_shop_page_is_on_the_tenant_allow_list(): void
     {
-        $platform = '/^(auth|_handle_|gens?\b|pingpin-plans|plans|subscriptions|companies\b|system-health|product-templates)/';
+        $platform = '/^(auth|_handle_|gens?\b|pingpin-plans|plans|subscriptions|companies\b|system-health|product-templates|standalone-(releases|products|licences))/';
         $missing = [];
         foreach (Route::getRoutes() as $route) {
             if (! in_array('GET', $route->methods(), true) || ! in_array(\App\Http\Middleware\EnsureWebAccess::class, $route->gatherMiddleware(), true)) {

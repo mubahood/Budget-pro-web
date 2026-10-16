@@ -37,12 +37,22 @@ class Kernel extends ConsoleKernel
             $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
             $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
             $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:00')->withoutOverlapping();
+            // Release builds run from their own cron line (`releases:work`, every 2 minutes), never in here;
+            // this only fails a build whose worker died so it can be retried.
+            $schedule->call(fn () => \App\Models\StandaloneRelease::failStale())->name('standalone-release-stale-check')->everyTenMinutes();
         } else {
             // Minute by minute, for the owner's "scheduler not running" banner (StandaloneHeartbeat).
             $schedule->call($task('standalone:heartbeat'))->name('standalone:heartbeat')->everyMinute();
         }
         // Messages (OTP, invites, notices) go through the database queue; the worker drains it each minute.
         $schedule->call($task('queue:work', ['--stop-when-empty' => true, '--tries' => 3, '--max-time' => 50]))->name('queue:work')->everyMinute()->withoutOverlapping();
+        if (! $saas) {
+            // Licence & updates (§12): what the page asked for (an update or a backup) within a minute, last in the run;
+            // the nightly backup; the daily update check. Maintenance mode skips them, as it does every task.
+            $schedule->call($task('standalone:system-requests'))->name('standalone:system-requests')->everyMinute()->withoutOverlapping(60);
+            $schedule->call($task('standalone:backup'))->name('standalone:backup')->dailyAt('02:15')->withoutOverlapping(120);
+            $schedule->call($task('standalone:update', ['--check' => true]))->name('standalone:update --check')->dailyAt('06:10')->withoutOverlapping(30);
+        }
     }
 
     /**

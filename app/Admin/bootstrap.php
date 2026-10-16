@@ -51,3 +51,25 @@ Admin::navbar(fn (\Encore\Admin\Widgets\Navbar $navbar) => $navbar->right(new cl
         return '<li><a href="'.e(rtrim((string) $newUi, '/')).'/login" title="The new, faster screens — same account, same data"><i class="fa fa-magic"></i> <span class="hidden-xs">Try the new Budget Pro</span></a></li>';
     }
 }));
+
+// Standalone: the owner's notices (licence, address, updates, scheduler, backups, messaging), the same
+// list as the new interface's banners (App\Support\OwnerNotices). Nothing on the SaaS.
+Admin::navbar(fn (\Encore\Admin\Widgets\Navbar $navbar) => $navbar->left(new class implements \Illuminate\Contracts\Support\Renderable
+{
+    public function render(): string
+    {
+        $user = Admin::user();
+        if (! \App\Support\Edition::isStandalone() || ! $user instanceof \App\Models\User) {
+            return '';
+        }
+        $notices = rescue(fn () => \App\Support\OwnerNotices::for($user, request()->getHost()), [], false);
+        if ($notices === []) {
+            return '';
+        }
+        $items = implode('', array_map(fn (array $n) => '<li style="padding:6px 14px;white-space:normal;max-width:420px;">'.e($n['text']).'</li>', $notices));
+
+        return '<li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown" title="Notices for the owner">'
+            .'<i class="fa fa-exclamation-triangle text-yellow"></i> <span class="hidden-xs">'.count($notices).' '.(count($notices) === 1 ? 'notice' : 'notices').'</span></a>'
+            .'<ul class="dropdown-menu" style="min-width:320px;">'.$items.'</ul></li>';
+    }
+}));

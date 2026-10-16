@@ -25,7 +25,7 @@ class AdminPermission
         if (! $user instanceof \App\Models\User || PlatformAdminOnly::isPlatformAdmin($user)) {
             return $next($request);
         }
-        $section = explode('/', trim($request->path(), '/'))[0] ?? '';
+        $section = explode('/', \App\Support\ClassicPath::of($request->path()))[0] ?? ''; // without the classic prefix
         $company = \App\Models\Company::withoutGlobalScopes()->find($user->company_id);
         if ($company && $section !== '' && \App\Models\AdminMenu::pathDisabled($section, \App\Models\AdminMenu::disabledPaths($company))) {
             admin_warning('Module switched off', 'Turn it on under Company settings → Modules.');

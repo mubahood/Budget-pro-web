@@ -88,6 +88,12 @@ final class Signer
         return ['licence' => $licence] + $this->sign($licence);
     }
 
+    /** The id a copy looks the public key up by (RELEASE_KEYS.json). */
+    public function keyId(): string
+    {
+        return $this->key()[0];
+    }
+
     /** The public half of the signing key (base64), as RELEASE_KEYS.json carries it. */
     public function publicKey(): string
     {

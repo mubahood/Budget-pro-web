@@ -167,6 +167,9 @@
             color: #856404;
         }
     </style>
+    {{-- The business's colour as the accent on a standalone copy (STANDALONE_EDITION_PLAN.md §15); #RRGGBB only. --}}
+    @php $accent = \App\Support\ShopBrand::forCompany($company ?? null)->colour(); @endphp
+    @if($accent)<style>.invoice-title{color:{{ $accent }}}.section-title{border-bottom-color:{{ $accent }};color:{{ $accent }}}.items-table th{background-color:{{ $accent }}}hr.divider{background-color:{{ $accent }}}.totals-row.grand-total{border-top-color:{{ $accent }};color:{{ $accent }}}</style>@endif
 </head>
 <body>
     <table class="w-100">

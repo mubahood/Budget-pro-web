@@ -42,6 +42,17 @@ return [
             'after_commit' => false,
         ],
 
+        // SaaS only: standalone release builds (docs/STANDALONE_EDITION_PLAN.md §10). A build takes up to
+        // 30 minutes, so it has its own long lease; the scheduler's short worker (queue 'default') never
+        // takes it. Worked by its own cron line: `php artisan releases:work` every 2 minutes.
+        'release-builds' => [
+            'driver' => 'database',
+            'table' => 'jobs',
+            'queue' => 'releases',
+            'retry_after' => 2100,
+            'after_commit' => true,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => 'localhost',

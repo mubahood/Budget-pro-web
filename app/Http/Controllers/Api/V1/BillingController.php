@@ -317,6 +317,13 @@ class BillingController extends Controller
             return response()->json(['status' => 'ignored'], 200);
         }
 
+        // A standalone copy bought online (docs/STANDALONE_EDITION_PLAN.md §11): verified with Flutterwave, one licence.
+        if (str_starts_with((string) $txRef, \App\Models\StandaloneOrder::PREFIX)) {
+            $result = app(\App\Services\StandaloneSalesService::class)->settle((string) $txRef, $transactionId);
+
+            return $result === 'retry' ? response()->json(['status' => 'retry'], 503) : response()->json(['status' => $result], 200);
+        }
+
         // Never trust the webhook body alone — re-verify with the API (SubscriptionFulfillment::verifyAndFulfill).
         $r = app(SubscriptionFulfillment::class)->verifyAndFulfill((string) $txRef, $transactionId);
         if ($r['status'] === 'unverified' && $r['transient']) {

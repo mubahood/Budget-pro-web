@@ -3,6 +3,8 @@
 namespace App\Support\Rules;
 
 use App\Models\Company;
+use App\Support\BrandColour;
+use App\Support\Edition;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -25,6 +27,9 @@ class CompanyRules
         'modules' => ['enabled_modules'],
     ];
 
+    /** The buyer's brand (STANDALONE_EDITION_PLAN.md §15): part of Business profile on a standalone copy only. */
+    public const BRAND = ['color', 'logo_wide'];
+
     /** Older profile fields the phone app still sends (kept writable for it; phone_number_2 and slogan are also in 'profile'). */
     public const LEGACY = [
         'phone_number_2', 'website', 'about', 'slogan',
@@ -45,7 +50,15 @@ class CompanyRules
     /** @return array<int, string> */
     public static function writable(): array
     {
-        return array_merge(array_merge(...array_values(self::SECTIONS)), self::LEGACY);
+        return array_merge(array_merge(...array_values(self::SECTIONS)), self::LEGACY, self::BRAND);
+    }
+
+    /** The columns a settings section writes in this edition (Business profile carries the brand on standalone). */
+    public static function sectionFields(string $section): array
+    {
+        $fields = self::SECTIONS[$section] ?? [];
+
+        return $section === 'profile' && Edition::isStandalone() ? array_merge($fields, self::BRAND) : $fields;
     }
 
     /** @return array<string, array<int, mixed>> */
@@ -61,6 +74,19 @@ class CompanyRules
             'about' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'slogan' => ['sometimes', 'nullable', 'string', 'max:255'],
             'logo' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'logo_wide' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // Printed into a <style> tag and under white button text: #RRGGBB only, and dark enough (4.5:1).
+            'color' => ['sometimes', 'nullable', 'string', 'max:20', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value === null || trim((string) $value) === '') {
+                    return;
+                }
+                $hex = BrandColour::normalise((string) $value);
+                if ($hex === null) {
+                    $fail('Enter the colour as a hex code, like #0F7B4F.');
+                } elseif (! BrandColour::readableOnWhite($hex)) {
+                    $fail('This colour is too light: white text on it would be hard to read ('.number_format(BrandColour::contrastWithWhite($hex), 1).':1, it needs 4.5:1). Choose a darker shade.');
+                }
+            }],
             'currency' => ['sometimes', 'required', 'string', Rule::in(config('saas.currencies')), function (string $attribute, mixed $value, \Closure $fail) use ($company) {
                 if (strtoupper((string) $value) !== strtoupper((string) $company->currency) && self::currencyLocked($company)) {
                     $fail('The currency cannot change once the shop has sales: every past figure is in '.$company->currency.'.');
@@ -131,6 +157,7 @@ class CompanyRules
         foreach (array_intersect_key($data, array_flip(self::writable())) as $key => $value) {
             $company->{$key} = match ($key) {
                 'currency' => strtoupper((string) $value),
+                'color' => BrandColour::normalise($value === null ? null : (string) $value),
                 'payment_methods' => array_merge(['momo' => [], 'opening_float' => 0.0], is_array($company->payment_methods) ? $company->payment_methods : [],
                     ['methods' => array_values(array_unique($value))]),
                 'receipt_channels', 'enabled_modules' => array_values(array_unique($value)),

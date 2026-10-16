@@ -33,7 +33,9 @@ class OtpService
             'ip' => $ip, 'created_at' => now(), 'updated_at' => now(),
         ]);
         $isEmail = str_contains($identifier, '@');
-        $text = 'Your '.config('app.name')." code is {$code}. It expires in {$cfg['ttl_minutes']} minutes. Never share it.";
+        // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
+        $product = \App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name');
+        $text = 'Your '.$product." code is {$code}. It expires in {$cfg['ttl_minutes']} minutes. Never share it.";
         $channels = $isEmail ? ['mail'] : ['whatsapp', 'sms'];
         $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];
         $logId = app(Messenger::class)->send($identifier, $text, $channels, $meta, now: true);

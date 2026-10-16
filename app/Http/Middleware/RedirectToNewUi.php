@@ -65,7 +65,7 @@ class RedirectToNewUi
             return $next($request);
         }
 
-        $path = trim($request->path(), '/');
+        $path = \App\Support\ClassicPath::of($request->path()); // without the classic prefix ("classic" on a standalone copy)
         $user = Admin::user();
 
         if ($user === null) {

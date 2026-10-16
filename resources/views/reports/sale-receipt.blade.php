@@ -139,6 +139,9 @@
             margin: 5px 0;
         }
     </style>
+    {{-- The business's colour as the accent on a standalone copy (STANDALONE_EDITION_PLAN.md §15); #RRGGBB only. --}}
+    @php $accent = \App\Support\ShopBrand::forCompany($company ?? null)->colour(); @endphp
+    @if($accent)<style>.receipt-title{color:{{ $accent }}}.section-title{border-bottom-color:{{ $accent }};color:{{ $accent }}}hr.divider{background-color:{{ $accent }}}</style>@endif
 </head>
 <body>
     <table class="w-100">

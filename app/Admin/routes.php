@@ -131,6 +131,23 @@ Route::group([
         $router->resource('pingpin-plans', PingPinPlanController::class);
         $router->resource('plans', PlanController::class);
         $router->resource('subscriptions', SubscriptionController::class);
+        // Standalone releases (docs/STANDALONE_EDITION_PLAN.md §10).
+        $router->get('standalone-releases', 'StandaloneReleaseController@index');
+        $router->post('standalone-releases', 'StandaloneReleaseController@stage');
+        $router->post('standalone-releases/{id}/publish', 'StandaloneReleaseController@publish')->where('id', '[0-9]+');
+        $router->post('standalone-releases/{id}/retry', 'StandaloneReleaseController@retry')->where('id', '[0-9]+');
+        $router->post('standalone-releases/{id}/withdraw', 'StandaloneReleaseController@withdraw')->where('id', '[0-9]+');
+        $router->get('standalone-releases/{id}/download', 'StandaloneReleaseController@download')->where('id', '[0-9]+');
+        // Standalone products and licences (docs/STANDALONE_EDITION_PLAN.md §11).
+        $router->get('standalone-products', 'StandaloneProductController@index');
+        $router->post('standalone-products', 'StandaloneProductController@store');
+        $router->post('standalone-products/{id}', 'StandaloneProductController@update')->where('id', '[0-9]+');
+        $router->post('standalone-products/{id}/toggle', 'StandaloneProductController@toggle')->where('id', '[0-9]+');
+        $router->get('standalone-licences', 'StandaloneLicenceController@index');
+        $router->post('standalone-licences', 'StandaloneLicenceController@issue');
+        $router->post('standalone-licences/{id}/{action}', 'StandaloneLicenceController@act')
+            ->where(['id' => '[0-9a-f-]{36}', 'action' => 'send-link|copy-link|renew|domain|revoke|reinstate']);
+        $router->get('standalone-licences/{id}/licence.json', 'StandaloneLicenceController@document')->where('id', '[0-9a-f-]{36}');
     });
 
 });

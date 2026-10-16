@@ -18,6 +18,9 @@ return [
     'licence_path' => env('APP_LICENCE_PATH', dirname(__DIR__).'/storage/app/private/licence.json'),
     'installed_path' => dirname(__DIR__).'/storage/app/private/installed.json',
 
+    // Standalone: the web app's folder (budget_pro_web), which the kernel caches, updates and backs up with itself.
+    'web_path' => env('BUDGETPRO_WEB_PATH'),
+
     // Standalone: where to look for updates (the SaaS). Empty = upload only.
     'update_server' => env('APP_UPDATE_SERVER', 'https://budget-dynamics.schooldynamics.ug'),
 
@@ -49,5 +52,6 @@ return [
         'database' => env('RELEASE_TEST_DB_DATABASE'),
         'user' => env('RELEASE_TEST_DB_USER'),
         'password' => env('RELEASE_TEST_DB_PASSWORD'),
+        'socket' => env('RELEASE_TEST_DB_SOCKET'), // optional: a MySQL that only listens on a socket
     ],
 ];

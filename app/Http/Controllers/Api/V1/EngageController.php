@@ -29,7 +29,7 @@ class EngageController extends Controller
 
         return $this->success([
             'debt_reminders_enabled' => (bool) $c->debt_reminders_enabled, 'credit_terms_days' => (int) $c->credit_terms_days,
-            'momo' => ['ready' => (bool) $c->momo_subaccount_id, 'phone' => $c->momo_payout_phone, 'network' => $c->momo_payout_network, 'networks' => $momo->networks($c)],
+            'momo' => ['ready' => $momo->ready($c), 'phone' => $c->momo_payout_phone, 'network' => $c->momo_payout_network, 'networks' => $momo->networks($c)],
         ], 'Settings.');
     }
 

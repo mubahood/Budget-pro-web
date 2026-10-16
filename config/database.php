@@ -57,7 +57,9 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
-            'engine' => null,
+            // Every table InnoDB whatever the server's default (a host once defaulted to MyISAM and an install died
+            // mid-migration: docs/STANDALONE_EDITION_PLAN.md §2 lesson 4). Live MySQL is InnoDB already.
+            'engine' => 'InnoDB',
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
