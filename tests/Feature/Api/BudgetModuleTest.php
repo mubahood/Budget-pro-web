@@ -132,4 +132,44 @@ class BudgetModuleTest extends ApiTestCase
         $category->assertOk();
         $this->assertGreaterThan(100, (float) $category->json('data.percentage_done'));
     }
+
+    public function test_the_phone_pledge_list_needs_a_signed_link_for_its_own_company(): void
+    {
+        $t = $this->registerTenant();
+        $h = $this->auth($t['token']);
+        $prog = $this->postJson('/api/v1/budget-programs', ['name' => 'Wedding'], $h)->json('data.id');
+        $this->postJson('/api/v1/contribution-records', ['budget_program_id' => $prog, 'name' => 'Aunt Florence Nakato', 'amount' => 500000, 'category_id' => 'family'], $h)->assertStatus(201);
+        $companyId = (int) \App\Models\ContributionRecord::where('name', 'Aunt Florence Nakato')->value('company_id');
+
+        // An unsigned link (older apps, or a guessed company number) shows no pledges.
+        $this->get('/data-exports-print?id=family&company_id='.$companyId)->assertStatus(403)
+            ->assertSee('This page is private')->assertDontSee('Aunt Florence Nakato');
+
+        $url = $this->postJson('/api/v1/contribution-records/print-link', ['category_id' => 'family'], $h)
+            ->assertOk()->json('data.url');
+        $this->assertStringContainsString('signature=', $url);
+        $path = parse_url($url, PHP_URL_PATH).'?'.parse_url($url, PHP_URL_QUERY);
+        $this->get($path)->assertOk()->assertSee('Aunt Florence Nakato');
+
+        // Changing the company number breaks the signature.
+        $this->get(str_replace('company_id='.$companyId, 'company_id='.($companyId + 1), $path))->assertStatus(403);
+    }
+
+    public function test_the_phone_budget_pdf_opens_from_a_signed_link_for_its_own_event_only(): void
+    {
+        $t = $this->registerTenant();
+        $h = $this->auth($t['token']);
+        $prog = $this->postJson('/api/v1/budget-programs', ['name' => 'Brian and Grace Wedding'], $h)->json('data.id');
+
+        $this->get('/budget-program-pdf?id='.$prog.'&company_id=1')->assertStatus(403)->assertSee('This page is private');
+
+        $url = $this->postJson('/api/v1/budget-programs/'.$prog.'/print-link', [], $h)->assertOk()->json('data.url');
+        $res = $this->get(parse_url($url, PHP_URL_PATH).'?'.parse_url($url, PHP_URL_QUERY));
+        $res->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $res->headers->get('Content-Type'));
+
+        // Another company's event cannot be asked for.
+        $other = $this->registerTenant();
+        $this->postJson('/api/v1/budget-programs/'.$prog.'/print-link', [], $this->auth($other['token']))->assertNotFound();
+    }
 }

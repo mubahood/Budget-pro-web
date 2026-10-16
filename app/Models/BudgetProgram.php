@@ -97,6 +97,22 @@ class BudgetProgram extends Model
         return $this->hasMany(BudgetItemCategory::class);
     }
 
+    /** The budget report as a streamed PDF (classic admin button and the phone's signed link). Never written to disk:
+     *  a copy under public/storage with a guessable name was readable by anyone. */
+    public function reportPdf()
+    {
+        $company = $this->company;
+        if ($this->logo === null || strlen((string) $this->logo) < 2) {
+            $this->logo = null;
+        }
+        $this->get_categories();
+        $pdf = \Illuminate\Support\Facades\App::make('dompdf.wrapper');
+        $pdf->loadHTML(view('reports.budget-report', ['data' => $this, 'company' => $company]));
+        $pdf->render();
+
+        return $pdf->stream();
+    }
+
     public function get_categories()
     {
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)

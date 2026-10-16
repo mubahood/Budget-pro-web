@@ -5,17 +5,37 @@ namespace App\Http\Controllers\Api\V1;
 use App\Models\BudgetProgram;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 
 class BudgetProgramController extends BaseCrudController
 {
     protected string $modelClass = BudgetProgram::class;
+
     protected string $resourceName = 'Budget program';
 
     // Financial totals are rollups computed from children.
     protected array $writable = ['name', 'status', 'deadline', 'rsvp', 'logo', 'title', 'bottom', 'groups', 'is_default', 'is_active'];
+
     protected array $searchable = ['name', 'title'];
+
     protected array $sortable = ['id', 'name', 'deadline', 'created_at'];
+
     protected array $filterable = ['status', 'is_active', 'is_default'];
+
+    /**
+     * POST budget-programs/{id}/print-link — a 30-minute link to this event's budget PDF (routes/web.php
+     * `budget-program.pdf`) for the phone's browser, which has no session. Only the caller's own company.
+     */
+    public function printLink(Request $request, $id)
+    {
+        $program = BudgetProgram::where('company_id', (int) $request->user()->company_id)->find((int) $id);
+        if ($program === null) {
+            return $this->error('Budget program not found.', 404);
+        }
+        $path = URL::temporarySignedRoute('budget-program.pdf', now()->addMinutes(30), ['id' => $program->id, 'company_id' => $program->company_id], false);
+
+        return $this->success(['url' => url($path), 'expires_in' => 1800], 'Link ready.');
+    }
 
     protected function rules(Request $request, ?Model $existing): array
     {

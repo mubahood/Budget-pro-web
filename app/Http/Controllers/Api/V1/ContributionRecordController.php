@@ -5,19 +5,41 @@ namespace App\Http\Controllers\Api\V1;
 use App\Models\ContributionRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 
 class ContributionRecordController extends BaseCrudController
 {
     protected string $modelClass = ContributionRecord::class;
+
     protected string $resourceName = 'Contribution';
 
     // not_paid_amount is derived by the model.
     protected array $writable = ['budget_program_id', 'treasurer_id', 'name', 'amount', 'paid_amount', 'fully_paid', 'custom_amount', 'custom_paid_amount', 'category_id'];
+
     protected array $searchable = ['name'];
+
     protected array $sortable = ['id', 'name', 'amount', 'paid_amount', 'created_at'];
+
     protected array $filterable = ['budget_program_id', 'treasurer_id', 'fully_paid'];
+
     protected array $listWith = ['budgetProgram', 'treasurer'];
+
+    /**
+     * POST contribution-records/print-link { category_id } — a 30-minute link to the printable pledge
+     * list of this person's own company (routes/web.php `data-exports.print`), to open in the phone's
+     * browser or share. Relative-signed, so the host's http/https proxy cannot invalidate it.
+     */
+    public function printLink(Request $request)
+    {
+        $data = $request->validate(['category_id' => ['required', 'string', 'max:191']]);
+        $path = URL::temporarySignedRoute('data-exports.print', now()->addMinutes(30), [
+            'id' => $data['category_id'],
+            'company_id' => (int) $request->user()->company_id,
+        ], false);
+
+        return $this->success(['url' => url($path), 'expires_in' => 1800], 'Link ready.');
+    }
 
     public function store(Request $request)
     {

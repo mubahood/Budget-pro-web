@@ -421,9 +421,13 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::get('members', [\App\Http\Controllers\Api\V1\MemberController::class, 'index']);
 
         // Budget / fundraising
+        // A 30-minute signed link to the event's budget PDF (routes/web.php budget-program.pdf).
+        Route::post('budget-programs/{id}/print-link', [BudgetProgramController::class, 'printLink'])->whereNumber('id')->middleware('throttle:30,1');
         apiCrud('budget-programs', BudgetProgramController::class);
         apiCrud('budget-item-categories', BudgetItemCategoryController::class);
         apiCrud('budget-items', BudgetItemController::class);
+        // A 30-minute signed link to the printable pledge list (routes/web.php data-exports.print).
+        Route::post('contribution-records/print-link', [ContributionRecordController::class, 'printLink'])->middleware('throttle:30,1');
         apiCrud('contribution-records', ContributionRecordController::class);
 
         // Poultry module sync (§Phase 8/9) — mobile-facing, matches the

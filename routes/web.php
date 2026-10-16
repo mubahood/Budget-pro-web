@@ -81,18 +81,7 @@ Route::middleware('admin.auth')->group(function () {
             abort(404);
         }
 
-        $company = $rep->company;
-        if ($rep->logo === null || strlen((string) $rep->logo) < 2) {
-            $rep->logo = null;
-        }
-
-        $rep->get_categories();
-        $pdf = App::make('dompdf.wrapper');
-        $pdf->loadHTML(view('reports.budget-report', ['data' => $rep, 'company' => $company]));
-        $pdf->render();
-
-        // Streamed only: a copy under public/storage with a guessable name was readable by anyone.
-        return $pdf->stream();
+        return $rep->reportPdf();
     });
 
     // "Print Thanks" button on ContributionRecordController's grid links here
@@ -162,11 +151,11 @@ Route::middleware('admin.auth')->group(function () {
 |    endpoints.
 |
 | Branching on whether `id` is numeric tells the two apart. The mobile path
-| still can't verify the caller actually owns `company_id` (no session to
-| check it against) -- but it now at least scopes strictly to that one
-| company_id + category, which is already narrower than the previous
-| /data-exports-print this replaced (BACKEND_API_MASTER_TASKS.md: removed
-| for returning literally every tenant's contribution records).
+| has no session, so since 2026-10-17 it needs a signed link: the app asks
+| POST /api/v1/contribution-records/print-link (signed in) for a 30-minute
+| relative-signed URL scoped to its own company_id + category. Unsigned links
+| (older apps) get a page explaining how to share the list again, instead of
+| any guessed company's pledges.
 */
 Route::get('data-exports-print', function () {
     $rawId = request('id');
@@ -185,6 +174,15 @@ Route::get('data-exports-print', function () {
         $categoryId = $export->category_id;
         $treasurerId = $export->treasurer_id;
     } else {
+        // The phone's share link carries no session, so it must carry a signature instead: a
+        // 30-minute link made for the signed-in person by POST /api/v1/contribution-records/print-link
+        // (relative, so http/https behind the host's proxy cannot break it). An unsigned link from an
+        // older app used to show any company's pledges to anyone who guessed its number; it now
+        // explains how to share the list again (docs/FAMILY_PLAN.md, privacy of who pledged what).
+        if (! request()->hasValidRelativeSignature()) {
+            return response()->view('reports.share-link-expired', [], 403);
+        }
+
         $companyId = (int) request('company_id');
         $categoryId = $rawId;
         $treasurerId = null;
@@ -213,4 +211,20 @@ Route::get('data-exports-print', function () {
         'treasurer' => $treasurer,
         'records' => $records,
     ]);
-});
+})->name('data-exports.print');
+
+/*
+| The phone's "Download budget PDF" (budget-pro-mobo BudgetItemCategoriesScreen): the phone's browser has
+| no admin session, so it opens a 30-minute relative-signed link made for the signed-in person's own
+| company by POST /api/v1/budget-programs/{id}/print-link. The admin's own button stays on
+| budget-program-print above, behind admin.auth.
+*/
+Route::get('budget-program-pdf', function () {
+    if (! request()->hasValidRelativeSignature()) {
+        return response()->view('reports.share-link-expired', [], 403);
+    }
+    $rep = BudgetProgram::withoutGlobalScopes()->where('company_id', (int) request('company_id'))->find((int) request('id'));
+    abort_if($rep === null, 404);
+
+    return $rep->reportPdf();
+})->name('budget-program.pdf');
