@@ -91,6 +91,9 @@ class RegistrationService
             'currency' => [$required, 'string', Rule::in(config('saas.currencies'))],
             'country' => ['nullable', 'string', Rule::in(array_keys((array) config('onboarding.countries')))],
             'business_type' => ['nullable', 'string', Rule::in(self::businessTypes())],
+            // Optional: what the account is for (shop, poultry, budget; at least one). Income & expenses is added.
+            // Without it the business type decides, as before (Company::modules()).
+            ...\App\Support\Rules\CompanyRules::modulesRules('modules', false),
             'timezone' => ['nullable', 'timezone'],
             'verification_token' => ['nullable', 'string'],
             'device_name' => ['nullable', 'string', 'max:191'],
@@ -176,6 +179,12 @@ class RegistrationService
             $company->currency = $currency;
             $company->country = $country;
             $company->business_type = $data['business_type'] ?? null;
+            // Modules picked at sign-up (a specialist app, or the web's choice): kept with Income & expenses,
+            // and the type follows them (a farm or an event has no shop type).
+            if ($modules = \App\Support\Rules\CompanyRules::signUpModules($data['modules'] ?? null)) {
+                $company->enabled_modules = $modules;
+                $company->business_type = \App\Support\Rules\CompanyRules::businessTypeFor($modules, $company->business_type);
+            }
             $company->timezone = $data['timezone'] ?? null;
             $company->license_expire = $standalone ? null : now()->addDays($trialDays); // standalone: set by the lifetime plan below
             $company->save(); // created hook: owner->company_id, account categories

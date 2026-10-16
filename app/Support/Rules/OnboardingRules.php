@@ -23,8 +23,7 @@ class OnboardingRules
             'logo' => ['nullable', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:500'],
             'phone_number' => ['nullable', 'string', 'max:30'],
-            'modules' => ['nullable', 'array'],
-            'modules.*' => [Rule::in(array_keys(config('onboarding.modules')))],
+            ...CompanyRules::modulesRules('modules', false), // at least one core module when sent
             'seconds' => ['nullable', 'integer', 'min:0'],
         ];
     }

@@ -30,6 +30,14 @@ class CompanyRules
     /** The buyer's brand (STANDALONE_EDITION_PLAN.md §15): part of Business profile on a standalone copy only. */
     public const BRAND = ['color', 'logo_wide'];
 
+    /**
+     * The modules a business is built around (budget-pro-new docs/FAMILY_PLAN.md): every account keeps at
+     * least one of them, so it always has a home screen. `finance` (Income & expenses) sits beside them.
+     */
+    public const CORE_MODULES = ['shop', 'poultry', 'budget'];
+
+    public const CORE_MODULE_MESSAGE = 'Pick at least one: Shop, Poultry farm or Budget & pledges.';
+
     /** Older profile fields the phone app still sends (kept writable for it; phone_number_2 and slogan are also in 'profile'). */
     public const LEGACY = [
         'phone_number_2', 'website', 'about', 'slogan',
@@ -105,7 +113,7 @@ class CompanyRules
             'require_shift' => ['sometimes', 'boolean'],
             'credit_terms_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
             'debt_reminders_enabled' => ['sometimes', 'boolean'],
-            'enabled_modules' => ['sometimes', 'array', 'min:1'],
+            'enabled_modules' => ['sometimes', 'array', 'min:1', self::coreModuleRule()],
             'enabled_modules.*' => [Rule::in(array_keys(config('onboarding.modules')))],
             'settings_worker_can_create_stock_item' => ['sometimes', 'nullable', Rule::in(['Yes', 'No'])],
             'settings_worker_can_create_stock_record' => ['sometimes', 'nullable', Rule::in(['Yes', 'No'])],
@@ -124,6 +132,58 @@ class CompanyRules
     public static function only(Company $company, array $fields): array
     {
         return array_filter(self::rules($company), fn ($key) => in_array(explode('.', $key)[0], $fields, true), ARRAY_FILTER_USE_KEY);
+    }
+
+    /** A list of modules must hold at least one core module (shop, poultry or budget). */
+    public static function coreModuleRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            if (is_array($value) && $value !== [] && array_intersect($value, self::CORE_MODULES) === []) {
+                $fail(self::CORE_MODULE_MESSAGE);
+            }
+        };
+    }
+
+    /**
+     * The rules for a list of modules sent under another name (PUT company/modules, sign-up's `modules`).
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function modulesRules(string $key = 'modules', bool $required = true): array
+    {
+        return [
+            $key => $required ? ['required', 'array', 'min:1', self::coreModuleRule()] : ['nullable', 'array', self::coreModuleRule()],
+            $key.'.*' => ['string', Rule::in(array_keys(config('onboarding.modules')))],
+        ];
+    }
+
+    /**
+     * Modules picked at sign-up, as stored: the known core modules in their usual order, then Income &
+     * expenses, which every new account gets. Null when none was picked (the business type decides).
+     *
+     * @param  array<int, mixed>|null  $picked
+     * @return list<string>|null
+     */
+    public static function signUpModules(?array $picked): ?array
+    {
+        $core = array_values(array_intersect(self::CORE_MODULES, array_map('strval', (array) $picked)));
+
+        return $core === [] ? null : [...$core, 'finance'];
+    }
+
+    /**
+     * The business type that goes with modules picked at sign-up: the shop's own type when Shop is
+     * picked, otherwise `poultry` (Poultry farm picked) or `fundraising` (Budget & pledges only).
+     *
+     * @param  array<int, string>  $modules
+     */
+    public static function businessTypeFor(array $modules, ?string $shopType): ?string
+    {
+        if (in_array('shop', $modules, true)) {
+            return $shopType;
+        }
+
+        return in_array('poultry', $modules, true) ? 'poultry' : 'fundraising';
     }
 
     /** Any sale recorded yet (web/app sale documents or the old app's sale movements)? */

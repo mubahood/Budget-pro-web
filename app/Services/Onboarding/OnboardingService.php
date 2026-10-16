@@ -61,13 +61,33 @@ class OnboardingService
         return $this->state($company);
     }
 
-    /** Record a finished or skipped step and move to the next one (Appendix F metrics included). */
+    /** Setup steps that only mean something for a shop (products, the till's money, the first sale). */
+    public const SHOP_STEPS = ['products', 'money', 'first_sale'];
+
+    /** Getting-started items (checklist v2) that only mean something for a shop. */
+    public const SHOP_ITEMS = ['products', 'prices', 'first_sale', 'momo', 'receipts'];
+
+    /**
+     * The setup steps that apply to this company: all of them for a shop; without Shop (a farm, an
+     * event) the shop-only steps are left out, so the web and the phone never ask a farmer for products.
+     *
+     * @return list<string>
+     */
+    public function stepsFor(Company $company): array
+    {
+        $steps = (array) config('onboarding.steps');
+
+        return in_array('shop', $company->modules(), true) ? array_values($steps) : array_values(array_diff($steps, self::SHOP_STEPS));
+    }
+
+    /** Record a finished or skipped step and move to the next one that applies (Appendix F metrics included). */
     public function markStep(Company $company, string $step, bool $skipped = false, ?int $seconds = null, array $extra = [], ?string $channel = null): array
     {
         $steps = config('onboarding.steps');
         if (! in_array($step, $steps, true) && $step !== 'done') {
             throw BusinessRuleException::make('invalid_step', 'Unknown setup step.');
         }
+        $applies = $this->stepsFor($company);
         $s = $this->state($company);
         $s['started_at'] ??= now()->toIso8601String();
         $s['channel'] ??= $channel ?? OnboardingEvents::channel();
@@ -76,8 +96,8 @@ class OnboardingService
         if ($step !== 'done') {
             $s[$key] = array_values(array_unique([...$s[$key], $step]));
             $s[$other] = array_values(array_diff($s[$other], [$step]));
-            $next = $steps[array_search($step, $steps, true) + 1] ?? 'done';
-            $s['step'] = $next;
+            $later = array_slice($steps, array_search($step, $steps, true) + 1);
+            $s['step'] = array_values(array_intersect($later, $applies))[0] ?? 'done';
         } else {
             $s['step'] = 'done';
         }
@@ -428,6 +448,12 @@ class OnboardingService
             ['key' => 'phone_app', 'label' => 'Sign in on the phone app', 'hint' => 'Sell even when the network is down.', 'action' => 'app'],
             ['key' => 'plan', 'label' => 'Choose your plan', 'hint' => 'Pick the plan that fits before the trial ends.', 'action' => 'plan'],
         ];
+        // A farm or an event (no Shop module) is never asked for products, a sale or receipts.
+        if (! in_array('shop', $company->modules(), true)) {
+            $hints = ['staff' => 'Invite someone to help. It counts once they accept.', 'phone_app' => 'Keep your records on the phone, even with no network.'];
+            $items = array_values(array_filter($items, fn (array $i) => ! in_array($i['key'], self::SHOP_ITEMS, true)));
+            $items = array_map(fn (array $i) => array_merge($i, ['hint' => $hints[$i['key']] ?? $i['hint']]), $items);
+        }
         $items = array_map(fn (array $i) => $i + ['done' => (bool) $sig[$i['key']]], $items);
         $done = count(array_filter($items, fn ($i) => $i['done']));
 

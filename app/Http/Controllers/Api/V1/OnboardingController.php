@@ -7,9 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\CompanyResource;
 use App\Models\Company;
 use App\Services\Onboarding\OnboardingService;
+use App\Support\Rules\CompanyRules;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /** Setup wizard + getting-started checklist + modules (plan C2/C4, Appendix F). */
 class OnboardingController extends Controller
@@ -84,6 +84,12 @@ class OnboardingController extends Controller
     public function business(Request $request)
     {
         $data = $request->validate(\App\Support\Rules\OnboardingRules::business());
+        // A specialist app sends its own module (Kuku Tally: poultry): saved with Income & expenses, and the
+        // type follows it, as at sign-up. Without `modules` the type decides, as before.
+        if ($modules = CompanyRules::signUpModules($data['modules'] ?? null)) {
+            $data['modules'] = $modules;
+            $data['business_type'] = CompanyRules::businessTypeFor($modules, $data['business_type']);
+        }
         $company = $this->onboarding->saveBusiness($this->company($request), $data);
         $this->onboarding->markStep($company, 'business', false, $data['seconds'] ?? null);
 
@@ -160,10 +166,10 @@ class OnboardingController extends Controller
         return $this->success(null, 'Checklist hidden.');
     }
 
-    /** PUT company/modules { modules: [...] } — hidden modules keep their data. */
+    /** PUT company/modules { modules: [...] }: at least one of shop, poultry or budget. Hidden modules keep their data. */
     public function modules(Request $request)
     {
-        $data = $request->validate(['modules' => ['required', 'array', 'min:1'], 'modules.*' => [Rule::in(array_keys(config('onboarding.modules')))]]);
+        $data = $request->validate(CompanyRules::modulesRules());
         $company = $this->company($request);
         $company->enabled_modules = array_values(array_unique($data['modules']));
         $company->save();
