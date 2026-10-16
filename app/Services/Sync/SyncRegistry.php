@@ -139,7 +139,7 @@ class SyncRegistry
             'budget_items' => ['model' => BudgetItem::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'unit_price', 'quantity', 'approved', 'details', 'priority', 'invested_amount'],
                 'user_fields' => ['created_by_id', 'changed_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'], 'category_uuid' => ['model' => BudgetItemCategory::class, 'column' => 'budget_item_category_id']]],
-            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id'],
+            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id', 'category_id'],
                 'user_fields' => ['treasurer_id', 'chaned_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
             // Poultry: same wire keys as the v1 endpoints; push semantics live in PoultrySyncable.

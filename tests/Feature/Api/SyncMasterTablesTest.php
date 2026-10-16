@@ -69,7 +69,7 @@ class SyncMasterTablesTest extends ApiTestCase
             $this->op('budget_programs', ['name' => 'Wedding', 'status' => 'Active', 'deadline' => '2026-12-12'], $prog),
             $this->op('budget_item_categories', ['name' => 'Venue', 'program_uuid' => $prog], $cat),
             $this->op('budget_items', ['name' => 'Hall hire', 'program_uuid' => $prog, 'category_uuid' => $cat, 'unit_price' => '500000', 'quantity' => '2', 'approved' => 'No']),
-            $this->op('contribution_records', ['name' => 'Uncle Joe', 'program_uuid' => $prog, 'amount' => '300000', 'paid_amount' => '100000']),
+            $this->op('contribution_records', ['name' => 'Uncle Joe', 'program_uuid' => $prog, 'amount' => '300000', 'paid_amount' => '100000', 'category_id' => 'Workmates']),
         ]);
         $this->assertSame('applied', $r['status'], json_encode($r));
 
@@ -78,6 +78,7 @@ class SyncMasterTablesTest extends ApiTestCase
         $this->assertSame($cat, $items[0]['category_uuid']);
         $pledges = $this->getJson('/api/v1/sync/pull?table=contribution_records&since_seq=0', $this->t['h'])->json('data.rows');
         $this->assertSame(200000, (int) $pledges[0]['not_paid_amount']);
+        $this->assertSame('Workmates', $pledges[0]['category_id'], 'the pledge keeps the category chosen on the phone');
         $cats = $this->getJson('/api/v1/sync/pull?table=budget_item_categories&since_seq=0', $this->t['h'])->json('data.rows');
         $this->assertSame(1000000, (int) $cats[0]['target_amount'], 'category rolled up from its items');
     }
