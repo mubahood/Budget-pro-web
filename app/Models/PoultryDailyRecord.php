@@ -21,6 +21,9 @@ class PoultryDailyRecord extends Model
         'batch_uuid' => ['model' => PoultryBatch::class, 'column' => 'batch_id'],
     ];
 
+    /** One daily card per batch per day (unique index batch_id + date): a second phone's card merges into it. */
+    protected static array $syncNaturalKey = ['batch_id', 'date'];
+
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);

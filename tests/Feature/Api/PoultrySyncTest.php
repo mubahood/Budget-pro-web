@@ -183,6 +183,33 @@ class PoultrySyncTest extends ApiTestCase
         $pull->assertOk()->assertJsonPath('data.rows.0.batch_uuid', $batchUuid);
     }
 
+    public function test_a_second_phones_daily_card_for_the_same_batch_and_day_merges_instead_of_failing(): void
+    {
+        $t = $this->registerTenant();
+        $batchUuid = (string) \Illuminate\Support\Str::uuid();
+        $this->pushBatch($t['token'], $batchUuid, ['updated_at' => 1000])->assertOk();
+        $card = fn (string $uuid, int $trays, int $at) => $this->postJson('/api/v1/poultry/sync/push', [
+            'table' => 'daily_records', 'uuid' => $uuid,
+            'json' => ['uuid' => $uuid, 'batch_uuid' => $batchUuid, 'date' => '2026-10-16', 'eggs_trays' => $trays, 'eggs_loose' => 0,
+                'mortality' => 0, 'feed_kg' => 30, 'created_at' => $at, 'updated_at' => $at],
+        ], $this->auth($t['token']));
+
+        $first = (string) \Illuminate\Support\Str::uuid();
+        $card($first, 7, 2000)->assertOk()->assertJsonPath('data.conflict', false);
+
+        // Phone B fills the same card later: one row stays, under phone A's uuid, with B's newer figures.
+        $second = (string) \Illuminate\Support\Str::uuid();
+        $card($second, 8, 3000)->assertOk()->assertJsonPath('data.conflict', true)
+            ->assertJsonPath('data.server_data.uuid', $first)->assertJsonPath('data.server_data.eggs_trays', 8);
+        $this->assertSame(1, \App\Models\PoultryDailyRecord::withoutGlobalScopes()->where('date', '2026-10-16')->count());
+
+        // An older card from phone C loses and gets the server's row back to replace its copy.
+        $third = (string) \Illuminate\Support\Str::uuid();
+        $card($third, 5, 2500)->assertOk()->assertJsonPath('data.conflict', true)
+            ->assertJsonPath('data.server_data.uuid', $first)->assertJsonPath('data.server_data.eggs_trays', 8);
+        $this->assertDatabaseMissing('poultry_daily_records', ['uuid' => $third]);
+    }
+
     public function test_push_with_unsynced_parent_uuid_does_not_hard_fail(): void
     {
         $t = $this->registerTenant();

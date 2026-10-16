@@ -28,6 +28,8 @@ use Illuminate\Support\Str;
  * A model using this trait must declare:
  *   protected static array $syncColumns = ['name', 'type', ...];      // direct-copy fields
  *   protected static array $syncUuidRefs = ['batch_uuid' => ['model' => PoultryBatch::class, 'column' => 'batch_id']];
+ * and may declare a natural key that a unique index enforces, so a twin made on another phone merges:
+ *   protected static array $syncNaturalKey = ['batch_id', 'date'];
  */
 trait PoultrySyncable
 {
@@ -149,6 +151,22 @@ trait PoultrySyncable
                     ->where('company_id', $companyId)->where('uuid', $refUuid)->value('id');
         }
 
+        // The same record made on another phone under another uuid (a model's $syncNaturalKey, e.g. a
+        // batch's one daily card a day): fold the push into the row the server already has, keeping that
+        // row's uuid, with the same newest-write-wins rule as above. Answered as a conflict carrying the
+        // server's row, so the phone swaps its copy for it instead of retrying a duplicate forever.
+        if (! $existing && ($twin = static::syncTwin($companyId, $uuid, $row)) !== null) {
+            if ((int) $twin->client_updated_at <= $clientUpdatedAt) {
+                $row['uuid'] = $twin->uuid;
+                $row['client_created_at'] = $twin->client_created_at;
+                $row['version'] = (int) $twin->version + 1;
+                DB::table($table)->where('id', $twin->id)->update($row);
+                $twin = static::query()->withoutGlobalScopes()->whereKey($twin->id)->first();
+            }
+
+            return ['conflict' => true, 'server_data' => $twin->toSyncArray()];
+        }
+
         if ($existing) {
             DB::table($table)->where('id', $existing->id)->update($row);
         } else {
@@ -159,6 +177,27 @@ trait PoultrySyncable
             ->where('company_id', $companyId)->where('uuid', $uuid)->first();
 
         return ['conflict' => false, 'server_data' => $fresh->toSyncArray()];
+    }
+
+    /**
+     * The row with the same natural key ($syncNaturalKey, columns of this table) under another uuid, or null.
+     * A key with an empty part (e.g. a parent not synced yet) never matches.
+     */
+    protected static function syncTwin(int $companyId, string $uuid, array $row): ?static
+    {
+        $columns = property_exists(static::class, 'syncNaturalKey') ? static::$syncNaturalKey : [];
+        if ($columns === []) {
+            return null;
+        }
+        $query = static::query()->withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', '<>', $uuid);
+        foreach ($columns as $column) {
+            if (! isset($row[$column]) || $row[$column] === '') {
+                return null;
+            }
+            $query->where($column, $row[$column]);
+        }
+
+        return $query->first();
     }
 
     /**
