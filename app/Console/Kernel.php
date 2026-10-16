@@ -30,6 +30,7 @@ class Kernel extends ConsoleKernel
         $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping(); // standalone: notices + debt reminders only, no billing Lifecycle
         $schedule->call($task('customers:adopt-named'))->name('customers:adopt-named')->hourlyAt(40)->withoutOverlapping();
         $schedule->call($task('shop:product-stats'))->name('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
+        $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
             $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();

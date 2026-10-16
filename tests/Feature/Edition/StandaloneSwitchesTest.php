@@ -22,7 +22,7 @@ class StandaloneSwitchesTest extends TestCase
 
     private const SAAS_ONLY_TASKS = ['billing:reconcile', 'onboarding:purge-demos', 'demo:public', 'ops backup', 'ops drill', 'ops purge', 'tracking:backfill-location-names'];
 
-    private const BOTH = ['fiscal:submit-due', 'prices:apply-due', 'customers:adopt-named', 'shop:product-stats', 'saas:hourly', 'queue:work'];
+    private const BOTH = ['fiscal:submit-due', 'prices:apply-due', 'customers:adopt-named', 'shop:product-stats', 'saas:hourly', 'queue:work', 'api:prune-keys'];
 
     public function test_master_password_public_demo_and_legacy_api_are_off_on_standalone(): void
     {

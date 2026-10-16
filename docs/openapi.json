@@ -6692,6 +6692,163 @@
                 ]
             }
         },
+        "/customers/{id}/statement.pdf": {
+            "get": {
+                "tags": [
+                    "Customers"
+                ],
+                "summary": "The statement as a PDF, the web customer page's layout; download it with the same bearer token. */",
+                "operationId": "get_customers_id_statement_pdf",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "/customers/{id}/summary": {
+            "get": {
+                "tags": [
+                    "Customers"
+                ],
+                "summary": "GET /customers/{id}/summary",
+                "operationId": "get_customers_id_summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
         "/dashboard": {
             "get": {
                 "tags": [
@@ -6777,6 +6934,71 @@
                             "enum": [
                                 "custom",
                                 ".implode("
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "/dashboard/suggestions": {
+            "get": {
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "GET dashboard/suggestions?limit=6 — \"Worth a look\" (App\\Services\\Dashboard\\Suggestions): what this person",
+                "operationId": "get_dashboard_suggestions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
                             ]
                         }
                     }
@@ -6951,7 +7173,7 @@
                 "tags": [
                     "Debts"
                 ],
-                "summary": "POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?} */",
+                "summary": "POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?, client_uuid?} */",
                 "operationId": "post_debts_receive",
                 "responses": {
                     "201": {
@@ -7021,6 +7243,13 @@
                                             "integer",
                                             "null"
                                         ]
+                                    },
+                                    "client_uuid": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "format": "uuid"
                                     }
                                 },
                                 "required": [
@@ -7185,7 +7414,7 @@
                 "tags": [
                     "Debts"
                 ],
-                "summary": "POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?} */",
+                "summary": "POST debts/{key}/receive (or debts/receive {key}) {amount, method, reference?, shift_id?, client_uuid?} */",
                 "operationId": "post_debts_key_receive",
                 "responses": {
                     "201": {
@@ -7255,6 +7484,13 @@
                                             "integer",
                                             "null"
                                         ]
+                                    },
+                                    "client_uuid": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "format": "uuid"
                                     }
                                 },
                                 "required": [
@@ -7822,6 +8058,188 @@
                     },
                     {
                         "name": "days",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 100
+                        }
+                    }
+                ]
+            }
+        },
+        "/exports/{kind}": {
+            "get": {
+                "tags": [
+                    "Exports"
+                ],
+                "summary": "GET /exports/{kind}",
+                "operationId": "get_exports_kind",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "kind",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "csv",
+                                "xlsx"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "Completed",
+                                "Partially Refunded",
+                                "Refunded",
+                                "Voided"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "scope",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "all",
+                                "active",
+                                "inactive",
+                                "low",
+                                "out",
+                                "owes",
+                                "unpaid",
+                                "paid"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "sold_by",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "customer_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "category_id",
                         "in": "query",
                         "required": false,
                         "schema": {
@@ -12326,6 +12744,60 @@
                 ]
             }
         },
+        "/meta": {
+            "get": {
+                "tags": [
+                    "Meta"
+                ],
+                "summary": "GET /meta",
+                "operationId": "get_meta",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
         "/momo-requests/{id}": {
             "get": {
                 "tags": [
@@ -15404,60 +15876,20 @@
                     }
                 ],
                 "requestBody": {
-                    "required": true,
+                    "required": false,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
                                 "properties": {
-                                    "supplier_id": {
-                                        "type": [
-                                            "integer",
-                                            "null"
-                                        ]
-                                    },
-                                    "expected_date": {
+                                    "client_uuid": {
                                         "type": [
                                             "string",
                                             "null"
                                         ],
-                                        "format": "date"
-                                    },
-                                    "notes": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ],
-                                        "maxLength": 500
-                                    },
-                                    "items": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "stock_item_id": {
-                                                    "type": "integer"
-                                                },
-                                                "quantity": {
-                                                    "type": "number"
-                                                },
-                                                "unit_cost": {
-                                                    "type": [
-                                                        "number",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "required": [
-                                                "stock_item_id",
-                                                "quantity"
-                                            ]
-                                        }
+                                        "format": "uuid"
                                     }
-                                },
-                                "required": [
-                                    "items"
-                                ]
+                                }
                             }
                         }
                     }
@@ -20706,6 +21138,68 @@
                 ],
                 "summary": "DELETE /stock-items/{id}",
                 "operationId": "delete_stock_items_id",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/stock-items/{id}/summary": {
+            "get": {
+                "tags": [
+                    "Stock items"
+                ],
+                "summary": "GET /stock-items/{id}/summary",
+                "operationId": "get_stock_items_id_summary",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -28468,6 +28962,79 @@
                                 },
                                 "required": [
                                     "file"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/web-link": {
+            "post": {
+                "tags": [
+                    "Web link"
+                ],
+                "summary": "POST /web-link",
+                "operationId": "post_web_link",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role or plan does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "path": {
+                                        "type": "string",
+                                        "maxLength": 500
+                                    }
+                                },
+                                "required": [
+                                    "path"
                                 ]
                             }
                         }

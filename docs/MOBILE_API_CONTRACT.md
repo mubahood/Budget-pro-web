@@ -747,6 +747,174 @@ is an object) instead of doing it again.
 - `POST debts/{key}/receive {…, client_uuid?}`: a retry answers `200 {received, debtor, owed, replayed: true}`.
 - `POST purchase-orders {…, client_uuid?}`: `201` first time; a retry answers `200` with the same order.
 
+## 9b. Phase D: meta, worth a look, record pages, safe retries, exports, open on the web
+
+From `MOBILE_EXCELLENCE_PLAN.md` Phase D (budget-pro-mobo). Tones everywhere are one of
+`ok | warn | bad | info | neutral` (the web badges' success, warn, danger, info, neutral).
+
+### 9b.1 GET `meta` (every member; outside the subscription gate)
+Read after sign-in and on resume. Send `If-None-Match: <last ETag>`: an unchanged answer is `304` with no body.
+A lapsed shop still gets it (with its plan nudge). `plan` is `null` on a standalone copy, `brand_colour` is
+`null` on the SaaS (keep Budget Pro green). `web_url` is `null` and `web_pages` is `[]` when the server has no web portal.
+```json
+{"code":1,"message":"Meta.","data":{
+  "api_version":1,
+  "business":{"id":12,"name":"Fresh Corner Market","logo_url":"https://…/storage/images/logo-12-ab.png","brand_colour":null,
+    "currency":"UGX","decimals":0,"timezone":"Africa/Kampala",
+    "money":{"code":"UGX","position":"before","space":true,"decimals":0,"thousands_separator":",","decimal_separator":".","sample":"UGX 1,234,568"}},
+  "edition":{"edition":"saas","registration_open":true,"name":"Budget Pro","version":"dev"},
+  "plan":{"name":"Business","slug":"business","status":"trialing","state":"active","ends_at":"2026-10-30T16:19:20+00:00","days_left":14,
+    "badge":"Trial: 14 days left","badge_kind":"trial","tone":"neutral",
+    "nudge":"Your free trial ends in 14 days. Choose a plan to keep selling without a break.","urgent":false,"can_pay":true},
+  "user":{"id":7,"name":"Test Owner","role":"owner","role_label":"Owner","permissions":["sell","discount","void","…"],"store_id":null},
+  "payment_methods":[{"value":"cash","label":"Cash","pay_later":false},{"value":"mobile_money","label":"Mobile money","pay_later":false},
+    {"value":"credit","label":"Credit (pay later)","pay_later":true}],
+  "enums":{
+    "sale_status":[{"value":"Completed","label":"Completed","tone":"ok"},{"value":"Partially Refunded","label":"Partly returned","tone":"warn"},
+      {"value":"Refunded","label":"Returned","tone":"bad"},{"value":"Voided","label":"Voided","tone":"neutral"}],
+    "payment_status":[{"value":"Paid","label":"Paid","tone":"ok"},{"value":"Partial","label":"Part paid","tone":"warn"},{"value":"Unpaid","label":"Not paid","tone":"bad"}],
+    "payment_method":[{"value":"cash","label":"Cash","tone":"neutral"},{"value":"credit","label":"Credit (pay later)","tone":"warn"},
+      {"value":"gift_card","label":"Gift card","tone":"info","tender":true}],
+    "movement_type":[{"value":"Purchase","label":"Purchase","tone":"ok","direction":"in"},{"value":"Sale","label":"Sale","tone":"info","direction":"out"},
+      {"value":"Damage","label":"Damage","tone":"bad","direction":"out"}],
+    "stock_state":[{"value":"in_stock","label":"In stock","tone":"ok"},{"value":"low","label":"Running low","tone":"warn"},
+      {"value":"out","label":"Out of stock","tone":"bad"},{"value":"oversold","label":"Oversold","tone":"bad"}],
+    "shift_status":[{"value":"open","label":"Open","tone":"info"},{"value":"closed","label":"Closed","tone":"neutral"}],
+    "batch_state":[{"value":"expired","label":"Expired","tone":"bad"},{"value":"soon","label":"Expires soon","tone":"warn"},{"value":"ok","label":"Fine","tone":"ok"}],
+    "role":[{"value":"owner","label":"Owner","tone":"neutral"},{"value":"cashier","label":"Cashier","tone":"neutral"}]},
+  "app":{"min_version":"2.0.0","latest_version":"2.0.0","download_url":"https://play.google.com/store/apps/details?id=com.budget.dynamics"},
+  "web_url":"https://budget-dynamics.schooldynamics.ug",
+  "web_pages":[{"key":"promotions.index","label":"Promotions","section":null,"path":"/promotions"},
+    {"key":"stock.locations","label":"Transfers & locations","section":"Shop","path":"/stock/locations"}],
+  "features":{"store":{"mode":false,"features":{"promotions":false,"…":false},"settings":{"cash_rounding":0,"…":0}},"modules":["shop","finance"]},
+  "server_time":"2026-10-16T16:19:20+00:00"}}
+```
+- `payment_methods`: the shop's own choice in its configured order (every method when it chose none). `pay_later` marks credit.
+- `enums.*` rows may carry extras: `direction` (movement_type), `tender` (payment_method rows that are not money in).
+- `plan.badge_kind`: `suspended | read_only | expired | trial | free | ending | renew` (or null: nothing to say).
+  `urgent` = tone `bad`, or 3 days or fewer left and not renewing by itself. `days_left` is null when the plan has no end.
+- `web_pages`: the web portal's menu for this person (same gates as the web: permission, module, feature, edition),
+  for "Open on the web" with §9b.7. `key` is the web route name.
+- Money: write amounts as `<code> <number>` with `decimals` places, `,` thousands (exactly `App\Support\Money::format`).
+
+### 9b.2 GET `dashboard/suggestions?limit=6` (every member; limit 1–20)
+"Worth a look" for this person, most urgent first (bad, warn, info). Nothing to show: one item `all_clear`.
+```json
+{"code":1,"message":"Suggestions.","data":{"all_clear":false,"as_of":"2026-10-16T16:19:20+00:00","items":[
+  {"key":"out_of_stock","tone":"bad","title":"3 products are out of stock","detail":"Customers asking for them go away empty-handed. Reorder or receive stock.",
+   "route":"products.out_of_stock","action_label":"See products","count":3,"web_path":null},
+  {"key":"credit_overdue","tone":"warn","title":"1 customer is late paying","detail":"UGX 4,000 is past its payment terms. Send a reminder or collect it.",
+   "route":"debts.overdue","action_label":"See debtors","count":1,"web_path":null}]}}
+```
+| key | tone | route | who sees it | from |
+|---|---|---|---|---|
+| `out_of_stock` | bad | `products.out_of_stock` | restock, manage_products or view_reports | DashboardService::stock (the member's store) |
+| `low_stock` | warn | `products.low_stock` | same | at or below `min_stock` / the shop default |
+| `credit_overdue` | warn | `debts.overdue` | sell or view_reports | open credit sales past `due_date` or sale day + terms (customer's, else the shop's, else 30) |
+| `shift_open` | warn | `shifts` | sell (own tills) or view_reports (all) | open shifts opened before today (shop's day) |
+| `expiring` | warn | `stock.expiring` | adjust or restock | batches on hand expiring within `short_dated_days` (default 14) |
+| `receipts_unsent` | info | `sales.receipts_unsent` | sell, when the plan sends receipts | today's sales with a phone, no receipt sent, customer not opted out |
+| `devices_unsynced` | warn | `devices` | manage_team | active phones not seen for 3+ days (seen within 30) |
+| `supplier_bills_due` | warn | `suppliers.due` | restock, view_reports or manage_finance | what we owe less deliveries still inside the supplier's terms |
+| `owner_<notice>` | warn | `web` | the owner of a standalone copy | OwnerNotices (`licence`, `address`, `updates`, `scheduler`, `backup`, `connections`); open `web_path` with §9b.7 |
+| `all_clear` | ok | `home` | everyone, when the list is empty | `action_label` is null |
+
+`count` is how many products, customers, tills, batches, receipts, phones or suppliers the item is about. `web_path` is
+null except on `route: "web"` items, where it is the web page to open. An app that does not know a `route` shows the item without a button.
+
+### 9b.3 GET `customers/{id or uuid}/summary?from=Y-m-d` (every member)
+The customer record. `from` (default 90 days back) starts the statement; what came before it is `brought_forward`.
+```json
+{"code":1,"message":"Customer summary.","data":{
+  "customer":{"id":2059,"uuid":"a4ec…","name":"Nakato Sarah","phone":"0772123456","email":null,"address":null,"is_active":true,
+    "payment_terms_days":30,"messages_opt_out":false,"last_reminded_at":null},
+  "figures":{"owes":6000,"credit_limit":200000,"available":194000,"store_credit":0,"points":null,"points_value":null,"tier":null,
+    "overdue":4000,"oldest_due":"2026-10-01"},
+  "aging":{"total":6000,"buckets":[{"key":"0_30","label":"0–30 days","amount":2000,"sales":1},
+    {"key":"31_60","label":"31–60 days","amount":4000,"sales":1},{"key":"60_plus","label":"Over 60 days","amount":0,"sales":0}]},
+  "recent_sales":[{"id":13381,"uuid":"e20e…","receipt_number":"RCP-2026-000002","sale_date":"2026-10-16","created_at":"2026-10-16T16:19:20+00:00",
+    "total":3000,"paid":1000,"balance":2000,"status":"Completed","payment_status":"Partial","voided":false}],
+  "payments":[{"id":12410,"uuid":"f06e…","amount":2000,"method":"mobile_money","method_label":"Mobile money","reference":null,
+    "received_at":"2026-10-16T16:19:20+00:00","sale_id":13380,"receipt_number":"RCP-2026-000001","on_account":false,"is_reversal":false}],
+  "statement":{"from":"2026-07-18","to":"2026-10-16","brought_forward":0,"closing_balance":6000,"entries":[
+    {"date":"2026-09-01","type":"sale","ref":"RCP-2026-000001","description":"Sale RCP-2026-000001","debit":6000,"credit":0,"balance":6000}]},
+  "statement_pdf_url":"https://…/api/v1/customers/a4ec…/statement.pdf?from=2026-07-18"}}
+```
+- `owes` is net of money held on account; `store_credit` is that money (what the customer may spend). `credit_limit` and
+  `available` are null without a limit. `points`, `points_value` and `tier` are null unless the shop has loyalty on.
+- `aging` adds up the open sales by days since the sale (it can exceed `owes` when there is credit on account).
+- `recent_sales` and `payments`: the latest 20 each, newest first. Payment `amount` is negative for a refund or reversal.
+- Statement entries: `type` = sale | payment | return | refund; `balance` is the running balance after the entry.
+- `statement_pdf_url`: GET it with the same `Authorization` header (`application/pdf`, inline). Optional `to=Y-m-d`.
+
+### 9b.4 GET `stock-items/{id or uuid}/summary` (every member)
+```json
+{"code":1,"message":"Product summary.","data":{
+  "product":{"id":11308,"uuid":"f165…","name":"Fanta 500ml","sku":"2026-8133-1","barcode":null,"unit":"pcs","current_quantity":18,
+    "reorder_level":6,"stock_state":"in_stock","selling_price":1500,"buying_price":900,"track_stock":true,"track_batches":false,"is_active":true},
+  "locations":[{"location_id":4471,"name":"Main shop","is_default":true,"quantity":18}],
+  "movements":[{"id":49067,"uuid":"7dd2…","type":"Sale","reason":null,"delta":-2,"balance":18,"at":"2026-10-16T16:19:20+00:00",
+    "who":"Test Owner","is_reversal":false,"unit_cost":900,"location_id":4471,"document":{"type":"sale","id":13381,"label":"Sale RCP-2026-000002"}}],
+  "sales_30d":{"from":"2026-09-17","to":"2026-10-16","quantity":2,"value":3000,"sales":1,"profit":1200},
+  "supplier_prices":null,
+  "price_history":null,
+  "batches":[]}}
+```
+- `buying_price` and `movements[].unit_cost` are null without view_cost; `sales_30d.profit` null without view_profit.
+- `stock_state`: in_stock | low | out | oversold (meta `enums.stock_state`). `movements`: the latest 30, newest first;
+  `balance` is the stock after that movement. `document.type`: sale | goods_receipt | sale_return | purchase_return |
+  stock_take | stock_transfer | … (`label` is set for sales only).
+- `sales_30d`: the shop's last 30 days, net of returns, voids left out.
+- `supplier_prices`: null unless `supplier_prices` is on and the person has restock or view_reports; else
+  `[{supplier_id, supplier, cost, since, previous, change_pct, source}]`, cheapest first.
+- `price_history`: null unless `price_book` is on; else `{applied:[{id, field: selling|buying, old, new, at, reason, who}], scheduled:[{id, field, new, starts_at, reason, who}]}`
+  (buying rows only with view_cost).
+- `batches` (batch-tracked products): `[{id, batch_number, expiry_date, location, quantity, state: expired|soon|ok|null}]`, soonest first.
+
+### 9b.5 `Idempotency-Key` on writes (every authenticated POST/PUT/PATCH/DELETE)
+Send `Idempotency-Key: <1–100 of A-Z a-z 0-9 . _ : ->` on a write; resend the **same key and the same body** when the
+first try got no answer. The first final answer is kept 24 hours per (shop, user, key).
+
+| the same key again… | answer |
+|---|---|
+| same method, path, query and body, first one finished | the stored status and body, header `Idempotent-Replay: true` (nothing runs again) |
+| a different request | `422 {"errors":{"code":"idempotency_key_reused"}}` |
+| while the first one is still running | `409 {"errors":{"code":"in_progress"}}`: wait, then check or resend |
+| a malformed key | `422 {"errors":{"code":"idempotency_key_invalid"}}` |
+
+- Not stored, so a resend with the key runs again: 5xx, 401, 403, 404, 408, 409, 419, 422, 423, 425, 426, 429, and any
+  answer that is not JSON (files).
+- Ignored (no key handling): `auth/login`, `sync/*`, `poultry/sync/*` (they have their own op ids), bodies over 1 MB
+  (uploads), and requests without the header. A "running" entry older than two minutes is treated as dead.
+- Tenant, subscription and permission checks run before the key is looked at. Entries are pruned daily (`api:prune-keys`).
+
+### 9b.6 GET `exports/{sales|products|customers}?format=csv|xlsx` (throttled 10/min)
+A file (`text/csv; charset=UTF-8` with a BOM, or `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`),
+`Content-Disposition: attachment; filename="sales-2026-09-17-to-2026-10-16.csv"`. The columns are the web's exports.
+
+| kind | permission (any of) | columns | filters |
+|---|---|---|---|
+| sales | view_reports | Date, Time, Receipt, Customer, Phone, Total, Paid, Still owed, Status, Paid by, Sold by | `from`, `to` (default the last 30 days), `status` (Completed, Partially Refunded, Refunded, Voided), `scope` (unpaid, paid), `sold_by` (user id), `customer_id` |
+| products | manage_products, view_reports | Name, SKU, Barcode, Category, Sub-category, Unit, In stock, Reorder level, Selling price, [Buying price, Stock value at cost], Stock value at selling price, Active | `q`, `category_id`, `scope` (active default, all, inactive, low, out) |
+| customers | sell, view_reports | Name, Phone, Balance, Credit limit, Last sale | `q`, `scope` (all = active, owes, inactive) |
+
+Cost columns only with view_cost. A member limited to one store exports only that store's sales. CSV cells that start
+with `= + - @` are quoted with `'`. Errors are JSON: `403 forbidden`, `404` unknown kind, `422` bad filter.
+
+### 9b.7 POST `web-link {path}` (every active member; outside the subscription gate; throttled 10/min)
+```json
+// POST /api/v1/web-link {"path":"/promotions"}
+{"code":1,"message":"Web link ready. It works once, for two minutes.","data":{
+  "url":"https://budget-dynamics.schooldynamics.ug/web-link?token=eyJ1Ijo…","expires_at":"2026-10-16T16:21:20+00:00","path":"/promotions"}}
+```
+Open `url` in the browser straight away: the web portal signs the person in (signing out anyone else on that browser)
+and lands on `path`. It works once, within two minutes; a used, expired or tampered link lands on the sign-in page with
+the reason. The sign-in page's refusals apply (switched-off account, removed member, no shop).
+- `path`: a page of the web portal, starting with `/` (use `meta → web_pages[].path`, with a query if needed). No
+  scheme, host, `//`, backslash or spaces; never `/login`, `/logout` or `/web-link`: `422 {"errors":{"code":"invalid_path"}}`.
+- `503 {"errors":{"code":"web_link_unavailable"}}`: the server has no web portal address (`SAAS_NEW_UI_URL`).
+- Server set-up: both apps need the same `SAAS_DATA_KEY` (the link is signed with it) and `SAAS_NEW_UI_URL` in the kernel.
+
 ## 10. Files for server maintainers
 - `app/Services/Sync/SyncRegistry.php`: the tables, including `KIND_SNAPSHOT`, schema guards, and the product and customer store fields and rules.
 - `app/Services/Sync/SyncPuller.php`: snapshots, `pullMany`, keyset bootstrap, history window, `loyalty_points`.
@@ -755,3 +923,11 @@ is an object) instead of doing it again.
 - `app/Http/Controllers/Api/V1/{StockRequestController, GoodsReceiptController, StockTakeController, TeamController, CompanyController, DashboardController}.php` (§9)
 - `app/Http/Middleware/ApiPermissionMap.php`: a rule with a null permission is checked in the controller (`team/members/{id}/pin`).
 - `tests/Feature/Api/{SyncSupermarketTest, StoreFeaturesApiTest, DebtsApiTest, SupermarketApiTest, ChatApiTest, StockRequestsApiTest, PhoneParityAdditionsTest}.php`
+- §9b: `app/Http/Controllers/Api/V1/{MetaController, SummaryController, ExportController, WebLinkController}.php`, `DashboardController::suggestions`;
+  `app/Support/{MetaEnums, ShopMenu, WebLink}.php`; `app/Services/Billing/PlanBadge.php` (also the web topbar chip);
+  `app/Services/Dashboard/Suggestions.php`; `app/Services/Shop/{CustomerSummary, ProductSummary}.php`; `app/Services/Reports/ListExports.php`;
+  `app/Http/Middleware/IdempotentRequests.php` (`api.idempotent`, last in every authenticated group of `routes/api.php`);
+  `app/Console/Commands/PruneApiKeys.php` (`api:prune-keys`, daily 03:20, both editions); tables `api_idempotency_keys`, `web_link_tokens`;
+  `resources/views/reports/customer-statement.blade.php`. Web portal: `app/Http/Controllers/Auth/WebLinkSignInController.php` (`GET /web-link`),
+  `App\Shop\Navigation::sections()` reads `ShopMenu`.
+- `tests/Feature/Api/{PhoneMetaTest, PhoneSummariesTest, IdempotencyKeyTest, PhoneExportsTest}.php`; web portal `tests/Feature/WebLinkSignInTest.php`.

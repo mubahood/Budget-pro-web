@@ -106,3 +106,12 @@ its Appendix H open questions (H1–H10). Every later decision made while execut
   - **Rebuild:** a new shop is built beside the old one, and the account is then moved in one transaction. A visitor never lands in a half-built shop, and a failed build leaves the old demo live.
   - **Shop details:** the shop is priced in USD and runs on UTC, so its trading hours line up with visitors in Africa, Europe and the Middle East.
 
+- **2026-10-17: Phone writes are made safe to retry with an `Idempotency-Key`, not by making every endpoint idempotent by hand.** On a bad network a phone often cannot tell whether a payment or a void reached the server. One middleware, run after the tenant and permission checks, stores the first final answer per (company, user, key) for 24 hours and replays it.
+  - **Not stored:** 5xx, refusals the person fixes and resends (401/403/404/409/422/429…) and non-JSON answers, so a resend after one of these runs again.
+  - **Left alone:** sync and sign-in, which already carry their own ids.
+  - **On the phone:** the key is kept after no answer, a 409 or a 5xx, and an identical resend reuses it.
+- **2026-10-17: "Open on the web" signs in with a single-use, two-minute link.** It is signed with the shared `SAAS_DATA_KEY`, because the two apps have different `APP_KEY`s.
+  - **Safeguards:** each link is recorded by the hash of its nonce and used up in one atomic update. It can only land on a plain path of the web portal (never `/login`, `/logout` or another host), and the portal applies its normal sign-in refusals.
+  - **Why:** web-only screens (promotions, price book, transfers) stay one tap away without a second password.
+- **2026-10-17: The plan chip and the shop menu moved into the kernel (`PlanBadge`, `ShopMenu`).** The web topbar and the phone's `meta` read the same code, so they cannot disagree about a shop's plan or its pages.
+

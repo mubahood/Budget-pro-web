@@ -155,8 +155,12 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     });
 
     // ── Authenticated: session/profile (no subscription gate) ──
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm'])->group(function () {
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm', 'api.idempotent'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
+        // The phone's meta (business, plan badge, person, enums, web pages…) and "Open on the web" (MOBILE_EXCELLENCE_PLAN D1, D7).
+        // Outside api.subscription on purpose: a lapsed shop still reads its plan nudge and can open My plan on the web.
+        Route::get('meta', [\App\Http\Controllers\Api\V1\MetaController::class, 'show']);
+        Route::post('web-link', [\App\Http\Controllers\Api\V1\WebLinkController::class, 'store'])->middleware('throttle:10,1');
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::post('auth/logout-all', [AuthController::class, 'logoutAll']);
         Route::put('auth/password', [AuthController::class, 'updatePassword']);
@@ -245,8 +249,8 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     // pingpin.member does the real per-organisation authorization itself.
     Route::middleware(['edition:saas', 'auth:sanctum'])->group(function () {
         Route::get('pingpin/organisations', [OrganisationController::class, 'index']);
-        Route::post('pingpin/organisations/members/{membershipId}/accept', [OrganisationController::class, 'acceptInvite']);
-        Route::middleware('pingpin.member')->group(function () {
+        Route::post('pingpin/organisations/members/{membershipId}/accept', [OrganisationController::class, 'acceptInvite'])->middleware('api.idempotent');
+        Route::middleware(['pingpin.member', 'api.idempotent'])->group(function () {
             Route::post('pingpin/organisations/{company}/members/invite', [OrganisationController::class, 'inviteMember']);
             Route::post('pingpin/organisations/{company}/members/{userId}/revoke', [OrganisationController::class, 'revokeMember']);
             Route::post('pingpin/organisations/{company}/members/{userId}/role', [OrganisationController::class, 'changeRole']);
@@ -265,7 +269,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     // ── Authenticated + active subscription: the product surface ──
     // Offline sync v2 (plan Appendix A). Deliberately outside api.subscription: a lapsed
     // tenant's devices keep syncing; batches are held (not lost) once the grace ends.
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm'])->group(function () {
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm', 'api.idempotent'])->group(function () {
         Route::post('devices/register', [DeviceController::class, 'register']);
         Route::get('devices', [DeviceController::class, 'index']);
         Route::post('devices/{id}/revoke', [DeviceController::class, 'revoke'])->whereNumber('id');
@@ -278,8 +282,14 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('files', [FileController::class, 'store']);
     });
 
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription', 'api.perm'])->group(function () {
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index']);
+        // Phone record pages, "worth a look" and list exports (MOBILE_EXCELLENCE_PLAN D2, D3, D4, D6). Records by id or uuid.
+        Route::get('dashboard/suggestions', [DashboardController::class, 'suggestions']);
+        Route::get('customers/{id}/summary', [\App\Http\Controllers\Api\V1\SummaryController::class, 'customer'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
+        Route::get('customers/{id}/statement.pdf', [\App\Http\Controllers\Api\V1\SummaryController::class, 'statementPdf'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}')->middleware('throttle:30,1');
+        Route::get('stock-items/{id}/summary', [\App\Http\Controllers\Api\V1\SummaryController::class, 'stockItem'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
+        Route::get('exports/{kind}', [\App\Http\Controllers\Api\V1\ExportController::class, 'show'])->where('kind', 'sales|products|customers')->middleware('throttle:10,1');
 
         Route::post('uploads', [UploadController::class, 'store']);
 

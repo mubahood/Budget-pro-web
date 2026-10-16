@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Phone app APIs, next round (2026-10-17, budget-pro-mobo docs/MOBILE_EXCELLENCE_PLAN.md phase D)
+- **`GET /api/v1/meta`:** what the app needs to fit this server, in one call:
+  - the business (name, logo, brand colour, money format), the edition and the plan badge;
+  - the person's role and permissions, payment methods, and labels and tones for sale, payment and stock states;
+  - the latest app version, the web portal address and its pages, and feature switches.
+  It answers even when the plan has lapsed, and sends an ETag.
+- **`GET /api/v1/dashboard/suggestions`:** "Worth a look", chosen per role. Each item links to a screen:
+  - products running low or out;
+  - credit overdue;
+  - a till left open;
+  - batches expiring;
+  - receipts not sent;
+  - phones not synced;
+  - supplier bills due;
+  - on a business's own server, the owner's licence, scheduler, backup and messaging warnings.
+- **Record summaries:**
+  - `GET /api/v1/customers/{id|uuid}/summary`: figures, aged debt, recent sales and payments, and a statement with a brought-forward line and a PDF (`statement.pdf`);
+  - `GET /api/v1/stock-items/{id|uuid}/summary`: stock by location, movements, 30-day sales, supplier prices, price history and batches.
+- **Safe retries:** every authenticated API write accepts an `Idempotency-Key` header. The first answer is kept for 24 hours and replayed (`Idempotent-Replay: true`). The same key with a different request is refused (422), and a request still in progress answers 409. `api:prune-keys` runs daily.
+- **Exports:** `GET /api/v1/exports/{sales,products,customers}` (CSV or Excel), with the web's columns.
+- **Open on the web:** `POST /api/v1/web-link` makes a single-use, two-minute link that signs the person into the web portal at a given page. It is signed with the shared data key and refused by the same rules as the sign-in page.
+- **Shared with the web portal:** the plan chip (`PlanBadge`) and the shop menu (`ShopMenu`) now live in the kernel, so the web and the phone show the same thing.
+
 ### One-off (standalone) edition: install, release, update, sell (2026-10-17, docs/STANDALONE_EDITION_PLAN.md)
 - **Package:** one ZIP with both apps (`budget_pro/`, `budget_pro_web/`), a web folder (`web_root_files/`) and a signed `PACKAGE.json`; one front controller serves both apps from one address (`/api`, `/classic`, receipts → kernel; the rest → the shop screens).
 - **Installer:** pre-Laravel `install.php` for cPanel (checks every file's signature, InnoDB, an empty database), writes both `.env` files with one key, migrates in short steps, creates the one business and its owner; `standalone:install` for the command line.

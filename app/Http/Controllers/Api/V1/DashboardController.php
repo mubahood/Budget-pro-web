@@ -86,6 +86,20 @@ class DashboardController extends Controller
     }
 
     /**
+     * GET dashboard/suggestions?limit=6 — "Worth a look" (App\Services\Dashboard\Suggestions): what this person
+     * should look at now, most urgent first, each naming the app screen to open; one `all_clear` item when nothing.
+     */
+    public function suggestions(Request $request)
+    {
+        $data = $request->validate(['limit' => ['nullable', 'integer', 'min:1', 'max:20']]);
+        $user = $request->user();
+        $company = $request->attributes->get('company') ?? Company::withoutGlobalScopes()->findOrFail($user->company_id);
+        $items = app(\App\Services\Dashboard\Suggestions::class)->for($user, $company, (int) ($data['limit'] ?? 6), $request->getHost());
+
+        return $this->success(['items' => $items, 'all_clear' => $items[0]['key'] === 'all_clear', 'as_of' => now()->toIso8601String()], 'Suggestions.');
+    }
+
+    /**
      * ?from=&to= (the shop's local days) or ?range=today|7d|month|… (DashboardService::REPORT_RANGES): the web dashboard's
      * figures for that range and the same length just before it (DashboardService::range/kpis), for the member's own
      * store when they are limited to one (StoreScope). Money figures only for view_reports, view_profit or manage_finance
