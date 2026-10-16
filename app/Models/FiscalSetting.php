@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Crypt;
+use App\Support\DataCrypt;
 
 /**
  * A shop's fiscal / e-invoicing connector (supermarket plan F2). Written by FiscalService only.
- * `config` is encrypted with Laravel Crypt and is never serialised: config() decrypts it for the adapter.
+ * `config` is encrypted with the shared data key (DataCrypt, readable by both apps) and is never
+ * serialised: decrypted() returns it for the adapter.
  */
 class FiscalSetting extends Model
 {
@@ -26,7 +27,7 @@ class FiscalSetting extends Model
             return [];
         }
         try {
-            return json_decode(Crypt::decryptString((string) $this->config), true) ?: [];
+            return json_decode(DataCrypt::decrypt((string) $this->config), true) ?: [];
         } catch (\Throwable) {
             return [];
         }
@@ -35,6 +36,6 @@ class FiscalSetting extends Model
     /** @param array<string, mixed> $config */
     public function encryptConfig(array $config): void
     {
-        $this->config = Crypt::encryptString(json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $this->config = DataCrypt::encrypt(json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 }

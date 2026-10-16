@@ -11,6 +11,14 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // A standalone copy gets only its reference data: no SaaS plans, no platform admin, no demo
+        // (docs/STANDALONE_EDITION_PLAN.md §7.1). Its one business is created by the installer.
+        if (\App\Support\Edition::isStandalone()) {
+            $this->call(StandaloneReferenceSeeder::class);
+
+            return;
+        }
+
         $this->call([
             AdminRolesSeeder::class,       // roles, permissions, platform + tenant menus
             PlanSeeder::class,             // paid plans (the Free plan comes with its migration)

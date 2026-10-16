@@ -96,7 +96,10 @@ class TenantDataService
         $days = (int) config('backup.deletion_grace_days', 30);
         $id = (int) DB::table('data_requests')->insertGetId(['company_id' => $company->id, 'requested_by_id' => $owner->id, 'kind' => 'delete', 'status' => 'scheduled',
             'purge_after' => now()->addDays($days), 'created_at' => now(), 'updated_at' => now()]);
-        app(Notifier::class)->notify((int) $company->id, 'billing', 'Shop deletion scheduled', "{$company->name} and all its data will be deleted on ".now()->addDays($days)->toFormattedDateString().'. Cancel any time before then in Company settings → Your data.');
+        $when = now()->addDays($days)->toFormattedDateString();
+        app(Notifier::class)->notify((int) $company->id, 'billing', 'Shop deletion scheduled', \App\Support\Edition::isStandalone()
+            ? "You asked to close and wipe this installation. Nothing is deleted automatically: from {$when} it can be wiped by hand. Cancel any time in Company settings → Your data."
+            : "{$company->name} and all its data will be deleted on {$when}. Cancel any time before then in Company settings → Your data.");
 
         return $id;
     }
@@ -107,9 +110,16 @@ class TenantDataService
             ->update(['status' => 'cancelled', 'updated_at' => now()]) > 0;
     }
 
-    /** Daily: delete shops whose grace period is over. */
+    /**
+     * Daily: delete shops whose grace period is over. Never on a standalone copy
+     * (docs/STANDALONE_EDITION_PLAN.md §5.4): its request is kept, but closing and wiping the
+     * installation is done by hand, never by a scheduled job.
+     */
     public function purgeDue(): int
     {
+        if (\App\Support\Edition::isStandalone()) {
+            return 0;
+        }
         $n = 0;
         foreach (DB::table('data_requests')->where('kind', 'delete')->where('status', 'scheduled')->where('purge_after', '<=', now())->get() as $r) {
             try {

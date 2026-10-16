@@ -19,18 +19,28 @@ class Kernel extends ConsoleKernel
         // refuses it and the warning stopped the worker for that minute. Scheduled tasks have no terminal anyway.
         \Closure::bind(fn () => self::$stty = false, null, \Symfony\Component\Console\Terminal::class)();
 
-        $schedule->call($task('tracking:backfill-location-names'))->name('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
+        // Per edition (docs/STANDALONE_EDITION_PLAN.md §16): the shop's own jobs run on both; billing, demos,
+        // Ping Pin, the mysqldump backup and the automatic purge are SaaS only.
+        $saas = \App\Support\Edition::isSaas();
+        if ($saas) {
+            $schedule->call($task('tracking:backfill-location-names'))->name('tracking:backfill-location-names')->everyFiveMinutes()->withoutOverlapping();
+        }
         $schedule->call($task('prices:apply-due'))->name('prices:apply-due')->everyFiveMinutes()->withoutOverlapping();
         $schedule->call($task('fiscal:submit-due'))->name('fiscal:submit-due')->everyMinute()->withoutOverlapping(); // F2: nothing to do unless a shop has fiscal receipts on
-        $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping();
+        $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping(); // standalone: notices + debt reminders only, no billing Lifecycle
         $schedule->call($task('customers:adopt-named'))->name('customers:adopt-named')->hourlyAt(40)->withoutOverlapping();
-        $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
-        $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();
-        $schedule->call($task('demo:public'))->name('demo:public')->hourlyAt(5)->withoutOverlapping(90);
         $schedule->call($task('shop:product-stats'))->name('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
-        $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
-        $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
-        $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:00')->withoutOverlapping();
+        if ($saas) {
+            $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
+            $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();
+            $schedule->call($task('demo:public'))->name('demo:public')->hourlyAt(5)->withoutOverlapping(90);
+            $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
+            $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
+            $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:00')->withoutOverlapping();
+        } else {
+            // Minute by minute, for the owner's "scheduler not running" banner (StandaloneHeartbeat).
+            $schedule->call($task('standalone:heartbeat'))->name('standalone:heartbeat')->everyMinute();
+        }
         // Messages (OTP, invites, notices) go through the database queue; the worker drains it each minute.
         $schedule->call($task('queue:work', ['--stop-when-empty' => true, '--tries' => 3, '--max-time' => 50]))->name('queue:work')->everyMinute()->withoutOverlapping();
     }

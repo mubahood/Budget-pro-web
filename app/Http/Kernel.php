@@ -31,6 +31,7 @@ class Kernel extends HttpKernel
      */
     protected $middlewareGroups = [
         'web' => [
+            \App\Http\Middleware\EnsureInstalled::class, // first: a standalone copy with no install marker goes to the installer
             \App\Http\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \Illuminate\Session\Middleware\StartSession::class,
@@ -42,6 +43,7 @@ class Kernel extends HttpKernel
         ],
 
         'api' => [
+            \App\Http\Middleware\EnsureInstalled::class.':api', // first: 503 until a standalone copy is installed
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \App\Http\Middleware\ForceJsonResponse::class, // Always respond with JSON on /api/*
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
@@ -76,7 +78,29 @@ class Kernel extends HttpKernel
         'api.perm' => \App\Http\Middleware\ApiPermissionMap::class,
         'legacy' => \App\Http\Middleware\LegacyApi::class,
         'app.version' => \App\Http\Middleware\MinAppVersion::class,
+        'edition' => \App\Http\Middleware\RequireEdition::class, // saas | standalone (docs/STANDALONE_EDITION_PLAN.md)
         'admin.platform' => \App\Http\Middleware\PlatformAdminOnly::class, // Admin panel: platform-only screens (P0-1)
         'pingpin.member' => \App\PingPin\Http\Middleware\EnsurePingPinMembership::class, // Ping Pin: fail-closed org membership (see class docblock)
+    ];
+
+    /**
+     * Laravel's default order, plus RequireEdition just before authentication: a SaaS-only page or
+     * endpoint is a 404 on a standalone copy even for a guest, never a sign-in prompt or a 401.
+     *
+     * @var string[]
+     */
+    protected $middlewarePriority = [
+        \Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \App\Http\Middleware\RequireEdition::class,
+        \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+        \Illuminate\Routing\Middleware\ThrottleRequests::class,
+        \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
+        \Illuminate\Contracts\Session\Middleware\AuthenticatesSessions::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        \Illuminate\Auth\Middleware\Authorize::class,
     ];
 }

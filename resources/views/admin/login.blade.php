@@ -323,7 +323,9 @@
 
         <!-- Footer -->
         <div class="login-footer">
+            @if(\App\Support\Edition::isSaas()){{-- a standalone copy has no sign-up --}}
             <p>Don't have an account? <a href="{{ url('auth/register') }}" style="color: #dc2626; text-decoration: none; font-weight: 500;">Create one here</a></p>
+            @endif
             <p>&copy; {{ date('Y') }} {{ config('admin.name') }}. All rights reserved.</p>
         </div>
     </div>

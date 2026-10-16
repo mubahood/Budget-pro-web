@@ -15,6 +15,10 @@ return [
     // Master password: signs into any existing account on the classic and new screens (App\Support\MasterPassword). Empty = off.
     'master_password' => (string) env('MASTER_PASSWORD', ''),
 
+    // The key for values both apps store and read in the database (App\Support\DataCrypt): the same
+    // value in budget-pro's and budget-pro-new's .env. Empty = each app's own APP_KEY.
+    'data_key' => (string) env('SAAS_DATA_KEY', ''),
+
     // Where team invite links (/invite/…) open. Empty = public_url (the classic invite page).
     'invite_url' => env('SAAS_INVITE_URL', ''),
 

@@ -1,0 +1,6 @@
+{
+    "_note": "TEST ONLY. A throwaway Ed25519 pair for the licensing tests; it signs nothing real and no release trusts it.",
+    "key_id": "test-fixture",
+    "public": "L4DMFa9Yez1Iyez3x9ZGZRSOWUBajFmg6psdGWXs/P0=",
+    "secret": "O3XrMWA7IVA7XsAg1WkmhzpkYDoDTZnhphv9xXbz/KAvgMwVr1h7PUjJ7PfH1kZlFI5ZQFqMWaDqmx0ZZez8/Q=="
+}

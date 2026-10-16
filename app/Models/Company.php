@@ -36,6 +36,9 @@ class Company extends Model
 {
     use AuditLogger, HasFactory;
 
+    /** Why a standalone installation refuses a second company (docs/STANDALONE_EDITION_PLAN.md §6). */
+    public const ONE_BUSINESS = 'This installation is licensed for one business.';
+
     /**
      * Mass-assignable fields. Every write path in this app currently sets
      * properties explicitly (`$company->name = ...`), so this is not relied
@@ -92,6 +95,18 @@ class Company extends Model
     protected static function boot()
     {
         parent::boot();
+
+        // One business per standalone installation (docs/STANDALONE_EDITION_PLAN.md §6): a second company is
+        // refused (demo ones count too); the unique standalone_slot and the installer's triggers back this up.
+        static::creating(function (Company $company) {
+            if (! \App\Support\Edition::isStandalone()) {
+                return;
+            }
+            if (static::withoutGlobalScopes()->exists()) {
+                throw new \DomainException(self::ONE_BUSINESS);
+            }
+            $company->standalone_slot = 1;
+        });
 
         // Update owner's company_id when company is updated
         static::updated(function (Company $company) {
@@ -211,6 +226,11 @@ class Company extends Model
     {
         if (strtolower((string) $this->status) === 'inactive') {
             return false;
+        }
+        // A standalone copy has a licence, not a subscription, and a licence never stops the shop
+        // (docs/STANDALONE_EDITION_PLAN.md S3): no grace, no read-only, whatever its subscription row says.
+        if (\App\Support\Edition::isStandalone()) {
+            return true;
         }
 
         // Subscription-based access (only if the table/relationship is available).

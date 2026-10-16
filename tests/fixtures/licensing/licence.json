@@ -1,0 +1,20 @@
+{
+    "licence": {
+        "format": 1,
+        "product": "budget-pro-standalone",
+        "id": "7d1c2f0e-3b8a-4c55-9e61-0f2a9b7c4d10",
+        "customer": "Fresh Mart Ltd",
+        "domains": [
+            "shop.freshmart.test"
+        ],
+        "updates_until": "2099-12-31",
+        "limits": {
+            "max_users": 10,
+            "max_locations": 3,
+            "max_devices": 10
+        },
+        "white_label": false
+    },
+    "key_id": "test-fixture",
+    "signature": "QCc3XxKD0+bbtAT+bErhdycDJ2r93VC+bX8vbBaouCrmugJkoJfHrAbVIGrmSB3XipBQ4KEa2c8hagos1niRAg=="
+}

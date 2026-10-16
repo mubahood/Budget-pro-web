@@ -79,9 +79,10 @@ if (! function_exists('apiCrud')) {
 | full rationale. New clients must use /api/v1 instead.
 |
 */
+// Legacy sign-up: SaaS only, and the edition is checked first so a standalone copy answers 404.
+Route::middleware(['edition:saas', 'legacy'])->post('auth/register', [ApiController::class, 'register']);
 Route::middleware('legacy')->group(function () {
     Route::post('auth/login', [ApiController::class, 'login']);
-    Route::post('auth/register', [ApiController::class, 'register']);
     Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
     Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
     Route::get('api/{model}', [ApiController::class, 'my_list']);
@@ -109,13 +110,15 @@ Route::middleware('legacy')->group(function () {
 }); // legacy (counted; retired by LEGACY_API_ENABLED=false)
 
 Route::prefix('v1')->middleware('app.version')->group(function () {
+    // Public: what the phone app reads before sign-in — versions, and which edition this server is
+    // (a standalone copy hides "Create your shop" and billing: registration_open false).
     Route::get('app/version', fn () => response()->json(['code' => 1, 'message' => 'App versions.', 'data' => [
         'min_version' => config('mobile.min_version'), 'latest_version' => config('mobile.latest_version'), 'store_url' => config('mobile.store_url'),
-    ]]));
+    ] + \App\Support\EditionMeta::forApp()]));
 
     // ── Public auth endpoints (rate-limited to deter brute force) ──
     Route::middleware('throttle:10,1')->group(function () {
-        Route::post('auth/register', [AuthController::class, 'register']);
+        Route::post('auth/register', [AuthController::class, 'register'])->middleware('edition:saas');
         Route::post('auth/login', [AuthController::class, 'login']);
         Route::post('auth/otp/request', [AuthController::class, 'otpRequest']);
         Route::post('auth/otp/verify', [AuthController::class, 'otpVerify']);
@@ -125,25 +128,31 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // routes above. Same admin_users/Sanctum identity (DECISIONS.md D6),
         // its own registration shape (phone-or-email, no company_name/
         // currency required) and its own trial-subscription creation.
-        Route::post('pingpin/auth/register', [PingPinAuthController::class, 'register']);
-        Route::post('pingpin/auth/login', [PingPinAuthController::class, 'login']);
+        // Ping Pin is SaaS only (docs/STANDALONE_EDITION_PLAN.md §5.2): every pingpin/* route is edition:saas.
+        Route::middleware('edition:saas')->group(function () {
+            Route::post('pingpin/auth/register', [PingPinAuthController::class, 'register']);
+            Route::post('pingpin/auth/login', [PingPinAuthController::class, 'login']);
+        });
 
         // Re-authentication step before weakening protection on an already-
         // enrolled device (disable tracking, sign out) — rate-limited here
         // too, since it's a password check an attacker could otherwise
         // brute-force. Only needs auth:sanctum (checks the CALLER's own
         // password), not pingpin.member — it isn't scoped to an organisation.
-        Route::middleware('auth:sanctum')->post('pingpin/auth/verify-password', [PingPinAuthController::class, 'verifyPassword']);
+        Route::middleware(['edition:saas', 'auth:sanctum'])->post('pingpin/auth/verify-password', [PingPinAuthController::class, 'verifyPassword']);
     });
 
-    // ── Public billing: pricing page + Flutterwave webhook (signature-verified) ──
-    Route::get('plans', [BillingController::class, 'plans']);
+    // ── Public billing: pricing page (SaaS only) + Flutterwave webhook (signature-verified) ──
+    Route::get('plans', [BillingController::class, 'plans'])->middleware('edition:saas');
     // Off the per-IP api throttle: Flutterwave retries a burst of webhooks from a few IPs (POWER_PLAN §4.1).
+    // Both editions: it also settles shops' mobile-money collections (MOMO- references); the subscription branch is SaaS only.
     Route::post('webhooks/flutterwave', [BillingController::class, 'webhook'])->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class.':api');
 
     // ── Ping Pin — same public shape, its own separate billing (DECISIONS.md D2) ──
-    Route::get('pingpin/plans', [PingPinBillingController::class, 'plans']);
-    Route::post('pingpin/webhooks/flutterwave', [PingPinBillingController::class, 'webhook']);
+    Route::middleware('edition:saas')->group(function () {
+        Route::get('pingpin/plans', [PingPinBillingController::class, 'plans']);
+        Route::post('pingpin/webhooks/flutterwave', [PingPinBillingController::class, 'webhook']);
+    });
 
     // ── Authenticated: session/profile (no subscription gate) ──
     Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm'])->group(function () {
@@ -171,18 +180,20 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::put('store-features', [\App\Http\Controllers\Api\V1\StoreFeaturesController::class, 'update']);
 
         // Billing — reachable even when the subscription has lapsed, so a
-        // customer can always pay to reactivate.
-        Route::get('subscription', [BillingController::class, 'current']);
-        Route::post('subscription/checkout', [BillingController::class, 'checkout']);
-        Route::post('subscription/verify', [BillingController::class, 'verify']);
-        Route::get('subscription/quote', [BillingController::class, 'quote']);
-        Route::post('subscription/cancel', [BillingController::class, 'cancel']);
-        Route::post('subscription/resume', [BillingController::class, 'resume']);
-        Route::get('subscription/invoices/{id}.pdf', [BillingController::class, 'invoicePdf'])->whereNumber('id');
-        Route::post('subscription/momo', [BillingController::class, 'chargeMomo'])->middleware('throttle:10,1');
-        Route::get('subscription/payments/{id}', [BillingController::class, 'paymentStatus'])->whereNumber('id');
-        Route::post('subscription/schedule-change', [BillingController::class, 'scheduleChange']);
-        Route::post('subscription/cancel-change', [BillingController::class, 'cancelChange']);
+        // customer can always pay to reactivate. SaaS only: a standalone copy has a licence instead.
+        Route::middleware('edition:saas')->group(function () {
+            Route::get('subscription', [BillingController::class, 'current']);
+            Route::post('subscription/checkout', [BillingController::class, 'checkout']);
+            Route::post('subscription/verify', [BillingController::class, 'verify']);
+            Route::get('subscription/quote', [BillingController::class, 'quote']);
+            Route::post('subscription/cancel', [BillingController::class, 'cancel']);
+            Route::post('subscription/resume', [BillingController::class, 'resume']);
+            Route::get('subscription/invoices/{id}.pdf', [BillingController::class, 'invoicePdf'])->whereNumber('id');
+            Route::post('subscription/momo', [BillingController::class, 'chargeMomo'])->middleware('throttle:10,1');
+            Route::get('subscription/payments/{id}', [BillingController::class, 'paymentStatus'])->whereNumber('id');
+            Route::post('subscription/schedule-change', [BillingController::class, 'scheduleChange']);
+            Route::post('subscription/cancel-change', [BillingController::class, 'cancelChange']);
+        });
 
         // Setup wizard, checklist and modules (plan C2/C4).
         Route::get('onboarding', [\App\Http\Controllers\Api\V1\OnboardingController::class, 'show']);
@@ -232,7 +243,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     // not built yet (Phase 2), so gating on the other product's billing here
     // would be exactly the cross-product coupling D2 exists to avoid.
     // pingpin.member does the real per-organisation authorization itself.
-    Route::middleware(['auth:sanctum'])->group(function () {
+    Route::middleware(['edition:saas', 'auth:sanctum'])->group(function () {
         Route::get('pingpin/organisations', [OrganisationController::class, 'index']);
         Route::post('pingpin/organisations/members/{membershipId}/accept', [OrganisationController::class, 'acceptInvite']);
         Route::middleware('pingpin.member')->group(function () {

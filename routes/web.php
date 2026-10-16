@@ -23,7 +23,8 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Browser return URL after hosted checkout (public; the transaction is re-verified server-side).
-Route::get('payment/callback', \App\Http\Controllers\PaymentCallbackController::class)->name('payment.callback');
+// SaaS only (edition:saas → 404 on a standalone copy, docs/STANDALONE_EDITION_PLAN.md §5.2): subscriptions are paid here.
+Route::get('payment/callback', \App\Http\Controllers\PaymentCallbackController::class)->middleware('edition:saas')->name('payment.callback');
 
 // Registration (public)
 // API reference (plan A8, P4-7): generated from the routes and their validation rules.
@@ -45,8 +46,9 @@ Route::post('stop/{customer}/{token}', [\App\Http\Controllers\PublicUnsubscribeC
 // Team invite links (plan C5).
 Route::get('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'show'])->middleware('throttle:30,1')->name('invite.show');
 Route::post('invite/{token}', [\App\Http\Controllers\InvitePageController::class, 'accept'])->middleware('throttle:10,1')->name('invite.accept');
-Route::get('auth/register', [AuthController::class, 'getRegister'])->name('admin.register');
-Route::post('auth/register', [AuthController::class, 'postRegister'])->name('admin.register.post');
+// Sign-up: SaaS only. A standalone copy has exactly one business, created by the installer (§6).
+Route::get('auth/register', [AuthController::class, 'getRegister'])->middleware('edition:saas')->name('admin.register');
+Route::post('auth/register', [AuthController::class, 'postRegister'])->middleware('edition:saas')->name('admin.register.post');
 
 // Admin-only AJAX helpers (require a laravel-admin session) + tenant-scoped PDFs.
 Route::middleware('admin.auth')->group(function () {

@@ -63,6 +63,9 @@ class DemoShopService
     /** May $user open a demo made from their shop (owners and managers who run the settings). */
     public function allowed(User $user): bool
     {
+        if (\App\Support\Edition::isStandalone()) {
+            return false; // a demo is a second company: never on a one-business copy (docs/STANDALONE_EDITION_PLAN.md §6)
+        }
         $company = Company::withoutGlobalScopes()->find($user->company_id);
 
         return $company !== null && ! $company->is_demo && Permissions::can($user, 'manage_settings');
@@ -73,6 +76,9 @@ class DemoShopService
      */
     public function create(User $owner, ?int $days = null): Company
     {
+        if (\App\Support\Edition::isStandalone()) {
+            throw BusinessRuleException::make('one_business', 'Demo shops are not available on this installation: it is licensed for one business.');
+        }
         $days ??= (int) config('onboarding.demo_days', 60);
         $real = Company::withoutGlobalScopes()->find($owner->company_id);
         if ($real === null) {

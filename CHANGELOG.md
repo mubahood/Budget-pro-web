@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### One-off (standalone) edition, foundation (2026-10-16, docs/STANDALONE_EDITION_PLAN.md)
+- **One codebase, two editions:** `APP_EDITION=saas|standalone` (config/edition.php, `App\Support\Edition`, `edition:` route middleware in both apps). On standalone, the public site, sign-up, plans and billing, platform screens, demos, PingPin, the legacy API and the master password are off; `/` is the sign-in.
+- **One business per installation:** `companies.standalone_slot` (unique), a model guard and database triggers (`SingleBusinessGuard`); every company-creation path refuses a second.
+- **Standalone plan:** a lifetime plan whose limits come from the licence (`licence:apply`), so every existing quota check works unchanged; the shop is always active.
+- **Licensing core:** Ed25519-signed `licence.json` checked offline (`InstalledLicence`, `Verifier`, `Signer`, `licensing:keygen`). Never limits products, sales or records.
+- **Backups for buyers' servers:** PHP database dump with triggers (restores with mysql/phpMyAdmin), plus both .env files, licence and uploaded files (`standalone:backup`, seven kept).
+- **Installed marker:** `EnsureInstalled` in both apps; scheduler tasks gated per edition; `standalone:heartbeat`.
+- **API:** `app/version` and `auth/me` report the edition (the phone app hides sign-up and billing on a buyer's server).
+- **Fix:** `subscriptions.ends_at` is DATETIME (a lifetime plan's end date did not fit in TIMESTAMP).
+- **Fix:** encrypted shared values (EFRIS credentials) use one data key both apps read (`SAAS_DATA_KEY`, `DataCrypt`); before, values saved from the web app could not be read by the kernel's fiscal job.
+
 ### Phone sync, safer and faster (2026-10-10, docs/MOBILE_API_CONTRACT.md §9a)
 - **One bad batch never fails a push:** an error inside a batch is rolled back and answered `retry_later` (a duplicate key whose rows exist is `replayed`); the other batches still apply.
 - **Sync has its own rate limit** (300/min per user and device); API 429s now carry `Retry-After`.

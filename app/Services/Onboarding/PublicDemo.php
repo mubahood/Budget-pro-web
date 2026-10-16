@@ -43,7 +43,8 @@ class PublicDemo
 
     public static function enabled(): bool
     {
-        return (bool) config('demo.enabled', true);
+        // Forced off on a standalone copy, whatever DEMO_PUBLIC says: it would add a company and publish a known sign-in.
+        return \App\Support\Edition::isSaas() && (bool) config('demo.enabled', true);
     }
 
     public static function owner(): ?User

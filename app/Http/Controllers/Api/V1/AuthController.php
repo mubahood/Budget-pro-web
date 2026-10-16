@@ -337,6 +337,8 @@ class AuthController extends Controller
             // Supermarket features (same block as company.store) and when this token expires (refresh before then).
             'store' => \App\Support\StoreFeatures::payload($company),
             'expires_at' => ($t = $user->currentAccessToken()) instanceof \Laravel\Sanctum\PersonalAccessToken ? optional($t->expires_at)->toIso8601String() : null,
+            // saas | standalone (docs/STANDALONE_EDITION_PLAN.md §5.6): standalone hides billing and sign-up in the app.
+            'edition' => \App\Support\Edition::name(),
         ], 'Profile loaded.');
     }
 

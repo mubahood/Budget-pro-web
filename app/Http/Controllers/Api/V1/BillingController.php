@@ -312,6 +312,11 @@ class BillingController extends Controller
             return response()->json(['status' => 'ok'], 200);
         }
 
+        // Subscriptions are SaaS only (docs/STANDALONE_EDITION_PLAN.md §5.2): a standalone copy acknowledges and ignores the rest.
+        if (\App\Support\Edition::isStandalone()) {
+            return response()->json(['status' => 'ignored'], 200);
+        }
+
         // Never trust the webhook body alone — re-verify with the API (SubscriptionFulfillment::verifyAndFulfill).
         $r = app(SubscriptionFulfillment::class)->verifyAndFulfill((string) $txRef, $transactionId);
         if ($r['status'] === 'unverified' && $r['transient']) {

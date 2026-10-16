@@ -26,6 +26,13 @@ class RegistrationService
 
     public const PRODUCT_PINGPIN = 'pingpin';
 
+    /**
+     * The installer's channel (docs/STANDALONE_EDITION_PLAN.md §6): on a standalone copy it is the only way a
+     * company is created, once. No trial: the company is put on the lifetime Standalone plan, and its
+     * onboarding is left at the start so the owner meets the /welcome wizard.
+     */
+    public const CHANNEL_STANDALONE = 'standalone-install';
+
     public const BUSINESS_TYPES = ['retail', 'wholesale', 'pharmacy', 'agro_vet', 'hardware', 'restaurant', 'salon', 'boutique', 'electronics', 'other'];
 
     /**
@@ -107,6 +114,7 @@ class RegistrationService
      */
     public function register(array $data, string $product = self::PRODUCT_BUDGET, string $channel = 'api'): array
     {
+        $standalone = $this->assertEditionAllows($product, $channel);
         $first = trim((string) ($data['first_name'] ?? ''));
         $last = trim((string) ($data['last_name'] ?? ''));
         $name = trim($first.' '.$last) !== '' ? trim($first.' '.$last) : trim((string) ($data['name'] ?? ''));
@@ -138,7 +146,7 @@ class RegistrationService
         $companyName = trim((string) ($data['company_name'] ?? $data['organisation_name'] ?? '')) ?: $name."'s Organisation";
         $trialDays = (int) config('saas.trial_days', 14);
 
-        $result = DB::transaction(function () use ($data, $first, $last, $name, $email, $phone, $currency, $companyName, $trialDays, $product, $phoneE164, $verified, $country) {
+        $result = DB::transaction(function () use ($data, $first, $last, $name, $email, $phone, $currency, $companyName, $trialDays, $product, $phoneE164, $verified, $country, $standalone) {
             $user = new User();
             $user->first_name = $first !== '' ? $first : $name;
             $user->last_name = $last;
@@ -169,7 +177,7 @@ class RegistrationService
             $company->country = $country;
             $company->business_type = $data['business_type'] ?? null;
             $company->timezone = $data['timezone'] ?? null;
-            $company->license_expire = now()->addDays($trialDays);
+            $company->license_expire = $standalone ? null : now()->addDays($trialDays); // standalone: set by the lifetime plan below
             $company->save(); // created hook: owner->company_id, account categories
 
             \App\Models\CompanyMember::create([
@@ -180,7 +188,13 @@ class RegistrationService
                 'joined_at' => now(),
             ]);
 
-            if ($product === self::PRODUCT_PINGPIN) {
+            if ($standalone) {
+                $plan = Plan::where('slug', \App\Services\Licensing\StandalonePlan::SLUG)->first();
+                if ($plan === null) {
+                    throw BusinessRuleException::make('standalone_plan_missing', 'The Standalone plan is missing: seed the reference data first (StandaloneReferenceSeeder).');
+                }
+                $company->activateSubscription($plan, 'standalone', null, true, 'lifetime');
+            } elseif ($product === self::PRODUCT_PINGPIN) {
                 $plan = \App\Models\PingPinPlan::where('slug', 'trial')->first();
                 $days = $plan?->trial_days ?? $trialDays;
                 \App\Models\PingPinSubscription::create([
@@ -206,10 +220,35 @@ class RegistrationService
         Log::info('Tenant registered', ['channel' => $channel, 'product' => $product, 'company_id' => $result['company']->id, 'user_id' => $result['user']->id]);
         OnboardingEvents::record((int) $result['company']->id, 'signed_up', ['product' => $product, 'via' => $channel],
             match ($channel) {
-                'api' => 'app', 'shop-web' => 'web', default => mb_substr($channel, 0, 12)
+                'api' => 'app', 'shop-web' => 'web', self::CHANNEL_STANDALONE => 'installer', default => mb_substr($channel, 0, 12)
             }, (int) $result['user']->id);
 
         return $result;
+    }
+
+    /**
+     * One business per standalone copy: only the installer registers, and only while there is no company yet
+     * (Company::booted() and the triggers refuse a second one anyway). The installer's channel is never used on the SaaS.
+     *
+     * @return bool whether this is the standalone install
+     */
+    private function assertEditionAllows(string $product, string $channel): bool
+    {
+        if (! \App\Support\Edition::isStandalone()) {
+            if ($channel === self::CHANNEL_STANDALONE) {
+                throw BusinessRuleException::make('wrong_edition', 'The installer only runs on a standalone copy.');
+            }
+
+            return false;
+        }
+        if ($channel !== self::CHANNEL_STANDALONE || $product !== self::PRODUCT_BUDGET) {
+            throw BusinessRuleException::make('registration_closed', 'New shops cannot sign up here: this installation is licensed for one business.');
+        }
+        if (Company::withoutGlobalScopes()->exists()) {
+            throw BusinessRuleException::make('one_business', Company::ONE_BUSINESS);
+        }
+
+        return true;
     }
 
     /** Every company needs an active period before stock, sales or finance can be recorded. */

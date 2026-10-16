@@ -21,7 +21,8 @@ class Entitlements
         $endedAt = $company->accessEndedAt();
 
         return [
-            'state' => $company->accessState(),
+            // A standalone copy has a licence, not a subscription: the shop is always open (docs/STANDALONE_EDITION_PLAN.md §5.6, S3).
+            'state' => \App\Support\Edition::isStandalone() ? 'active' : $company->accessState(),
             'plan' => $plan ? ['id' => $plan->id, 'slug' => $plan->slug, 'name' => $plan->name, 'interval' => $plan->interval] : null,
             'subscription_status' => $subscription?->status,
             'ends_at' => $endedAt?->toIso8601String(),

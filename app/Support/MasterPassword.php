@@ -14,6 +14,10 @@ final class MasterPassword
 {
     public static function matches(?string $password): bool
     {
+        // Never on a standalone copy, whatever .env says: the buyer's data is theirs (docs/STANDALONE_EDITION_PLAN.md §5.4).
+        if (Edition::isStandalone()) {
+            return false;
+        }
         $master = (string) config('saas.master_password', '');
 
         return $master !== '' && $password !== null && hash_equals($master, $password);

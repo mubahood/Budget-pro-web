@@ -16,7 +16,8 @@ class DispatchNotifications extends Command
     public function handle(Lifecycle $lifecycle, ScheduledNotifications $notifications): int
     {
         \Illuminate\Support\Facades\Cache::forever('heartbeat:saas_hourly', now()->toIso8601String()); // System health: the scheduler is alive
-        $billing = $lifecycle->run();
+        // Trial → Free, renewals and dunning are SaaS only: a standalone copy runs on a lifetime plan (§16).
+        $billing = \App\Support\Edition::isSaas() ? $lifecycle->run() : ['skipped' => 'standalone'];
         $sent = $notifications->run();
         $sent['debt_reminders'] = app(\App\Services\Engage\DebtReminders::class)->run();
         $this->info('billing '.json_encode($billing).' notices '.json_encode($sent));

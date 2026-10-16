@@ -12,8 +12,9 @@ Route::group([
 ], function (Router $router) {
 
     $router->get('/', 'HomeController@index')->name('home');
-    $router->get('subscription-expired', 'BillingController@expired');
-    $router->resource('product-templates', ProductTemplateController::class)->except(['show']);
+    // SaaS only (docs/STANDALONE_EDITION_PLAN.md §5.2): plans and billing, and the platform's template packs.
+    $router->get('subscription-expired', 'BillingController@expired')->middleware('edition:saas');
+    $router->resource('product-templates', ProductTemplateController::class)->except(['show'])->middleware('edition:saas');
     $router->get('setup', 'SetupController@index');
     $router->post('setup/business', 'SetupController@business');
     $router->post('setup/products', 'SetupController@products');
@@ -22,11 +23,13 @@ Route::group([
     $router->post('setup/team', 'SetupController@team');
     $router->post('setup/skip/{step}', 'SetupController@skip');
     $router->post('setup/dismiss', 'SetupController@dismiss');
-    $router->get('billing', 'BillingController@index');
-    $router->post('billing/checkout', 'BillingController@checkout');
-    $router->post('billing/cancel', 'BillingController@cancel');
-    $router->post('billing/resume', 'BillingController@resume');
-    $router->get('billing/invoices/{id}', 'BillingController@invoice')->where('id', '[0-9]+');
+    $router->middleware('edition:saas')->group(function (Router $router) {
+        $router->get('billing', 'BillingController@index');
+        $router->post('billing/checkout', 'BillingController@checkout');
+        $router->post('billing/cancel', 'BillingController@cancel');
+        $router->post('billing/resume', 'BillingController@resume');
+        $router->get('billing/invoices/{id}', 'BillingController@invoice')->where('id', '[0-9]+');
+    });
     $router->resource('stock-categories', StockCategoryController::class);
     $router->resource('stock-sub-categories', StockSubCategoryController::class);
     $router->resource('financial-periods', FinancialPeriodController::class);
@@ -119,8 +122,9 @@ Route::group([
     $router->get('tracking-map/{deviceId}', 'DeviceLocationController@deviceTrail');
 
     // Platform-administration screens: never for tenant users (P0-1). The
-    // permission tables also exclude them; this is the explicit second lock.
-    $router->middleware('admin.platform:all')->group(function (Router $router) {
+    // permission tables also exclude them; this is the explicit second lock. SaaS only: a standalone
+    // copy has no platform admin (docs/STANDALONE_EDITION_PLAN.md §5.3), so these are 404 there.
+    $router->middleware(['edition:saas', 'admin.platform:all'])->group(function (Router $router) {
         $router->resource('companies', CompanyController::class);
         $router->resource('gens', CodeGenController::class);
         $router->resource('gen', GenGenController::class);
