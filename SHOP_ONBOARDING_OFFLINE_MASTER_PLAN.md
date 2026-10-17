@@ -1456,4 +1456,4 @@ chosen, % using import, % inviting staff. Target: median < 10 min to first sale.
 
 *Related documents:* `BACKEND_API_MASTER_TASKS.md` (older backend backlog — superseded where it conflicts),
 `POULTRY_MODULE_MASTER_PLAN.md` and `poultry/ARCHITECTURE_NOTES.md` in the mobile repo (source of the sync
-engine being generalised), `API_DOCUMENTATION.md`, `DEPLOYMENT_GUIDE.md`.
+engine being generalised), `API_DOCUMENTATION.md`, `docs/archive/2025/DEPLOYMENT_GUIDE.md` (2025, archived; current operations are in `docs/runbooks/`).
