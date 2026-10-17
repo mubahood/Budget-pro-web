@@ -3232,7 +3232,30 @@
         },
         {
             "name": "Demo",
-            "item": []
+            "item": [
+                {
+                    "name": "POST /demo/session",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/demo/session",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "demo",
+                                "session"
+                            ]
+                        }
+                    }
+                }
+            ]
         },
         {
             "name": "Devices",
