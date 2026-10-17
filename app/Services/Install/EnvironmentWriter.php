@@ -17,7 +17,9 @@ use Dotenv\Dotenv;
 final class EnvironmentWriter
 {
     /** @param string|null $installedMarker the kernel's installed.json; refuses once it exists */
-    public function __construct(private readonly ?string $installedMarker = null) {}
+    public function __construct(private readonly ?string $installedMarker = null)
+    {
+    }
 
     /** @param array<string,string> $settings */
     public function write(string $path, array $settings): void

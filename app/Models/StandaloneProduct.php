@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $description
  * @property string $price_ugx
  * @property string|null $price_usd
- * @property string|null $renewal_price_ugx  empty: renewals by arrangement, not online
+ * @property string|null $renewal_price_ugx empty: renewals by arrangement, not online
  * @property string|null $renewal_price_usd
  * @property int $updates_months
  * @property array<string,int|null>|null $limits {max_users, max_locations, max_devices}; null = unlimited

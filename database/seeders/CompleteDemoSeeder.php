@@ -288,7 +288,7 @@ class CompleteDemoSeeder extends Seeder
             }
         }
 
-        $this->command->info("  ✓ Created ".count($stockItems)." stock items");
+        $this->command->info('  ✓ Created '.count($stockItems).' stock items');
 
         return $stockItems;
     }

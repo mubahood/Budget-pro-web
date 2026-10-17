@@ -30,7 +30,9 @@ class StandaloneInstaller
     /** What the installer asks; every value a string. */
     public const DETAILS = ['business_name', 'business_type', 'country', 'owner_name', 'owner_email', 'owner_phone', 'owner_password'];
 
-    public function __construct(private readonly InstallCaches $caches) {}
+    public function __construct(private readonly InstallCaches $caches)
+    {
+    }
 
     /** The CLI door: every migration in one go, then complete. */
     public function install(array $details): User

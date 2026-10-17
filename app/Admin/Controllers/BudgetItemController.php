@@ -113,7 +113,7 @@ class BudgetItemController extends TenantAdminController
             ->totalRow(function ($amount) use ($currency) {
                 $color = $amount > 0 ? 'danger' : 'success';
 
-                return "<strong class='text-$color'>".$currency." ".number_format($amount).'</strong>';
+                return "<strong class='text-$color'>".$currency.' '.number_format($amount).'</strong>';
             })->sortable();
 
         $grid->column('percentage_done', __('Progress'))

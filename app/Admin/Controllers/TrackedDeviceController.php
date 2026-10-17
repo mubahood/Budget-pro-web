@@ -51,18 +51,22 @@ class TrackedDeviceController extends TenantAdminController
         $grid->column('platform', __('Platform'))->display(fn ($p) => strtoupper($p));
         $grid->column('model', __('Model'));
         $grid->column('last_battery_pct', __('Battery'))->display(function ($v) {
-            if ($v === null) return '—';
+            if ($v === null) {
+                return '—';
+            }
             $color = $v <= 15 ? 'danger' : ($v <= 40 ? 'warning' : 'success');
 
             return "<span class='badge badge-$color'>$v%</span>";
         });
         $grid->column('last_location', __('Last Location'))->display(function () {
-            if ($this->last_lat === null) return 'No fix yet';
+            if ($this->last_lat === null) {
+                return 'No fix yet';
+            }
 
             $label = $this->last_location_name ?: (number_format($this->last_lat, 5).', '.number_format($this->last_lng, 5));
 
             return "<a href='https://www.google.com/maps?q={$this->last_lat},{$this->last_lng}' target='_blank'>"
-                ."<i class='fa fa-map-marker'></i> ".e($label)."</a>";
+                ."<i class='fa fa-map-marker'></i> ".e($label).'</a>';
         });
         $grid->column('last_location_at', __('Fix Time'))->display(function ($v) {
             return $v ? \Carbon\Carbon::parse($v)->diffForHumans() : '—';

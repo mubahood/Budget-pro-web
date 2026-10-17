@@ -17,7 +17,9 @@ use Symfony\Component\Process\Process;
  */
 class ReleaseDesk
 {
-    public function __construct(private readonly GitArchiveStager $git, private readonly Signer $signer) {}
+    public function __construct(private readonly GitArchiveStager $git, private readonly Signer $signer)
+    {
+    }
 
     /** @return array<string,array{ok:bool,detail:string}> */
     public function readiness(): array

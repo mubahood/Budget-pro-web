@@ -10,13 +10,18 @@ use Illuminate\Validation\Rule;
 class BudgetItemCategoryController extends BaseCrudController
 {
     protected string $modelClass = BudgetItemCategory::class;
+
     protected string $resourceName = 'Budget category';
 
     // target_amount / invested_amount / balance / percentage_done are rollups from items.
     protected array $writable = ['budget_program_id', 'name'];
+
     protected array $searchable = ['name'];
+
     protected array $sortable = ['id', 'name', 'created_at'];
+
     protected array $filterable = ['budget_program_id'];
+
     protected array $listWith = ['budgetProgram'];
 
     protected function rules(Request $request, ?Model $existing): array

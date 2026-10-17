@@ -29,7 +29,9 @@ class DatabaseBackup
     private const BINARY_TYPES = ['binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob', 'bit',
         'geometry', 'point', 'linestring', 'polygon', 'multipoint', 'multilinestring', 'multipolygon', 'geometrycollection'];
 
-    public function __construct(private readonly ?string $connection = null) {}
+    public function __construct(private readonly ?string $connection = null)
+    {
+    }
 
     /** Write the whole database to `$path` (".sql.gz" is added when missing). Returns the file. */
     public function dump(string $path): string
@@ -204,7 +206,7 @@ class DatabaseBackup
     /** PDO\\Mysql::ATTR_USE_BUFFERED_QUERY on PHP 8.4+, where the PDO:: name is deprecated (same value). */
     private static function buffered(): int
     {
-        return defined("Pdo\\Mysql::ATTR_USE_BUFFERED_QUERY") ? constant("Pdo\\Mysql::ATTR_USE_BUFFERED_QUERY") : \PDO::MYSQL_ATTR_USE_BUFFERED_QUERY;
+        return defined('Pdo\\Mysql::ATTR_USE_BUFFERED_QUERY') ? constant('Pdo\\Mysql::ATTR_USE_BUFFERED_QUERY') : \PDO::MYSQL_ATTR_USE_BUFFERED_QUERY;
     }
 
     private function quoteName(string $name): string

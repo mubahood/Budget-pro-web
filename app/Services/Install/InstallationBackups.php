@@ -36,7 +36,8 @@ final class InstallationBackups
         private readonly ?string $mediaRoot = null,
         private readonly ?string $directory = null,
         private readonly ?string $kernelEnv = null,
-    ) {}
+    ) {
+    }
 
     public function directory(): string
     {

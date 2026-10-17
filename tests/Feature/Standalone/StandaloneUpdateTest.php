@@ -340,7 +340,9 @@ class UpdateFakeRunner extends ArtisanRunner
     /** @var list<list<string>> */
     public array $calls = [];
 
-    public function __construct(private readonly ?string $failOn = null) {}
+    public function __construct(private readonly ?string $failOn = null)
+    {
+    }
 
     public function available(): bool
     {

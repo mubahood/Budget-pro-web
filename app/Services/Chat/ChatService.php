@@ -48,7 +48,9 @@ class ChatService
 
     public const TEAM_TITLE = 'Whole team';
 
-    public function __construct(private ?Filesystem $disk = null) {}
+    public function __construct(private ?Filesystem $disk = null)
+    {
+    }
 
     /** Where pictures live: budget-pro's public storage (the new app points `budgetpro.media_root` at the same folder). */
     public function disk(): Filesystem

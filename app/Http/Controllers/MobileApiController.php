@@ -34,6 +34,7 @@ class MobileApiController extends BaseController
         if ($u === null) {
             Utils::error('Unauthenticated. Please log in again.');
         }
+
         return $u;
     }
 
@@ -130,7 +131,7 @@ class MobileApiController extends BaseController
             ->where('company_id', $u->company_id)
             ->first();
 
-        if (!$program) {
+        if (! $program) {
             Utils::error('Budget program not found.');
         }
 
@@ -201,7 +202,7 @@ class MobileApiController extends BaseController
 
         if ($id) {
             $object = BudgetProgram::withoutGlobalScopes()->where('id', $id)->where('company_id', $u->company_id)->first();
-            if (!$object) {
+            if (! $object) {
                 Utils::error('Budget program not found or access denied.');
             }
             $isEdit = true;
@@ -219,7 +220,7 @@ class MobileApiController extends BaseController
         $duplicate = BudgetProgram::withoutGlobalScopes()
             ->where('name', $name)
             ->where('company_id', $u->company_id)
-            ->when($isEdit, fn($q) => $q->where('id', '!=', $id))
+            ->when($isEdit, fn ($q) => $q->where('id', '!=', $id))
             ->first();
         if ($duplicate) {
             Utils::error('A program with this name already exists.');
@@ -238,7 +239,7 @@ class MobileApiController extends BaseController
         try {
             $object->saveQuietly(); // skip boot hooks — we handle validation above
         } catch (\Exception $e) {
-            Utils::error('Failed to save: ' . $e->getMessage());
+            Utils::error('Failed to save: '.$e->getMessage());
         }
 
         $saved = BudgetProgram::withoutGlobalScopes()->find($object->id);
@@ -297,7 +298,7 @@ class MobileApiController extends BaseController
 
         if ($id) {
             $object = BudgetItemCategory::withoutGlobalScopes()->where('id', $id)->where('company_id', $u->company_id)->first();
-            if (!$object) {
+            if (! $object) {
                 Utils::error('Category not found or access denied.');
             }
             $isEdit = true;
@@ -317,7 +318,7 @@ class MobileApiController extends BaseController
 
         // Verify program belongs to user's company
         $program = BudgetProgram::withoutGlobalScopes()->where('id', $programId)->where('company_id', $u->company_id)->first();
-        if (!$program) {
+        if (! $program) {
             Utils::error('Budget program not found or access denied.');
         }
 
@@ -325,7 +326,7 @@ class MobileApiController extends BaseController
         $duplicate = BudgetItemCategory::withoutGlobalScopes()
             ->where('name', $name)
             ->where('budget_program_id', $programId)
-            ->when($isEdit, fn($q) => $q->where('id', '!=', $id))
+            ->when($isEdit, fn ($q) => $q->where('id', '!=', $id))
             ->first();
         if ($duplicate) {
             Utils::error('A category with this name already exists in this program.');
@@ -336,7 +337,7 @@ class MobileApiController extends BaseController
         $object->company_id = $u->company_id;
 
         // Set defaults for new categories
-        if (!$isEdit) {
+        if (! $isEdit) {
             $object->target_amount = 0;
             $object->invested_amount = 0;
             $object->balance = 0;
@@ -347,7 +348,7 @@ class MobileApiController extends BaseController
         try {
             $object->saveQuietly();
         } catch (\Exception $e) {
-            Utils::error('Failed to save: ' . $e->getMessage());
+            Utils::error('Failed to save: '.$e->getMessage());
         }
 
         $saved = BudgetItemCategory::withoutGlobalScopes()->find($object->id);
@@ -423,7 +424,7 @@ class MobileApiController extends BaseController
 
         if ($id) {
             $object = BudgetItem::withoutGlobalScopes()->where('id', $id)->where('company_id', $u->company_id)->first();
-            if (!$object) {
+            if (! $object) {
                 Utils::error('Budget item not found or access denied.');
             }
             $isEdit = true;
@@ -452,7 +453,7 @@ class MobileApiController extends BaseController
 
         // Verify category belongs to user's company
         $cat = BudgetItemCategory::withoutGlobalScopes()->where('id', $categoryId)->where('company_id', $u->company_id)->first();
-        if (!$cat) {
+        if (! $cat) {
             Utils::error('Budget category not found or access denied.');
         }
 
@@ -460,7 +461,7 @@ class MobileApiController extends BaseController
         $duplicate = BudgetItem::withoutGlobalScopes()
             ->where('name', $name)
             ->where('budget_item_category_id', $categoryId)
-            ->when($isEdit, fn($q) => $q->where('id', '!=', $id))
+            ->when($isEdit, fn ($q) => $q->where('id', '!=', $id))
             ->first();
         if ($duplicate) {
             Utils::error('An item with this name already exists in this category.');
@@ -488,7 +489,7 @@ class MobileApiController extends BaseController
         try {
             $object->saveQuietly();
         } catch (\Exception $e) {
-            Utils::error('Failed to save: ' . $e->getMessage());
+            Utils::error('Failed to save: '.$e->getMessage());
         }
 
         // Trigger cascade: category → program recalculation
@@ -581,7 +582,7 @@ class MobileApiController extends BaseController
 
         if ($id) {
             $object = ContributionRecord::withoutGlobalScopes()->where('id', $id)->where('company_id', $u->company_id)->first();
-            if (!$object) {
+            if (! $object) {
                 Utils::error('Contribution record not found or access denied.');
             }
             $isEdit = true;
@@ -603,18 +604,18 @@ class MobileApiController extends BaseController
 
         // Verify program belongs to user's company
         $program = BudgetProgram::withoutGlobalScopes()->where('id', $programId)->where('company_id', $u->company_id)->first();
-        if (!$program) {
+        if (! $program) {
             Utils::error('Budget program not found or access denied.');
         }
 
         // Verify treasurer if provided (optional)
         $treasurer = null;
-        if (!empty($treasurerId)) {
+        if (! empty($treasurerId)) {
             $treasurer = User::where('id', $treasurerId)->where('company_id', $u->company_id)->first();
         }
 
         // Check duplicate name within program (only on create)
-        if (!$isEdit) {
+        if (! $isEdit) {
             $duplicate = ContributionRecord::withoutGlobalScopes()
                 ->where('name', $name)
                 ->where('budget_program_id', $programId)
@@ -689,7 +690,7 @@ class MobileApiController extends BaseController
         try {
             $object->saveQuietly();
         } catch (\Exception $e) {
-            Utils::error('Failed to save: ' . $e->getMessage());
+            Utils::error('Failed to save: '.$e->getMessage());
         }
 
         // Clear custom fields and trigger program recalculation
@@ -794,15 +795,15 @@ class MobileApiController extends BaseController
 
         // Whitelist allowed models for security
         $allowed = [
-            'User'              => User::class,
-            'BudgetProgram'     => BudgetProgram::class,
-            'BudgetItemCategory'=> BudgetItemCategory::class,
-            'BudgetItem'        => BudgetItem::class,
-            'ContributionRecord'=> ContributionRecord::class,
+            'User' => User::class,
+            'BudgetProgram' => BudgetProgram::class,
+            'BudgetItemCategory' => BudgetItemCategory::class,
+            'BudgetItem' => BudgetItem::class,
+            'ContributionRecord' => ContributionRecord::class,
         ];
 
-        if (!isset($allowed[$model])) {
-            Utils::error('Invalid model: ' . $model);
+        if (! isset($allowed[$model])) {
+            Utils::error('Invalid model: '.$model);
         }
 
         $modelClass = $allowed[$model];
@@ -827,15 +828,15 @@ class MobileApiController extends BaseController
         $u = $this->auth($r);
 
         $allowed = [
-            'User'              => User::class,
-            'BudgetProgram'     => BudgetProgram::class,
-            'BudgetItemCategory'=> BudgetItemCategory::class,
-            'BudgetItem'        => BudgetItem::class,
-            'ContributionRecord'=> ContributionRecord::class,
+            'User' => User::class,
+            'BudgetProgram' => BudgetProgram::class,
+            'BudgetItemCategory' => BudgetItemCategory::class,
+            'BudgetItem' => BudgetItem::class,
+            'ContributionRecord' => ContributionRecord::class,
         ];
 
-        if (!isset($allowed[$model])) {
-            Utils::error('Invalid model: ' . $model);
+        if (! isset($allowed[$model])) {
+            Utils::error('Invalid model: '.$model);
         }
 
         $modelClass = $allowed[$model];
@@ -845,7 +846,7 @@ class MobileApiController extends BaseController
         $id = $r->get('id');
         if ($id) {
             $object = $modelClass::withoutGlobalScopes()->where('id', $id)->where('company_id', $u->company_id)->first();
-            if (!$object) {
+            if (! $object) {
                 Utils::error('Record not found or access denied.');
             }
             $isEdit = true;
@@ -858,9 +859,15 @@ class MobileApiController extends BaseController
         $except = ['id', 'created_at', 'updated_at'];
 
         foreach ($r->all() as $key => $value) {
-            if (!in_array($key, $columns)) continue;
-            if (in_array($key, $except)) continue;
-            if ($value === null || $value === '') continue;
+            if (! in_array($key, $columns)) {
+                continue;
+            }
+            if (in_array($key, $except)) {
+                continue;
+            }
+            if ($value === null || $value === '') {
+                continue;
+            }
             $object->$key = $value;
         }
 
@@ -869,7 +876,7 @@ class MobileApiController extends BaseController
         try {
             $object->saveQuietly();
         } catch (\Exception $e) {
-            Utils::error('Failed to save: ' . $e->getMessage());
+            Utils::error('Failed to save: '.$e->getMessage());
         }
 
         $saved = $modelClass::withoutGlobalScopes()->find($object->id);

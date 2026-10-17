@@ -21,7 +21,8 @@ class DebtService
     public function __construct(
         private readonly SaleService $sales = new SaleService,
         private readonly CustomerService $customers = new CustomerService,
-    ) {}
+    ) {
+    }
 
     /** Open, not voided, not deleted credit sales of a company. */
     private function open(int $companyId)

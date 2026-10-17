@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class ServerHealth
 {
-    public function __construct(private readonly InstallationBackups $backups, private readonly UpdateChannel $channel) {}
+    public function __construct(private readonly InstallationBackups $backups, private readonly UpdateChannel $channel)
+    {
+    }
 
     /**
      * @return array{installed:array<string,mixed>,heartbeat:?Carbon,queued:?int,failed:?int,diskFree:?float,

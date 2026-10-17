@@ -42,10 +42,11 @@ class BatchFixCategories extends BatchAction
 
                 $category = BudgetItemCategory::withoutGlobalScopes()->find($item->id);
 
-                if (!$category) {
+                if (! $category) {
                     $failed++;
                     $errors[] = "Category #{$item->id}: not found";
                     DB::rollBack();
+
                     continue;
                 }
 
@@ -74,11 +75,11 @@ class BatchFixCategories extends BatchAction
                     DB::table('budget_items')
                         ->where('id', $child->id)
                         ->update([
-                            'target_amount'   => $targetAmount,
-                            'balance'         => $balance,
+                            'target_amount' => $targetAmount,
+                            'balance' => $balance,
                             'percentage_done' => $percentageDone,
-                            'is_complete'     => $isComplete,
-                            'updated_at'      => now(),
+                            'is_complete' => $isComplete,
+                            'updated_at' => now(),
                         ]);
                 }
 
@@ -99,12 +100,12 @@ class BatchFixCategories extends BatchAction
                 DB::table('budget_item_categories')
                     ->where('id', $category->id)
                     ->update([
-                        'target_amount'   => $catTarget,
+                        'target_amount' => $catTarget,
                         'invested_amount' => $catInvested,
-                        'balance'         => $catBalance,
+                        'balance' => $catBalance,
                         'percentage_done' => $catPercentage,
-                        'is_complete'     => $catComplete,
-                        'updated_at'      => now(),
+                        'is_complete' => $catComplete,
+                        'updated_at' => now(),
                     ]);
 
                 if ($category->budget_program_id) {
@@ -117,8 +118,8 @@ class BatchFixCategories extends BatchAction
             } catch (\Exception $e) {
                 DB::rollBack();
                 $failed++;
-                $errors[] = "Category #{$item->id}: " . $e->getMessage();
-                Log::error('BatchFixCategories failed on category #' . $item->id, [
+                $errors[] = "Category #{$item->id}: ".$e->getMessage();
+                Log::error('BatchFixCategories failed on category #'.$item->id, [
                     'error' => $e->getMessage(),
                 ]);
             }
@@ -140,11 +141,11 @@ class BatchFixCategories extends BatchAction
         Log::info('BatchFixCategories completed', [
             'categories_fixed' => $fixed,
             'categories_failed' => $failed,
-            'programs_fixed'   => $programCount,
-            'errors'           => $errors,
+            'programs_fixed' => $programCount,
+            'errors' => $errors,
         ]);
 
-        $message = "Fixed {$fixed} categor" . ($fixed === 1 ? 'y' : 'ies') . " (with child items).";
+        $message = "Fixed {$fixed} categor".($fixed === 1 ? 'y' : 'ies').' (with child items).';
         if ($programCount > 0) {
             $message .= " Updated {$programCount} program(s).";
         }
@@ -176,13 +177,13 @@ class BatchFixCategories extends BatchAction
         DB::table('budget_programs')
             ->where('id', $programId)
             ->update([
-                'budget_total'    => $budgetTotal,
-                'budget_spent'    => $budgetSpent,
-                'budget_balance'  => $budgetTotal - $budgetSpent,
-                'total_expected'  => (float) $contributionAggregates->total_expected,
+                'budget_total' => $budgetTotal,
+                'budget_spent' => $budgetSpent,
+                'budget_balance' => $budgetTotal - $budgetSpent,
+                'total_expected' => (float) $contributionAggregates->total_expected,
                 'total_collected' => (float) $contributionAggregates->total_collected,
                 'total_in_pledge' => (float) $contributionAggregates->total_in_pledge,
-                'updated_at'      => now(),
+                'updated_at' => now(),
             ]);
     }
 

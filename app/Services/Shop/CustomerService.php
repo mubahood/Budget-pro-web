@@ -37,7 +37,7 @@ class CustomerService
         $groups = DB::table('sale_records')->where('company_id', $companyId)->whereNull('customer_id')
             ->where(fn ($q) => $q->whereNull('is_deleted')->orWhere('is_deleted', 0))
             ->whereNotNull('customer_name')
-            ->whereRaw("LOWER(TRIM(customer_name)) NOT IN (".implode(',', array_fill(0, count($placeholders), '?')).')', $placeholders)
+            ->whereRaw('LOWER(TRIM(customer_name)) NOT IN ('.implode(',', array_fill(0, count($placeholders), '?')).')', $placeholders)
             ->selectRaw('LOWER(TRIM(customer_name)) AS k, MAX(id) AS last_id, COUNT(*) AS n')
             ->groupBy('k')->get();
         if ($groups->isEmpty()) {

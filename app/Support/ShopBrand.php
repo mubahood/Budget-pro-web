@@ -21,7 +21,9 @@ final class ShopBrand
 
     private ?bool $square = null;
 
-    public function __construct(private readonly ?Company $company) {}
+    public function __construct(private readonly ?Company $company)
+    {
+    }
 
     /** The signed-in person's business (standalone), else none. */
     public static function current(): self

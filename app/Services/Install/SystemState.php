@@ -22,7 +22,9 @@ final class SystemState
     public const STALE_HOURS = 3;
 
     /** @param string|null $directory default: system/ beside the install marker */
-    public function __construct(private readonly ?string $directory = null) {}
+    public function __construct(private readonly ?string $directory = null)
+    {
+    }
 
     /** The kernel's storage/app/private, as both apps resolve it (from the install marker's folder). */
     public static function privateDirectory(): string

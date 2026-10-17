@@ -28,7 +28,9 @@ final class InstalledLicence
 
     private bool $loaded = false;
 
-    public function __construct(private readonly ?Verifier $verifier = null, private readonly ?string $path = null) {}
+    public function __construct(private readonly ?Verifier $verifier = null, private readonly ?string $path = null)
+    {
+    }
 
     public static function current(): self
     {

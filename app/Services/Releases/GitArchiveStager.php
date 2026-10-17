@@ -25,7 +25,9 @@ class GitArchiveStager
     /** @var callable(string,int):void */
     private $progress;
 
-    public function __construct(private readonly StandaloneArchive $archive = new StandaloneArchive) {}
+    public function __construct(private readonly StandaloneArchive $archive = new StandaloneArchive)
+    {
+    }
 
     public static function isCheckout(string $path): bool
     {
@@ -58,7 +60,8 @@ class GitArchiveStager
     public function build(string $version, string $destination, Signer $signer, ?callable $progress = null,
         ?string $kernel = null, ?string $web = null): array
     {
-        $this->progress = $progress ?? static function (): void {};
+        $this->progress = $progress ?? static function (): void {
+        };
         $repositories = ['kernel' => $kernel ?? (string) config('edition.release_sources.kernel'), 'web' => $web ?? (string) config('edition.release_sources.web')];
         $commits = [];
         foreach ($repositories as $side => $repository) {

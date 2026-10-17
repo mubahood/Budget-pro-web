@@ -82,7 +82,7 @@ class PublicDemoBuilder
     /** @var list<array{customer: Customer, x: array}> */
     private array $customers = [];
 
-    /** @var array<int, int> stock item id => index in $items */
+    /** @var array<int, int> stock item id => index in */
     private array $byId = [];
 
     private string $tz = 'UTC';

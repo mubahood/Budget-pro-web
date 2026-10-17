@@ -380,9 +380,9 @@ class ReportService
         // Sales taxed per line (tax classes, F1) use the tax stored on their lines, net of returns. Every other sale
         // (older ones, shops without tax classes, old-app movements) is worked out from the gross at the shop's rate.
         [$from, $bind] = $this->saleRows();
-        $taxed = "(SELECT i.sale_record_id, COUNT(i.tax_rate) AS n,
+        $taxed = '(SELECT i.sale_record_id, COUNT(i.tax_rate) AS n,
                 SUM(COALESCE(i.tax_amount, 0) * (i.quantity - COALESCE(i.returned_quantity, 0)) / NULLIF(i.quantity, 0)) AS tax
-            FROM sale_record_items i WHERE i.company_id = ? AND COALESCE(i.is_deleted, 0) = 0 GROUP BY i.sale_record_id) t";
+            FROM sale_record_items i WHERE i.company_id = ? AND COALESCE(i.is_deleted, 0) = 0 GROUP BY i.sale_record_id) t';
         $sum = DB::selectOne("SELECT COALESCE(SUM(s.total_amount), 0) AS total,
                 COALESCE(SUM(CASE WHEN t.n > 0 THEN s.total_amount END), 0) AS taxed_gross, COALESCE(SUM(CASE WHEN t.n > 0 THEN t.tax END), 0) AS taxed_vat
             FROM {$from} LEFT JOIN {$taxed} ON t.sale_record_id = s.sale_id", array_merge($bind, [$this->companyId]));

@@ -2,8 +2,8 @@
 
 namespace App\Support\OpenApi;
 
-use App\Support\Rules\PasswordPolicy;
 use App\Http\Controllers\Api\V1\BaseCrudController;
+use App\Support\Rules\PasswordPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;

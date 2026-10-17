@@ -10,7 +10,9 @@ namespace App\Support\Licensing;
 final class Verifier
 {
     /** @param array<string,string>|null $keys key id => base64 public key; null = the configured keys */
-    public function __construct(private readonly ?array $keys = null) {}
+    public function __construct(private readonly ?array $keys = null)
+    {
+    }
 
     /** @param array<string,mixed> $payload */
     public function verifies(array $payload, string $signature, string $keyId): bool

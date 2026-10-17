@@ -41,10 +41,11 @@ class BatchFixContributions extends BatchAction
 
                 $record = DB::table('contribution_records')->where('id', $item->id)->first();
 
-                if (!$record) {
+                if (! $record) {
                     $failed++;
                     $errors[] = "Contribution #{$item->id}: not found";
                     DB::rollBack();
+
                     continue;
                 }
 
@@ -70,12 +71,12 @@ class BatchFixContributions extends BatchAction
                 DB::table('contribution_records')
                     ->where('id', $record->id)
                     ->update([
-                        'paid_amount'     => $paidAmount,
+                        'paid_amount' => $paidAmount,
                         'not_paid_amount' => $notPaidAmount,
-                        'fully_paid'      => $fullyPaid,
-                        'custom_amount'   => null,  // Clear transient fields
+                        'fully_paid' => $fullyPaid,
+                        'custom_amount' => null,  // Clear transient fields
                         'custom_paid_amount' => null,
-                        'updated_at'      => now(),
+                        'updated_at' => now(),
                     ]);
 
                 if ($record->budget_program_id) {
@@ -88,8 +89,8 @@ class BatchFixContributions extends BatchAction
             } catch (\Exception $e) {
                 DB::rollBack();
                 $failed++;
-                $errors[] = "Contribution #{$item->id}: " . $e->getMessage();
-                Log::error('BatchFixContributions failed on record #' . $item->id, [
+                $errors[] = "Contribution #{$item->id}: ".$e->getMessage();
+                Log::error('BatchFixContributions failed on record #'.$item->id, [
                     'error' => $e->getMessage(),
                 ]);
             }
@@ -109,10 +110,10 @@ class BatchFixContributions extends BatchAction
         }
 
         Log::info('BatchFixContributions completed', [
-            'contributions_fixed'  => $fixed,
+            'contributions_fixed' => $fixed,
             'contributions_failed' => $failed,
-            'programs_fixed'       => $programCount,
-            'errors'               => $errors,
+            'programs_fixed' => $programCount,
+            'errors' => $errors,
         ]);
 
         $message = "Fixed {$fixed} contribution(s).";
@@ -147,13 +148,13 @@ class BatchFixContributions extends BatchAction
         DB::table('budget_programs')
             ->where('id', $programId)
             ->update([
-                'budget_total'    => $budgetTotal,
-                'budget_spent'    => $budgetSpent,
-                'budget_balance'  => $budgetTotal - $budgetSpent,
-                'total_expected'  => (float) $contributionAggregates->total_expected,
+                'budget_total' => $budgetTotal,
+                'budget_spent' => $budgetSpent,
+                'budget_balance' => $budgetTotal - $budgetSpent,
+                'total_expected' => (float) $contributionAggregates->total_expected,
                 'total_collected' => (float) $contributionAggregates->total_collected,
                 'total_in_pledge' => (float) $contributionAggregates->total_in_pledge,
-                'updated_at'      => now(),
+                'updated_at' => now(),
             ]);
     }
 

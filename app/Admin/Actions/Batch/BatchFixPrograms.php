@@ -46,10 +46,11 @@ class BatchFixPrograms extends BatchAction
 
                 $program = BudgetProgram::withoutGlobalScopes()->find($item->id);
 
-                if (!$program) {
+                if (! $program) {
                     $failed++;
                     $errors[] = "Program #{$item->id}: not found";
                     DB::rollBack();
+
                     continue;
                 }
 
@@ -77,11 +78,11 @@ class BatchFixPrograms extends BatchAction
                     DB::table('budget_items')
                         ->where('id', $budgetItem->id)
                         ->update([
-                            'target_amount'   => $targetAmount,
-                            'balance'         => $balance,
+                            'target_amount' => $targetAmount,
+                            'balance' => $balance,
                             'percentage_done' => $percentageDone,
-                            'is_complete'     => $isComplete,
-                            'updated_at'      => now(),
+                            'is_complete' => $isComplete,
+                            'updated_at' => now(),
                         ]);
                     $totalItemsFixed++;
                 }
@@ -108,12 +109,12 @@ class BatchFixPrograms extends BatchAction
                     DB::table('budget_item_categories')
                         ->where('id', $category->id)
                         ->update([
-                            'target_amount'   => $catTarget,
+                            'target_amount' => $catTarget,
                             'invested_amount' => $catInvested,
-                            'balance'         => $catBalance,
+                            'balance' => $catBalance,
                             'percentage_done' => $catPercentage,
-                            'is_complete'     => $catComplete,
-                            'updated_at'      => now(),
+                            'is_complete' => $catComplete,
+                            'updated_at' => now(),
                         ]);
                     $totalCategoriesFixed++;
                 }
@@ -143,10 +144,10 @@ class BatchFixPrograms extends BatchAction
                     DB::table('contribution_records')
                         ->where('id', $contribution->id)
                         ->update([
-                            'paid_amount'     => $paidAmount,
+                            'paid_amount' => $paidAmount,
                             'not_paid_amount' => $notPaidAmount,
-                            'fully_paid'      => $fullyPaid,
-                            'updated_at'      => now(),
+                            'fully_paid' => $fullyPaid,
+                            'updated_at' => now(),
                         ]);
                     $totalContributionsFixed++;
                 }
@@ -168,13 +169,13 @@ class BatchFixPrograms extends BatchAction
                 DB::table('budget_programs')
                     ->where('id', $program->id)
                     ->update([
-                        'budget_total'    => $budgetTotal,
-                        'budget_spent'    => $budgetSpent,
-                        'budget_balance'  => $budgetTotal - $budgetSpent,
-                        'total_expected'  => (float) $contributionAggregates->total_expected,
+                        'budget_total' => $budgetTotal,
+                        'budget_spent' => $budgetSpent,
+                        'budget_balance' => $budgetTotal - $budgetSpent,
+                        'total_expected' => (float) $contributionAggregates->total_expected,
                         'total_collected' => (float) $contributionAggregates->total_collected,
                         'total_in_pledge' => (float) $contributionAggregates->total_in_pledge,
-                        'updated_at'      => now(),
+                        'updated_at' => now(),
                     ]);
 
                 DB::commit();
@@ -183,20 +184,20 @@ class BatchFixPrograms extends BatchAction
             } catch (\Exception $e) {
                 DB::rollBack();
                 $failed++;
-                $errors[] = "Program #{$item->id}: " . $e->getMessage();
-                Log::error('BatchFixPrograms failed on program #' . $item->id, [
+                $errors[] = "Program #{$item->id}: ".$e->getMessage();
+                Log::error('BatchFixPrograms failed on program #'.$item->id, [
                     'error' => $e->getMessage(),
                 ]);
             }
         }
 
         Log::info('BatchFixPrograms completed', [
-            'programs_fixed'      => $fixed,
-            'programs_failed'     => $failed,
-            'items_fixed'         => $totalItemsFixed,
-            'categories_fixed'    => $totalCategoriesFixed,
+            'programs_fixed' => $fixed,
+            'programs_failed' => $failed,
+            'items_fixed' => $totalItemsFixed,
+            'categories_fixed' => $totalCategoriesFixed,
             'contributions_fixed' => $totalContributionsFixed,
-            'errors'              => $errors,
+            'errors' => $errors,
         ]);
 
         $message = "Fixed {$fixed} program(s): {$totalItemsFixed} items, {$totalCategoriesFixed} categories, {$totalContributionsFixed} contributions recalculated.";
