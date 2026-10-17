@@ -10,7 +10,7 @@
 - True-Doctor's code: `app/Support/Edition.php`, `app/Services/Install/*`, `app/Services/Releases/*`, `app/Support/Licensing/*`, `public/install.php` and others.
 - A full inventory of Budget Pro's SaaS-specific code: the kernel `budget-pro`, the web app `budget-pro-new` and the phone app `budget-pro-mobo`.
 
-**Status:** proposal (16 Oct 2026). Nothing in it is built yet. Every file and class named as existing was checked to exist.
+**Status:** built 16 October 2026 (delivery phases 1 to 8 of §19: edition switch, one business, licensing, package and installer, releases, updates and backups, selling, connections, phone app and brand; see `CHANGELOG.md`, "One-off (standalone) edition"). Still open: phase 0 on live (SMTP), phase 9 (the clean-room drill on a real cPanel account, `docs/editions.md` and the buyer's guide with screenshots), the owner's questions in §22, and the later "move my shop to my own server". Written as a proposal on 16 Oct 2026; the sections below keep that wording.
 
 ---
 
