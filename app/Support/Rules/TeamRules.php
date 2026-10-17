@@ -29,7 +29,7 @@ class TeamRules
     public static function newMember(): array
     {
         return ['name' => ['required', 'string', 'max:150'], 'phone' => ['nullable', 'string', 'max:30'], 'email' => ['nullable', 'email', 'max:191', Rule::unique('admin_users', 'email')],
-            'password' => ['required', 'string', 'min:'.\App\Services\Team\TeamService::MIN_PASSWORD, 'max:191'], 'role' => ['required', 'string']];
+            'password' => PasswordPolicy::rules(max: 191), 'role' => ['required', 'string']];
     }
 
     /**
@@ -46,7 +46,7 @@ class TeamRules
     /** A new password set for a member (TeamService::setPassword). @return array<string, array<int, mixed>> */
     public static function password(): array
     {
-        return ['password' => ['required', 'string', 'min:'.\App\Services\Team\TeamService::MIN_PASSWORD, 'max:191', 'confirmed']];
+        return ['password' => PasswordPolicy::rules(confirmed: true, max: 191)];
     }
 
     /** @return array<string, array<int, mixed>> */

@@ -12,8 +12,21 @@ return [
     // Screens the new interface lacks, platform admins, the API and ?classic=1 sessions stay here.
     'redirect_to_new_ui' => (bool) env('SAAS_REDIRECT_TO_NEW_UI', false),
 
-    // Master password: signs into any existing account on the classic and new screens (App\Support\MasterPassword). Empty = off.
-    'master_password' => (string) env('MASTER_PASSWORD', ''),
+    // Master password (App\Support\MasterPassword, DECISIONS.md 2026-10-17). SaaS only; always off on a standalone copy.
+    // Only its bcrypt hash is kept: make it with `php artisan master-password:set` (20 characters or more) and paste
+    // the same line into both apps' .env. Empty = off. A plaintext MASTER_PASSWORD is ignored.
+    'master_password_hash' => trim((string) env('MASTER_PASSWORD_HASH', '')),
+    // Where the master password works on the sign-in forms and "Sign in as": comma-separated IPs or CIDR ranges
+    // (203.0.113.7, 198.51.100.0/24, 2001:db8::/32). Empty = nowhere.
+    'master_password_allowed_ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('MASTER_PASSWORD_ALLOWED_IPS', ''))))),
+    // A session opened with it is marked and ends after this many minutes.
+    'master_password_session_minutes' => max(1, (int) env('MASTER_PASSWORD_SESSION_MINUTES', 60)),
+    // Who hears about each use (email and WhatsApp). Empty = the support contact (config/support.php).
+    'owner_alert_email' => trim((string) env('OWNER_ALERT_EMAIL', '')),
+    'owner_alert_whatsapp' => trim((string) env('OWNER_ALERT_WHATSAPP', '')),
+
+    // New passwords are checked against the public list of leaked passwords (App\Support\Rules\PasswordPolicy).
+    'password_breach_check' => (bool) env('PASSWORD_BREACH_CHECK', true),
 
     // The key for values both apps store and read in the database (App\Support\DataCrypt): the same
     // value in budget-pro's and budget-pro-new's .env. Empty = each app's own APP_KEY.

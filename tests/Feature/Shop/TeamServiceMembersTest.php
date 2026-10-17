@@ -30,7 +30,7 @@ class TeamServiceMembersTest extends AdminTestCase
     {
         $t = $this->makeTenant('company');
         $company = $t['company'];
-        $u = app(TeamService::class)->createMember($company, $t['user'], 'Grace Nakato', 'Grace@Example.test', '0772 404 101', 'secret-pass', 'cashier');
+        $u = app(TeamService::class)->createMember($company, $t['user'], 'Grace Nakato', 'Grace@Example.test', '0772 404 101', 'secret-pass-1', 'cashier');
 
         $this->assertSame('Grace', $u->first_name);
         $this->assertSame('Nakato', $u->last_name);
@@ -39,7 +39,7 @@ class TeamServiceMembersTest extends AdminTestCase
         $this->assertSame('+256772404101', $u->phone_e164);
         $this->assertSame('grace@example.test', $u->username);
         $this->assertSame((int) $company->id, (int) $u->company_id);
-        $this->assertTrue(Hash::check('secret-pass', $u->password));
+        $this->assertTrue(Hash::check('secret-pass-1', $u->password));
         $m = DB::table('company_members')->where('company_id', $company->id)->where('user_id', $u->id)->first();
         $this->assertSame(['cashier', 'active', (int) $t['user']->id], [$m->role, $m->status, (int) $m->invited_by_id]);
         Permissions::flush();
@@ -48,7 +48,7 @@ class TeamServiceMembersTest extends AdminTestCase
             ->where('user_id', $u->id)->where('slug', config('permissions.admin_roles.cashier'))->exists(), 'the web admin role follows, as with setRole');
 
         // Phone-only works too, and signs in with the phone.
-        $p = app(TeamService::class)->createMember($company, $t['user'], 'Peter', null, '0772404102', 'secret-pass', 'stock_keeper');
+        $p = app(TeamService::class)->createMember($company, $t['user'], 'Peter', null, '0772404102', 'secret-pass-1', 'stock_keeper');
         $this->assertSame('+256772404102', $p->username);
         $this->assertSame((int) $p->id, (int) \App\Services\Auth\AccountLookup::find('0772404102')?->id);
     }
@@ -58,16 +58,16 @@ class TeamServiceMembersTest extends AdminTestCase
         $t = $this->makeTenant('company');
         $s = app(TeamService::class);
         $c = $t['company'];
-        $this->assertSame('invalid_role', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', 'a@x.test', null, 'secret-pass', 'owner')));
-        $this->assertSame('contact_required', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', null, null, 'secret-pass', 'cashier')));
-        $this->assertSame('invalid_phone', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', null, '12', 'secret-pass', 'cashier')));
+        $this->assertSame('invalid_role', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', 'a@x.test', null, 'secret-pass-1', 'owner')));
+        $this->assertSame('contact_required', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', null, null, 'secret-pass-1', 'cashier')));
+        $this->assertSame('invalid_phone', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', null, '12', 'secret-pass-1', 'cashier')));
         $this->assertSame('weak_password', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', 'a@x.test', null, 'short', 'cashier')));
-        $this->assertSame('already_member', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', strtoupper($t['user']->email), null, 'secret-pass', 'cashier')));
+        $this->assertSame('already_member', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', strtoupper($t['user']->email), null, 'secret-pass-1', 'cashier')));
 
         $plan = Plan::query()->create(['name' => 'Tiny', 'slug' => 'tiny-'.uniqid(), 'price' => 0, 'limits' => ['max_users' => 1], 'features' => [], 'is_active' => true]);
         Subscription::create(['company_id' => $c->id, 'plan_id' => $plan->id, 'status' => 'active', 'starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(), 'provider' => 'manual']);
         $c = Company::withoutGlobalScopes()->find($c->id);
-        $this->assertSame('plan_limit_reached', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', 'a@x.test', null, 'secret-pass', 'cashier')));
+        $this->assertSame('plan_limit_reached', $this->refused(fn () => $s->createMember($c, $t['user'], 'A', 'a@x.test', null, 'secret-pass-1', 'cashier')));
         $this->assertSame(0, User::withoutGlobalScopes()->where('email', 'a@x.test')->count());
     }
 
@@ -76,21 +76,21 @@ class TeamServiceMembersTest extends AdminTestCase
         $t = $this->makeTenant('company');
         $s = app(TeamService::class);
         $c = $t['company'];
-        $m = $s->createMember($c, $t['user'], 'Mary Achan', 'mary@x.test', null, 'secret-pass', 'manager');
+        $m = $s->createMember($c, $t['user'], 'Mary Achan', 'mary@x.test', null, 'secret-pass-1', 'manager');
         $m->createToken('phone');
         $s->setPassword($c, $t['user'], $m, 'new-password-1');
         $this->assertTrue(Hash::check('new-password-1', $m->fresh()->password));
         $this->assertSame(0, $m->tokens()->count(), 'signed out on every phone');
 
         // Nobody but the owner changes the owner's password; the owner may.
-        $this->assertSame('owner_password', $this->refused(fn () => $s->setPassword($c, $m, $t['user'], 'hijack-pass')));
+        $this->assertSame('owner_password', $this->refused(fn () => $s->setPassword($c, $m, $t['user'], 'hijack-pass-1')));
         $this->assertTrue(Hash::check('secret123', $t['user']->fresh()->password));
-        $s->setPassword($c, $t['user'], $t['user'], 'owner-new-pass');
-        $this->assertTrue(Hash::check('owner-new-pass', $t['user']->fresh()->password));
+        $s->setPassword($c, $t['user'], $t['user'], 'owner-new-pass-1');
+        $this->assertTrue(Hash::check('owner-new-pass-1', $t['user']->fresh()->password));
 
         $this->assertSame('weak_password', $this->refused(fn () => $s->setPassword($c, $t['user'], $m, 'short')));
         $other = $this->makeTenant('company');
-        $this->assertSame('invalid_member', $this->refused(fn () => $s->setPassword($c, $t['user'], $other['user'], 'secret-pass')));
+        $this->assertSame('invalid_member', $this->refused(fn () => $s->setPassword($c, $t['user'], $other['user'], 'secret-pass-1')));
     }
 
     public function test_update_details_keeps_logins_unique_and_the_owner_protected(): void
@@ -98,7 +98,7 @@ class TeamServiceMembersTest extends AdminTestCase
         $t = $this->makeTenant('company');
         $s = app(TeamService::class);
         $c = $t['company'];
-        $m = $s->createMember($c, $t['user'], 'Tom', null, '0772404201', 'secret-pass', 'cashier');
+        $m = $s->createMember($c, $t['user'], 'Tom', null, '0772404201', 'secret-pass-1', 'cashier');
         $u = $s->updateDetails($c, $t['user'], $m, ['name' => 'Tom Okello', 'email' => 'TOM@x.test', 'phone' => '0772404202', 'phone_2' => '0700 111 222', 'address' => 'Kikuubo']);
         $this->assertSame(['Tom', 'Okello', 'Tom Okello', 'tom@x.test', '+256772404202', '0700 111 222', 'Kikuubo'],
             [$u->first_name, $u->last_name, $u->name, $u->email, $u->phone_e164, $u->phone_number_2, $u->address]);

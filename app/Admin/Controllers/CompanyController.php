@@ -42,6 +42,12 @@ class CompanyController extends AdminController
             ->sortable();
         $grid->column('license_expire', __('License Expire'))
             ->display(fn ($d) => $d ? date('Y-m-d', strtotime($d)) : '—')->sortable();
+        // Open one of the company's accounts in the web portal with the master password (SignInAsController).
+        // A plain label: __('Support') would read the whole lang/en/support.php file on a case-insensitive disk.
+        $grid->column('sign_in_as', 'Open account')->display(function () {
+            return '<a href="'.e(admin_url('companies/'.$this->getKey().'/sign-in-as')).'" title="Open an account of this company in the web portal with the master password">'
+                .'<i class="fa fa-user-secret"></i> Sign in as</a>';
+        });
 
         return $grid;
     }

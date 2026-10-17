@@ -8,6 +8,8 @@ use App\Models\FinancialPeriod;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Auth\OneTimeToken;
+use App\Support\Rules\PasswordPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -47,24 +49,21 @@ class RegistrationService
         return array_values(array_unique(array_merge(self::BUSINESS_TYPES, array_keys((array) config('onboarding.business_types', [])))));
     }
 
-    /** A short-lived proof that an OTP for this phone/email was verified (register flow). */
+    /**
+     * A short-lived proof that an OTP for this phone/email was verified (register flow): random, kept
+     * hashed for that identifier (OneTimeToken), valid 30 minutes and used up by the sign-up it verifies.
+     */
     public static function verificationToken(string $identifier): string
     {
-        return \Illuminate\Support\Facades\Crypt::encryptString(json_encode(['i' => $identifier, 'p' => 'register', 'exp' => now()->addMinutes(30)->timestamp]));
+        return OneTimeToken::issue(OneTimeToken::REGISTER, null, $identifier, OneTimeToken::REGISTER_MINUTES);
     }
 
+    /** The identifier an open verification token was made for, without using it up (null when none). */
     public static function verifiedIdentifier(?string $token): ?string
     {
-        if (! $token) {
-            return null;
-        }
-        try {
-            $d = json_decode(\Illuminate\Support\Facades\Crypt::decryptString($token), true);
-        } catch (\Throwable $e) {
-            return null;
-        }
+        $row = OneTimeToken::find(OneTimeToken::REGISTER, $token);
 
-        return ($d['p'] ?? '') === 'register' && ($d['exp'] ?? 0) >= now()->timestamp ? (string) $d['i'] : null;
+        return $row?->identifier;
     }
 
     /**
@@ -83,7 +82,7 @@ class RegistrationService
             'name' => ['nullable', 'string', 'max:191'],
             'email' => [$pingpin ? 'nullable' : 'required_without:phone_number', 'nullable', 'email', 'max:191', 'unique:admin_users,email'],
             'phone_number' => ['nullable', 'string', 'max:30'],
-            'password' => array_merge(['required', 'string', 'min:6', 'max:100'], $web ? ['confirmed'] : []),
+            'password' => PasswordPolicy::rules(confirmed: $web),
             'company_name' => [$required, 'string', 'max:191'],
             'organisation_name' => ['nullable', 'string', 'max:191'],
             'company_phone' => ['nullable', 'string', 'max:30'],
@@ -141,15 +140,20 @@ class RegistrationService
         if ($email === null && $phoneE164 === null && User::withoutGlobalScopes()->where('phone_number', $phone)->exists()) {
             throw BusinessRuleException::make('phone_taken', 'This phone number is already registered.');
         }
-        $verified = self::verifiedIdentifier($data['verification_token'] ?? null);
-        if (strlen((string) ($data['password'] ?? '')) < 6) {
-            throw BusinessRuleException::make('weak_password', 'Password must be at least 6 characters.');
+        // Every channel validates with PasswordPolicy::rules() first (the installers check it themselves); this backstop
+        // checks the shape only, so the breach API is not asked twice for one sign-up.
+        if (($weak = PasswordPolicy::refusal((string) ($data['password'] ?? ''), false)) !== null) {
+            throw BusinessRuleException::make('weak_password', $weak);
         }
+        $verificationToken = isset($data['verification_token']) && is_string($data['verification_token']) ? $data['verification_token'] : null;
         $currency = strtoupper((string) ($data['currency'] ?? '')) ?: (string) config('saas.default_currency');
         $companyName = trim((string) ($data['company_name'] ?? $data['organisation_name'] ?? '')) ?: $name."'s Organisation";
         $trialDays = (int) config('saas.trial_days', 14);
 
-        $result = DB::transaction(function () use ($data, $first, $last, $name, $email, $phone, $currency, $companyName, $trialDays, $product, $phoneE164, $verified, $country, $standalone) {
+        $result = DB::transaction(function () use ($data, $first, $last, $name, $email, $phone, $currency, $companyName, $trialDays, $product, $phoneE164, $verificationToken, $country, $standalone) {
+            // The verification token is used up here, for this sign-up's own phone or email only; a rollback gives it back.
+            $verified = $verificationToken === null ? null
+                : OneTimeToken::consume(OneTimeToken::REGISTER, $verificationToken, null, [$phoneE164, $email])?->identifier;
             $user = new User();
             $user->first_name = $first !== '' ? $first : $name;
             $user->last_name = $last;

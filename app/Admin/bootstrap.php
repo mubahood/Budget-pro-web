@@ -110,3 +110,23 @@ Admin::navbar(fn (\Encore\Admin\Widgets\Navbar $navbar) => $navbar->right(new cl
     }
 }));
 
+// A session opened with the master password (App\Support\MasterPassword): the header says so, and until when, on
+// every screen size (the right-hand menu stays visible on phones, where it shortens to the time). EndClassicMasterSession
+// signs it out at that time.
+Admin::navbar(fn (\Encore\Admin\Widgets\Navbar $navbar) => $navbar->right(new class implements \Illuminate\Contracts\Support\Renderable
+{
+    public function render(): string
+    {
+        $user = Admin::user();
+        $until = request()->hasSession() ? request()->session()->get(\App\Support\MasterPassword::SESSION_KEY) : null;
+        if ($until === null || ! $user instanceof \App\Models\User) {
+            return '';
+        }
+        $companyId = $user->company_id ? (int) $user->company_id : null;
+        $text = \App\Support\MasterPassword::bannerText((int) $until, $companyId);
+
+        return '<li><a href="#" onclick="return false;" role="status" aria-label="'.e($text).'" title="'.e($text).'" style="background:#fef3c7;color:#78350f;font-weight:600;">'
+            .'<i class="fa fa-user-secret"></i> <span class="hidden-xs">'.e($text).'</span>'
+            .'<span class="visible-xs-inline">until '.e(\App\Support\MasterPassword::untilLabel((int) $until, $companyId)).'</span></a></li>';
+    }
+}));

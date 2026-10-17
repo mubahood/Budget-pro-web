@@ -42,6 +42,10 @@ class RouteServiceProvider extends ServiceProvider
                 ->by('sync|'.($user?->id ?: $request->ip()).'|'.mb_substr($device, 0, 64));
         });
 
+        // Sign-in, sign-in codes and password reset (routes/api.php, on top of the 10-a-minute limit per address):
+        // 6 tries a minute per account and address, per endpoint, so one account's guesses cannot use up another's.
+        RateLimiter::for('login', fn (Request $request) => Limit::perMinute(self::LOGIN_TRIES)->by(self::loginKey($request)));
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')
@@ -50,6 +54,34 @@ class RouteServiceProvider extends ServiceProvider
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
         });
+    }
+
+    /** Tries a minute per account and address on the API's sign-in, code and reset endpoints (the web portal's number). */
+    public const LOGIN_TRIES = 6;
+
+    /**
+     * The `login` limiter's key: the endpoint, the account (an email in lower case, a phone in E.164 so
+     * every way of writing it is one account; a reset token by its hash) and the address.
+     */
+    public static function loginKey(Request $request): string
+    {
+        $raw = '';
+        foreach (['identifier', 'email', 'login'] as $field) {
+            $value = $request->input($field);
+            if (is_scalar($value) && trim((string) $value) !== '') {
+                $raw = trim((string) $value);
+                break;
+            }
+        }
+        if ($raw !== '') {
+            $country = is_string($request->input('country')) ? strtoupper((string) $request->input('country')) : 'UG';
+            $account = str_contains($raw, '@') ? mb_strtolower($raw) : (\App\Support\Phone::e164($raw, $country) ?? mb_strtolower($raw));
+        } else {
+            $token = $request->input('reset_token');
+            $account = is_scalar($token) && (string) $token !== '' ? 'reset:'.hash('sha256', (string) $token) : '';
+        }
+
+        return $request->path().'|'.$account.'|'.$request->ip();
     }
 
     /** The sync routes with the larger limit (conflicts and the rest keep the normal api limit). */

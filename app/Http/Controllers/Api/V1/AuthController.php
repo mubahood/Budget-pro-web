@@ -10,8 +10,10 @@ use App\Http\Resources\CompanyResource;
 use App\Http\Resources\UserResource;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Auth\OneTimeToken;
 use App\Services\Billing\Entitlements;
 use App\Services\Onboarding\RegistrationService;
+use App\Support\Rules\PasswordPolicy;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -139,9 +141,10 @@ class AuthController extends Controller
         }
         $this->markVerified($user, $id);
         if ($data['purpose'] === 'reset') {
-            $token = \Illuminate\Support\Facades\Crypt::encryptString(json_encode(['u' => $user->id, 'exp' => now()->addMinutes(15)->timestamp]));
+            // Random, single-use, kept hashed for this account (OneTimeToken): nothing a server key could forge.
+            $token = OneTimeToken::issue(OneTimeToken::RESET, (int) $user->id, $id, OneTimeToken::RESET_MINUTES);
 
-            return $this->success(['reset_token' => $token], 'Verified — choose a new password.');
+            return $this->success(['reset_token' => $token, 'expires_in' => OneTimeToken::RESET_MINUTES * 60], 'Verified. Choose a new password.');
         }
         $company = Company::find($user->company_id);
         if ($company === null || strtolower((string) $user->status) === 'inactive') {
@@ -159,26 +162,32 @@ class AuthController extends Controller
         }
     }
 
-    /** POST auth/password/reset { reset_token, password, password_confirmation } */
+    /**
+     * POST auth/password/reset { reset_token, password, password_confirmation }. The token from otp/verify
+     * works once, for 15 minutes; a refused password leaves it usable so the person can try another.
+     */
     public function resetPassword(Request $request)
     {
-        $data = $request->validate(['reset_token' => ['required', 'string'], 'password' => ['required', 'string', 'min:6', 'max:100', 'confirmed']]);
-        try {
-            $d = json_decode(\Illuminate\Support\Facades\Crypt::decryptString($data['reset_token']), true);
-        } catch (\Throwable $e) {
-            $d = null;
-        }
-        if (! is_array($d) || ($d['exp'] ?? 0) < now()->timestamp) {
+        $data = $request->validate(['reset_token' => ['required', 'string', 'max:2000'], 'password' => PasswordPolicy::rules(confirmed: true)]);
+        $open = OneTimeToken::find(OneTimeToken::RESET, $data['reset_token']);
+        $user = $open?->user_id ? User::withoutGlobalScopes()->find((int) $open->user_id) : null;
+        if ($open === null || $user === null) {
             return $this->error('This reset link has expired. Request a new code.', 422, ['code' => 'reset_expired']);
         }
-        $user = User::withoutGlobalScopes()->find($d['u'] ?? 0);
-        if ($user === null) {
-            return $this->error('Account not found.', 404);
-        }
         \App\Services\Onboarding\PublicDemo::guardAccount($user, 'resetting the password');
-        $user->password = Hash::make($data['password']);
-        $user->save();
-        $user->tokens()->delete(); // every session signs in again with the new password
+        $changed = DB::transaction(function () use ($data, $user) {
+            if (OneTimeToken::consume(OneTimeToken::RESET, $data['reset_token'], (int) $user->id) === null) {
+                return false; // used a moment ago by another request
+            }
+            $user->password = Hash::make($data['password']);
+            $user->save();
+            $user->tokens()->delete(); // every session signs in again with the new password
+
+            return true;
+        });
+        if (! $changed) {
+            return $this->error('This reset link has expired. Request a new code.', 422, ['code' => 'reset_expired']);
+        }
 
         return $this->success(null, 'Password changed. Please log in.');
     }
@@ -350,7 +359,7 @@ class AuthController extends Controller
         \App\Services\Onboarding\PublicDemo::guardAccount($request->user(), 'changing the password');
         $data = $request->validate([
             'current_password' => ['required', 'string'],
-            'new_password' => ['required', 'string', 'min:6', 'max:100', 'confirmed'],
+            'new_password' => PasswordPolicy::rules(confirmed: true),
         ]);
 
         $user = $request->user();

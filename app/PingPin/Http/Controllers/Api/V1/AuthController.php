@@ -35,7 +35,7 @@ class AuthController extends Controller
             'name' => 'required|string|max:191',
             'email' => 'nullable|email|max:191|unique:admin_users,email',
             'phone_number' => 'nullable|string|max:30',
-            'password' => 'required|string|min:6|max:100',
+            'password' => \App\Support\Rules\PasswordPolicy::rules(),
             'organisation_name' => 'nullable|string|max:191',
             'currency' => 'nullable|string|max:8',
         ]);

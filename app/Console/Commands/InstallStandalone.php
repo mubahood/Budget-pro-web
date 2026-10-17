@@ -41,8 +41,14 @@ class InstallStandalone extends Command
                 return self::FAILURE;
             }
         }
-        if (strlen($details['owner_password']) < 10) {
-            $this->error('The owner password needs at least 10 characters.');
+        // The owner of a whole copy: 10 characters or more, and the one password rule (letters, numbers, not leaked).
+        if (mb_strlen($details['owner_password']) < 10) {
+            $this->error('The owner password needs at least 10 characters, with letters and numbers.');
+
+            return self::FAILURE;
+        }
+        if (($weak = \App\Support\Rules\PasswordPolicy::refusal($details['owner_password'])) !== null) {
+            $this->error('The owner password: '.$weak);
 
             return self::FAILURE;
         }

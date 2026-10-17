@@ -11,7 +11,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // The breach check gives up after a few seconds instead of the framework's 30 (PasswordPolicy).
+        \App\Support\Rules\PasswordPolicy::shortenBreachCheck($this->app);
     }
 
     /**
@@ -20,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         \App\Support\SchemaIntegrity::guardModels();
+        // One password rule wherever Password::defaults() is used (App\Support\Rules\PasswordPolicy).
+        \Illuminate\Validation\Rules\Password::defaults(fn () => \App\Support\Rules\PasswordPolicy::rule());
 
         // CompanyScope keeps each table's "has company_id" answer in the cache for good; a migration may change it.
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Database\Events\MigrationsEnded::class, fn () => \App\Scopes\CompanyScope::flushColumnCache());

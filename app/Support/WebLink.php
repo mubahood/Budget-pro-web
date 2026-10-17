@@ -28,11 +28,13 @@ final class WebLink
     private const REFUSED = ['/web-link', '/logout', '/login'];
 
     /**
+     * @param  int|null  $masterUntil  "Sign in as" (App\Support\MasterPassword): the Unix time the master session it opens ends.
+     *                                 Carried inside the signed token, so only the kernel can mark a session.
      * @return array{url: string, expires_at: string, path: string}
      *
      * @throws BusinessRuleException invalid_path | web_link_unavailable
      */
-    public static function issue(User $user, string $path, ?string $base = null): array
+    public static function issue(User $user, string $path, ?string $base = null, ?int $masterUntil = null): array
     {
         $clean = self::cleanPath($path);
         if ($clean === null) {
@@ -44,7 +46,11 @@ final class WebLink
         }
         $nonce = Str::random(40);
         $expires = now()->addSeconds(self::TTL_SECONDS);
-        $payload = self::encode((string) json_encode(['u' => (int) $user->id, 'c' => (int) $user->company_id, 'p' => $clean, 'e' => $expires->getTimestamp(), 'n' => $nonce]));
+        $claims = ['u' => (int) $user->id, 'c' => (int) $user->company_id, 'p' => $clean, 'e' => $expires->getTimestamp(), 'n' => $nonce];
+        if ($masterUntil !== null) {
+            $claims['m'] = $masterUntil;
+        }
+        $payload = self::encode((string) json_encode($claims));
         DB::table(self::TABLE)->insert(['nonce_hash' => hash('sha256', $nonce), 'company_id' => (int) $user->company_id, 'user_id' => (int) $user->id,
             'path' => $clean, 'expires_at' => $expires, 'created_at' => now()]);
 
@@ -54,7 +60,7 @@ final class WebLink
     /**
      * Check a token and use it up. Valid once, within two minutes, with a genuine signature.
      *
-     * @return array{user_id: int, company_id: int, path: string}
+     * @return array{user_id: int, company_id: int, path: string, master_until: int|null}
      *
      * @throws BusinessRuleException invalid_link | link_expired | link_used
      */
@@ -74,7 +80,8 @@ final class WebLink
             throw BusinessRuleException::make('link_used', 'This link was already used. Open the page from the app again.');
         }
 
-        return ['user_id' => (int) $claims['u'], 'company_id' => (int) $claims['c'], 'path' => (string) $claims['p']];
+        return ['user_id' => (int) $claims['u'], 'company_id' => (int) $claims['c'], 'path' => (string) $claims['p'],
+            'master_until' => isset($claims['m']) ? (int) $claims['m'] : null];
     }
 
     /** A path on the web portal ("/sales?scope=unpaid"), or null: no scheme, host, "//", backslash, spaces or control characters. */

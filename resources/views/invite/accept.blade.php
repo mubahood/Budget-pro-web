@@ -37,9 +37,10 @@
             <label for="last_name">Last name</label>
             <input id="last_name" name="last_name" value="{{ old('last_name') }}" required>
             <label for="password">Password</label>
-            <input id="password" type="password" name="password" minlength="6" required>
+            <input id="password" type="password" name="password" minlength="{{ \App\Support\Rules\PasswordPolicy::MIN }}" required autocomplete="new-password" aria-describedby="password-hint">
+            <p class="muted" id="password-hint" style="margin:4px 0 0">{{ \App\Support\Rules\PasswordPolicy::hint() }}</p>
             <label for="password_confirmation">Repeat password</label>
-            <input id="password_confirmation" type="password" name="password_confirmation" minlength="6" required>
+            <input id="password_confirmation" type="password" name="password_confirmation" minlength="{{ \App\Support\Rules\PasswordPolicy::MIN }}" required autocomplete="new-password">
             <button class="btn primary" type="submit">Join the team</button>
         </form>
         <p class="muted" style="margin-top:14px">You will sign in with {{ $invite->phone_e164 ?: $invite->email }}.</p>

@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\User;
 use App\Services\Messaging\Messenger;
 use App\Support\Phone;
+use App\Support\Rules\PasswordPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -87,13 +88,12 @@ class TeamService
 
     public function accept(string $token, string $firstName, string $lastName, string $password): User
     {
+        $this->assertPassword($password);
+
         return DB::transaction(function () use ($token, $firstName, $lastName, $password) {
             $invite = DB::table('invites')->where('token_hash', hash('sha256', $token))->lockForUpdate()->first();
             if (! $invite || $invite->status !== 'pending' || now()->greaterThan($invite->expires_at)) {
                 throw BusinessRuleException::make('invite_invalid', 'This invite link has expired or was already used. Ask for a new one.');
-            }
-            if (strlen($password) < 6) {
-                throw BusinessRuleException::make('weak_password', 'Password must be at least 6 characters.');
             }
             $user = new User();
             $user->first_name = trim($firstName);
@@ -232,8 +232,8 @@ class TeamService
         Permissions::flush();
     }
 
-    /** Shortest password a login made or reset by the shop may have (the classic Employees form's min:8). */
-    public const MIN_PASSWORD = 8;
+    /** Shortest password a member may have: the one password rule's (App\Support\Rules\PasswordPolicy). */
+    public const MIN_PASSWORD = PasswordPolicy::MIN;
 
     /**
      * Add a member directly, with a login and a password, without an invite (the classic admin's
@@ -359,10 +359,15 @@ class TeamService
         }
     }
 
+    /**
+     * The one password rule's shape (at least 8 characters with letters and numbers). Every caller's form
+     * runs the whole rule first, breach check included (TeamRules, the invite pages, the Employees form),
+     * so the breach API is not asked twice.
+     */
     private function assertPassword(string $password): void
     {
-        if (mb_strlen($password) < self::MIN_PASSWORD) {
-            throw BusinessRuleException::make('weak_password', 'The password must be at least '.self::MIN_PASSWORD.' characters.');
+        if (($refusal = PasswordPolicy::refusal($password, false)) !== null) {
+            throw BusinessRuleException::make('weak_password', $refusal);
         }
     }
 

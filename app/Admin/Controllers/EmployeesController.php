@@ -123,9 +123,16 @@ class EmployeesController extends TenantAdminController
         $form->textarea('address', __('Address'))->rows(2)->rules('nullable|max:500');
 
         $form->divider('Account');
+        // The one password rule (PasswordPolicy). A closure replaces the rules: on edit the stored hash comes back
+        // when the password is left as it is, and that is not a new password.
         $form->password('password', __('Password'))
-            ->rules($form->isEditing() ? 'nullable|min:8|confirmed' : 'required|min:8|confirmed')
-            ->help($form->isEditing() ? 'Leave blank to keep the current password.' : 'At least 8 characters. Share it with the employee; they can change it under Settings.');
+            ->rules(function () use ($editingId) {
+                $current = $editingId ? (string) User::withoutGlobalScopes()->whereKey($editingId)->value('password') : null;
+
+                return \App\Support\Rules\PasswordPolicy::formRules(request('password'), $current, $editingId === null);
+            })
+            ->help(($editingId ? 'Leave blank to keep the current password. ' : '').\App\Support\Rules\PasswordPolicy::hint()
+                .($editingId ? ' A new password signs them out of the phone app.' : ' Share it with the employee; they can change it under Settings.'));
         $form->password('password_confirmation', __('Confirm password'));
         $teamRoles = collect(config('permissions.roles'))->except('owner')->map(fn ($r) => $r['label'])->all();
         $currentRole = $editingId ? \App\Services\Team\Permissions::roleOf(User::withoutGlobalScopes()->findOrFail($editingId)) : 'cashier';
@@ -140,7 +147,8 @@ class EmployeesController extends TenantAdminController
 
         $form->ignore(['password_confirmation', 'team_role', 'team_role_label']);
 
-        $form->saving(function (Form $form) {
+        $passwordChanged = false;
+        $form->saving(function (Form $form) use (&$passwordChanged) {
             $form->company_id = $this->companyId();
 
             $current = $form->model()->password;
@@ -149,6 +157,7 @@ class EmployeesController extends TenantAdminController
                 $form->password = $current;
             } elseif ($form->password !== $current) {
                 $form->password = Hash::make($form->password);
+                $passwordChanged = $form->isEditing();
             }
 
             if (! $form->isEditing()) {
@@ -162,9 +171,12 @@ class EmployeesController extends TenantAdminController
         });
 
         // The company role (plan C5) drives both the app permissions and the web admin role.
-        $form->saved(function (Form $form) {
+        $form->saved(function (Form $form) use (&$passwordChanged) {
             $role = request('team_role');
             $user = User::withoutGlobalScopes()->find($form->model()->id);
+            if ($user && $passwordChanged) {
+                $user->tokens()->delete(); // signed out on every phone, as TeamService::setPassword does
+            }
             if ($user && $role && array_key_exists($role, config('permissions.roles'))) {
                 $company = \App\Models\Company::withoutGlobalScopes()->findOrFail($this->companyId());
                 if ((int) $company->owner_id !== (int) $user->id) {

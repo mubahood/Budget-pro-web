@@ -116,13 +116,14 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         'min_version' => config('mobile.min_version'), 'latest_version' => config('mobile.latest_version'), 'store_url' => config('mobile.store_url'),
     ] + \App\Support\EditionMeta::forApp()]));
 
-    // ── Public auth endpoints (rate-limited to deter brute force) ──
+    // ── Public auth endpoints (rate-limited to deter brute force): 10 a minute per address, and `login`
+    //    (RouteServiceProvider) 6 a minute per account and address on sign-in, codes and reset ──
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('auth/register', [AuthController::class, 'register'])->middleware('edition:saas');
-        Route::post('auth/login', [AuthController::class, 'login']);
-        Route::post('auth/otp/request', [AuthController::class, 'otpRequest']);
-        Route::post('auth/otp/verify', [AuthController::class, 'otpVerify']);
-        Route::post('auth/password/reset', [AuthController::class, 'resetPassword']);
+        Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+        Route::post('auth/otp/request', [AuthController::class, 'otpRequest'])->middleware('throttle:login');
+        Route::post('auth/otp/verify', [AuthController::class, 'otpVerify'])->middleware('throttle:login');
+        Route::post('auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:login');
 
         // Ping Pin's own, independent signup/login (Task 3.1) — NOT the
         // routes above. Same admin_users/Sanctum identity (DECISIONS.md D6),

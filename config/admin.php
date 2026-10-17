@@ -64,9 +64,14 @@ return [
 
         'namespace' => 'App\\Admin\\Controllers',
 
-        // PlatformAdminOnly runs BEFORE the 'admin' group so tenant users get a clean 403 for
+        // PlatformAdminOnly runs BEFORE laravel-admin's own middleware so tenant users get a clean 403 for
         // platform paths instead of laravel-admin's deny page (which echoes and exit()s).
-        'middleware' => ['web', \App\Http\Middleware\PlatformAdminOnly::class, 'admin', \App\Http\Middleware\RedirectToNewUi::class, \App\Http\Middleware\EnsureWebAccess::class, \App\Http\Middleware\AdminPermission::class],
+        // laravel-admin's 'admin' group is spelled out (admin.auth, admin.pjax, admin.log, admin.bootstrap,
+        // admin.permission) with its operation log replaced by RedactedOperationLog, which never stores a
+        // password, PIN or token. EndClassicMasterSession ends a master-password session on time.
+        'middleware' => ['web', \App\Http\Middleware\PlatformAdminOnly::class, \App\Http\Middleware\EndClassicMasterSession::class,
+            'admin.auth', 'admin.pjax', \App\Http\Middleware\RedactedOperationLog::class, 'admin.bootstrap', 'admin.permission',
+            \App\Http\Middleware\RedirectToNewUi::class, \App\Http\Middleware\EnsureWebAccess::class, \App\Http\Middleware\AdminPermission::class],
     ],
 
     /*

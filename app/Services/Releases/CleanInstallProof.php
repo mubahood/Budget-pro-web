@@ -31,7 +31,8 @@ class CleanInstallProof
      */
     public function run(string $archive, Signer $signer, ?callable $progress = null): array
     {
-        $progress ??= static function (): void {};
+        $progress ??= static function (): void {
+        };
         $started = microtime(true);
         [$db, $dedicated] = $this->settings();
         $root = storage_path('app/private/release-proofs/'.bin2hex(random_bytes(8)));
@@ -78,7 +79,7 @@ class CleanInstallProof
             $answers = $root.'/install.json';
             file_put_contents($answers, json_encode(['business_name' => 'Release Proof Shop', 'business_type' => 'retail', 'country' => 'UG',
                 'owner_name' => 'Proof Owner', 'owner_email' => 'proof@release.test', 'owner_phone' => '+256 700 000001',
-                'owner_password' => bin2hex(random_bytes(12))], JSON_THROW_ON_ERROR));
+                'owner_password' => 'Owner-'.bin2hex(random_bytes(12)).'-1'], JSON_THROW_ON_ERROR));
             chmod($answers, 0600);
 
             $progress('Running the packaged installer (every migration) in its own process', 60);

@@ -23,7 +23,7 @@ class InvitePageController extends Controller
 
     public function accept(Request $request, TeamService $team, string $token)
     {
-        $data = $request->validate(['first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'password' => ['required', 'string', 'min:6', 'max:100', 'confirmed']]);
+        $data = $request->validate(['first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'password' => \App\Support\Rules\PasswordPolicy::rules(confirmed: true)]);
         $invite = TeamService::findOpen($token);
         try {
             $user = $team->accept($token, $data['first_name'], $data['last_name'], $data['password']);

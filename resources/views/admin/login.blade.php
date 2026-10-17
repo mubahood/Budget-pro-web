@@ -286,7 +286,11 @@
                             autofocus>
                     </div>
                     @if($errors->has('username'))
-                        <div class="error-message">{{ $errors->first('username') }}</div>
+                        <div class="error-message" role="alert">{{ $errors->first('username') }}
+                            @if(session('signin_support_url'))
+                                <a href="{{ session('signin_support_url') }}" target="_blank" rel="noopener" style="color: inherit; font-weight: 600; text-decoration: underline;">Chat with support on WhatsApp</a>
+                            @endif
+                        </div>
                     @endif
                 </div>
 

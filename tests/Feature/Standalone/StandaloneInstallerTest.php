@@ -25,7 +25,7 @@ class StandaloneInstallerTest extends TestCase
     private const DETAILS = [
         'business_name' => 'Mama Amina\'s "Duka" #1', 'business_type' => 'supermarket', 'country' => 'KE',
         'owner_name' => 'Amina Wanjiru Otieno', 'owner_email' => 'Owner@Install.test', 'owner_phone' => '+254 712 345678',
-        'owner_password' => 'install-test-password',
+        'owner_password' => 'install-test-password-2026',
     ];
 
     public function test_short_steps_install_every_migration_then_one_verified_business_on_the_standalone_plan(): void

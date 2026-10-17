@@ -405,10 +405,13 @@
                                 class="form-control has-icon" 
                                 id="password" 
                                 name="password" 
-                                placeholder="Minimum 6 characters"
+                                placeholder="Choose a password"
                                 required
-                                minlength="6">
+                                autocomplete="new-password"
+                                aria-describedby="password-hint"
+                                minlength="{{ \App\Support\Rules\PasswordPolicy::MIN }}">
                         </div>
+                        <div id="password-hint" style="font-size: 12px; color: #6b7280; margin-top: 4px;">{{ \App\Support\Rules\PasswordPolicy::hint() }}</div>
                         @if($errors->has('password'))
                             <div class="error-message">{{ $errors->first('password') }}</div>
                         @endif
@@ -427,7 +430,8 @@
                                 name="password_confirmation" 
                                 placeholder="Re-enter password"
                                 required
-                                minlength="6">
+                                autocomplete="new-password"
+                                minlength="{{ \App\Support\Rules\PasswordPolicy::MIN }}">
                         </div>
                         @if($errors->has('password_confirmation'))
                             <div class="error-message">{{ $errors->first('password_confirmation') }}</div>

@@ -26,17 +26,20 @@ class StandaloneSwitchesTest extends TestCase
 
     public function test_master_password_public_demo_and_legacy_api_are_off_on_standalone(): void
     {
-        config(['saas.master_password' => '111111', 'demo.enabled' => true, 'mobile.legacy_enabled' => true]);
-        $this->assertTrue(MasterPassword::matches('111111'));
+        $master = 'a-long-master-password-2026';
+        config(['saas.master_password_hash' => \Illuminate\Support\Facades\Hash::make($master), 'saas.master_password_allowed_ips' => ['127.0.0.1'],
+            'demo.enabled' => true, 'mobile.legacy_enabled' => true]);
+        $this->assertTrue(MasterPassword::matches($master));
         $this->assertTrue(PublicDemo::enabled());
 
         $this->asStandalone();
-        $this->assertFalse(MasterPassword::matches('111111'));
+        $this->assertFalse(MasterPassword::matches($master));
+        $this->assertFalse(MasterPassword::configured());
         $this->assertFalse(PublicDemo::enabled());
         $this->assertSame(['action' => 'off'], app(PublicDemo::class)->run());
 
         $user = User::withoutGlobalScopes()->whereNotNull('company_id')->whereNotNull('username')->where('status', '!=', 'Inactive')->firstOrFail();
-        $this->post('/auth/login', ['username' => $user->username, 'password' => '111111']);
+        $this->post('/auth/login', ['username' => $user->username, 'password' => $master]);
         $this->assertGuest('admin');
         $this->getJson('/api/mobile/dashboard?logged_in_user_id='.$user->id)->assertStatus(426)->assertJsonPath('errors.code', 'upgrade_required');
     }

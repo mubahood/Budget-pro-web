@@ -290,7 +290,7 @@ class PublicDemoBuilder
         // The team (the manager already exists: he is building the shop).
         foreach (array_slice($this->data['team'], 1) as [$name, $role]) {
             $slug = Str::slug($name, '.');
-            $u = $this->quietly(fn () => app(TeamService::class)->createMember($this->co, $this->manager, $name, "{$slug}.".$this->cid.'@freshcorner.example', null, Str::random(24), $role));
+            $u = $this->quietly(fn () => app(TeamService::class)->createMember($this->co, $this->manager, $name, "{$slug}.".$this->cid.'@freshcorner.example', null, Str::password(24, symbols: false), $role)); // letters and numbers always (PasswordPolicy)
             if ($u instanceof User) {
                 DB::table('admin_users')->where('id', $u->id)->update(['email' => "{$slug}@freshcorner.example"]);
                 $this->staff[strtolower(strtok($name, ' '))] = $u->fresh();

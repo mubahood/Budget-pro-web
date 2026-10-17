@@ -30,7 +30,7 @@ class InviteController extends Controller
 
     public function accept(Request $request, TeamService $team, string $token)
     {
-        $data = $request->validate(['first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'password' => ['required', 'string', 'min:6', 'max:100'], 'device_name' => ['nullable', 'string', 'max:100']]);
+        $data = $request->validate(['first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'], 'password' => \App\Support\Rules\PasswordPolicy::rules(), 'device_name' => ['nullable', 'string', 'max:100']]);
         try {
             $user = $team->accept($token, $data['first_name'], $data['last_name'], $data['password']);
         } catch (BusinessRuleException $e) {

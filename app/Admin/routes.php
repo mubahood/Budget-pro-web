@@ -4,6 +4,12 @@ use Illuminate\Routing\Router;
 
 Admin::routes();
 
+// laravel-admin's platform user screen with the one password rule (PlatformUserController): registered after
+// Admin::routes() on the same paths and names, so it replaces Encore's own controller.
+Route::group(['prefix' => config('admin.route.prefix'), 'middleware' => config('admin.route.middleware')], function (Router $router) {
+    $router->resource('auth/users', \App\Admin\Controllers\PlatformUserController::class)->names('admin.auth.users');
+});
+
 Route::group([
     'prefix' => config('admin.route.prefix'),
     'namespace' => config('admin.route.namespace'),
@@ -126,6 +132,9 @@ Route::group([
     // copy has no platform admin (docs/STANDALONE_EDITION_PLAN.md §5.3), so these are 404 there.
     $router->middleware(['edition:saas', 'admin.platform:all'])->group(function (Router $router) {
         $router->resource('companies', CompanyController::class);
+        // "Sign in as" one of a company's accounts in the web portal, with the master password (App\Support\MasterPassword).
+        $router->get('companies/{company}/sign-in-as', 'SignInAsController@show')->where('company', '[0-9]+');
+        $router->post('companies/{company}/sign-in-as', 'SignInAsController@store')->where('company', '[0-9]+');
         $router->resource('gens', CodeGenController::class);
         $router->resource('gen', GenGenController::class);
         $router->resource('pingpin-plans', PingPinPlanController::class);
