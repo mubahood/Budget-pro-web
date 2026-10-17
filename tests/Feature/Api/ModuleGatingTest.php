@@ -152,7 +152,7 @@ class ModuleGatingTest extends ApiTestCase
         $h = $this->auth($shop['token']);
 
         $this->getJson('/api/v1/budget-programs', $h)->assertStatus(403)
-            ->assertJsonPath('message', 'Budgets & pledges is not on your account.')
+            ->assertJsonPath('message', 'Budget & pledges is not on your account.')
             ->assertJsonPath('errors.code', 'module_off')->assertJsonPath('errors.module', 'budget');
         $this->postJson('/api/v1/budget-programs/1/print-link', [], $h)->assertStatus(403)->assertJsonPath('errors.module', 'budget');
         $this->postJson('/api/v1/contribution-records/print-link', [], $h)->assertStatus(403)->assertJsonPath('errors.module', 'budget');

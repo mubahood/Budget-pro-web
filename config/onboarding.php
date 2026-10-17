@@ -75,7 +75,7 @@ return [
     'modules' => [
         'shop' => 'Shop: products, sales and stock',
         'finance' => 'Income & expenses',
-        'budget' => 'Budgets & pledges',
+        'budget' => 'Budget & pledges',
         'poultry' => 'Poultry farm',
     ],
 
