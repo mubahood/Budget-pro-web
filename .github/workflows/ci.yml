@@ -7,11 +7,17 @@ on:
 
 jobs:
   backend:
-    name: Backend (pint, phpstan, phpunit)
+    # MySQL 8 and the production server's version (5.7), so a migration or query that only one of them
+    # accepts fails here first (docs/roadmap/02-stabilise-and-secure.md §8).
+    name: Backend on MySQL ${{ matrix.mysql }} (pint, phpstan, phpunit)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['8.0', '5.7']
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:${{ matrix.mysql }}
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: budget_pro_test
@@ -26,11 +32,20 @@ jobs:
           php-version: '8.3'
           extensions: mbstring, pdo_mysql, gd, zip, bcmath, pcntl, posix
           coverage: none
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock', 'tools/phpstan/composer.json') }}
       - name: Install dependencies
         run: |
           composer install --no-interaction --prefer-dist --no-progress
           composer install -d tools/phpstan --no-interaction --prefer-dist --no-progress
+      - name: Support number only in config, env examples and docs
+        run: bash scripts/ci/support-number-scan.sh
       - name: Prepare environment
+        # The test environment is made from .env.example, so a key the code reads but the example lacks
+        # fails here the way it would fail a production install (02 §1; EnvExampleTest checks the list).
         run: |
           cp .env.example .env
           php artisan key:generate
@@ -38,25 +53,15 @@ jobs:
           php artisan migrate --force          # from an empty database (plan Part D: migrate:fresh must work)
           php artisan db:seed --force
           php artisan schema:integrity         # foreign keys, status checks: all in place on a clean install
+          php artisan config:doctor            # runs and reports; failures only block a production environment
       - name: Code style
         run: vendor/bin/pint --test
       - name: Static analysis
         run: tools/phpstan/vendor/bin/phpstan analyse --memory-limit=1G --no-progress
       - name: Tests
-        run: php artisan test --parallel --processes=4
+        # One process: paratest (needed by --parallel) is not a dependency, and the suite runs in about 8 minutes.
+        run: php artisan test
 
-  mobile:
-    name: Mobile (flutter analyze + test)
-    runs-on: ubuntu-latest
-    if: ${{ hashFiles('mobile/pubspec.yaml') != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-        working-directory: mobile
-      - run: flutter analyze
-        working-directory: mobile
-      - run: flutter test
-        working-directory: mobile
+# The phone apps have their own repository and CI (mubahood/budget-pro-mobo, .github/workflows/ci.yml).
+# The old "mobile" job here used hashFiles() in a job-level `if`, which GitHub refuses, so the whole
+# workflow was invalid and not even the backend job ran.
