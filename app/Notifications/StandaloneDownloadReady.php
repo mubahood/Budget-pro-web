@@ -35,7 +35,7 @@ class StandaloneDownloadReady extends Notification implements ShouldQueue
         return [MessagingMailChannel::class];
     }
 
-    /** @return array{subject:string,body:string,link:string}|null null when the licence is gone */
+    /** @return array{subject:string,body:string,link:string,options:array<string,mixed>}|null null when the licence is gone */
     public function toText(object $notifiable): ?array
     {
         $licence = StandaloneLicence::query()->find($this->licenceId);
@@ -71,6 +71,8 @@ class StandaloneDownloadReady extends Notification implements ShouldQueue
             'Budget Pro',
         ]);
 
-        return ['subject' => 'Your Budget Pro download is ready', 'body' => $body, 'link' => $link];
+        // The email ends with our help line, its WhatsApp message naming the licence (never the buyer).
+        return ['subject' => 'Your Budget Pro download is ready', 'body' => $body, 'link' => $link,
+            'options' => ['support_context' => 'standalone.install', 'support_vars' => ['licence' => (string) $licence->id]]];
     }
 }

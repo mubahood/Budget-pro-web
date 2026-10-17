@@ -309,6 +309,7 @@
     <div class="footer">
         <p>Thank you for your business!</p>
         <p>Generated on {{ Utils::my_date(now()) }}</p>
+        @include('reports.partials.support-line', ['company' => $sale->company ?? ($company ?? null)])
     </div>
 </body>
 </html>

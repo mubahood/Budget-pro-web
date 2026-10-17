@@ -131,6 +131,8 @@ class StandaloneSalesTest extends TestCase
         $text = (new StandaloneDownloadReady($licence->id, 'issued'))->toText(new AnonymousNotifiable());
         $this->assertSame('Your Budget Pro download is ready', $text['subject']);
         $this->assertStringContainsString($text['link'], $text['body']);
+        // The email ends with our help line, its message naming the licence (never the buyer): SupportContact via MailChannel.
+        $this->assertSame(['support_context' => 'standalone.install', 'support_vars' => ['licence' => $licence->id]], $text['options']);
         parse_str((string) parse_url($text['link'], PHP_URL_QUERY), $q);
         $this->assertSame(now()->addHours(24)->getTimestamp(), (int) $q['expires']);
         $this->assertStringStartsWith('https://web.test/my-licence/claim/'.$licence->id.'?', $text['link']);

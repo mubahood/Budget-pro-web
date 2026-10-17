@@ -767,7 +767,8 @@ A lapsed shop still gets it (with its plan nudge). `plan` is `null` on a standal
   "api_version":1,
   "business":{"id":12,"name":"Fresh Corner Market","logo_url":"https://…/storage/images/logo-12-ab.png","brand_colour":null,
     "currency":"UGX","decimals":0,"timezone":"Africa/Kampala",
-    "money":{"code":"UGX","position":"before","space":true,"decimals":0,"thousands_separator":",","decimal_separator":".","sample":"UGX 1,234,568"}},
+    "money":{"code":"UGX","position":"before","space":true,"decimals":0,"thousands_separator":",","decimal_separator":".","sample":"UGX 1,234,568"},
+    "receipt_support_line":"Powered by Budget Pro · WhatsApp +256 783 204 665"},
   "edition":{"edition":"saas","registration_open":true,"name":"Budget Pro","version":"dev"},
   "plan":{"name":"Business","slug":"business","status":"trialing","state":"active","ends_at":"2026-10-30T16:19:20+00:00","days_left":14,
     "badge":"Trial: 14 days left","badge_kind":"trial","tone":"neutral",
@@ -789,6 +790,11 @@ A lapsed shop still gets it (with its plan nudge). `plan` is `null` on a standal
     "batch_state":[{"value":"expired","label":"Expired","tone":"bad"},{"value":"soon","label":"Expires soon","tone":"warn"},{"value":"ok","label":"Fine","tone":"ok"}],
     "role":[{"value":"owner","label":"Owner","tone":"neutral"},{"value":"cashier","label":"Cashier","tone":"neutral"}]},
   "app":{"min_version":"2.0.0","latest_version":"2.0.0","download_url":"https://play.google.com/store/apps/details?id=com.budget.dynamics"},
+  "support":{"whatsapp":"256783204665","whatsapp_display":"+256 783 204 665","phone":"+256 783 204 665","email":null,
+    "hours":"Monday to Saturday, 8:00 to 20:00","who":"platform","name":"Budget Pro","status_url":null,
+    "templates":{"app.help":"Hello Budget Pro, I need help with the[ :app] app[ (version :version)].[ I am the :role at :shop.]",
+      "app.diagnostics":"Hello Budget Pro, here is my[ :app] app diagnostics report:[ :report]",
+      "auth.signin":"Hello Budget Pro, I am having trouble signing in[ to :app].","…":"…"}},
   "web_url":"https://budget-dynamics.schooldynamics.ug",
   "web_pages":[{"key":"promotions.index","label":"Promotions","section":null,"path":"/promotions"},
     {"key":"stock.locations","label":"Transfers & locations","section":"Shop","path":"/stock/locations"}],
@@ -802,6 +808,17 @@ A lapsed shop still gets it (with its plan nudge). `plan` is `null` on a standal
 - `web_pages`: the web portal's menu for this person (same gates as the web: permission, module, feature, edition),
   for "Open on the web" with §9b.7. `key` is the web route name.
 - Money: write amounts as `<code> <number>` with `decimals` places, `,` thousands (exactly `App\Support\Money::format`).
+- `support` (docs/roadmap/06 §4, `App\Support\SupportContact`): who to ask for help. The same block is in the public
+  `GET app/version`, so the sign-in screen has it before anyone signs in; keep the last copy for offline use. `who` is
+  `platform` (us), `partner` or `own` (a standalone copy's own phone and email; then `whatsapp` is null). Any field
+  may be null; never type the number into the app.
+  - `templates`: the prefilled WhatsApp messages by context (`app.help`, `app.diagnostics`, `auth.signin`, …). Fill
+    them the server's way: a `[part]` stays only when every `:placeholder` inside it has a value; any other unknown
+    `:placeholder` becomes nothing; collapse spaces. Allowed values: the app's name, its version, the person's role,
+    the shop's name, the screen, an error reference, the diagnostics report. Never a customer's name, an amount or a
+    phone number. Link: `https://wa.me/<whatsapp>?text=<message, URL-encoded>`.
+- `business.receipt_support_line`: the small line to print under the receipt footer, or null when the shop switched
+  it off (Settings › Receipts; on by default on the SaaS, off on a standalone copy, never on a white-label copy).
 
 ### 9b.2 GET `dashboard/suggestions?limit=6` (every member; limit 1–20)
 "Worth a look" for this person, most urgent first (bad, warn, info). Nothing to show: one item `all_clear`.

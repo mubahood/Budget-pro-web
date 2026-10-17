@@ -27,5 +27,7 @@ class AppServiceProvider extends ServiceProvider
         \App\Support\LocalTime::listen();
         // Standalone: the buyer's own mail, SMS, WhatsApp and Flutterwave keys (Settings › Connections) over .env.
         \App\Support\InstallSettings::overlay();
+        // The prefilled support messages (lang/en/support.php) as `bp::support.*`, the same name the web app uses.
+        \Illuminate\Support\Facades\Lang::addNamespace('bp', lang_path());
     }
 }

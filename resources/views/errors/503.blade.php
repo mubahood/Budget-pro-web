@@ -2,7 +2,13 @@
      the standalone updater runs, pre-renders it once and serves it before Laravel boots, so it stands alone: inline
      styles, no build, no database, no signed-in user, no product name (a buyer's copy wears their own). It reloads
      itself (the Refresh header, and a fallback here). A plain abort(503) gets the same page without the reload. --}}
-@php($maintenance = isset($retryAfter))
+@php
+  $maintenance = isset($retryAfter);
+  // Who to ask (App\Support\SupportContact): config only on the SaaS, rescued everywhere, so it draws with nothing else up.
+  $support = rescue(fn () => \App\Support\SupportContact::current(), null, false);
+  $supportHref = $support ? ($support->hasWhatsapp() ? $support->waLink('admin.help', ['screen' => 'an update']) : ($support->phoneLink() ?: $support->emailLink())) : '';
+  $supportLabel = $support ? ($support->hasWhatsapp() ? 'WhatsApp '.($support->isPlatform() ? 'us' : $support->name()).' on '.$support->whatsappDisplay() : ($support->phone() !== '' ? 'Call '.$support->name().' on '.$support->phone() : 'Email '.$support->name())) : '';
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,6 +31,7 @@
     a{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;font-weight:600;font-size:15px;color:#1d2420;border:1px solid #c9c8c0;background:#fff;text-decoration:none}
     a:hover,a:focus-visible{border-color:#1d2420;outline:none}
     .small{margin-top:18px;font-size:14px;color:#6b6f6a}
+    a.plain{display:inline;min-height:0;padding:0;border:0;background:none;text-decoration:underline;font-size:14px}
   </style>
 </head>
 <body>
@@ -37,6 +44,7 @@
     @if($maintenance)<div class="bar" aria-hidden="true"><span></span></div>@endif
     <a href="javascript:location.reload()">Try now</a>
     @if($maintenance)<p class="small">Reloads every 30 seconds.</p>@endif
+    @if($supportHref)<p class="small help">Taking longer than expected? <a class="plain" href="{{ $supportHref }}" rel="noopener">{{ $supportLabel }}</a></p>@endif
   </main>
 </body>
 </html>

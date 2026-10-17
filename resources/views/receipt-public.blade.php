@@ -35,6 +35,7 @@
     @if($company?->receipt_footer)<p class="muted">{{ $company->receipt_footer }}</p>@endif
     <a class="btn" href="{{ url('r/'.$token.'/pdf') }}">Download PDF</a>
     <p class="muted" style="margin-top:14px">Thank you!</p>
+    @include('reports.partials.support-line', ['company' => $company, 'size' => '12px', 'link' => true])
 </div>
 </body>
 </html>

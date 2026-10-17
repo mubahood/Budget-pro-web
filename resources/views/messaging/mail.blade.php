@@ -16,6 +16,7 @@
         <tr><td style="padding:12px 24px 24px;font-size:15px;line-height:1.6;">{!! nl2br(e($body)) !!}</td></tr>
         <tr><td style="padding:14px 24px 18px;border-top:1px solid #e2e8f0;font-size:12px;line-height:1.5;color:#5a6b80;">
           <strong style="color:#111c2e;">{{ $name }}</strong>@foreach($contact as $line) · {{ $line }}@endforeach
+          @if($supportText !== '')<br>{{ $supportText }}@if($supportLink !== '') <a href="{{ $supportLink }}" style="color:{{ $colour }};">Open WhatsApp</a>@endif @endif
           @if($poweredBy)<br><span style="color:#93a1b3;">Powered by Budget Pro</span>@endif
         </td></tr>
       </table>

@@ -23,7 +23,16 @@ class GeocodingService
 
     private const LAST_CALL_CACHE_KEY = 'geocoding:last_call_at';
 
-    private const USER_AGENT = 'FindMyPhone-BudgetPro/1.0 (mubahood360@gmail.com)';
+    /**
+     * Nominatim asks every caller to say who it is and how to reach them: the support email when there
+     * is one (config/support.php), else the site's address. Never a person's own address.
+     */
+    private function userAgent(): string
+    {
+        $contact = trim((string) config('support.email')) ?: rtrim((string) (config('saas.public_url') ?: config('app.url')), '/');
+
+        return 'FindMyPhone-BudgetPro/1.0'.($contact !== '' ? " ({$contact})" : '');
+    }
 
     /** Cache-only lookup — never makes a network call. Used for cheap re-checks. */
     public function cached(float $lat, float $lng): ?string
@@ -58,7 +67,7 @@ class GeocodingService
             $name = Cache::lock('geocoding:nominatim-call', 10)->block(6, function () use ($lat, $lng) {
                 $this->waitForRateLimit();
 
-                $response = Http::withHeaders(['User-Agent' => self::USER_AGENT])
+                $response = Http::withHeaders(['User-Agent' => $this->userAgent()])
                     ->timeout(4)
                     ->get('https://nominatim.openstreetmap.org/reverse', [
                         'format' => 'json',

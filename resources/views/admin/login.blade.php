@@ -202,6 +202,10 @@
             to { transform: rotate(360deg); }
         }
 
+        .login-help { font-size: 14px; color: #374151; margin-bottom: 10px; }
+        .login-help a { color: #15803d; font-weight: 600; text-decoration: none; white-space: nowrap; }
+        .login-help a:hover { text-decoration: underline; }
+        .login-help .bp-support-hours { font-size: 12px; color: #6b7280; }
         .login-footer {
             padding: 20px 30px;
             background: #fafafa;
@@ -323,6 +327,7 @@
 
         <!-- Footer -->
         <div class="login-footer">
+            @include('admin.partials.support-line', ['lead' => 'Trouble signing in?', 'context' => 'auth.signin', 'class' => 'login-help', 'hoursBelow' => true])
             @if(\App\Support\Edition::isSaas()){{-- a standalone copy has no sign-up --}}
             <p>Don't have an account? <a href="{{ url('auth/register') }}" style="color: #dc2626; text-decoration: none; font-weight: 500;">Create one here</a></p>
             @endif

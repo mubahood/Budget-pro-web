@@ -21,7 +21,7 @@ class CompanyRules
     public const SECTIONS = [
         'profile' => ['name', 'phone_number', 'phone_number_2', 'email', 'address', 'slogan', 'logo'],
         'money' => ['currency', 'timezone', 'tax_rate'],
-        'receipts' => ['receipt_header', 'receipt_footer', 'receipt_channels', 'payment_methods'],
+        'receipts' => ['receipt_header', 'receipt_footer', 'receipt_channels', 'payment_methods', 'receipt_support_line'],
         'stock' => ['low_stock_default', 'negative_stock_policy', 'require_shift'],
         'customers' => ['credit_terms_days', 'debt_reminders_enabled'],
         'modules' => ['enabled_modules'],
@@ -104,6 +104,8 @@ class CompanyRules
             'tax_rate' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:50'],
             'receipt_header' => ['sometimes', 'nullable', 'string', 'max:500'],
             'receipt_footer' => ['sometimes', 'nullable', 'string', 'max:500'],
+            // The small "Powered by Budget Pro · WhatsApp …" line (SupportContact::receiptLineOn); null = the edition's default.
+            'receipt_support_line' => ['sometimes', 'nullable', 'boolean'],
             'receipt_channels' => ['sometimes', 'array'],
             'receipt_channels.*' => [Rule::in(array_keys(self::RECEIPT_CHANNELS))],
             'payment_methods' => ['sometimes', 'array', 'min:1'],
@@ -222,6 +224,7 @@ class CompanyRules
                     ['methods' => array_values(array_unique($value))]),
                 'receipt_channels', 'enabled_modules' => array_values(array_unique($value)),
                 'require_shift', 'debt_reminders_enabled' => (bool) $value,
+                'receipt_support_line' => $value === null ? null : (bool) $value,
                 'credit_terms_days' => (int) $value,
                 'tax_rate', 'low_stock_default' => $value === null || $value === '' ? null : (float) $value,
                 default => $value,

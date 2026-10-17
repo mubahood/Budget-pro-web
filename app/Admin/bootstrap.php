@@ -73,3 +73,40 @@ Admin::navbar(fn (\Encore\Admin\Widgets\Navbar $navbar) => $navbar->left(new cla
             .'<ul class="dropdown-menu" style="min-width:320px;">'.$items.'</ul></li>';
     }
 }));
+
+// Help: who to ask (App\Support\SupportContact, docs/roadmap/06 §4). WhatsApp with the screen, the shop and the
+// person's role in the message (never a customer's details), else a phone or an email for a standalone copy.
+// Not for platform admins: they are the support.
+Admin::navbar(fn (\Encore\Admin\Widgets\Navbar $navbar) => $navbar->right(new class implements \Illuminate\Contracts\Support\Renderable
+{
+    public function render(): string
+    {
+        $user = Admin::user();
+        if ($user === null || \App\Http\Middleware\PlatformAdminOnly::isPlatformAdmin($user)) {
+            return '';
+        }
+        $support = \App\Support\SupportContact::current();
+        $vars = [];
+        if ($user instanceof \App\Models\User) {
+            $role = rescue(fn () => \App\Services\Team\Permissions::roleOf($user), '', false);
+            $vars = [
+                'shop' => rescue(fn () => (string) \App\Models\Company::withoutGlobalScopes()->whereKey($user->company_id)->value('name'), '', false),
+                'role' => mb_strtolower((string) config("permissions.roles.{$role}.label", str_replace('_', ' ', $role))),
+            ];
+        }
+        $segment = trim((string) preg_replace('/[^a-z ]/', ' ', strtolower((string) (request()->segment(1) ?? ''))));
+        $vars['screen'] = ($segment !== '' ? ucfirst($segment) : 'the dashboard').' (classic screens)';
+        [$href, $title, $icon, $external] = match (true) {
+            $support->hasWhatsapp() => [$support->goLink('admin.help', $vars, '/'.ltrim(request()->path(), '/'), 'classic'), 'WhatsApp '.($support->isPlatform() ? 'Budget Pro support' : $support->name()).' on '.$support->whatsappDisplay(), 'fa-whatsapp', true],
+            $support->phoneLink() !== '' => [$support->phoneLink(), 'Call '.$support->name().' on '.$support->phone(), 'fa-phone', false],
+            $support->emailLink() !== '' => [$support->emailLink(), 'Email '.$support->name(), 'fa-envelope', false],
+            default => ['', '', '', false],
+        };
+        if ($href === '') {
+            return '';
+        }
+
+        return '<li><a href="'.e($href).'"'.($external ? ' target="_blank" rel="noopener"' : '').' title="'.e($title).'"><i class="fa '.$icon.'"></i> <span class="hidden-xs">Help</span></a></li>';
+    }
+}));
+

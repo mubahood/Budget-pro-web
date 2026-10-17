@@ -14,6 +14,7 @@ use App\Support\ShopBrand;
 use App\Support\ShopMenu;
 use App\Support\StoreFeatures;
 use App\Support\StoreScope;
+use App\Support\SupportContact;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 
@@ -21,7 +22,8 @@ use Illuminate\Http\Request;
  * GET /api/v1/meta (MOBILE_EXCELLENCE_PLAN.md D1): everything the phone needs to draw the shop the way
  * the web draws it, from the same objects the web reads: the business and how it writes money, the
  * edition, the plan badge (PlanBadge, SaaS only), the person, the payment methods, the enums with
- * their tones (MetaEnums), the app versions, the web address and its pages (ShopMenu), the switches.
+ * their tones (MetaEnums), the app versions, who to ask for help (SupportContact), the web address and its
+ * pages (ShopMenu), the switches.
  * Read after sign-in and on resume; send If-None-Match with the last ETag to get a 304.
  */
 class MetaController extends Controller
@@ -40,7 +42,7 @@ class MetaController extends Controller
         $data = [
             'api_version' => self::API_VERSION,
             'business' => $this->business($company),
-            'edition' => EditionMeta::forApp(),
+            'edition' => EditionMeta::edition(),
             'plan' => $plan === null ? null : $plan + ['can_pay' => Permissions::can($user, 'billing')],
             'user' => [
                 'id' => (int) $user->id, 'name' => (string) $user->name, 'role' => $role = Permissions::roleOf($user),
@@ -50,6 +52,8 @@ class MetaController extends Controller
             'payment_methods' => MetaEnums::paymentMethods($company),
             'enums' => MetaEnums::all(),
             'app' => ['min_version' => (string) config('mobile.min_version'), 'latest_version' => (string) config('mobile.latest_version'), 'download_url' => (string) config('mobile.store_url')],
+            // Who to ask for help, with the prefilled messages (docs/roadmap/06 §4): a standalone copy's own contact first.
+            'support' => SupportContact::forCompany($company)->toArray(),
             'web_url' => $webUrl,
             'web_pages' => $webUrl === null ? [] : ShopMenu::pagesFor($user, $company),
             'features' => ['store' => StoreFeatures::payload($company), 'modules' => $company->modules()],
@@ -82,6 +86,8 @@ class MetaController extends Controller
             // Enough to write an amount exactly as App\Support\Money::format does: "<code> <number>".
             'money' => ['code' => Money::symbol($id), 'position' => 'before', 'space' => true, 'decimals' => Money::decimals($id),
                 'thousands_separator' => ',', 'decimal_separator' => '.', 'sample' => Money::format(1234567.5, null, $id)],
+            // The small line under the receipt footer ("Powered by Budget Pro · WhatsApp …"), or null when the shop has it off.
+            'receipt_support_line' => SupportContact::receiptLine($company),
         ];
     }
 }

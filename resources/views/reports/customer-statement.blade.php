@@ -76,5 +76,6 @@
   @else
     <p class="muted">No entries yet.</p>
   @endif
+  @include('reports.partials.support-line', ['company' => $shop ?? null, 'size' => '9px'])
 </body>
 </html>

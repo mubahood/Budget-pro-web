@@ -24,7 +24,8 @@ class MessagingMailChannel
         }
 
         $channel = Messenger::channel('mail') ?? new LogChannel('mail');
-        $result = $channel->send($to, $message['body'], ['subject' => $message['subject']]);
+        // `options` from the notification: which help line ends the email (MailChannel's support_*).
+        $result = $channel->send($to, $message['body'], ['subject' => $message['subject']] + (is_array($message['options'] ?? null) ? $message['options'] : []));
 
         DB::table('message_log')->insert([
             'channel' => $channel->name(), 'to' => mb_substr($to, 0, 191), 'purpose' => 'standalone_link',

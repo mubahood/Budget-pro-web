@@ -92,7 +92,8 @@ class Notifier
         $to = $user->phone_e164 ?: $user->email;
         if ($to) {
             $this->messenger->send($to, $text, Messenger::channelsFor($user->phone_e164, $user->email), ['company_id' => $company->id, 'user_id' => $user->id, 'purpose' => 'welcome',
-                'options' => ['mail' => ['subject' => 'Welcome to '.config('app.name')]]]);
+                // The email ends with "WhatsApp us to set up" (SupportContact, trial.welcome): the shop's name only.
+                'options' => ['mail' => ['subject' => 'Welcome to '.config('app.name'), 'support_context' => 'trial.welcome', 'support_vars' => ['shop' => (string) $company->name]]]]);
         }
         DB::table('app_notifications')->insert(['company_id' => $company->id, 'user_id' => $user->id, 'type' => 'welcome', 'title' => 'Welcome!',
             'body' => 'Start with the getting-started checklist on your dashboard.', 'created_at' => now(), 'updated_at' => now()]);

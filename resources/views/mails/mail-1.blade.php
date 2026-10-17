@@ -71,6 +71,13 @@ if (!isset($body)) {
         font-size: 16px;
         ">
             {!! $body !!}</div>
+        {{-- Who to ask for help (App\Support\SupportContact): every platform email ends with it. --}}
+        @php $bpHelp = \App\Support\SupportContact::current()->mailParts(); @endphp
+        @if($bpHelp['text'] !== '')
+        <div class="content" style="font-size: 13px; color: #5a6b80; border-top: 1px solid #e2e8f0;">
+            {{ $bpHelp['text'] }}@if($bpHelp['link'] !== '') <a href="{{ $bpHelp['link'] }}" style="color: #00A65A;">Open WhatsApp</a>@endif
+        </div>
+        @endif
         <a href="{{ env('APP_URL') }}">
             <div class="header small">
                 <h2>{{ env('APP_NAME') }}</h2>

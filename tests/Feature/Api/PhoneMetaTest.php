@@ -52,6 +52,8 @@ class PhoneMetaTest extends ApiTestCase
             }
         }
         $this->assertSame(config('mobile.latest_version'), $d['app']['latest_version']);
+        $this->assertSame(['platform', 'Budget Pro'], [$d['support']['who'], $d['support']['name']], 'who to ask (SupportContact)');
+        $this->assertArrayHasKey('app.help', $d['support']['templates']);
         $this->assertSame('https://shop.example.test', $d['web_url']);
         $this->assertContains('/settings', array_column($d['web_pages'], 'path'));
         $this->assertNotContains('/settings/system', array_column($d['web_pages'], 'path'), 'standalone only');

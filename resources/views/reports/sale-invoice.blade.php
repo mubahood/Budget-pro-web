@@ -351,6 +351,7 @@
         <p><strong>Thank you for your business!</strong></p>
         <p>This is a computer-generated invoice and does not require a signature.</p>
         <p>Generated on {{ Utils::my_date(now()) }}</p>
+        @include('reports.partials.support-line', ['company' => $sale->company ?? ($company ?? null)])
     </div>
 </body>
 </html>

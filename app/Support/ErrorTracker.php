@@ -16,6 +16,15 @@ class ErrorTracker
 {
     private static bool $busy = false;
 
+    /**
+     * The group an exception is counted in on System health: its class, file and line. The first
+     * characters are the reference a person reads out to support (App\Support\SupportContact::reference).
+     */
+    public static function fingerprint(Throwable $e): string
+    {
+        return hash('sha256', get_class($e).'|'.str_replace(base_path().'/', '', $e->getFile()).'|'.$e->getLine());
+    }
+
     public static function capture(Throwable $e): void
     {
         if (self::$busy || $e instanceof \App\Exceptions\BusinessRuleException || (app()->runningUnitTests() && ! config('app.track_errors_in_tests', false))) {
@@ -30,7 +39,7 @@ class ErrorTracker
                 return;
             }
             $file = str_replace(base_path().'/', '', $e->getFile());
-            $fingerprint = hash('sha256', get_class($e).'|'.$file.'|'.$e->getLine());
+            $fingerprint = self::fingerprint($e);
             $request = app()->runningInConsole() && ! app()->runningUnitTests() ? null : request();
             $context = $request === null ? ['url' => 'console'] : ['request_id' => $request->attributes->get('request_id'), 'company_id' => $request->user()?->company_id, 'user_id' => $request->user()?->id,
                 'device_id' => $request->header('X-Device-Id'), 'url' => $request->method().' '.$request->path()];
