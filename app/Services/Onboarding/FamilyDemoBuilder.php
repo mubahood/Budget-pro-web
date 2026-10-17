@@ -57,6 +57,11 @@ use Illuminate\Support\Str;
  * same figures. Change one, change the other.
  *
  * Local accounts only (`php artisan demo:family`): *.demo@local.test, password secret123.
+ *
+ * The farm and the wedding are also reusable on their own (seedFarm, seedWedding, topUpFarm): the public
+ * demo (PublicDemoBuilder) puts both into Fresh Corner Market on every build and keeps them current on
+ * every heal. There, amounts are converted from UGX to the shop's currency (RATES) and no entry is dated
+ * after the real "now".
  */
 class FamilyDemoBuilder
 {
@@ -77,14 +82,31 @@ class FamilyDemoBuilder
     /** The wedding's treasurer (a member of the wedding account who takes the money). */
     public const TREASURER = ['email' => 'doreen.demo@local.test', 'name' => 'Doreen Natukunda'];
 
+    /** UGX per unit of a shop's currency, for the farm and the wedding in a shop that does not count in shillings (round figures on purpose). */
+    public const RATES = ['UGX' => 1, 'USD' => 4000, 'EUR' => 4000, 'GBP' => 5000, 'KES' => 30, 'TZS' => 1, 'RWF' => 3];
+
     /** @var list<string> sample entries a rule refused (logged, never fatal) */
     public array $skipped = [];
+
+    /** @var array{farm?: array<string, int>, wedding?: int} what the last seed made: batch ids by key, the event's id */
+    public array $ids = [];
 
     private Company $co;
 
     private User $owner;
 
     private Carbon $today;
+
+    private string $tz = self::TZ;
+
+    /** UGX per unit of the account's currency (RATES). */
+    private int $rate = 1;
+
+    /** @var array<int, string>|null the event's committee (user id => role); null: the owner chairs, the treasurer keeps the money */
+    private ?array $committee = null;
+
+    /** When set, nothing is dated after it (the public demo is read while it is being looked at; the local accounts keep the evening's figures). */
+    private ?Carbon $realNow = null;
 
     /**
      * (Re)build the named accounts (default: all three). An existing account with the same email is
@@ -102,20 +124,135 @@ class FamilyDemoBuilder
             }
         }
         $out = [];
-        $mail = [config('saas.mail_enabled'), config('mail.default')];
-        $clock = Carbon::getTestNow();
-        // Nothing leaves the machine while building (budget item updates email the account, for one).
-        config(['saas.mail_enabled' => false, 'mail.default' => 'array', 'messaging.sms.driver' => 'log', 'messaging.whatsapp.driver' => 'log']);
-        try {
-            foreach ($keys as $key) {
-                $out[$key] = OnboardingEvents::muted(fn () => $this->account($key));
-            }
-        } finally {
-            Carbon::setTestNow($clock);
-            config(['saas.mail_enabled' => $mail[0], 'mail.default' => $mail[1]]);
+        foreach ($keys as $key) {
+            $out[$key] = $this->muted(fn () => $this->account($key));
         }
 
         return $out;
+    }
+
+    /**
+     * The Mukono layers farm (and the broiler batch sold earlier) in an existing account, as the owner.
+     *
+     * @param  array{now?: Carbon, tz?: string, currency?: string, ledger?: bool}  $opts  ledger: also mirror the farm's expenses to Finance
+     * @return array{summary: array, batches: array<string, int>}
+     */
+    public function seedFarm(Company $co, User $owner, array $opts = []): array
+    {
+        $summary = $this->within($co, $owner, $opts, fn () => $this->farm((bool) ($opts['ledger'] ?? false)));
+
+        return ['summary' => $summary, 'batches' => $this->ids['farm'] ?? []];
+    }
+
+    /**
+     * The Brian & Grace wedding (budget, pledges, and the pledge extras whose tables exist) in an existing
+     * account, eleven weeks before the day. The treasurer defaults to the owner.
+     *
+     * @param  array{now?: Carbon, tz?: string, currency?: string, committee?: array<int, string>}  $opts  committee: user id => role
+     * @return array{summary: array, program_id: int}
+     */
+    public function seedWedding(Company $co, User $owner, ?User $treasurer = null, array $opts = []): array
+    {
+        $this->committee = $opts['committee'] ?? null;
+        $summary = $this->within($co, $owner, $opts, fn () => $this->wedding($treasurer ?? $owner));
+
+        return ['summary' => $summary, 'program_id' => (int) ($this->ids['wedding'] ?? 0)];
+    }
+
+    /**
+     * Keep a seeded farm current: the layers' daily card for each day since the last one, up to today
+     * (never a day twice), and a delivery of layers mash when fewer than three days' feed is left.
+     *
+     * @param  array{now?: Carbon, tz?: string, currency?: string}  $opts
+     * @return int daily cards added
+     */
+    public function topUpFarm(Company $co, User $owner, int $batchId, array $opts = []): int
+    {
+        return $this->within($co, $owner, $opts, function () use ($batchId) {
+            $cid = (int) $this->co->id;
+            $batch = DB::table('poultry_batches')->where('company_id', $cid)->where('id', $batchId)->where('is_deleted', 0)->first();
+            $last = $batch ? DB::table('poultry_daily_records')->where('company_id', $cid)->where('batch_id', $batchId)->where('is_deleted', 0)->max('date') : null;
+            if ($batch === null || $last === null) {
+                return 0;
+            }
+            $from = Carbon::parse($last, $this->tz)->startOfDay()->addDay();
+            if ($from->lt($this->today->copy()->subDays(14))) {
+                return 0; // a farm left alone this long waits for the next rebuild
+            }
+            $alive = (int) $batch->start_count
+                - (int) DB::table('poultry_daily_records')->where('batch_id', $batchId)->where('is_deleted', 0)->sum('mortality')
+                - (int) DB::table('poultry_mortality_events')->where('batch_id', $batchId)->where('is_deleted', 0)->sum('count');
+            $placed = Carbon::parse($batch->acquired_date, $this->tz)->startOfDay();
+            $by = (string) $this->owner->name;
+            $added = 0;
+            for ($day = $from; $day->lte($this->today); $day = $day->copy()->addDay()) {
+                $d = (int) $placed->diffInDays($day);
+                $w = intdiv($d, 7);
+                Carbon::setTestNow($this->past($day->copy()->setTime(19, 0)->utc()));
+                $eggs = max(0, intdiv(self::farmLayPct($w) * $alive + 50, 100) + self::FARM_WOBBLE[$d % 7]);
+                $feed = intdiv(self::farmIntake($w) * $alive + 500, 1000);
+                $this->make(PoultryDailyRecord::class, ['batch_id' => $batchId, 'date' => $day->toDateString(), 'eggs_trays' => intdiv($eggs, 30), 'eggs_loose' => $eggs % 30,
+                    'mortality' => 0, 'feed_kg' => $feed, 'water_l' => $feed * 2, 'notes' => '', 'egg_unit_price' => $this->money(12000),
+                    'feed_price_per_kg' => $this->money(self::farmPricePerKg('layer')), 'avg_weight_kg' => 0.0], $by);
+                $added++;
+            }
+            // Feed: a delivery before it runs out (ten bags), like the farm's fortnightly buying.
+            $left = (float) DB::table('poultry_feed_stock')->where('company_id', $cid)->where('is_deleted', 0)->where('direction', 'in')->sum('qty_kg')
+                - (float) DB::table('poultry_feed_stock')->where('company_id', $cid)->where('is_deleted', 0)->where('direction', 'out')->sum('qty_kg')
+                - (float) DB::table('poultry_daily_records')->where('company_id', $cid)->where('is_deleted', 0)->sum('feed_kg');
+            $perDay = intdiv(self::farmIntake(30) * max(1, $alive) + 500, 1000);
+            $feedType = DB::table('poultry_feed_types')->where('company_id', $cid)->where('is_deleted', 0)->where('category', 'layers_mash')->value('id');
+            if ($feedType && $left < 3 * $perDay) {
+                [$name, , $kgPerBag, $bagPrice] = self::FARM_FEEDS['layer'];
+                Carbon::setTestNow($this->past($this->today->copy()->setTime(9, 0)->utc()));
+                $x = $this->make(PoultryExpense::class, ['category' => 'feed', 'feed_type_id' => (int) $feedType, 'amount' => $this->money(10 * $bagPrice), 'batch_id' => $batchId,
+                    'date' => $this->today->toDateString(), 'note' => "10 bags {$name} ({$kgPerBag} kg)"], $by);
+                $this->make(PoultryFeedStock::class, ['feed_type_id' => (int) $feedType, 'direction' => 'in', 'source' => 'purchase', 'qty_kg' => 10 * $kgPerBag,
+                    'cost' => $this->money(10 * $bagPrice), 'batch_id' => $batchId, 'ref_uuid' => $x->uuid, 'date' => $this->today->toDateString(), 'note' => ''], $by);
+            }
+            Carbon::setTestNow(null);
+
+            return $added;
+        });
+    }
+
+    public static function rateFor(?string $currency): int
+    {
+        return self::RATES[strtoupper((string) $currency)] ?? 1;
+    }
+
+    /** Nothing leaves the machine while building (budget item updates email the account, for one), and the clock is put back. */
+    private function muted(callable $fn): mixed
+    {
+        $mail = [config('saas.mail_enabled'), config('mail.default'), config('messaging.sms.driver'), config('messaging.whatsapp.driver')];
+        $clock = Carbon::getTestNow();
+        config(['saas.mail_enabled' => false, 'mail.default' => 'array', 'messaging.sms.driver' => 'log', 'messaging.whatsapp.driver' => 'log']);
+        try {
+            return OnboardingEvents::muted($fn);
+        } finally {
+            Carbon::setTestNow($clock);
+            config(['saas.mail_enabled' => $mail[0], 'mail.default' => $mail[1], 'messaging.sms.driver' => $mail[2], 'messaging.whatsapp.driver' => $mail[3]]);
+        }
+    }
+
+    /** Seed into an account someone else made: its currency, its time zone, today as the caller sees it. */
+    private function within(Company $co, User $owner, array $opts, callable $fn): mixed
+    {
+        $this->co = $co;
+        $this->owner = $owner;
+        $this->tz = (string) ($opts['tz'] ?? ($co->timezone ?: self::TZ));
+        $this->rate = self::rateFor($opts['currency'] ?? $co->currency);
+        $this->realNow = ($opts['now'] ?? now())->copy();
+        $this->today = $this->realNow->copy()->setTimezone($this->tz)->startOfDay();
+
+        return $this->muted(function () use ($fn) {
+            $guards = $this->actAs($this->owner);
+            try {
+                return $fn();
+            } finally {
+                $this->restore($guards);
+            }
+        });
     }
 
     /** Delete an account this builder made (only one of the *.demo@local.test owners above). */
@@ -145,6 +282,10 @@ class FamilyDemoBuilder
     {
         $a = self::ACCOUNTS[$key];
         $this->remove($key);
+        $this->tz = self::TZ;
+        $this->rate = 1;
+        $this->realNow = null;
+        $this->committee = null;
         $this->today = now(self::TZ)->startOfDay();
 
         // Signed up 40 weeks ago (before the layers came), through the real sign-up.
@@ -204,20 +345,13 @@ class FamilyDemoBuilder
     {
         $plan = self::farmPlan();
         $cid = (int) $this->co->id;
-        $by = $this->owner->name;
+        $by = (string) $this->owner->name;
         $date = fn (int $d) => $this->today->copy()->subDays(self::FARM_AGE - $d)->toDateString();
         $at = function (int $d, int $hour = 19) {
-            Carbon::setTestNow($this->at(self::FARM_AGE - $d, $hour));
+            Carbon::setTestNow($this->past($this->at(self::FARM_AGE - $d, $hour)));
         };
-        $new = function (string $class, array $attrs) use ($cid, $by) {
-            $m = new $class();
-            foreach ($attrs + ['company_id' => $cid, 'entered_by' => $by, 'is_deleted' => 0, 'version' => 1] as $k => $v) {
-                $m->{$k} = $v;
-            }
-            $m->save();
-
-            return $m;
-        };
+        $new = fn (string $class, array $attrs) => $this->make($class, $attrs, $by);
+        $money = fn (int $ugx) => $this->money($ugx);
 
         $at(0, 8);
         $feeds = [];
@@ -226,7 +360,7 @@ class FamilyDemoBuilder
         }
         $batches = [
             'layers' => $new(PoultryBatch::class, ['name' => 'Layers House 1', 'type' => 'layer', 'source' => 'Ugachick, Kampala', 'acquired_date' => $date(0),
-                'start_count' => self::FARM_PLACED, 'cost_per_chick' => self::FARM_CHICK_PRICE, 'status' => 'laying', 'is_main_farm' => true,
+                'start_count' => self::FARM_PLACED, 'cost_per_chick' => $money(self::FARM_CHICK_PRICE), 'status' => 'laying', 'is_main_farm' => true,
                 'notes' => 'Brown layers, deep litter house behind the main house']),
         ];
         $customers = [];
@@ -235,20 +369,22 @@ class FamilyDemoBuilder
         }
         $at(self::FARM_BROILER_START, 8);
         $batches['broilers'] = $new(PoultryBatch::class, ['name' => 'Broilers Batch 2', 'type' => 'broiler', 'source' => 'Kakiri hatchery',
-            'acquired_date' => $date(self::FARM_BROILER_START), 'start_count' => self::FARM_BROILER_PLACED, 'cost_per_chick' => self::FARM_BROILER_CHICK_PRICE,
+            'acquired_date' => $date(self::FARM_BROILER_START), 'start_count' => self::FARM_BROILER_PLACED, 'cost_per_chick' => $money(self::FARM_BROILER_CHICK_PRICE),
             'status' => 'closed', 'is_main_farm' => false, 'notes' => 'Sold at six weeks']);
         $bid = fn (string $k) => $k === '' ? null : (int) $batches[$k]->id;
+        $this->ids['farm'] = array_map(fn ($b) => (int) $b->id, $batches);
 
         foreach ($plan['days'] as $r) {
             $at($r['d'], 19);
             $new(PoultryDailyRecord::class, ['batch_id' => $bid($r['batch']), 'date' => $date($r['d']), 'eggs_trays' => intdiv($r['eggs'], 30), 'eggs_loose' => $r['eggs'] % 30,
                 'mortality' => $r['deaths'], 'feed_kg' => $r['feed_kg'], 'water_l' => $r['feed_kg'] * 2, 'notes' => $r['note'],
-                'egg_unit_price' => $r['egg_price'], 'feed_price_per_kg' => $r['feed_price_per_kg'], 'avg_weight_kg' => $r['weight_kg']]);
+                'egg_unit_price' => $money($r['egg_price']), 'feed_price_per_kg' => $money($r['feed_price_per_kg']), 'avg_weight_kg' => $r['weight_kg']]);
         }
         foreach ($plan['sales'] as $s) {
             $at($s['d'], 9);
+            $total = round($s['qty'] * $money($s['price']), 2);
             $new(PoultrySale::class, ['category' => $s['category'], 'product_label' => $s['label'], 'qty' => $s['qty'], 'unit' => $s['unit'],
-                'unit_price' => $s['price'], 'total' => $s['qty'] * $s['price'], 'amount_paid' => $s['paid'],
+                'unit_price' => $money($s['price']), 'total' => $total, 'amount_paid' => $s['paid'] === $s['qty'] * $s['price'] ? $total : $money($s['paid']),
                 'customer_id' => $s['customer'] === '' ? null : (int) $customers[$s['customer']]->id, 'batch_id' => $bid($s['batch']), 'date' => $date($s['d']), 'note' => '']);
         }
         // Farm expenses also go to the Finance ledger, as the phone's PoultryFinanceBridge mirrors them.
@@ -257,13 +393,13 @@ class FamilyDemoBuilder
         foreach ($plan['expenses'] as $e) {
             $at($e['d'], 17);
             $x = $new(PoultryExpense::class, ['category' => $e['category'], 'feed_type_id' => $e['feed'] === '' ? null : (int) $feeds[$e['feed']]->id,
-                'amount' => $e['amount'], 'batch_id' => $bid($e['batch']), 'date' => $date($e['d']), 'note' => $e['note']]);
+                'amount' => $money($e['amount']), 'batch_id' => $bid($e['batch']), 'date' => $date($e['d']), 'note' => $e['note']]);
             if ($e['feed'] !== '') {
                 $new(PoultryFeedStock::class, ['feed_type_id' => (int) $feeds[$e['feed']]->id, 'direction' => 'in', 'source' => 'purchase', 'qty_kg' => $e['kg'],
-                    'cost' => $e['amount'], 'batch_id' => $bid($e['batch']), 'ref_uuid' => $x->uuid, 'date' => $date($e['d']), 'note' => '']);
+                    'cost' => $money($e['amount']), 'batch_id' => $bid($e['batch']), 'ref_uuid' => $x->uuid, 'date' => $date($e['d']), 'note' => '']);
             }
             if ($category) {
-                $this->quietly(fn () => FinancialRecord::create(['company_id' => $cid, 'financial_category_id' => $category->id, 'type' => 'Expense', 'amount' => $e['amount'],
+                $this->quietly(fn () => FinancialRecord::create(['company_id' => $cid, 'financial_category_id' => $category->id, 'type' => 'Expense', 'amount' => $money($e['amount']),
                     'payment_method' => 'cash', 'description' => $e['note'], 'date' => $date($e['d']), 'created_by_id' => $this->owner->id, 'user_id' => $this->owner->id]));
             }
         }
@@ -280,7 +416,7 @@ class FamilyDemoBuilder
         foreach ($plan['health'] as $h) {
             $at($h['d'], 16);
             $new(PoultryHealthEvent::class, ['batch_id' => $bid('layers'), 'symptoms' => $h['symptoms'], 'diagnosis' => $h['diagnosis'], 'treatment' => $h['treatment'],
-                'cost' => $h['cost'], 'withdrawal_days' => 0, 'date' => $date($h['d']), 'note' => '']);
+                'cost' => $money($h['cost']), 'withdrawal_days' => 0, 'date' => $date($h['d']), 'note' => '']);
         }
         foreach ($plan['mortality'] as $m) {
             $at($m['d'], 7);
@@ -312,7 +448,7 @@ class FamilyDemoBuilder
     private function wedding(User $treasurer): array
     {
         $cid = (int) $this->co->id;
-        Carbon::setTestNow($this->at(self::WEDDING_DAYS_RECORDED + 16, 20));
+        Carbon::setTestNow($this->past($this->at(self::WEDDING_DAYS_RECORDED + 16, 20)));
         $program = new BudgetProgram();
         $program->company_id = $cid;
         $program->name = self::WEDDING_NAME;
@@ -322,10 +458,11 @@ class FamilyDemoBuilder
         $program->is_default = 'Yes';
         $program->deadline = $this->today->copy()->addDays(self::WEDDING_DAYS_TO_GO)->toDateString();
         $program->save();
+        $this->ids['wedding'] = (int) $program->id;
 
         $c = 0;
         foreach (self::WEDDING_BUDGET as $category => $items) {
-            Carbon::setTestNow($this->at(self::WEDDING_DAYS_RECORDED + 14 - $c++, 20));
+            Carbon::setTestNow($this->past($this->at(self::WEDDING_DAYS_RECORDED + 14 - $c++, 20)));
             $cat = new BudgetItemCategory();
             $cat->company_id = $cid;
             $cat->budget_program_id = $program->id;
@@ -338,9 +475,9 @@ class FamilyDemoBuilder
                 $item->budget_program_id = $program->id;
                 $item->created_by_id = $this->owner->id;
                 $item->name = $name;
-                $item->unit_price = $unitPrice;
+                $item->unit_price = $this->whole($unitPrice);
                 $item->quantity = $qty;
-                $item->invested_amount = $paid;
+                $item->invested_amount = $this->whole($paid);
                 $item->approved = $approved ? 'Yes' : 'No';
                 $item->priority = 'Normal';
                 $item->details = '';
@@ -349,9 +486,15 @@ class FamilyDemoBuilder
         }
 
         $n = count(self::WEDDING_PLEDGES);
+        $extras = new DemoPledgeExtras();
+        // With the payment history, each pledge's paid figure is its payments, recorded on their days.
+        $history = DemoPledgeExtras::paymentsReady();
+        $phones = DemoPledgeExtras::phonesReady();
+        $now = $this->realNow ?? now();
         for ($k = 0; $k < $n; $k++) {
             [$category, $name, $amount, $paid] = self::WEDDING_PLEDGES[self::pledgeOrder($k)];
-            Carbon::setTestNow($this->at(self::pledgeDaysAgo($k), $k % 2 === 0 ? 19 : 20, $k % 2 === 0 ? 30 : 10));
+            Carbon::setTestNow($this->past($this->at(self::pledgeDaysAgo($k), $k % 2 === 0 ? 19 : 20, $k % 2 === 0 ? 30 : 10)));
+            [$amount, $paid] = [$this->whole($amount), $this->whole($paid)];
             $p = new ContributionRecord();
             $p->budget_program_id = $program->id;
             $p->company_id = $cid;
@@ -359,12 +502,23 @@ class FamilyDemoBuilder
             $p->name = $name;
             $p->category_id = $category;
             $p->amount = $amount;
-            $p->paid_amount = $paid;
-            $p->fully_paid = $paid >= $amount ? 'Yes' : 'No';
+            $p->paid_amount = $history ? 0 : $paid;
+            $p->fully_paid = ! $history && $paid >= $amount ? 'Yes' : 'No';
+            if ($phones) {
+                $p->phone = DemoPledgeExtras::phoneFor($name);
+            }
             $this->quietly(fn () => $p->save()); // not paid, fully paid and the program's totals: the model's own finalizers
+            if ($history && $p->exists && ! $extras->pay($cid, (int) $p->id, $paid, $k, (int) $treasurer->id, Carbon::now(), $now)) {
+                $p->refresh();
+                $p->paid_amount = $paid; // the older way: the model posts the difference
+                $this->quietly(fn () => $p->save());
+            }
         }
         Carbon::setTestNow(null);
         BudgetProgram::recalculateFromChildren((int) $program->id);
+        // The committee (and phones on any pledge without one), once those tables exist.
+        $committee = $this->committee ?? [(int) $this->owner->id => 'chair'] + [(int) $treasurer->id => 'treasurer'];
+        $this->skipped = array_merge($this->skipped, $extras->apply((int) $program->id, (int) $this->owner->id, $committee));
 
         return self::weddingSummary();
     }
@@ -491,6 +645,36 @@ class FamilyDemoBuilder
     private function at(int $daysAgo, int $hour, int $minute = 0): Carbon
     {
         return $this->today->copy()->subDays($daysAgo)->setTime($hour, $minute)->utc();
+    }
+
+    /** Never after the real "now" when seeding a live account (the family accounts keep the evening's figures). */
+    private function past(Carbon $t): Carbon
+    {
+        return $this->realNow !== null && $t->greaterThan($this->realNow) ? $this->realNow->copy() : $t;
+    }
+
+    /** A UGX amount in the account's currency, to the cent. */
+    private function money(int|float $ugx): float
+    {
+        return $this->rate === 1 ? (float) $ugx : round($ugx / $this->rate, 2);
+    }
+
+    /** A UGX amount in the account's currency, in whole units (the budget tables keep whole numbers). */
+    private function whole(int $ugx): int
+    {
+        return $this->rate === 1 ? $ugx : (int) round($ugx / $this->rate);
+    }
+
+    /** One farm row through its model (so it carries the uuid and sync fields the phone needs). */
+    private function make(string $class, array $attrs, string $by): mixed
+    {
+        $m = new $class();
+        foreach ($attrs + ['company_id' => (int) $this->co->id, 'entered_by' => $by, 'is_deleted' => 0, 'version' => 1] as $k => $v) {
+            $m->{$k} = $v;
+        }
+        $m->save();
+
+        return $m;
     }
 
     /** One refused entry (a rule that bites on sample data) must not stop the rest. */

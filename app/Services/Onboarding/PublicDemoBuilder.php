@@ -39,6 +39,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -49,12 +50,24 @@ use Illuminate\Support\Str;
  *
  * The same class keeps an existing demo trading (tradeUntilNow): the hourly heal calls it so today's
  * figures move while people are looking.
+ *
+ * Every module is on: beside the shop are the Mukono layers farm and the Brian & Grace wedding
+ * (FamilyDemoBuilder's, in the shop's currency, dated from today, the wedding eleven weeks away), so
+ * the dashboard shows all three and each phone app opens its own part. keepFamily() is the heal's half:
+ * it adds them to a demo built before they came, puts them back when a visitor deleted them, and keeps
+ * the farm's daily cards up to today, never adding a row twice.
  */
 class PublicDemoBuilder
 {
     public const OPEN = 7;
 
     public const CLOSE = 21;
+
+    /** Every module, so the dashboard and every phone app have something to show. */
+    public const MODULES = ['shop', 'poultry', 'budget', 'finance'];
+
+    /** The farm's laying batch, by the name the heal looks for. */
+    public const LAYERS = 'Layers House 1';
 
     /** @var list<string> sample entries a rule refused (logged, never fatal) */
     public array $skipped = [];
@@ -98,6 +111,9 @@ class PublicDemoBuilder
     /** The heal carries on after the last sale already made today. */
     private ?Carbon $after = null;
 
+    /** @var array{farm?: array<string, int>, wedding?: int} what the farm and the wedding are (kept in the snapshot) */
+    private array $family = [];
+
     public function __construct()
     {
         $this->data = require dirname(__DIR__, 3).'/database/data/public_demo.php';
@@ -131,6 +147,7 @@ class PublicDemoBuilder
                 }
                 $this->finishingTouches($today);
             });
+            $this->family = $this->seedFamily();
         } finally {
             PublicDemo::$building = false;
             Carbon::setTestNow($clock);
@@ -167,8 +184,110 @@ class PublicDemoBuilder
                 $this->customers[] = ['customer' => $c, 'x' => (array) $x];
             }
         }
+        $this->family = array_intersect_key($snapshot, array_flip(['farm', 'wedding']));
 
         return $this;
+    }
+
+    /**
+     * The heal's half for the farm and the wedding: add them when missing (a demo built before they came,
+     * or a visitor deleted them), bring back a batch or event that was switched off, keep the farm's daily
+     * cards up to today, and add the pledge extras whose tables exist. Never adds a row twice.
+     *
+     * @return array{farm: array<string, int>, wedding: int, repairs: list<string>}
+     */
+    public function keepFamily(): array
+    {
+        $repairs = [];
+        $family = new FamilyDemoBuilder();
+        $opts = ['now' => $this->realNow, 'tz' => $this->tz, 'currency' => (string) $this->co->currency];
+        PublicDemo::$building = true;
+        try {
+            // The farm: its laying batch is the sign it is there.
+            $layers = (int) ($this->family['farm']['layers'] ?? 0);
+            $batch = $layers ? DB::table('poultry_batches')->where('company_id', $this->cid)->where('id', $layers)->first(['id', 'is_deleted']) : null;
+            if ($batch === null) {
+                $batch = DB::table('poultry_batches')->where('company_id', $this->cid)->where('name', self::LAYERS)->orderBy('id')->first(['id', 'is_deleted']);
+            }
+            if ($batch === null) {
+                $this->wipe(['poultry_daily_records', 'poultry_sales', 'poultry_expenses', 'poultry_feed_stock', 'poultry_egg_transactions', 'poultry_mortality_events',
+                    'poultry_health_events', 'poultry_vaccination_events', 'poultry_customers', 'poultry_feed_types', 'poultry_batches']);
+                $this->family['farm'] = $family->seedFarm($this->co, $this->manager, $opts)['batches'];
+                $repairs[] = 'farm';
+            } else {
+                if ((int) $batch->is_deleted === 1) {
+                    DB::table('poultry_batches')->where('id', $batch->id)->update(['is_deleted' => 0, 'updated_at' => now()]);
+                    $repairs[] = 'farm batch';
+                }
+                $this->family['farm'] = ['layers' => (int) $batch->id] + (array) ($this->family['farm'] ?? []);
+                if ($n = $family->topUpFarm($this->co, $this->manager, (int) $batch->id, $opts)) {
+                    $repairs[] = "{$n} farm day(s)";
+                }
+            }
+
+            // The wedding: found by its id, or its name.
+            $id = (int) ($this->family['wedding'] ?? 0);
+            $program = DB::table('budget_programs')->where('company_id', $this->cid)
+                ->where(fn ($q) => $q->where('id', $id)->orWhere('name', FamilyDemoBuilder::WEDDING_NAME))->orderBy('id')->first(['id', 'status']);
+            if ($program === null) {
+                $this->wipe(['contribution_payments', 'budget_program_members', 'contribution_records', 'budget_items', 'budget_item_categories', 'budget_programs']);
+                $this->family['wedding'] = $family->seedWedding($this->co, $this->manager, null, $opts + ['committee' => $this->committee()])['program_id'];
+                $repairs[] = 'wedding';
+            } else {
+                if ((string) $program->status !== 'Active') {
+                    DB::table('budget_programs')->where('id', $program->id)->update(['status' => 'Active', 'updated_at' => now()]);
+                    $repairs[] = 'wedding status';
+                }
+                $this->family['wedding'] = (int) $program->id;
+                $this->skipped = array_merge($this->skipped, (new DemoPledgeExtras())->apply((int) $program->id, (int) $this->manager->id, $this->committee()));
+            }
+        } finally {
+            PublicDemo::$building = false;
+        }
+        $this->skipped = array_merge($this->skipped, $family->skipped);
+
+        return ['farm' => (array) ($this->family['farm'] ?? []), 'wedding' => (int) $this->family['wedding'], 'repairs' => $repairs];
+    }
+
+    /** The farm and the wedding, with the manager as the one who wrote them down and the treasurer. */
+    private function seedFamily(): array
+    {
+        $family = new FamilyDemoBuilder();
+        $opts = ['now' => $this->realNow, 'tz' => $this->tz, 'currency' => (string) $this->co->currency];
+        $farm = $family->seedFarm($this->co->fresh(), $this->manager, $opts);
+        $wedding = $family->seedWedding($this->co->fresh(), $this->manager, null, $opts + ['committee' => $this->committee()]);
+        $this->skipped = array_merge($this->skipped, $family->skipped);
+
+        return ['farm' => $farm['batches'], 'wedding' => $wedding['program_id']];
+    }
+
+    /**
+     * The wedding's committee from the shop's team (once the committee exists): whoever owns the demo
+     * chairs it (the demo account, once it has moved in), the manager keeps the money, two of the team help.
+     *
+     * @return array<int, string> user id => role
+     */
+    public function committee(): array
+    {
+        $owner = (int) Company::withoutGlobalScopes()->whereKey($this->cid)->value('owner_id');
+        $roles = ($owner && $owner !== (int) $this->manager->id ? [$owner => 'chair'] : []) + [(int) $this->manager->id => 'treasurer'];
+        foreach (['samuel' => 'secretary', 'maria' => 'member'] as $who => $role) {
+            if (isset($this->staff[$who])) {
+                $roles += [(int) $this->staff[$who]->id => $role];
+            }
+        }
+
+        return $roles;
+    }
+
+    /** Delete this demo's rows from these tables (only ever the demo's own company). */
+    private function wipe(array $tables): void
+    {
+        foreach ($tables as $t) {
+            if (Schema::hasTable($t) && Schema::hasColumn($t, 'company_id')) {
+                DB::table($t)->where('company_id', $this->cid)->delete();
+            }
+        }
     }
 
     /**
@@ -238,7 +357,7 @@ class PublicDemoBuilder
         $co->receipt_header = "Fresh Corner Market\n214 Harbor Street · (207) 555-0100";
         $co->receipt_footer = 'Thank you for shopping local. Returns within 14 days with this receipt.';
         $co->license_expire = now()->addYears(5);
-        $co->enabled_modules = ['shop', 'finance'];
+        $co->enabled_modules = self::MODULES;
         $co->negative_stock_policy = 'allow';
         $co->receipt_channels = [];
         $co->tax_rate = 5.5;
@@ -946,7 +1065,7 @@ class PublicDemoBuilder
             'suppliers' => array_map(fn (Supplier $s) => (int) $s->id, $this->suppliers),
             'items' => $this->items,
             'customers' => collect($this->customers)->mapWithKeys(fn ($c) => [(int) $c['customer']->id => $c['x']])->all(),
-        ];
+        ] + $this->family;
     }
 
     private function item(string $name): ?array

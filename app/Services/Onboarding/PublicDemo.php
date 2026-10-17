@@ -176,6 +176,9 @@ class PublicDemo
         });
         Permissions::flush();
         app(ApprovalService::class)->setPin($owner->fresh(), self::PIN);
+        if (! empty($snapshot['wedding'])) {
+            (new DemoPledgeExtras())->apply((int) $snapshot['wedding'], (int) $owner->id, [(int) $owner->id => 'chair']); // the demo account chairs the wedding
+        }
 
         $new = $new->fresh();
         $this->remember($new, ['built_at' => now()->toIso8601String(), 'healed_at' => now()->toIso8601String(), 'heals' => 0,
@@ -197,6 +200,8 @@ class PublicDemo
     {
         $repairs = [];
         $snap = (array) $state['snapshot'];
+        // Every module on (a demo built when it was a shop only gets the others now).
+        $snap['company'] = ['enabled_modules' => PublicDemoBuilder::MODULES] + (array) ($snap['company'] ?? []);
 
         // The sign-in everybody uses.
         $owner = $owner->fresh();
@@ -217,7 +222,7 @@ class PublicDemo
 
         // The shop's settings.
         $changed = [];
-        foreach ((array) ($snap['company'] ?? []) as $field => $value) {
+        foreach ($snap['company'] as $field => $value) {
             if (json_encode($company->{$field}) !== json_encode($value)) {
                 $company->{$field} = $value;
                 $changed[] = $field;
@@ -253,8 +258,16 @@ class PublicDemo
         }
 
         // Today, up to the minute.
-        $sales = (new PublicDemoBuilder())->load($company->fresh(), $snap)->tradeUntilNow();
+        $builder = (new PublicDemoBuilder())->load($company->fresh(), $snap);
+        $sales = $builder->tradeUntilNow();
 
+        // The farm and the wedding: there, current, and never twice.
+        $family = $builder->keepFamily();
+        $snap['farm'] = $family['farm'];
+        $snap['wedding'] = $family['wedding'];
+        $repairs = array_merge($repairs, $family['repairs']);
+
+        $state['snapshot'] = $snap;
         $this->remember($company->fresh(), ['healed_at' => now()->toIso8601String(), 'heals' => (int) ($state['heals'] ?? 0) + 1, 'repairs' => $repairs] + $state);
         $this->forgetCache();
 
