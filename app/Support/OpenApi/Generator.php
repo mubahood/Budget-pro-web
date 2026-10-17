@@ -2,6 +2,7 @@
 
 namespace App\Support\OpenApi;
 
+use App\Support\Rules\PasswordPolicy;
 use App\Http\Controllers\Api\V1\BaseCrudController;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
@@ -257,6 +258,10 @@ class Generator
             }
         }
         $body = substr($src, $start + 1, $end - $start - 1);
+        // The one password rule (App\Support\Rules\PasswordPolicy::rules(...)) is a call, not a literal: document it as
+        // what it checks, so the password fields stay in the spec.
+        $body = (string) preg_replace_callback('/(?:\\\\?App\\\\Support\\\\Rules\\\\)?PasswordPolicy::rules\(([^)]*)\)/', fn ($m) => "'required|string|min:".PasswordPolicy::MIN
+            .(str_contains($m[1], 'confirmed: true') ? '|confirmed' : '')."'", $body);
         $out = [];
         if (preg_match_all("/'([\\w.*]+)'\\s*=>\\s*(\\[(?:[^\\[\\]]|\\[(?:[^\\[\\]]|\\[[^\\[\\]]*\\])*\\])*\\]|'[^']*')/", $body, $m, PREG_SET_ORDER)) {
             foreach ($m as [, $field, $rule]) {
