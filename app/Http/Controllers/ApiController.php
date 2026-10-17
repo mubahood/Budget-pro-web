@@ -219,6 +219,15 @@ class ApiController extends BaseController
             Utils::error('Failed to save.');
         }
 
+        // paid_amount is the sum of the pledge's payments (roadmap 02 §6): the figure this old app sent is
+        // posted as a payment of the difference, then paid_amount is the sum again.
+        try {
+            (new \App\Services\Budget\ContributionPayments())->settleTo((int) $u->company_id, (int) $object->id,
+                \App\Support\Decimal::valid($object->paid_amount) ? \App\Support\Decimal::of((string) $object->paid_amount) : '0.00', (int) $u->id);
+        } catch (\Throwable $th) {
+            Utils::error('Failed to record the payment: '.$th->getMessage());
+        }
+
         // saveQuietly() skips ContributionRecord::prepare()/finalizer(), so
         // the parent BudgetProgram's rollup totals silently went stale on
         // every write through this endpoint. Mirrors the same cascade

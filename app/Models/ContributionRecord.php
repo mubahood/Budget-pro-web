@@ -4,12 +4,13 @@ namespace App\Models;
 
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
+use App\Services\Budget\ContributionPayments;
+use App\Support\Decimal;
 use App\Traits\AuditLogger;
 use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class ContributionRecord extends Model
 {
@@ -35,8 +36,13 @@ class ContributionRecord extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'amount' => 'decimal:2',
+        'paid_amount' => 'decimal:2',
+        'not_paid_amount' => 'decimal:2',
         'date' => 'date',
     ];
+
+    /** A paid figure sent with this save, posted as a payment of the difference after it (prepare → finalizer). */
+    public ?string $pendingPaid = null;
 
     //boot
     protected static function boot()
@@ -125,51 +131,54 @@ class ContributionRecord extends Model
             $data->company_id = $treasurer->company_id;
         }
 
-        $custom_amount = (int) $data->custom_amount;
-        if ($custom_amount > 0) {
-            $data->amount = $custom_amount;
+        // Money is exact decimals (bcmath), never (int)/(float): pledges can carry cents.
+        $custom = $data->custom_amount;
+        if (Decimal::valid($custom) && Decimal::cmp((string) $custom, '0') > 0) {
+            $data->amount = Decimal::of((string) $custom);
         }
-        $custom_paid_amount = (int) $data->custom_paid_amount;
-        if ($custom_paid_amount > 0) {
-            $data->paid_amount = $custom_paid_amount;
+        $data->amount = Decimal::valid($data->amount) ? Decimal::max(Decimal::of((string) $data->amount), '0') : '0.00';
+
+        // paid_amount is the sum of the pledge's payments (contribution_payments) and is never set by hand.
+        // A paid figure sent with the save (older apps, the classic form, custom_paid_amount, or the
+        // "mark as fully paid" shortcut) becomes a payment of the difference once the pledge is saved (finalizer).
+        $paid = $data->exists ? (new ContributionPayments())->sum((int) $data->id) : '0.00';
+        $wanted = null;
+        $customPaid = $data->custom_paid_amount;
+        if (Decimal::valid($customPaid) && Decimal::cmp((string) $customPaid, '0') > 0) {
+            $wanted = Decimal::of((string) $customPaid);
+        } elseif ($data->isDirty('paid_amount') && Decimal::valid($data->paid_amount)) {
+            $wanted = Decimal::of((string) $data->paid_amount);
         }
-
-        // Captured BEFORE the normalization below touches paid_amount
-        // unconditionally (which would otherwise make isDirty() true even
-        // when the caller never sent a real figure at all).
-        $paidAmountExplicitlySet = $data->isDirty('paid_amount');
-
-        // Ensure amount is non-negative
-        $data->amount = max(0, (int) $data->amount);
-
-        // Ensure paid_amount is non-negative and cannot exceed pledged amount
-        $data->paid_amount = max(0, (int) $data->paid_amount);
-        if ($data->paid_amount > $data->amount && $data->amount > 0) {
-            $data->paid_amount = $data->amount;
-        }
-
-        if ($data->fully_paid == 'Yes') {
-            // Only default paid_amount up to the full pledge when THIS save
-            // didn't also carry a real paid_amount/custom_paid_amount — a
-            // "mark as fully paid" shortcut that sends only the flag still
-            // works, but a caller that submits fully_paid=Yes alongside a
-            // genuine (lower) receipt figure no longer has that real figure
-            // silently overwritten to the full pledge amount.
-            if (! $paidAmountExplicitlySet) {
-                $data->paid_amount = $data->amount;
+        if ($wanted !== null) {
+            $wanted = Decimal::max($wanted, '0');
+            if (Decimal::cmp($data->amount, '0') > 0 && Decimal::cmp($wanted, $data->amount) > 0) {
+                // As before, the paid figure of a pledge edit never goes past the pledge, but money already
+                // recorded beyond it (a payment made offline) is never taken back by that limit.
+                $wanted = Decimal::cmp($paid, $data->amount) > 0 ? null : $data->amount;
             }
-            $data->not_paid_amount = max(0, $data->amount - $data->paid_amount);
-        } else {
-            $data->not_paid_amount = $data->amount - $data->paid_amount;
+        } elseif ($data->fully_paid === 'Yes' && $data->isDirty('fully_paid') && Decimal::cmp($data->amount, $paid) > 0) {
+            $wanted = $data->amount; // a "mark as fully paid" shortcut that sends only the flag (it only ever adds)
         }
+        $data->pendingPaid = $wanted;
 
-        if ($data->paid_amount >= $data->amount && $data->amount > 0) {
-            $data->fully_paid = 'Yes';
-        } else {
-            $data->fully_paid = 'No';
-        }
-        if ($data->fully_paid == 'Yes') {
-            $data->not_paid_amount = 0;
+        // Until then the stored figures are what the payments say.
+        $data->paid_amount = $paid;
+        $data->not_paid_amount = Decimal::max(Decimal::sub($data->amount, $paid), '0');
+        $data->fully_paid = Decimal::cmp($data->amount, '0') > 0 && Decimal::cmp($paid, $data->amount) >= 0 ? 'Yes' : 'No';
+
+        // The pledger's phone (optional), in E.164 for reminders.
+        if ($data->isDirty('phone')) {
+            $raw = trim((string) $data->phone);
+            if ($raw === '') {
+                $data->phone = null;
+            } else {
+                $country = \App\Support\Phone::countryFor(\App\Support\Money::symbol((int) $data->company_id));
+                $e164 = \App\Support\Phone::e164($raw, (string) (DB::table('companies')->where('id', $data->company_id)->value('country') ?: $country));
+                if ($e164 === null) {
+                    throw BusinessRuleException::make('invalid_phone', 'Enter a valid phone number, or leave it empty.');
+                }
+                $data->phone = $e164;
+            }
         }
 
         // Track who last modified this record
@@ -188,13 +197,26 @@ class ContributionRecord extends Model
         $sql = "UPDATE $table_name SET custom_paid_amount = NULL, custom_amount = NULL WHERE id = ?";
         DB::update($sql, [$data->id]);
 
-        // Cascade up to parent BudgetProgram to update contribution totals
-        try {
-            if ($data->budget_program_id) {
-                BudgetProgram::recalculateFromChildren((int) $data->budget_program_id);
+        // A paid figure that came with the save is posted as a payment of the difference; then paid_amount is
+        // the sum again, and the event's totals follow (ContributionPayments::recalculate).
+        $wanted = $data->pendingPaid;
+        $data->pendingPaid = null;
+        $payments = new ContributionPayments();
+        $by = $data->chaned_by_id ? (int) $data->chaned_by_id : ($data->treasurer_id ? (int) $data->treasurer_id : null);
+        if ($wanted !== null) {
+            $payments->settleTo((int) $data->company_id, (int) $data->id, $wanted, $by);
+        } else {
+            $payments->recalculateById((int) $data->company_id, (int) $data->id);
+        }
+
+        // The caller's model shows what was stored (paid figures, sync version).
+        $stored = DB::table($table_name)->where('id', $data->id)->first(['paid_amount', 'not_paid_amount', 'fully_paid', 'version', 'server_seq', 'client_updated_at']);
+        if ($stored !== null) {
+            foreach ((array) $stored as $k => $v) {
+                $data->setAttribute($k, $v);
             }
-        } catch (\Throwable $th) {
-            Log::error('ContributionRecord::finalizer cascade to program failed: '.$th->getMessage());
+            $data->custom_paid_amount = null;
+            $data->custom_amount = null;
         }
 
         return $data;
@@ -265,6 +287,12 @@ class ContributionRecord extends Model
     public function company()
     {
         return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    /** The payment history, oldest first (reversals included). */
+    public function payments()
+    {
+        return $this->hasMany(ContributionPayment::class, 'contribution_record_id')->orderBy('id');
     }
 
     /**

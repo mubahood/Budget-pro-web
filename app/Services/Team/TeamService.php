@@ -123,6 +123,7 @@ class TeamService
                 ['role' => $invite->role, 'status' => 'active', 'invited_by_id' => $invite->invited_by_id, 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
             $this->syncAdminRole($user, $invite->role);
             DB::table('invites')->where('id', $invite->id)->update(['status' => 'accepted', 'accepted_user_id' => $user->id, 'accepted_at' => now(), 'updated_at' => now()]);
+            \App\Services\Budget\CommitteeService::claimInvite((int) $invite->id, (int) $user->id); // an event committee place waiting for them
             app(\App\Services\Notifications\Notifier::class)->notify((int) $invite->company_id, 'team', 'New team member', "{$user->name} joined as ".config("permissions.roles.{$invite->role}.label").'.');
 
             return $user;
@@ -166,6 +167,7 @@ class TeamService
                 ['role' => $invite->role, 'status' => 'active', 'invited_by_id' => $invite->invited_by_id, 'joined_at' => now(), 'deactivated_at' => null, 'created_at' => now(), 'updated_at' => now()]);
             $this->syncAdminRole($user, $invite->role);
             DB::table('invites')->where('id', $invite->id)->update(['status' => 'accepted', 'accepted_user_id' => $user->id, 'accepted_at' => now(), 'updated_at' => now()]);
+            \App\Services\Budget\CommitteeService::claimInvite((int) $invite->id, (int) $user->id); // an event committee place waiting for them
             Permissions::flush();
             app(\App\Services\Notifications\Notifier::class)->notify($companyId, 'team', 'New team member', "{$user->name} joined as ".config("permissions.roles.{$invite->role}.label").'.');
 

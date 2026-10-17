@@ -5,7 +5,9 @@ namespace App\Services\Sync;
 use App\Models\BudgetItem;
 use App\Models\BudgetItemCategory;
 use App\Models\BudgetProgram;
+use App\Models\BudgetProgramMember;
 use App\Models\CashMovement;
+use App\Models\ContributionPayment;
 use App\Models\ContributionRecord;
 use App\Models\Customer;
 use App\Models\FinancialCategory;
@@ -139,8 +141,20 @@ class SyncRegistry
             'budget_items' => ['model' => BudgetItem::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'unit_price', 'quantity', 'approved', 'details', 'priority', 'invested_amount'],
                 'user_fields' => ['created_by_id', 'changed_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'], 'category_uuid' => ['model' => BudgetItemCategory::class, 'column' => 'budget_item_category_id']]],
-            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id', 'category_id'],
+            // paid_amount / custom_paid_amount / fully_paid stay writable for older apps: a changed paid figure is posted as a
+            // payment of the difference (ContributionRecord::prepare). Newer apps send contribution_payments ops instead.
+            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id', 'category_id'], self::present('contribution_records', ['phone'])),
                 'user_fields' => ['treasurer_id', 'chaned_by_id'],
+                'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
+            // Pledge payments (roadmap 02 §6): append-only events. Op data: {contribution_uuid, amount, paid_on? (Y-m-d),
+            // method?, receipt_no?, reference?, notes?}; a reversal: {reverses_uuid, reason}. Applied by ContributionPayments
+            // (the op uuid is the payment's uuid and idempotency key); the pledge's new paid figures come down with contribution_records.
+            'contribution_payments' => ['model' => ContributionPayment::class, 'kind' => self::KIND_EVENT, 'handler' => 'contribution_payment',
+                'refs' => ['contribution_uuid' => ['model' => ContributionRecord::class, 'column' => 'contribution_record_id'], 'program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'],
+                    'reverses_uuid' => ['model' => ContributionPayment::class, 'column' => 'reverses_id']]],
+            // An event's committee (master, last write wins; a removal is a tombstone). user_id must be a teammate.
+            'budget_program_members' => ['model' => BudgetProgramMember::class, 'kind' => self::KIND_MASTER, 'fields' => ['user_id', 'role'],
+                'user_fields' => ['user_id', 'added_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
             // Poultry: same wire keys as the v1 endpoints; push semantics live in PoultrySyncable.
             'farm_types' => ['model' => PoultryFarmType::class, 'kind' => self::KIND_REFERENCE],
@@ -190,6 +204,9 @@ class SyncRegistry
             }
             if ($key === 'cash_movements') {
                 return in_array('server_seq', self::columns('cash_movements'), true);
+            }
+            if ($key === 'contribution_payments' || $key === 'budget_program_members') {
+                return self::columns($key) !== []; // the pledges migrations not run yet
             }
 
             return true;

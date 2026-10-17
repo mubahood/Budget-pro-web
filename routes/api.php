@@ -463,6 +463,15 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // A 30-minute signed link to the printable pledge list (routes/web.php data-exports.print).
         Route::post('contribution-records/print-link', [ContributionRecordController::class, 'printLink'])->middleware('throttle:30,1');
         apiCrud('contribution-records', ContributionRecordController::class);
+        // Pledge payments (append-only; a reversal is a new row) and each event's committee (roadmap 02 §6).
+        // Who may write is decided per event in the controllers (App\Services\Budget\BudgetAccess).
+        Route::get('contribution-records/{id}/payments', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'index'])->whereNumber('id');
+        Route::post('contribution-records/{id}/payments', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'store'])->whereNumber('id');
+        Route::post('contribution-payments/{id}/reverse', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'reverse'])->whereNumber('id');
+        Route::get('budget-programs/{id}/members', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'index'])->whereNumber('id');
+        Route::post('budget-programs/{id}/members', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'store'])->whereNumber('id');
+        Route::match(['put', 'patch'], 'budget-programs/{id}/members/{memberId}', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'update'])->whereNumber(['id', 'memberId']);
+        Route::delete('budget-programs/{id}/members/{memberId}', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'destroy'])->whereNumber(['id', 'memberId']);
     });
 
     // The v1 poultry sync is core, like every sync route: a sync is never cut by a module (DECISIONS.md 2026-10-17). Older

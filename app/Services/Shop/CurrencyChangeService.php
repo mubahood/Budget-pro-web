@@ -69,6 +69,7 @@ class CurrencyChangeService
         'budget_item_categories' => ['invested_amount', 'target_amount', 'balance'],
         'budget_programs' => ['budget_total', 'budget_balance', 'total_collected', 'total_in_pledge', 'budget_spent', 'total_expected'],
         'contribution_records' => ['amount', 'not_paid_amount', 'paid_amount'],
+        'contribution_payments' => ['amount'],
         'handover_records' => ['amount'],
         'poultry_batches' => ['cost_per_chick'],
         'poultry_daily_records' => ['egg_unit_price', 'feed_price_per_kg'],
@@ -145,6 +146,12 @@ class CurrencyChangeService
                     }
                 }
                 $this->convertSettings($company, $rate);
+                if (Schema::hasTable('contribution_payments')) {
+                    // Each payment was rounded on its own: a pledge's paid figure is their sum again (roadmap 02 §6).
+                    DB::statement('UPDATE contribution_records r SET r.paid_amount = (SELECT COALESCE(SUM(p.amount), 0) FROM contribution_payments p WHERE p.contribution_record_id = r.id AND p.is_deleted = 0),
+                        r.not_paid_amount = GREATEST(r.amount - (SELECT COALESCE(SUM(p2.amount), 0) FROM contribution_payments p2 WHERE p2.contribution_record_id = r.id AND p2.is_deleted = 0), 0)
+                        WHERE r.company_id = ?', [$company->id]);
+                }
             }
             foreach (self::LABELS as $table) {
                 if (Schema::hasTable($table) && Schema::hasColumn($table, 'currency')) {

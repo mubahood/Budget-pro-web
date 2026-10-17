@@ -148,6 +148,13 @@ class SyncApplier
                     $failed = true;
                     break;
                 }
+                // Pledges, pledge payments and committees are per event (chair, treasurer, secretary…): BudgetAccess.
+                $need = \App\Services\Budget\BudgetAccess::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''));
+                if ($need !== null) {
+                    $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role on this event does not allow this.', 'permission' => $need];
+                    $failed = true;
+                    break;
+                }
                 try {
                     $r = match ($config['kind']) {
                         SyncRegistry::KIND_EVENT => $this->applyEvent($company, $deviceId, $userId, $table, $config, $op, $assigned, $touchedProducts, $stockExceptions),
@@ -268,6 +275,7 @@ class SyncApplier
             'stock_take' => $this->applyStockTake($companyId, $deviceId, $userId, $uuid, $action, $data, $touchedProducts),
             'cash_movement' => $this->applyCashMovement($companyId, $userId, $uuid, $action, $data),
             'supplier_payment' => $this->applySupplierPayment($companyId, $userId, $uuid, $action, $data),
+            'contribution_payment' => $this->applyContributionPayment($companyId, $deviceId, $userId, $uuid, $action, $data, $op),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
     }
@@ -520,6 +528,43 @@ class SyncApplier
         return ['status' => 'applied', 'model' => $row];
     }
 
+    /**
+     * A pledge payment (or its reversal) recorded on the phone: ContributionPayments, idempotent on the op uuid.
+     * Money already received offline is never refused for going past the pledge (allowOverpay).
+     */
+    private function applyContributionPayment(int $companyId, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array $op): array
+    {
+        if ($action !== 'insert' && $action !== 'upsert') {
+            return ['status' => 'rejected', 'code' => 'immutable_event', 'message' => 'A payment cannot be changed. Reverse it and record it again.'];
+        }
+        $existing = \App\Models\ContributionPayment::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', strtolower($uuid))->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $svc = new \App\Services\Budget\ContributionPayments();
+        if (! empty($data['reverses_uuid'])) {
+            $original = \App\Models\ContributionPayment::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', (string) $data['reverses_uuid'])->first();
+            if ($original === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'reverses_uuid'];
+            }
+            $r = $svc->reverse($companyId, (int) $original->id, (string) ($data['reason'] ?? ''), $userId, $uuid, $deviceId);
+
+            return ['status' => 'applied', 'model' => $r['payment']];
+        }
+        $recordId = ! empty($data['contribution_uuid'])
+            ? \App\Models\ContributionRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', (string) $data['contribution_uuid'])->value('id') : null;
+        if ($recordId === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'contribution_uuid'];
+        }
+        $r = $svc->record($companyId, (int) $recordId, [
+            'uuid' => $uuid, 'amount' => isset($data['amount']) ? (string) $data['amount'] : null, 'paid_on' => $data['paid_on'] ?? null, 'method' => $data['method'] ?? null,
+            'receipt_no' => $data['receipt_no'] ?? null, 'reference' => $data['reference'] ?? null, 'notes' => $data['notes'] ?? null,
+            'device_id' => $deviceId, 'client_created_at' => isset($op['client_created_at']) ? (int) $op['client_created_at'] : null,
+        ], $userId, true);
+
+        return ['status' => 'applied', 'model' => $r['payment']];
+    }
+
     private function applyMovement(Company $company, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array &$touchedProducts, array &$stockExceptions): array
     {
         $companyId = (int) $company->id;
@@ -714,7 +759,8 @@ class SyncApplier
             'stock_takes' => 'stock_take',
             'categories', 'sub_categories', 'products', 'units', 'product_barcodes' => 'manage_products',
             'financial_periods', 'financial_categories', 'financial_records' => 'manage_finance',
-            'budget_programs', 'budget_item_categories', 'budget_items', 'contribution_records' => 'manage_budget',
+            'budget_programs', 'budget_item_categories', 'budget_items' => 'manage_budget',
+            // contribution_records, contribution_payments, budget_program_members: per event (BudgetAccess::refuseSyncOp).
             default => null, // poultry: farm roles live in the poultry module
         };
     }

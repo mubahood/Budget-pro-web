@@ -698,6 +698,14 @@ class MobileApiController extends BaseController
             ->where('id', $object->id)
             ->update(['custom_paid_amount' => null, 'custom_amount' => null]);
 
+        // paid_amount is the sum of the pledge's payments (roadmap 02 §6): the figure sent is posted as a payment
+        // of the difference, then paid_amount, not_paid_amount and fully_paid are recalculated from the history.
+        try {
+            (new \App\Services\Budget\ContributionPayments())->settleTo((int) $u->company_id, (int) $object->id, \App\Support\Decimal::of((string) $paidAmount), (int) $u->id);
+        } catch (\Throwable $th) {
+            Utils::error('Failed to record the payment: '.$th->getMessage());
+        }
+
         try {
             BudgetProgram::recalculateFromChildren((int) $programId);
         } catch (\Throwable $th) {

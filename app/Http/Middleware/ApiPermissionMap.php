@@ -51,7 +51,12 @@ class ApiPermissionMap
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(stock-items|stock-categories|stock-sub-categories|units|product-barcodes)(/\d+)?$#', 'manage_products'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(financial-records|financial-categories|financial-periods)(/\d+)?$#', 'manage_finance'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^financial-reports(/\d+)?$#', 'view_reports'],
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(budget-programs|budget-item-categories|budget-items|contribution-records)(/\d+)?$#', 'manage_budget'],
+        // Pledges, pledge payments and committees: per event (chair, treasurer, secretary…), checked in the
+        // controllers by App\Services\Budget\BudgetAccess; the owner and manage_budget keep full access.
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^contribution-records(/\d+(/payments)?)?$#', null],
+        [['POST'], '#^contribution-payments/\d+/reverse$#', null],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^budget-programs/\d+/members(/\d+)?$#', null],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(budget-programs|budget-item-categories|budget-items)(/\d+)?$#', 'manage_budget'],
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],
         [['GET'], '#^subscription/payments/\d+$#', 'billing'],

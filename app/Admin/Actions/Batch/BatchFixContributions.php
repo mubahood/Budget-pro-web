@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Batch Fix Contribution Records
  *
- * Recalculates paid_amount, not_paid_amount, and fully_paid for each
+ * Recalculates paid_amount (the sum of the payments), not_paid_amount, and fully_paid for each
  * selected ContributionRecord, then cascades the totals up to the
  * parent BudgetProgram. Processes record-by-record with individual
  * transactions to avoid deadlocks. Maximum 50 records per batch.
@@ -49,35 +49,10 @@ class BatchFixContributions extends BatchAction
                     continue;
                 }
 
-                $amount = (float) $record->amount;
-                $paidAmount = (float) $record->paid_amount;
-
-                // Sanitize: paid cannot exceed pledged
-                if ($paidAmount > $amount && $amount > 0) {
-                    $paidAmount = $amount;
-                }
-                if ($paidAmount < 0) {
-                    $paidAmount = 0;
-                }
-
-                $notPaidAmount = $amount - $paidAmount;
-                $fullyPaid = $notPaidAmount <= 0 ? 'Yes' : 'No';
-
-                if ($fullyPaid === 'Yes') {
-                    $notPaidAmount = 0;
-                    $paidAmount = $amount;
-                }
-
-                DB::table('contribution_records')
-                    ->where('id', $record->id)
-                    ->update([
-                        'paid_amount' => $paidAmount,
-                        'not_paid_amount' => $notPaidAmount,
-                        'fully_paid' => $fullyPaid,
-                        'custom_amount' => null,  // Clear transient fields
-                        'custom_paid_amount' => null,
-                        'updated_at' => now(),
-                    ]);
+                // paid_amount is the sum of the pledge's payments (roadmap 02 §6): recalculated from the history,
+                // never edited by hand; not_paid_amount and fully_paid follow from it.
+                (new \App\Services\Budget\ContributionPayments())->recalculateById((int) $record->company_id, (int) $record->id);
+                DB::table('contribution_records')->where('id', $record->id)->update(['custom_amount' => null, 'custom_paid_amount' => null]); // transient fields
 
                 if ($record->budget_program_id) {
                     $affectedProgramIds[$record->budget_program_id] = true;
