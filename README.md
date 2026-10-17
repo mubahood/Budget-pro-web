@@ -203,3 +203,7 @@ Commercial license. See `LICENSE.txt` for terms.
 **Thank you for choosing Budget Pro!** 🎉
 
 *Budget Pro - Streamline Your Inventory, Boost Your Profits, Manage with Confidence*
+
+## Test results (fresh run, 17 Oct 2026, end of Phase 0):
+
+Kernel: 856 tests, 12,958 assertions, all passing. PHPStan: no errors (baseline of 43 older errors in phpstan-baseline.neon). Pint: clean.
