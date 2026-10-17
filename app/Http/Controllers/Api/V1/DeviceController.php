@@ -49,11 +49,27 @@ class DeviceController extends Controller
         return $this->success([
             'device_id' => $device->device_id,
             'number_prefix' => $device->number_prefix,
+            // The highest receipt number this phone already sent: a phone whose counter started again continues after it.
+            'number_floors' => ['receipt' => self::lastReceiptNumber((int) $company->id, $device->device_id)],
             'name' => $device->name,
             'server_time' => SyncSequence::nowMs(),
             'server_seq' => SyncSequence::current(),
             'entitlements' => Entitlements::for($company),
         ], 'Device registered.');
+    }
+
+    private static function lastReceiptNumber(int $companyId, string $deviceId): int
+    {
+        $max = 0;
+        \App\Models\SaleRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('device_id', $deviceId)
+            ->where('provisional_number', 'like', 'RCP-%')->pluck('provisional_number')
+            ->each(function ($n) use (&$max) {
+                if (preg_match('/^RCP-[A-Z0-9]+-(\d+)/', (string) $n, $m)) {
+                    $max = max($max, (int) $m[1]);
+                }
+            });
+
+        return $max;
     }
 
     public function index(Request $request)

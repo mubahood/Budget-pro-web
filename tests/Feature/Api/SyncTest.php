@@ -107,6 +107,22 @@ class SyncTest extends ApiTestCase
         $this->assertSame(1, SyncBatch::where('company_id', $t['company_id'])->count());
     }
 
+    public function test_a_receipt_number_the_phone_already_used_is_kept_apart_and_registration_continues_after_it(): void
+    {
+        $t = $this->tenant();
+        $p = $this->product($t, 10);
+        $first = $this->saleBatch($p, 1, ['provisional_number' => 'RCP-D1-000007']);
+        $again = $this->saleBatch($p, 1, ['provisional_number' => 'RCP-D1-000007']); // the counter started again on the phone
+
+        $this->postJson('/api/v1/sync/push', ['batches' => [$first]], $t['h'])->assertOk()->assertJsonPath('data.results.0.status', 'applied');
+        $this->postJson('/api/v1/sync/push', ['batches' => [$again]], $t['h'])->assertOk()->assertJsonPath('data.results.0.status', 'applied');
+        $this->assertSame('RCP-D1-000007-2', SaleRecord::withoutGlobalScopes()->where('uuid', $again['ops'][0]['uuid'])->value('provisional_number'));
+        $this->postJson('/api/v1/sync/push', ['batches' => [$again]], $t['h'])->assertOk()->assertJsonPath('data.results.0.replayed', true);
+
+        $this->postJson('/api/v1/devices/register', ['device_id' => $t['device']], $this->auth($t['token']))->assertOk()
+            ->assertJsonPath('data.number_floors.receipt', 7);
+    }
+
     public function test_one_bad_op_rolls_back_the_whole_batch(): void
     {
         $t = $this->tenant();

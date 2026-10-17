@@ -120,6 +120,31 @@ class SyncApplier
             'message' => $unique ? 'This record clashed with one saved at the same moment. It will be sent again.' : 'The server could not save this batch just now. It will be sent again.'];
     }
 
+    /**
+     * The phone's receipt number, or the same number with "-2", "-3"… when this phone already used it for another
+     * sale. That happens when the phone's counter starts again (app data cleared, a new demo session), and the
+     * unique key (company, device, provisional number) would otherwise refuse the sale on every round.
+     */
+    public static function unusedProvisional(int $companyId, ?string $deviceId, string $saleUuid, ?string $number): ?string
+    {
+        if ($number === null || $number === '' || $deviceId === null) {
+            return $number;
+        }
+        $taken = fn (string $n) => \App\Models\SaleRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('device_id', $deviceId)
+            ->where('provisional_number', $n)->where('client_uuid', '!=', $saleUuid)->exists();
+        if (! $taken($number)) {
+            return $number;
+        }
+        for ($i = 2; $i < 100; $i++) {
+            $candidate = mb_substr($number, 0, 36).'-'.$i;
+            if (! $taken($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null; // the server's own receipt number still identifies the sale
+    }
+
     private function applyInTransaction(Company $company, int $companyId, ?string $deviceId, int $userId, array $batch, string $batchUuid): array
     {
         $result = DB::transaction(function () use ($company, $companyId, $deviceId, $userId, $batch, $batchUuid) {
@@ -377,7 +402,7 @@ class SyncApplier
             'payment_method' => $data['payment_method'] ?? 'cash',
             'sale_date' => isset($data['occurred_at']) ? \App\Support\LocalDate::fromMs($companyId, (int) $data['occurred_at']) : null, // shop's local day
             'notes' => $data['notes'] ?? null,
-            'provisional_number' => $data['provisional_number'] ?? null,
+            'provisional_number' => self::unusedProvisional($companyId, $deviceId, $uuid, $data['provisional_number'] ?? null),
             'device_id' => $deviceId,
             'customer_id' => $customerId,
             'shift_id' => $shiftId,
