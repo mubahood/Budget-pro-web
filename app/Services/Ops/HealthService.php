@@ -2,14 +2,19 @@
 
 namespace App\Services\Ops;
 
+use App\Support\ConfigDoctor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
-/** Platform health at a glance (plan Part D observability): errors, queue, scheduler, sync, backups. */
+/** Platform health at a glance (plan Part D observability): errors, queue, scheduler, sync, backups, configuration. */
 class HealthService
 {
     public function snapshot(): array
     {
+        // The same list as `php artisan config:doctor` (failures first): what would quietly switch mail,
+        // messages, payments or the queue off on this server.
+        $config = ConfigDoctor::sorted((new ConfigDoctor(ConfigDoctor::KERNEL))->checks());
+
         $since = now()->subDay();
         $oldestJob = DB::table('jobs')->min('created_at');
         $heartbeat = Cache::get('heartbeat:saas_hourly');
@@ -32,6 +37,11 @@ class HealthService
             'last_backup_ok' => DB::table('backup_runs')->where('kind', 'backup')->where('status', 'ok')->max('created_at'),
             'legacy' => \App\Console\Commands\LegacyStatus::status(),
             'tenants' => ['companies' => DB::table('companies')->count(), 'deletions_scheduled' => DB::table('data_requests')->where('kind', 'delete')->where('status', 'scheduled')->count()],
+            'config' => [
+                'checks' => $config,
+                'overall' => ConfigDoctor::overall($config),
+                'counts' => array_count_values(array_column($config, 'status')) + [ConfigDoctor::FAIL => 0, ConfigDoctor::WARN => 0, ConfigDoctor::OK => 0],
+            ],
         ];
     }
 }

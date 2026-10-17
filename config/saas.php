@@ -19,6 +19,16 @@ return [
     // value in budget-pro's and budget-pro-new's .env. Empty = each app's own APP_KEY.
     'data_key' => (string) env('SAAS_DATA_KEY', ''),
 
+    // True while a plaintext MASTER_PASSWORD is still in .env, so config:doctor can flag it (App\Support\ConfigDoctor).
+    // Read here because env() returns nothing outside config files once the config is cached.
+    'master_password_plaintext_set' => trim((string) env('MASTER_PASSWORD', '')) !== '',
+
+    // config:doctor failures the owner has decided to live with for now: comma-separated check keys (e.g. "sms,whatsapp").
+    // Each still shows, as a warning marked "accepted by the owner", in config:doctor, shop:check and System health.
+    // Never accepted: app_debug, data_key, queue_sync, flutterwave_test_mode, master_password_plaintext, edition.
+    // Each app reads its own .env (budget-pro-new loads this file too), so each has its own list.
+    'config_doctor_accept' => array_values(array_filter(array_map('trim', explode(',', strtolower((string) env('CONFIG_DOCTOR_ACCEPT', '')))))),
+
     // Where team invite links (/invite/…) open. Empty = public_url (the classic invite page).
     'invite_url' => env('SAAS_INVITE_URL', ''),
 
@@ -42,11 +52,12 @@ return [
     */
     'grace_days' => env('SAAS_GRACE_DAYS', 7),
 
-    // Outbound email (notifications) — off until a mailer is configured on the host.
     // Decision H2: a trial or lapsed paid plan falls back to the public Free plan instead of a lockout.
     'free_tier_fallback' => (bool) env('SAAS_FREE_TIER_FALLBACK', true),
     'free_plan' => env('SAAS_FREE_PLAN', 'free'),
 
+    // Outbound notification email (Utils::mail_sender): off until a mailer is configured on the host.
+    // config:doctor fails a production deploy on the SaaS while it is off.
     'mail_enabled' => (bool) env('SAAS_MAIL_ENABLED', false),
 
     // Timezone used when formatting dates for people (per-company timezones arrive in Phase 1).

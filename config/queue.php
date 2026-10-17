@@ -11,9 +11,14 @@ return [
     | API, giving you convenient access to each back-end using the same
     | syntax for every one. Here you may define a default connection.
     |
+    | Budget Pro: the database queue (ADR 0008). The scheduler drains it every minute (queue:work
+    | --stop-when-empty in app/Console/Kernel.php), also for the jobs budget-pro-new puts in the same
+    | `jobs` table. With `sync` that worker drains nothing, so config:doctor fails a production deploy
+    | on it. Tests set sync in phpunit.xml.
+    |
     */
 
-    'default' => env('QUEUE_CONNECTION', 'sync'),
+    'default' => env('QUEUE_CONNECTION', 'database'),
 
     /*
     |--------------------------------------------------------------------------

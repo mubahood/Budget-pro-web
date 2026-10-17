@@ -5,6 +5,51 @@
     <div class="col-md-3"><div class="info-box"><span class="info-box-icon bg-{{ $h['sync']['open_conflicts'] > 0 ? 'yellow' : 'green' }}"><i class="fa fa-refresh"></i></span><div class="info-box-content"><span class="info-box-text">Sync (24 h)</span><span class="info-box-number" style="font-size:13px">@foreach($h['sync']['batches_24h'] as $s => $n){{ $s }} {{ $n }} @endforeach · {{ $h['sync']['open_conflicts'] }} conflicts</span></div></div></div>
     <div class="col-md-3"><div class="info-box"><span class="info-box-icon bg-{{ $h['last_backup_ok'] && now()->diffInHours($h['last_backup_ok']) < 30 ? 'green' : 'red' }}"><i class="fa fa-database"></i></span><div class="info-box-content"><span class="info-box-text">Last good backup</span><span class="info-box-number" style="font-size:13px">{{ $h['last_backup_ok'] ?? 'none' }}</span></div></div></div>
 </div>
+@php
+    $cfg = $h['config'];
+    $cfgLabel = ['fail' => ['label-danger', 'Fix'], 'warn' => ['label-warning', 'Check'], 'ok' => ['label-success', 'OK']];
+    $cfgOpen = array_values(array_filter($cfg['checks'], fn ($c) => $c['status'] !== 'ok'));
+    $cfgFine = array_values(array_filter($cfg['checks'], fn ($c) => $c['status'] === 'ok'));
+@endphp
+<div class="row">
+    <div class="col-md-12">
+        <div class="box box-{{ ['fail' => 'danger', 'warn' => 'warning'][$cfg['overall']] ?? 'success' }}" id="configuration">
+            <div class="box-header with-border">
+                <h3 class="box-title">Configuration</h3>
+                <div class="box-tools" style="position:static;display:inline-block;margin-left:8px">
+                    <span class="label label-{{ $cfg['counts']['fail'] > 0 ? 'danger' : 'default' }}">{{ $cfg['counts']['fail'] }} to fix</span>
+                    <span class="label label-{{ $cfg['counts']['warn'] > 0 ? 'warning' : 'default' }}">{{ $cfg['counts']['warn'] }} to check</span>
+                    <span class="label label-success">{{ $cfg['counts']['ok'] }} fine</span>
+                </div>
+            </div>
+            <div class="box-body no-padding">
+                <table class="table table-condensed" style="margin:0;table-layout:fixed;width:100%">
+                    @forelse($cfgOpen as $c)
+                        <tr>
+                            <td style="width:76px"><span class="label {{ $cfgLabel[$c['status']][0] }}">{{ $c['accepted'] ? 'Accepted' : $cfgLabel[$c['status']][1] }}</span></td>
+                            <td style="overflow-wrap:anywhere"><code>{{ $c['key'] }}</code> {{ $c['message'] }}
+                                @if($c['accepted'])<br><small><strong>Accepted by the owner</strong> (CONFIG_DOCTOR_ACCEPT), so it does not stop a deploy.</small>@endif
+                                @if($c['fix'] !== '')<br><small class="text-muted">Fix: {{ $c['fix'] }}</small>@endif</td>
+                        </tr>
+                    @empty
+                        <tr><td class="text-muted">Every setting is right for this server.</td></tr>
+                    @endforelse
+                </table>
+                @if($cfgFine !== [])
+                    <details style="padding:8px 10px">
+                        <summary style="cursor:pointer;display:list-item">{{ count($cfgFine) }} {{ count($cfgFine) === 1 ? 'setting is' : 'settings are' }} fine</summary>
+                        <table class="table table-condensed" style="margin:6px 0 0;table-layout:fixed;width:100%">
+                            @foreach($cfgFine as $c)
+                                <tr><td style="width:76px"><span class="label label-success">OK</span></td><td style="overflow-wrap:anywhere"><code>{{ $c['key'] }}</code> {{ $c['message'] }}</td></tr>
+                            @endforeach
+                        </table>
+                    </details>
+                @endif
+            </div>
+            <div class="box-footer"><small class="text-muted">The same list as <code>php artisan config:doctor</code>. In production a failure stops the deploy; on other servers every problem is only a warning. The owner can accept a failure for now with CONFIG_DOCTOR_ACCEPT in .env, except {{ implode(', ', \App\Support\ConfigDoctor::NEVER_ACCEPTED) }}.</small></div>
+        </div>
+    </div>
+</div>
 <div class="row">
     <div class="col-md-8">
         <div class="box"><div class="box-header"><h3 class="box-title">Unresolved errors</h3></div><div class="box-body no-padding"><table class="table table-condensed">
