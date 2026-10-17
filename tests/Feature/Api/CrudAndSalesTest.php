@@ -96,7 +96,7 @@ class CrudAndSalesTest extends ApiTestCase
 
         $this->postJson('/api/v1/budget-items', [
             'name' => 'Hall', 'budget_item_category_id' => $cat, 'unit_price' => 100000, 'quantity' => 2,
-        ], $h)->assertStatus(201)->assertJsonPath('data.target_amount', 200000);
+        ], $h)->assertStatus(201)->assertJsonPath('data.target_amount', '200000.00'); // decimal money (exact to the cent)
     }
 
     public function test_dashboard_returns_summary(): void
