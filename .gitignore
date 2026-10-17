@@ -29,3 +29,6 @@ deploy_key*
 # static-analysis toolchain (installed with: composer install -d tools/phpstan)
 /tools/phpstan/vendor/
 /tools/phpstan/composer.lock
+
+# Live account lists hold personal data: never in a repo or a web folder (kept in ~/BudgetPro-private/).
+LIVE_ACCOUNTS*
