@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
+use App\Support\Decimal;
 use App\Traits\AuditLogger;
 use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -91,15 +92,15 @@ class BudgetItemCategory extends Model
     //update self
     public function updateSelf()
     {
-        $target_amount = BudgetItem::where('budget_item_category_id', $this->id)->sum('target_amount');
-        $invested_amount = BudgetItem::where('budget_item_category_id', $this->id)->sum('invested_amount');
-        $balance = $target_amount - $invested_amount;
-        $percentage_done = 0;
-        if ($target_amount > 0) {
-            $percentage_done = round(($invested_amount / $target_amount) * 100, 2);
-        }
+        // Exact sums (bcmath on the DECIMAL strings), straight from the table so the scope of the caller does not matter.
+        $sums = DB::table('budget_items')->where('budget_item_category_id', $this->id)->where('is_deleted', 0)
+            ->selectRaw('COALESCE(SUM(target_amount), 0) AS t, COALESCE(SUM(invested_amount), 0) AS i')->first();
+        $target_amount = Decimal::of((string) ($sums->t ?? 0));
+        $invested_amount = Decimal::of((string) ($sums->i ?? 0));
+        $balance = Decimal::sub($target_amount, $invested_amount);
+        $percentage_done = Decimal::percent($invested_amount, $target_amount);
 
-        $is_complete = ($percentage_done >= 98 || $balance <= 0) ? 'Yes' : 'No';
+        $is_complete = (Decimal::cmp($percentage_done, '98') >= 0 || Decimal::cmp($balance, '0') <= 0) ? 'Yes' : 'No';
 
         DB::table((new self())->getTable())
             ->where('id', $this->id)
@@ -127,14 +128,11 @@ class BudgetItemCategory extends Model
         // Was clamped to 100 here, which hid genuinely over-budget categories
         // (invested_amount > target_amount is a real, useful signal for a
         // budget tracker to surface, not something to mask as "100% done").
-        if ($percentage_done !== null && $percentage_done > 0) {
-            return round((float) $percentage_done, 2);
-        }
-        if ($this->target_amount == 0) {
-            return 0;
+        if (Decimal::valid($percentage_done) && Decimal::cmp((string) $percentage_done, '0') > 0) {
+            return Decimal::of((string) $percentage_done);
         }
 
-        return round(($this->invested_amount / $this->target_amount) * 100, 2);
+        return Decimal::percent(Decimal::valid($this->invested_amount) ? (string) $this->invested_amount : '0', Decimal::valid($this->target_amount) ? (string) $this->target_amount : '0');
     }
 
     public function get_items()

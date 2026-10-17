@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Exceptions\BusinessRuleException;
 use App\Jobs\SendBudgetItemNotification;
 use App\Scopes\CompanyScope;
+use App\Support\Decimal;
 use App\Traits\AuditLogger;
 use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -38,6 +39,10 @@ class BudgetItem extends Model
         'amount' => 'decimal:2',
         'paid' => 'decimal:2',
         'balance' => 'decimal:2',
+        'target_amount' => 'decimal:2',
+        'invested_amount' => 'decimal:2',
+        'unit_price' => 'decimal:2',
+        'quantity' => 'decimal:3',
         'date' => 'date',
     ];
 
@@ -97,7 +102,10 @@ class BudgetItem extends Model
     //public static function prepare
     public static function prepare($data)
     {
-        $data->target_amount = $data->unit_price * $data->quantity;
+        // Exact: unit price × quantity in bcmath (DECIMAL(20,2) × DECIMAL(15,3)), never floats.
+        $data->unit_price = Decimal::valid($data->unit_price) ? Decimal::of((string) $data->unit_price) : '0.00';
+        $data->quantity = Decimal::valid($data->quantity) ? Decimal::of((string) $data->quantity, 3) : '0.000';
+        $data->target_amount = Decimal::mul($data->unit_price, $data->quantity);
 
         // Use auth user first for company_id (most reliable), fallback to created_by_id
         $loggedUser = null;
@@ -139,21 +147,11 @@ class BudgetItem extends Model
     //public static function finalizer
     public static function finalizer($data)
     {
-        $balance = $data->target_amount - $data->invested_amount;
-        $is_complete = 'No';
-        $percentage_done = 0;
-
-        if ($data->target_amount == 0) {
-            $percentage_done = 0;
-        } else {
-            $percentage_done = round(($data->invested_amount / $data->target_amount) * 100, 2);
-        }
-
-        if ($percentage_done >= 98) {
-            $is_complete = 'Yes';
-        } else {
-            $is_complete = 'No';
-        }
+        $target = Decimal::valid($data->target_amount) ? (string) $data->target_amount : '0';
+        $invested = Decimal::valid($data->invested_amount) ? (string) $data->invested_amount : '0';
+        $balance = Decimal::sub($target, $invested);
+        $percentage_done = Decimal::percent($invested, $target);
+        $is_complete = Decimal::cmp($percentage_done, '98') >= 0 ? 'Yes' : 'No';
 
         DB::table((new self())->getTable())
             ->where('id', $data->id)

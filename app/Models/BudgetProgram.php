@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
+use App\Support\Decimal;
 use App\Traits\AuditLogger;
 use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,6 +38,12 @@ class BudgetProgram extends Model
         'budget' => 'decimal:2',
         'spent' => 'decimal:2',
         'balance' => 'decimal:2',
+        'budget_total' => 'decimal:2',
+        'budget_spent' => 'decimal:2',
+        'budget_balance' => 'decimal:2',
+        'total_expected' => 'decimal:2',
+        'total_collected' => 'decimal:2',
+        'total_in_pledge' => 'decimal:2',
         'start_date' => 'date',
         'end_date' => 'date',
     ];
@@ -131,9 +138,9 @@ class BudgetProgram extends Model
         }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->get();
-        $total = 0;
+        $total = '0.00';
         foreach ($cats as $cat) {
-            $total += $cat->invested_amount;
+            $total = Decimal::add($total, (string) ($cat->getRawOriginal('invested_amount') ?? 0));
         }
 
         return $total;
@@ -148,9 +155,9 @@ class BudgetProgram extends Model
         }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->get();
-        $total = 0;
+        $total = '0.00';
         foreach ($cats as $cat) {
-            $total += $cat->target_amount;
+            $total = Decimal::add($total, (string) ($cat->getRawOriginal('target_amount') ?? 0));
         }
 
         return $total;
@@ -165,9 +172,9 @@ class BudgetProgram extends Model
         }
         $cats = BudgetItemCategory::where('budget_program_id', $this->id)
             ->get();
-        $total = 0;
+        $total = '0.00';
         foreach ($cats as $cat) {
-            $total += $cat->balance;
+            $total = Decimal::add($total, (string) ($cat->getRawOriginal('balance') ?? 0));
         }
 
         return $total;
@@ -201,18 +208,19 @@ budget_total
                 ->selectRaw('COALESCE(SUM(amount), 0) as total_expected, COALESCE(SUM(paid_amount), 0) as total_collected, COALESCE(SUM(not_paid_amount), 0) as total_in_pledge')
                 ->first();
 
-            $budgetTotal = (float) ($budgetAggregates->budget_total ?? 0);
-            $budgetSpent = (float) ($budgetAggregates->budget_spent ?? 0);
+            // Exact decimals (bcmath): the SUMs of DECIMAL columns come back as strings and stay strings.
+            $budgetTotal = Decimal::of((string) ($budgetAggregates->budget_total ?? 0));
+            $budgetSpent = Decimal::of((string) ($budgetAggregates->budget_spent ?? 0));
 
             DB::table('budget_programs')
                 ->where('id', $programId)
                 ->update([
                     'budget_total' => $budgetTotal,
                     'budget_spent' => $budgetSpent,
-                    'budget_balance' => $budgetTotal - $budgetSpent,
-                    'total_expected' => (float) ($contributionAggregates->total_expected ?? 0),
-                    'total_collected' => (float) ($contributionAggregates->total_collected ?? 0),
-                    'total_in_pledge' => (float) ($contributionAggregates->total_in_pledge ?? 0),
+                    'budget_balance' => Decimal::sub($budgetTotal, $budgetSpent),
+                    'total_expected' => Decimal::of((string) ($contributionAggregates->total_expected ?? 0)),
+                    'total_collected' => Decimal::of((string) ($contributionAggregates->total_collected ?? 0)),
+                    'total_in_pledge' => Decimal::of((string) ($contributionAggregates->total_in_pledge ?? 0)),
                     'updated_at' => now(),
                 ]);
         } catch (\Throwable $th) {
@@ -248,6 +256,17 @@ budget_total
     public function contributionRecords()
     {
         return $this->hasMany(ContributionRecord::class, 'budget_program_id');
+    }
+
+    /** The event's committee (roadmap 02 §6). */
+    public function members()
+    {
+        return $this->hasMany(BudgetProgramMember::class, 'budget_program_id');
+    }
+
+    public function contributionPayments()
+    {
+        return $this->hasMany(ContributionPayment::class, 'budget_program_id');
     }
 
     public function financialPeriod()
