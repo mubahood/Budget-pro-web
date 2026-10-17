@@ -1,5 +1,7 @@
 includes:
     - tools/phpstan/vendor/larastan/larastan/extension.neon
+    # Errors that predate Phase 0 (17 Oct 2026), so CI fails only on new ones. Work this list down; never add to it by hand.
+    - phpstan-baseline.neon
 
 parameters:
     level: 5

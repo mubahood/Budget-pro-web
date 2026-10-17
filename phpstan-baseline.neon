@@ -1,0 +1,211 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Parameter \\#2 \\$others of method App\\\\Services\\\\Chat\\\\ChatService\\:\\:typers\\(\\) expects Illuminate\\\\Support\\\\Collection\\<int, object\\{id\\: int, name\\: string\\}\\>, Illuminate\\\\Support\\\\Collection\\<int, object\\{id\\: int, name\\: string, avatar\\: string\\|null, last_active_at\\: string\\|null, online\\: bool, last_read_message_id\\: int\\}\\> given\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/ChatController.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\Shift\\|Illuminate\\\\Database\\\\Eloquent\\\\Collection\\<int, App\\\\Models\\\\Shift\\>\\:\\:\\$uuid\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/SupermarketController.php
+
+		-
+			message: "#^Parameter \\#2 \\$default of method Illuminate\\\\Http\\\\Request\\:\\:query\\(\\) expects array\\|string\\|null, int given\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/SupermarketController.php
+
+		-
+			message: "#^Offset 'snapshot' on array\\{table\\: string, rows\\: array, next_seq\\: int, has_more\\: bool\\} in empty\\(\\) does not exist\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/SyncController.php
+
+		-
+			message: "#^Offset 'unchanged' on array\\{table\\: string, rows\\: array, next_seq\\: int, has_more\\: bool\\} in empty\\(\\) does not exist\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/SyncController.php
+
+		-
+			message: "#^Result of && is always true\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/SyncController.php
+
+		-
+			message: "#^Offset 0 on array\\{'Supervisor PIN for…', 'A5'\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Http/Controllers/Api/V1/TeamController.php
+
+		-
+			message: "#^Parameter \\#2 \\$default of method Illuminate\\\\Http\\\\Request\\:\\:server\\(\\) expects array\\|string\\|null, int given\\.$#"
+			count: 1
+			path: app/Http/Middleware/IdempotentRequests.php
+
+		-
+			message: "#^Method App\\\\Services\\\\Chat\\\\ChatService\\:\\:others\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, object\\{id\\: int, name\\: string, avatar\\: string\\|null, last_active_at\\: string\\|null, online\\: bool, last_read_message_id\\: int\\}\\> but returns Illuminate\\\\Support\\\\Collection\\<int, object\\{id\\: int, name\\: string, avatar\\: mixed, last_active_at\\: mixed, online\\: bool, last_read_message_id\\: int\\}&stdClass\\>\\.$#"
+			count: 1
+			path: app/Services/Chat/ChatService.php
+
+		-
+			message: "#^Method App\\\\Services\\\\Fiscal\\\\FiscalService\\:\\:recent\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, object\\> but returns Illuminate\\\\Support\\\\Collection\\<int, stdClass\\>\\.$#"
+			count: 1
+			path: app/Services/Fiscal/FiscalService.php
+
+		-
+			message: "#^Offset 'customer' on array\\{customer\\: string, domains\\: array\\<int, string\\>, updates_until\\: DateTimeInterface\\|string, limits\\?\\: array\\<string, int\\|null\\>, white_label\\?\\: bool, id\\?\\: string\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/Licensing/Signer.php
+
+		-
+			message: "#^Offset 'domains' on array\\{customer\\: string, domains\\: array\\<int, string\\>, updates_until\\: DateTimeInterface\\|string, limits\\?\\: array\\<string, int\\|null\\>, white_label\\?\\: bool, id\\?\\: string\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/Licensing/Signer.php
+
+		-
+			message: "#^Offset 'updates_until' on array\\{customer\\: string, domains\\: array\\<int, string\\>, updates_until\\: DateTimeInterface\\|string, limits\\?\\: array\\<string, int\\|null\\>, white_label\\?\\: bool, id\\?\\: string\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/Licensing/Signer.php
+
+		-
+			message: "#^Cannot access property \\$status on array\\|object\\.$#"
+			count: 1
+			path: app/Services/Messaging/ConnectionTest.php
+
+		-
+			message: "#^Variable \\$template might not be defined\\.$#"
+			count: 1
+			path: app/Services/Messaging/ConnectionTest.php
+
+		-
+			message: "#^Parameter \\#1 \\$key of method Illuminate\\\\Support\\\\Collection\\<int,array\\<int, int\\|string\\>\\>\\:\\:firstWhere\\(\\) expects \\(callable\\(\\)\\: mixed\\)\\|string, 0 given\\.$#"
+			count: 1
+			path: app/Services/Onboarding/FamilyDemoBuilder.php
+
+		-
+			message: "#^Offset 'category_id' on array\\{id\\: int, name\\: string, sell\\: float, cost\\: float, target\\: float, reorder\\: float, weighed\\: bool, life\\: int\\|null, \\.\\.\\.\\} on left side of \\?\\? does not exist\\.$#"
+			count: 2
+			path: app/Services/Onboarding/PublicDemoBuilder.php
+
+		-
+			message: "#^Property App\\\\Models\\\\FinancialPeriod\\:\\:\\$end_date \\(Illuminate\\\\Support\\\\Carbon\\) does not accept string\\.$#"
+			count: 1
+			path: app/Services/Onboarding/PublicDemoBuilder.php
+
+		-
+			message: "#^Property App\\\\Models\\\\FinancialPeriod\\:\\:\\$start_date \\(Illuminate\\\\Support\\\\Carbon\\) does not accept string\\.$#"
+			count: 1
+			path: app/Services/Onboarding/PublicDemoBuilder.php
+
+		-
+			message: "#^Offset 'kernel'\\|'web' on array\\{kernel\\: string, web\\: string\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/Releases/StandaloneArchive.php
+
+		-
+			message: "#^Match expression does not handle remaining value\\: string$#"
+			count: 1
+			path: app/Services/Reports/ListExports.php
+
+		-
+			message: "#^Match expression does not handle remaining value\\: mixed$#"
+			count: 1
+			path: app/Services/Shop/PromotionService.php
+
+		-
+			message: "#^Offset 'location_id' does not exist on array\\{customer_id\\?\\: int\\|null, coupon\\?\\: string\\|null\\}\\.$#"
+			count: 1
+			path: app/Services/Shop/PromotionService.php
+
+		-
+			message: "#^Offset 'location_id' on array\\{customer_id\\?\\: int\\|null, coupon\\?\\: string\\|null\\} in empty\\(\\) does not exist\\.$#"
+			count: 1
+			path: app/Services/Shop/PromotionService.php
+
+		-
+			message: "#^Offset int on array\\{\\} on left side of \\?\\? does not exist\\.$#"
+			count: 1
+			path: app/Services/Shop/PromotionService.php
+
+		-
+			message: "#^Result of && is always false\\.$#"
+			count: 1
+			path: app/Services/Shop/PromotionService.php
+
+		-
+			message: "#^Strict comparison using \\!\\=\\= between null and null will always evaluate to false\\.$#"
+			count: 1
+			path: app/Services/Shop/PromotionService.php
+
+		-
+			message: "#^Offset 'quantity' on array\\{stock_item_id\\: int, quantity\\: float\\|string\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/Shop/ReturnService.php
+
+		-
+			message: "#^Offset 'store' on array\\{levels\\: bool, promos\\: bool, level\\: string\\|null, customer_id\\: int\\|null, coupon\\: string\\|null, rows\\: array, products\\: array, dept_keys\\: bool\\}\\|null on left side of \\?\\? does not exist\\.$#"
+			count: 1
+			path: app/Services/Shop/SaleService.php
+
+		-
+			message: "#^Strict comparison using \\!\\=\\= between null and null will always evaluate to false\\.$#"
+			count: 1
+			path: app/Services/Shop/SaleService.php
+
+		-
+			message: "#^Method App\\\\Services\\\\Shop\\\\ShortDatedService\\:\\:batches\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, object\\{id\\: int, stock_item_id\\: int, name\\: string, sku\\: string\\|null, batch_number\\: string, expiry_date\\: string, quantity\\: float, unit_cost\\: float, value\\: float, selling_price\\: float, location\\: string\\|null, days_left\\: int, markdown_id\\: int\\|null, markdown_price\\: float\\|null, markdown_pct\\: float\\|null, markdown_barcode\\: string\\|null\\}\\> but returns Illuminate\\\\Support\\\\Collection\\<int, stdClass\\>\\.$#"
+			count: 1
+			path: app/Services/Shop/ShortDatedService.php
+
+		-
+			message: "#^Method App\\\\Services\\\\Shop\\\\StorePriceService\\:\\:stores\\(\\) should return Illuminate\\\\Support\\\\Collection\\<int, object\\> but returns Illuminate\\\\Support\\\\Collection\\<int, stdClass\\>\\.$#"
+			count: 1
+			path: app/Services/Shop/StorePriceService.php
+
+		-
+			message: "#^Property App\\\\Models\\\\FinancialRecord\\:\\:\\$date \\(Carbon\\\\Carbon\\|null\\) does not accept DateTimeInterface\\.$#"
+			count: 1
+			path: app/Services/Shop/SupplierService.php
+
+		-
+			message: "#^Method App\\\\Services\\\\StandaloneSalesService\\:\\:latestFor\\(\\) should return App\\\\Models\\\\StandaloneRelease\\|null but returns Illuminate\\\\Database\\\\Eloquent\\\\Model\\|null\\.$#"
+			count: 1
+			path: app/Services/StandaloneSalesService.php
+
+		-
+			message: "#^Offset 'success' on array\\{success\\: bool, link\\?\\: string, message\\?\\: string, raw\\?\\: array\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/StandaloneSalesService.php
+
+		-
+			message: "#^Parameter \\#1 \\$callback of method Illuminate\\\\Support\\\\Collection\\<int,Illuminate\\\\Database\\\\Eloquent\\\\Model\\>\\:\\:filter\\(\\) expects \\(callable\\(Illuminate\\\\Database\\\\Eloquent\\\\Model, int\\)\\: bool\\)\\|null, Closure\\(App\\\\Models\\\\StandaloneRelease\\)\\: bool given\\.$#"
+			count: 1
+			path: app/Services/StandaloneSalesService.php
+
+		-
+			message: "#^Parameter \\#1 \\$callback of method Illuminate\\\\Support\\\\Collection\\<int,Illuminate\\\\Database\\\\Eloquent\\\\Model\\>\\:\\:sort\\(\\) expects \\(callable\\(Illuminate\\\\Database\\\\Eloquent\\\\Model, Illuminate\\\\Database\\\\Eloquent\\\\Model\\)\\: int\\)\\|int\\|null, Closure\\(App\\\\Models\\\\StandaloneRelease, App\\\\Models\\\\StandaloneRelease\\)\\: \\(\\-1\\|0\\|1\\) given\\.$#"
+			count: 1
+			path: app/Services/StandaloneSalesService.php
+
+		-
+			message: "#^Cannot call static method query\\(\\) on \\(int\\|string\\)\\.$#"
+			count: 1
+			path: app/Services/Sync/SyncSerializer.php
+
+		-
+			message: "#^Access to an undefined property App\\\\Models\\\\User\\:\\:\\$phone_number_2\\.$#"
+			count: 1
+			path: app/Services/Team/TeamService.php
+
+		-
+			message: "#^Offset 'name' on array\\{name\\: string, email\\?\\: string\\|null, phone\\?\\: string\\|null, phone_2\\?\\: string\\|null, address\\?\\: string\\|null\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: app/Services/Team/TeamService.php
+
+		-
+			message: "#^Strict comparison using \\=\\=\\= between 'Adjustment In'\\|'Opening'\\|'Purchase'\\|'Return'\\|'Stock In'\\|'Transfer In' and 'Sale' will always evaluate to false\\.$#"
+			count: 1
+			path: app/Support/MetaEnums.php
+
+		-
+			message: "#^Call to function is_float\\(\\) with 'price'\\|array\\{\\}\\|array\\{'20', '21', '22', '23', '24', '25', '26', '27', \\.\\.\\.\\} will always evaluate to false\\.$#"
+			count: 1
+			path: app/Support/StoreFeatures.php
