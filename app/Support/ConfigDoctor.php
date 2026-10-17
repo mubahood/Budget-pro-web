@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Services\Auth\OtpService;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Str;
 
@@ -44,8 +45,8 @@ use Illuminate\Support\Str;
  *   mail_mailer                MAIL_MAILER really sends (not log or array; smtp has a host)
  *   mail_enabled               SAAS_MAIL_ENABLED is on (Utils::mail_sender)
  *   mail_messages              MESSAGING_MAIL_DRIVER is mail (codes and notices by email)
- *   sms                        SMS_DRIVER is africastalking, with its username and API key
- *   whatsapp                   WHATSAPP_DRIVER is meta, with its token and phone number id
+ *   sms                        SMS_DRIVER is africastalking, with its username and API key (warns only while OTP_PHONE_CODES is off)
+ *   whatsapp                   WHATSAPP_DRIVER is meta, with its token and phone number id (warns only while OTP_PHONE_CODES is off)
  *   connections                standalone only: which channels Settings › Connections has set up (warns)
  *   flutterwave_keys           FLW_SECRET_KEY is set
  *   flutterwave_test_mode      no Flutterwave test key (FLWSECK_TEST, FLWPUBK_TEST)
@@ -443,7 +444,9 @@ final class ConfigDoctor
     {
         $driver = (string) config('messaging.sms.driver');
         $fix = $this->fix('Set SMS_DRIVER=africastalking with AFRICASTALKING_USERNAME, AFRICASTALKING_API_KEY and AFRICASTALKING_SENDER_ID.', 'Add your Africa\'s Talking account in Settings › Connections.');
-        if ($driver !== 'africastalking') {
+        if ($driver !== 'africastalking' && ! OtpService::phoneCodes()) {
+            $this->add('sms', 'messaging', self::WARN, 'SMS is off. Codes go by email, so nothing depends on it.', $fix);
+        } elseif ($driver !== 'africastalking') {
             $this->add('sms', 'messaging', self::FAIL, $this->offMessage('SMS_DRIVER', $driver, 'SMS codes and messages'), $fix);
         } elseif (blank(config('messaging.sms.africastalking.username')) || blank(config('messaging.sms.africastalking.api_key'))) {
             $this->add('sms', 'messaging', self::FAIL, 'SMS uses Africa\'s Talking, but AFRICASTALKING_USERNAME or AFRICASTALKING_API_KEY is empty.', $fix);
@@ -456,7 +459,9 @@ final class ConfigDoctor
     {
         $driver = (string) config('messaging.whatsapp.driver');
         $fix = $this->fix('Set WHATSAPP_DRIVER=meta with WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID from Meta.', 'Add your WhatsApp Business account in Settings › Connections.');
-        if ($driver !== 'meta') {
+        if ($driver !== 'meta' && ! OtpService::phoneCodes()) {
+            $this->add('whatsapp', 'messaging', self::WARN, 'WhatsApp sending is off. Codes go by email; receipts open WhatsApp on the phone instead.', $fix);
+        } elseif ($driver !== 'meta') {
             $this->add('whatsapp', 'messaging', self::FAIL, $this->offMessage('WHATSAPP_DRIVER', $driver, 'WhatsApp codes, receipts and messages'), $fix);
         } elseif (blank(config('messaging.whatsapp.meta.token')) || blank(config('messaging.whatsapp.meta.phone_number_id'))) {
             $this->add('whatsapp', 'messaging', self::FAIL, 'WhatsApp uses Meta, but WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID is empty.', $fix);

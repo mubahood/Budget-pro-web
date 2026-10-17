@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Codes by email (2026-10-17)
+- **Email only:** sign-in, reset, sign-up and verification codes are sent only by email, so nothing costs money per message.
+- **Codes asked for with a phone:** they go to that account's email, shown masked in the answer.
+- **Sign-up needs an email.**
+- **Paid phone codes:** `OTP_PHONE_CODES=true` brings them back.
+
 ### Phase 0: stabilise and lock (2026-10-17, docs/roadmap/phase-0-plan.md)
 - **Config cannot silently switch things off:**
   - `.env.example` lists every key, and a test fails on a missing one.

@@ -27,7 +27,7 @@ class ConfigDoctorTest extends TestCase
             'saas.master_password_hash' => '', 'saas.master_password_allowed_ips' => [], 'saas.master_password_on_sign_in_forms' => false,
             'app.trusted_proxies' => null, 'trustedproxy.proxies' => null,
             'mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.example.test', 'saas.mail_enabled' => true,
-            'messaging.mail.driver' => 'mail',
+            'messaging.mail.driver' => 'mail', 'messaging.otp.phone_codes' => true, // phones get codes, so SMS and WhatsApp must work
             'messaging.sms.driver' => 'africastalking', 'messaging.sms.africastalking.username' => 'bp', 'messaging.sms.africastalking.api_key' => 'at-key',
             'messaging.whatsapp.driver' => 'meta', 'messaging.whatsapp.meta.token' => 'wa-token', 'messaging.whatsapp.meta.phone_number_id' => '1234',
             'flutterwave.secret_key' => 'FLWSECK-live-abc-X', 'flutterwave.public_key' => 'FLWPUBK-live-abc-X', 'flutterwave.secret_hash' => 'hash',
@@ -286,6 +286,20 @@ class ConfigDoctorTest extends TestCase
         $this->assertSame(ConfigDoctor::OK, $this->checks(ConfigDoctor::PORTAL)['site_facts']['status']);
         config(['edition.name' => 'standalone']);
         $this->assertArrayNotHasKey('site_facts', $this->checks(ConfigDoctor::PORTAL), 'A standalone copy has no public site.');
+    }
+
+    public function test_with_codes_by_email_sms_and_whatsapp_may_be_off(): void
+    {
+        $this->production(['messaging.otp.phone_codes' => false, 'messaging.sms.driver' => 'log', 'messaging.whatsapp.driver' => 'null']);
+        $checks = $this->checks();
+
+        $this->assertSame(ConfigDoctor::WARN, $checks['sms']['status']);
+        $this->assertSame(ConfigDoctor::WARN, $checks['whatsapp']['status']);
+        $this->assertStringContainsString('Codes go by email', $checks['sms']['message']);
+        $this->assertSame(ConfigDoctor::WARN, ConfigDoctor::overall($checks), 'Nothing to accept: the deploy goes ahead.');
+
+        config(['messaging.mail.driver' => 'log']);
+        $this->assertSame(ConfigDoctor::FAIL, $this->checks()['mail_messages']['status'], 'Email is what carries the codes.');
     }
 
     public function test_the_owner_can_accept_a_failure_and_it_stays_visible(): void

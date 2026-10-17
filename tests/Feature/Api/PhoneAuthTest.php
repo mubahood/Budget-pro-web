@@ -28,8 +28,35 @@ class PhoneAuthTest extends ApiTestCase
         $this->assertNull(Phone::e164(''));
     }
 
-    public function test_register_with_a_verified_phone_and_no_email(): void
+    public function test_codes_go_by_email_and_a_phone_reaches_its_accounts_email(): void
     {
+        // A phone cannot start a sign-up, and a sign-up needs an email.
+        $this->postJson('/api/v1/auth/otp/request', ['identifier' => '0772 555 111', 'purpose' => 'register'])->assertStatus(422)->assertJsonPath('errors.code', 'email_required');
+        $this->postJson('/api/v1/auth/register', ['first_name' => 'Aisha', 'last_name' => 'N', 'phone_number' => '0772555111', 'password' => 'secret123',
+            'company_name' => 'Aisha Mini Mart', 'currency' => 'UGX', 'business_type' => 'retail'])->assertStatus(422)->assertJsonPath('errors.code', 'email_required');
+
+        // Signing in with the phone: the code goes to the account's email, and the answer shows it masked.
+        $t = $this->registerTenant(['phone_number' => '0701000002']);
+        $email = strtolower($t['email']);
+        $this->postJson('/api/v1/auth/otp/request', ['identifier' => '0701000002', 'purpose' => 'login'])->assertOk()
+            ->assertJsonPath('data.channel', 'mail')->assertJsonPath('data.sent_to', \App\Services\Auth\OtpService::mask($email));
+        $this->assertSame('mail', DB::table('message_log')->where('to', $email)->where('purpose', 'otp')->value('channel'));
+        $this->assertFalse(DB::table('message_log')->where('to', '+256701000002')->where('purpose', 'otp')->exists(), 'Nothing is sent to the phone.');
+        $this->postJson('/api/v1/auth/otp/verify', ['identifier' => '0701000002', 'purpose' => 'login', 'code' => $this->code('+256701000002')])->assertOk()->assertJsonStructure(['data' => ['token']]);
+
+        // An older account with only a phone is told to use its password.
+        DB::table('admin_users')->insert(['username' => '0701000003', 'phone_number' => '0701000003', 'phone_e164' => '+256701000003', 'password' => bcrypt('secret123'),
+            'name' => 'Old Phone', 'company_id' => $t['company_id'], 'created_at' => now(), 'updated_at' => now()]);
+        $this->postJson('/api/v1/auth/otp/request', ['identifier' => '0701000003', 'purpose' => 'reset'])->assertStatus(422)->assertJsonPath('errors.code', 'no_email');
+
+        // A phone number is not verified by code.
+        $this->postJson('/api/v1/auth/verify/request', ['channel' => 'phone'], $this->auth($t['token']))->assertStatus(422)->assertJsonPath('errors.code', 'phone_codes_off');
+        $this->assertSame('m•••@gmail.com', \App\Services\Auth\OtpService::mask('mary@gmail.com'));
+    }
+
+    public function test_register_with_a_verified_phone_and_no_email_when_phone_codes_are_on(): void
+    {
+        config(['messaging.otp.phone_codes' => true]);
         $this->postJson('/api/v1/auth/otp/request', ['identifier' => '0772 555 111', 'purpose' => 'register'])->assertOk()->assertJsonPath('data.channel', 'whatsapp');
         $this->assertSame('whatsapp', DB::table('message_log')->where('to', '+256772555111')->value('channel'));
         $this->postJson('/api/v1/auth/otp/verify', ['identifier' => '0772555111', 'purpose' => 'register', 'code' => '000000'])->assertStatus(422)->assertJsonPath('errors.code', 'otp_invalid');
@@ -95,6 +122,7 @@ class PhoneAuthTest extends ApiTestCase
         $this->putJson('/api/v1/auth/profile', ['phone_number' => '0772000999'], $h)->assertStatus(422)->assertJsonPath('errors.code', 'phone_taken');
         $this->putJson('/api/v1/auth/profile', ['phone_number' => '0772000888', 'locale' => 'lg'], $h)->assertOk()
             ->assertJsonPath('data.phone_e164', '+256772000888')->assertJsonPath('data.phone_verified', false)->assertJsonPath('data.locale', 'lg');
+        config(['messaging.otp.phone_codes' => true]); // phones verified by code only when phone codes are paid for
         $this->postJson('/api/v1/auth/verify/request', ['channel' => 'phone'], $h)->assertOk();
         $this->postJson('/api/v1/auth/verify', ['channel' => 'phone', 'code' => $this->code('+256772000888')], $h)->assertOk()->assertJsonPath('data.phone_verified', true);
 

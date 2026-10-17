@@ -33,5 +33,7 @@ return [
         'ttl_minutes' => 10,
         'max_attempts' => 5,
         'max_per_hour' => 5,
+        // Codes go by email (free). On: phones get theirs by WhatsApp, then SMS, at a cost per message.
+        'phone_codes' => (bool) env('OTP_PHONE_CODES', false),
     ],
 ];

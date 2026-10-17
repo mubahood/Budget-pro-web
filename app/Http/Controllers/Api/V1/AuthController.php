@@ -156,7 +156,7 @@ class AuthController extends Controller
 
     private function markVerified(User $user, string $identifier): void
     {
-        $col = str_contains($identifier, '@') ? 'email_verified_at' : 'phone_verified_at';
+        $col = \App\Services\Auth\OtpService::verifiedColumn($identifier);
         if ($user->{$col} === null) {
             $user->forceFill([$col => now()])->saveQuietly();
         }

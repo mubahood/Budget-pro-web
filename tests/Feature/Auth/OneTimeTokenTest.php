@@ -60,6 +60,7 @@ class OneTimeTokenTest extends ApiTestCase
 
     public function test_the_verification_token_marks_only_its_own_contact_once_and_a_forged_one_marks_nothing(): void
     {
+        config(['messaging.otp.phone_codes' => true]); // phone-only sign-ups exist only with phone codes on
         $forged = Crypt::encryptString((string) json_encode(['i' => '+256772555222', 'p' => 'register', 'exp' => now()->addMinutes(30)->timestamp]));
         $this->assertNull(RegistrationService::verifiedIdentifier($forged));
         $r = $this->postJson('/api/v1/auth/register', ['first_name' => 'Forged', 'last_name' => 'Token', 'phone_number' => '0772555222', 'password' => 'secret123',

@@ -9,19 +9,22 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * One-time codes (plan C6, P3-1): 6 digits, 10 minutes, 5 tries, 5 per hour per
- * identifier; delivered by WhatsApp (template) then SMS for phones, mail for emails.
+ * identifier. They go by email, which costs nothing but hosting: a code asked for with
+ * a phone number (sign-in, reset) is sent to that account's email. WhatsApp then SMS
+ * for phones only when OTP_PHONE_CODES is on (messaging.otp.phone_codes).
  */
 class OtpService
 {
     public const PURPOSES = ['login', 'register', 'reset', 'verify'];
 
-    /** @return array{sent: bool, channel: string|null, expires_in: int} */
+    /** @return array{sent: bool, channel: string|null, sent_to: string, expires_in: int} */
     public function request(string $identifier, string $purpose, ?string $ip = null): array
     {
         if (! in_array($purpose, self::PURPOSES, true)) {
             throw BusinessRuleException::make('invalid_purpose', 'Unknown code purpose.');
         }
         $cfg = config('messaging.otp');
+        $to = $this->deliverTo($identifier, $purpose);
         $recent = DB::table('otp_codes')->where('identifier', $identifier)->where('created_at', '>=', now()->subHour())->count();
         if ($recent >= $cfg['max_per_hour']) {
             throw BusinessRuleException::make('otp_rate_limited', 'Too many codes requested. Please wait a while and try again.');
@@ -32,20 +35,63 @@ class OtpService
             'identifier' => $identifier, 'purpose' => $purpose, 'code_hash' => Hash::make($code), 'expires_at' => now()->addMinutes($cfg['ttl_minutes']),
             'ip' => $ip, 'created_at' => now(), 'updated_at' => now(),
         ]);
-        $isEmail = str_contains($identifier, '@');
+        $isEmail = str_contains($to, '@');
         // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
         $product = \App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name');
         $text = 'Your '.$product." code is {$code}. It expires in {$cfg['ttl_minutes']} minutes. Never share it.";
         $channels = $isEmail ? ['mail'] : ['whatsapp', 'sms'];
         $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];
-        $logId = app(Messenger::class)->send($identifier, $text, $channels, $meta, now: true);
+        $logId = app(Messenger::class)->send($to, $text, $channels, $meta, now: true);
         /** @var object{status: string, channel: string|null}|null $row */
         $row = DB::table('message_log')->find($logId);
         if (app()->runningUnitTests()) {
             cache()->put('otp_test_'.$identifier, $code, 600); // lets feature tests read the code
         }
 
-        return ['sent' => $row?->status === 'sent', 'channel' => $row?->channel, 'expires_in' => $cfg['ttl_minutes'] * 60];
+        return ['sent' => $row?->status === 'sent', 'channel' => $row?->channel, 'sent_to' => $isEmail ? self::mask($to) : $to, 'expires_in' => $cfg['ttl_minutes'] * 60];
+    }
+
+    /** Phone codes cost money per message; whether they are sent at all (off unless OTP_PHONE_CODES=true). */
+    public static function phoneCodes(): bool
+    {
+        return (bool) config('messaging.otp.phone_codes', false);
+    }
+
+    /**
+     * Where the code goes: an email to itself; a phone, with phone codes off, to its account's email.
+     * A phone can neither sign up nor be verified by code then, and an account without an email is told so.
+     */
+    private function deliverTo(string $identifier, string $purpose): string
+    {
+        if (str_contains($identifier, '@') || self::phoneCodes()) {
+            return $identifier;
+        }
+        if ($purpose === 'register') {
+            throw BusinessRuleException::make('email_required', 'Sign up with your email. We send codes by email.');
+        }
+        if ($purpose === 'verify') {
+            throw BusinessRuleException::make('phone_codes_off', 'Phone numbers are not checked by code. Verify your email instead.');
+        }
+        $email = AccountLookup::find($identifier)?->email;
+        if (! is_string($email) || ! str_contains($email, '@')) {
+            throw BusinessRuleException::make('no_email', 'This account has no email, so we cannot send a code. Sign in with your password, or ask support to add your email.');
+        }
+
+        return strtolower(trim($email));
+    }
+
+    /** The contact a code for this identifier proves: a phone's code went to its email unless phone codes are on. */
+    public static function verifiedColumn(string $identifier): string
+    {
+        return str_contains($identifier, '@') || ! self::phoneCodes() ? 'email_verified_at' : 'phone_verified_at';
+    }
+
+    /** m•••@gmail.com: enough to recognise the inbox without showing the address to whoever typed the phone. */
+    public static function mask(string $email): string
+    {
+        [$local, $domain] = array_pad(explode('@', $email, 2), 2, '');
+
+        return mb_substr($local, 0, 1).'•••@'.$domain;
     }
 
     /** Consumes the code on success; throws otherwise. */

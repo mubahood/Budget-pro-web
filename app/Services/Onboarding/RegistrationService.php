@@ -128,6 +128,11 @@ class RegistrationService
         if ($email === null && $phone === null) {
             throw BusinessRuleException::make('contact_required', 'Provide an email or phone number.');
         }
+        // Sign-in codes and password resets go by email (\App\Services\Auth\OtpService), so every new account has one.
+        // Ping Pin keeps its own contract (a name and an email *or* a phone, signed in by password).
+        if ($email === null && $product !== self::PRODUCT_PINGPIN && ! \App\Services\Auth\OtpService::phoneCodes()) {
+            throw BusinessRuleException::make('email_required', 'Add your email. We send sign-in codes and password resets by email.');
+        }
         if ($email !== null && User::withoutGlobalScopes()->where('email', $email)->exists()) {
             throw BusinessRuleException::make('email_taken', 'This email is already registered.');
         }

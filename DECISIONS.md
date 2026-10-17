@@ -165,3 +165,10 @@ its Appendix H open questions (H1–H10). Every later decision made while execut
   - **`.phpunit.result.cache`:** no longer tracked.
   - **Dev packages in `vendor/`:** the tracked `vendor/` still carries dev packages (phpunit, mockery, faker, collision, pint), against ADR 0008. They cannot be reached from the web on production (checked). Removing them changes the tracked autoload files, so it waits for the Laravel upgrade (02 §11).
 
+- **2026-10-17: Codes go by email, not by phone.** The platform should cost nothing to run beyond hosting, so one-time codes (sign-in, password reset, sign-up, verification) are sent only by email.
+  - **A phone number typed for a sign-in or reset code:** the code goes to that account's email, and the answer shows it masked (`m•••@gmail.com`). The email is what gets marked verified.
+  - **Sign-up:** needs an email, on the web, in the apps and through the API (`email_required`). Ping Pin keeps its own contract.
+  - **Phone verification by code:** off (`phone_codes_off`).
+  - **Older phone-only accounts:** they still sign in with their password. A code request tells them to add an email (`no_email`).
+  - **`config:doctor`:** SMS and WhatsApp being off only warns.
+  - **To bring paid phone codes back:** set `OTP_PHONE_CODES=true` (`messaging.otp.phone_codes`). WhatsApp then SMS return, and the doctor requires both again.
