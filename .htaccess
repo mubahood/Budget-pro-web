@@ -1,9 +1,22 @@
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
-        Options -MultiViews
+        Options -MultiViews -Indexes
     </IfModule>
     
     RewriteEngine On
+
+    # When the project root is the document root (shared hosting, MAMP), every real file would
+    # otherwise be reachable. Deny the application tree, but only where the path really exists at
+    # the root: public asset URLs such as /vendor/laravel-admin/* and /storage/* live in public/ and
+    # must keep falling through to the rules below. Same rules as budget-pro-new/.htaccess.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^(\.git|\.github|app|backups|bootstrap|config|database|docs|lang|node_modules|resources|routes|scripts|storage|tests|tools|vendor)(/|$) - [F,L]
+    # Dotfiles and dot-directories in any segment (.env, .git, .gitignore), except .well-known.
+    RewriteRule (^|/)\.(?!well-known) - [F,L]
+    # Sensitive file types anywhere: never valid public assets.
+    RewriteRule ^(\.env.*|artisan|composer\.(json|lock)|package(-lock)?\.json|phpunit\.xml|phpstan\.neon|pint\.json|vite\.config\.js|.*\.(md|sql|sql\.gz|dump|bak|backup|log|neon|lock|yml|yaml))$ - [F,L]
+
     # Exclude directory from rewriting
     RewriteRule ^(public/) - [L]
     
