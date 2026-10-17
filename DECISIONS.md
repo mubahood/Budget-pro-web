@@ -172,3 +172,11 @@ its Appendix H open questions (H1–H10). Every later decision made while execut
   - **Older phone-only accounts:** they still sign in with their password. A code request tells them to add an email (`no_email`).
   - **`config:doctor`:** SMS and WhatsApp being off only warns.
   - **To bring paid phone codes back:** set `OTP_PHONE_CODES=true` (`messaging.otp.phone_codes`). WhatsApp then SMS return, and the doctor requires both again.
+
+- **2026-10-18: Whoever creates an event chairs it.** `CommitteeService::seatCreator` gives the creator a chair seat right after the event is saved. It runs on the API (`BudgetProgramController::afterSave`), on a phone's synced event (`MasterDataService`) and on the web portal's Events pages.
+  - **It never blocks the event:** it does nothing when the person is already seated or is not on the account's team.
+  - **The self-seat rule:** a seat a person holds by their own hand (`added_by_id` = `user_id`, which is what the creator seat is) gives way to a new committee row for them. So a phone that creates an event offline and pushes its own seat as well is applied, not refused as `already_on_committee`. The older seat becomes a tombstone, so phones drop it. A seat someone else gave is still refused twice, and `CommitteeService::add` still answers "Change their role instead".
+  - **Existing events are left alone:** no backfill.
+- **2026-10-18: The web portal's events book.** `EventBook` reads events, pledges, groups, recent payments and the "Worth a look" notes for the portal, as exact decimal strings. `PledgeService` writes a signed-in person's pledges, one with an optional first payment, or many pasted with a preview. `BudgetAccess::canManageEvent` (full access or the event's chair) lets the portal's chair edit the event and its budget.
+  - **Not one of `ABILITIES` on purpose:** the API and sync still keep event, category and item edits with `manage_budget`, and the phone's `abilities` answer is unchanged.
+  - **`ShopMenu` gains an Events section** (`module` budget). The phone's `web_pages` list it for budget accounts.

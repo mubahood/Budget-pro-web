@@ -73,6 +73,38 @@ class CommitteeService
         return $member;
     }
 
+    /**
+     * Whoever creates an event chairs it: the API (BudgetProgramController), a phone's synced event
+     * (MasterDataService) and the web portal all call this right after the event is saved. Quietly does
+     * nothing when the person is already on the committee or is not a team member of the event's account,
+     * so it never stops the event itself from being created. A phone that pushes its own committee row for
+     * the same person afterwards replaces this seat (BudgetProgramMember, the self-seat rule).
+     */
+    public static function seatCreator(BudgetProgram $program, ?int $userId): ?BudgetProgramMember
+    {
+        if (! $userId || ! $program->exists || ! \Illuminate\Support\Facades\Schema::hasTable('budget_program_members')) {
+            return null;
+        }
+        $companyId = (int) $program->company_id;
+        $teammate = DB::table('admin_users')->where('id', $userId)->where('company_id', $companyId)->exists();
+        $seated = BudgetProgramMember::withoutGlobalScopes()->where('budget_program_id', $program->id)->where('user_id', $userId)->where('is_deleted', 0)->exists();
+        if (! $teammate || $seated) {
+            return null;
+        }
+        try {
+            $member = new BudgetProgramMember();
+            $member->forceFill(['company_id' => $companyId, 'budget_program_id' => $program->id, 'user_id' => $userId,
+                'role' => 'chair', 'status' => 'active', 'added_by_id' => $userId]);
+            $member->save();
+
+            return $member;
+        } catch (BusinessRuleException $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
     public function setRole(BudgetProgramMember $member, string $role): BudgetProgramMember
     {
         $role = strtolower(trim($role));

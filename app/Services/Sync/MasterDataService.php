@@ -140,6 +140,10 @@ class MasterDataService
         }
         if ($existing === null) {
             $this->flagDuplicate($companyId, $model);
+            if ($model instanceof \App\Models\BudgetProgram) {
+                // An event made on a phone is chaired by whoever made it, as on the API and the web.
+                \App\Services\Budget\CommitteeService::seatCreator($model, $pushUser ?: null);
+            }
         }
 
         return ['status' => 'applied', 'model' => $model];

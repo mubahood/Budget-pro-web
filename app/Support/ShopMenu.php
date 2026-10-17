@@ -28,6 +28,11 @@ final class ShopMenu
                 // Supermarket (B3): only for shops with promotions on.
                 ['label' => 'Promotions', 'icon' => 'fa-tags', 'route' => 'promotions.index', 'path' => '/promotions', 'match' => ['promotions.*'], 'can' => 'manage_products', 'module' => 'shop', 'feature' => 'promotions'],
             ]],
+            // Budget & pledges (Pledge & Budget): weddings, introductions and fundraisers, with their pledges, budget and
+            // committee. Every team member reads; what each may change is their committee role (BudgetAccess).
+            ['key' => 'events', 'label' => 'Events', 'module' => 'budget', 'entries' => [
+                ['label' => 'Events', 'icon' => 'fa-hand-holding-heart', 'route' => 'events.index', 'path' => '/events', 'match' => ['events.*']],
+            ]],
             ['key' => 'catalogue', 'label' => 'Shop', 'module' => 'shop', 'entries' => [
                 ['label' => 'Products', 'icon' => 'fa-box', 'route' => 'products.index', 'path' => '/products', 'match' => ['products.*']],
                 ['key' => 'stock', 'label' => 'Stock', 'icon' => 'fa-warehouse', 'items' => [

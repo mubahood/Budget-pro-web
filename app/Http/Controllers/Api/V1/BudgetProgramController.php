@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Models\BudgetProgram;
+use App\Services\Budget\CommitteeService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -35,6 +36,14 @@ class BudgetProgramController extends BaseCrudController
         $path = URL::temporarySignedRoute('budget-program.pdf', now()->addMinutes(30), ['id' => $program->id, 'company_id' => $program->company_id], false);
 
         return $this->success(['url' => url($path), 'expires_in' => 1800], 'Link ready.');
+    }
+
+    /** Whoever creates the event chairs it (CommitteeService::seatCreator). */
+    protected function afterSave(Request $request, Model $model, bool $wasCreated): void
+    {
+        if ($wasCreated && $model instanceof BudgetProgram) {
+            CommitteeService::seatCreator($model, (int) $request->user()->id);
+        }
     }
 
     protected function rules(Request $request, ?Model $existing): array

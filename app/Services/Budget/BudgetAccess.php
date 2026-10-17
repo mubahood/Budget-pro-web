@@ -67,6 +67,21 @@ final class BudgetAccess
         return $role !== null && in_array($role, self::ABILITIES[$ability] ?? [], true);
     }
 
+    /**
+     * May edit the event itself, close or reopen it, and its budget (the web portal's Events pages): full access,
+     * or the event's chair. Not one of ABILITIES on purpose: the API and sync still keep event, category and
+     * item edits with `manage_budget` (ApiPermissionMap, SyncApplier::permissionFor), so the phone's answer
+     * does not offer the chair what its own screens would be refused.
+     */
+    public static function canManageEvent(?User $user, int $programId): bool
+    {
+        if ($user === null || Permissions::roleOf($user) === 'none') {
+            return false;
+        }
+
+        return self::fullAccess($user) || self::roleOn($user, $programId) === 'chair';
+    }
+
     /** @return list<string> what the person may do on this event (for the API answer and the phone) */
     public static function abilities(User $user, int $programId): array
     {

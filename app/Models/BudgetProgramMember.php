@@ -48,8 +48,14 @@ class BudgetProgramMember extends Model
                 }
                 if (! $m->is_deleted && ($m->isDirty('user_id') || $m->isDirty('is_deleted') || ! $m->exists)) {
                     $twin = self::withoutGlobalScopes()->where('budget_program_id', $m->budget_program_id)->where('user_id', $m->user_id)
-                        ->where('is_deleted', 0)->when($m->exists, fn ($q) => $q->where('id', '!=', $m->id))->exists();
-                    if ($twin) {
+                        ->where('is_deleted', 0)->when($m->exists, fn ($q) => $q->where('id', '!=', $m->id))->first();
+                    if ($twin !== null && (int) $twin->added_by_id === (int) $twin->user_id && ! $m->exists) {
+                        // The self-seat rule: a seat a person holds by their own hand (above all the chair seat an event's
+                        // creator gets, CommitteeService::seatCreator) gives way to a new committee row for them (a phone
+                        // that created the event offline and pushes its own seat too), so that push is never refused.
+                        // CommitteeService::add still refuses a second seat with "Change their role instead".
+                        $twin->delete();
+                    } elseif ($twin !== null) {
                         throw BusinessRuleException::make('already_on_committee', 'This person is already on the committee. Change their role instead.');
                     }
                 }

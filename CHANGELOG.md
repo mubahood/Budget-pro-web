@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Events on the web, and the creator chairs (2026-10-18)
+- **The creator of an event chairs it:** on the API, from a phone's sync and on the web. A phone's own seat for that person replaces the creator seat instead of being refused.
+- **`EventBook` and `PledgeService`:** the web portal's events book (figures, filtered pledges, groups, notes) and its pledge writes (with an optional first payment, or many pasted with a preview).
+- **`BudgetAccess::canManageEvent`:** on the web, the chair edits the event and its budget. The API and sync are unchanged.
+- **The web menu** (`ShopMenu`) has an Events section for accounts with the budget module.
+
 ### Codes by email (2026-10-17)
 - **Email only:** sign-in, reset, sign-up and verification codes are sent only by email, so nothing costs money per message.
 - **Codes asked for with a phone:** they go to that account's email, shown masked in the answer.
