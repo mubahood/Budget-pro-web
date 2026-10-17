@@ -1,3 +1,9 @@
+> **SUPERSEDED (17 October 2026). Do not work from this file.** It was the August 2026 backend backlog. Its
+> open boxes were overtaken by `SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md` (63 of 63 items built), the ADRs in
+> `docs/adr/` and the roadmap in `docs/roadmap/` (Phase 0 security, Phase 1 stabilise). Unticked boxes below are
+> **not** a to-do list: many are built, some were dropped. For the API as it is, read `API_DOCUMENTATION.md` and
+> `docs/MOBILE_API_CONTRACT.md`. Kept because code comments cite its task numbers. Map of current docs: `docs/README.md`.
+
 # Budget Pro — Backend & API Master Task Plan (SaaS Readiness)
 
 > **Scope of this document:** A ground‑truth analysis of the **web backend + REST API** and a prioritized,
@@ -253,7 +259,7 @@ return correct status codes and leak nothing; a security‑review pass (`/securi
 > will build on, so it must be uniform *to the dot*.
 
 ### 1.1 One versioned, RESTful route surface
-- [ ] **Introduce `/api/v1`.** `API_VERSIONING_STRATEGY.md` specs this in full but **nothing is
+- [ ] **Introduce `/api/v1`.** `docs/archive/2025/API_VERSIONING_STRATEGY.md` specs this in full but **nothing is
   implemented** (no `v1` segment anywhere). Move all endpoints under `routes/api_v1.php`.
 - [ ] **Collapse the two controllers.** `ApiController` (legacy, unsafe) and `MobileApiController` (safer)
   duplicate list/save/budget/contribution logic with divergent safety. Standardize on one set of
