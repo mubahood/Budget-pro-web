@@ -74,6 +74,14 @@ class SuppliersMoneyRulesTest extends ApiTestCase
     {
         $this->postJson('/api/v1/financial-records', ['type' => 'Expense', 'amount' => 10], $this->h)->assertStatus(422)->assertJsonValidationErrors('financial_category_id');
         $this->postJson('/api/v1/financial-periods', ['name' => 'Bad', 'start_date' => '2026-02-01', 'end_date' => '2026-01-01'], $this->h)->assertStatus(422)->assertJsonValidationErrors('end_date');
+
+        // No status sent: the new period becomes the Active one and the previous Active period steps down (it used to 500).
+        $before = \App\Models\FinancialPeriod::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->where('status', 'Active')->value('id');
+        $new = $this->postJson('/api/v1/financial-periods', ['name' => 'Next year', 'start_date' => '2027-01-01', 'end_date' => '2027-12-31'], $this->h)->assertStatus(201)->json('data');
+        $this->assertSame('Active', $new['status']);
+        if ($before) {
+            $this->assertSame('Inactive', \App\Models\FinancialPeriod::withoutGlobalScopes()->find($before)->status);
+        }
         $this->postJson('/api/v1/shifts/open', ['opening_float' => -1], $this->h)->assertStatus(422)->assertJsonValidationErrors('opening_float');
         $shift = $this->postJson('/api/v1/shifts/open', ['opening_float' => 20000], $this->h)->assertStatus(201)->json('data.id');
         $this->postJson("/api/v1/shifts/{$shift}/close", [], $this->h)->assertStatus(422)->assertJsonValidationErrors('counted_cash');

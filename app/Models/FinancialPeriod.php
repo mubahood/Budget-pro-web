@@ -48,6 +48,13 @@ class FinancialPeriod extends Model
     protected $with = ['company'];
 
     /**
+     * A new period is Active unless told otherwise: the same default as the column, set here so save() sees it and
+     * demotes the period that was Active first. Without it the database default made the row Active behind save()'s
+     * back and the one-active-period unique index failed with a 500.
+     */
+    protected $attributes = ['status' => 'Active'];
+
+    /**
      * The attributes that are mass assignable.
      */
     protected $fillable = [
