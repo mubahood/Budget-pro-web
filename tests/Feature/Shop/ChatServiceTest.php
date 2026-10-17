@@ -129,7 +129,7 @@ class ChatServiceTest extends AdminTestCase
         $this->assertSame(0, $this->chat->unreadCount($owner), 'one\'s own messages are read');
 
         // A member who joins later starts with the history already read, but can scroll it.
-        $cara = app(TeamService::class)->createMember($co, $owner, 'Cara Late', 'cara_'.uniqid().'@example.test', null, 'secret-pass', 'cashier');
+        $cara = app(TeamService::class)->createMember($co, $owner, 'Cara Late', 'cara_'.uniqid().'@example.test', null, 'secret-pass1', 'cashier');
         $list = $this->chat->conversationsFor($cara);
         $this->assertSame(0, $list[0]['unread']);
         $this->assertCount(2, $this->chat->messages($team, $cara));
