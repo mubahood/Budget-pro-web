@@ -10,9 +10,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * A classic session opened with the master password ends after MASTER_PASSWORD_SESSION_MINUTES
- * (App\Support\MasterPassword). In config('admin.route.middleware'), so it runs on every classic page
- * and request. The person is signed out on this browser only: their own "remember me" devices stay
- * signed in. The header shows how long is left (app/Admin/bootstrap.php).
+ * (App\Support\MasterPassword). In the kernel's `web` group (and config('admin.route.middleware'), which
+ * starts with it; the router runs it once), so it runs on every classic page and on the session routes
+ * outside the admin prefix: the AJAX helpers (api/global-search, quick sale, quick add), receipts, PDFs
+ * and data-exports-print. Without the session mark it does nothing, so public pages are untouched; the
+ * API has no session and never reaches it. The person is signed out on this browser only: their own
+ * "remember me" devices stay signed in. A JSON request gets a 401 with the reason. The header shows how
+ * long is left (app/Admin/bootstrap.php).
  */
 class EndClassicMasterSession
 {

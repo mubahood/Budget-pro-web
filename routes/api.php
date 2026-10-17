@@ -82,7 +82,7 @@ if (! function_exists('apiCrud')) {
 // Legacy sign-up: SaaS only, and the edition is checked first so a standalone copy answers 404.
 Route::middleware(['edition:saas', 'legacy'])->post('auth/register', [ApiController::class, 'register']);
 Route::middleware('legacy')->group(function () {
-    Route::post('auth/login', [ApiController::class, 'login']);
+    Route::post('auth/login', [ApiController::class, 'login'])->middleware(['throttle:10,1', 'throttle:login']); // 10 a minute per address, and the sign-in limiter (SignInThrottle)
     Route::post('budget-item-create', [ApiController::class, 'budget_item_create']);
     Route::post('contribution-records-create', [ApiController::class, 'contribution_records_create']);
     Route::get('api/{model}', [ApiController::class, 'my_list']);
@@ -465,8 +465,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         apiCrud('contribution-records', ContributionRecordController::class);
     });
 
-    // Module: poultry. The v1 poultry sync (retiring, roadmap 02 §7); the app's poultry records move on the core sync v2.
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:poultry', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
+    // The v1 poultry sync is core, like every sync route: a sync is never cut by a module (DECISIONS.md 2026-10-17). Older
+    // apps still push the farm's records here, and a refused push would strand them on the phone. It retires in Phase 3
+    // (roadmap 02 §7); the app's poultry records move on the core sync v2.
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:core', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
         // Poultry module sync (§Phase 8/9) — mobile-facing, matches the
         // Flutter client's PoultrySyncTransport push/pull contract exactly.
         Route::get('poultry/sync/pull', [PoultrySyncController::class, 'pull']);

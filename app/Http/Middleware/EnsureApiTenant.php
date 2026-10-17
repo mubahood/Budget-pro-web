@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Company;
 use App\Scopes\CompanyScope;
+use App\Services\Auth\AccountAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,8 +13,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * API tenant guard (runs AFTER auth:sanctum).
  *
- * Guarantees that the authenticated API user belongs to an existing, active company,
- * and exposes the resolved company on the request as `company` for downstream use.
+ * Guarantees that the authenticated API user belongs to an existing, active company, is
+ * not switched off and was not removed from it (403, errors.code = account_inactive), and
+ * exposes the resolved company on the request as `company` for downstream use.
  * This is the real multi-tenant enforcement point for the API (the legacy
  * EnforceSaasIsolation middleware only worked for the web/session guard).
  *
@@ -58,6 +60,17 @@ class EnsureApiTenant
                 'code' => 0,
                 'message' => 'Your company account is inactive. Please contact support.',
                 'data' => null,
+            ], 403);
+        }
+
+        // A switched-off person, or one removed from the shop, is refused on every request, so a token they
+        // still hold stops working at once (App\Services\Auth\AccountAccess, the portal's rule).
+        if (($refusal = AccountAccess::refusal($user, $company)) !== null) {
+            return response()->json([
+                'code' => 0,
+                'message' => $refusal,
+                'data' => null,
+                'errors' => ['code' => AccountAccess::CODE],
             ], 403);
         }
 

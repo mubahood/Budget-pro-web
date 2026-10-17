@@ -15,21 +15,32 @@ use Illuminate\Support\Str;
  *
  * Each check is ok, warn (look this week) or fail (a production deploy stops):
  * - production on the SaaS fails on what would quietly stop mail, messages, payments or the queue,
- *   on debug mode, on a missing shared data key or support WhatsApp, and on a plaintext master password;
+ *   on debug mode, on a missing shared data key or support WhatsApp, on a plaintext master password,
+ *   and on a master password whose address check anyone can pass (every proxy trusted, or 0.0.0.0/0);
  * - a standalone copy only warns about messaging and payments: the buyer may set them up later in
  *   Settings › Connections, and their updates must never be blocked by it;
- * - any environment other than production only warns;
+ * - a server that is not live only warns. Live means APP_ENV=production, or an APP_URL that is https on a
+ *   real host (anything but localhost, 127.x, ::1, *.test, *.local, *.localhost), whatever APP_ENV says:
+ *   a production server left on APP_ENV=local still fails on debug mode and the rest;
  * - the owner may accept a failure for now with CONFIG_DOCTOR_ACCEPT (config saas.config_doctor_accept,
  *   comma-separated keys): it then shows as a warning marked "accepted by the owner", never hidden.
- *   The keys in NEVER_ACCEPTED always fail in production.
+ *   The keys in NEVER_ACCEPTED always fail on a live server.
  *
  * Check keys (stable: CONFIG_DOCTOR_ACCEPT, monitors and tests use them):
  *   edition                    APP_EDITION is saas or standalone
+ *   app_env                    APP_ENV is production on a live address (warns; off a live address it says why failures only warn)
  *   app_debug                  APP_DEBUG is off
- *   app_url_https              APP_URL is https in production (warns)
+ *   app_url_https              APP_URL is https on a live server (warns)
  *   queue_sync                 the queue is not sync or null (ADR 0008)
  *   data_key                   SAAS_DATA_KEY is set and valid (both apps read each other's encrypted values)
  *   master_password_plaintext  no plaintext MASTER_PASSWORD in .env
+ *   master_proxies             SaaS, with MASTER_PASSWORD_HASH set: the app does not trust every proxy (TRUSTED_PROXIES=*),
+ *                              or anyone could claim an allowed address in X-Forwarded-For. The kernel's TrustProxies
+ *                              ignores TRUSTED_PROXIES, so it checks the connecting address and is always ok
+ *   master_allowlist           SaaS: MASTER_PASSWORD_ALLOWED_IPS is not 0.0.0.0/0 or ::/0 (fails), and has no range wider than
+ *                              an IPv4 /24 or an IPv6 /48 and no entry that is not an address (warns)
+ *   master_sign_in_forms       SaaS, with MASTER_PASSWORD_HASH set: the master password is not also open on the sign-in
+ *                              forms (saas.master_password_on_sign_in_forms; warns: "Sign in as" records who and why)
  *   mail_mailer                MAIL_MAILER really sends (not log or array; smtp has a host)
  *   mail_enabled               SAAS_MAIL_ENABLED is on (Utils::mail_sender)
  *   mail_messages              MESSAGING_MAIL_DRIVER is mail (codes and notices by email)
@@ -64,14 +75,26 @@ final class ConfigDoctor
 
     /** Every check key, in the order the checks run. */
     public const KEYS = [
-        'edition', 'app_debug', 'app_url_https', 'queue_sync', 'data_key', 'master_password_plaintext',
+        'edition', 'app_env', 'app_debug', 'app_url_https', 'queue_sync', 'data_key', 'master_password_plaintext',
+        'master_proxies', 'master_allowlist', 'master_sign_in_forms',
         'mail_mailer', 'mail_enabled', 'mail_messages', 'sms', 'whatsapp', 'connections',
         'flutterwave_keys', 'flutterwave_test_mode', 'flutterwave_webhook',
         'support_whatsapp', 'support_details', 'new_ui_url', 'invite_url', 'site_facts', 'accepted',
     ];
 
     /** Failures CONFIG_DOCTOR_ACCEPT can never turn into warnings: each is a security hole or loses data. */
-    public const NEVER_ACCEPTED = ['edition', 'app_debug', 'data_key', 'queue_sync', 'flutterwave_test_mode', 'master_password_plaintext'];
+    public const NEVER_ACCEPTED = [
+        'edition', 'app_debug', 'data_key', 'queue_sync', 'flutterwave_test_mode', 'master_password_plaintext',
+        'master_proxies', 'master_allowlist',
+    ];
+
+    /** Hosts that are never a live server, whatever APP_URL's scheme (the L4 rule in the class docblock). */
+    private const LOCAL_HOSTS = ['localhost', '127.0.0.1', '::1'];
+
+    private const LOCAL_SUFFIXES = ['.test', '.local', '.localhost'];
+
+    /** The widest MASTER_PASSWORD_ALLOWED_IPS range that does not warn: one office or one provider's block. */
+    private const NARROWEST_WIDE_PREFIX = ['ipv4' => 24, 'ipv6' => 48];
 
     /** On standalone these groups only warn (the buyer's own accounts, set up when they are ready). */
     private const BUYER_GROUPS = ['messaging', 'payments'];
@@ -79,6 +102,9 @@ final class ConfigDoctor
     private string $app;
 
     private bool $production = false;
+
+    /** Production, or a live address on any APP_ENV: failures stay failures. */
+    private bool $live = false;
 
     private bool $standalone = false;
 
@@ -99,11 +125,13 @@ final class ConfigDoctor
     {
         $this->checks = [];
         $this->production = config('app.env') === 'production';
+        $this->live = $this->production || self::liveAddress((string) config('app.url'));
         $this->accept = array_values(array_map('strval', (array) config('saas.config_doctor_accept', [])));
         $this->standalone = $this->edition() === Edition::STANDALONE;
 
         foreach ([
-            'appDebug', 'appUrl', 'queue', 'dataKey', 'masterPassword',
+            'appEnv', 'appDebug', 'appUrl', 'queue', 'dataKey', 'masterPassword',
+            'masterProxies', 'masterAllowlist', 'masterSignInForms',
             'mailer', 'mailEnabled', 'mailMessages', 'sms', 'whatsapp', 'connections',
             'flutterwaveKeys', 'flutterwaveTestMode', 'flutterwaveWebhook',
             'supportWhatsapp', 'supportDetails', 'saasLinks', 'siteFacts', 'accepted',
@@ -144,6 +172,29 @@ final class ConfigDoctor
         return array_map(fn ($row) => $row[2], $keyed);
     }
 
+    /**
+     * Whether APP_URL is a live server: https on a host that is not this machine or a local-only name.
+     * Then a failure stays a failure even when APP_ENV is not production.
+     */
+    public static function liveAddress(string $url): bool
+    {
+        $url = trim($url);
+        if (! str_starts_with(strtolower($url), 'https://')) {
+            return false;
+        }
+        $host = strtolower(trim((string) parse_url($url, PHP_URL_HOST), '[].'));
+        if ($host === '' || in_array($host, self::LOCAL_HOSTS, true) || str_starts_with($host, '127.')) {
+            return false;
+        }
+        foreach (self::LOCAL_SUFFIXES as $suffix) {
+            if (str_ends_with($host, $suffix) || $host === ltrim($suffix, '.')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** The keys CONFIG_DOCTOR_ACCEPT may name. @return list<string> */
     public static function acceptable(): array
     {
@@ -165,6 +216,19 @@ final class ConfigDoctor
         return Edition::SAAS;
     }
 
+    private function appEnv(): void
+    {
+        $env = (string) config('app.env');
+        $url = (string) config('app.url');
+        if ($this->production) {
+            $this->add('app_env', 'app', self::OK, 'APP_ENV is production.');
+        } elseif ($this->live) {
+            $this->add('app_env', 'app', self::WARN, "APP_ENV is \"{$env}\", but APP_URL ({$url}) is a live address, so this is checked as a live server: failures still fail.", 'Set APP_ENV=production.');
+        } else {
+            $this->add('app_env', 'app', self::OK, "APP_ENV is \"{$env}\" and APP_URL ({$url}) is not a live address, so a failure is only a warning here.");
+        }
+    }
+
     private function appDebug(): void
     {
         config('app.debug')
@@ -175,8 +239,8 @@ final class ConfigDoctor
     private function appUrl(): void
     {
         $url = (string) config('app.url');
-        if (! $this->production) {
-            $this->add('app_url_https', 'app', self::OK, "Not production, so http is fine ({$url}).");
+        if (! $this->live) {
+            $this->add('app_url_https', 'app', self::OK, "Not a live server, so http is fine ({$url}).");
         } elseif (str_starts_with(strtolower($url), 'https://')) {
             $this->add('app_url_https', 'app', self::OK, "APP_URL uses https ({$url}).");
         } else {
@@ -221,6 +285,127 @@ final class ConfigDoctor
         } else {
             $this->add('master_password_plaintext', 'app', self::FAIL, 'A plaintext MASTER_PASSWORD is in .env.', 'Remove MASTER_PASSWORD. Set MASTER_PASSWORD_HASH with php artisan master-password:set instead.');
         }
+    }
+
+    /** A master password hash is set (MasterPassword works only then, and never on standalone). */
+    private function masterHashSet(): bool
+    {
+        return trim((string) config('saas.master_password_hash', '')) !== '';
+    }
+
+    /**
+     * The proxies this app takes X-Forwarded-For from. The web app reads TRUSTED_PROXIES (config app.trusted_proxies,
+     * its AppServiceProvider); the kernel's App\Http\Middleware\TrustProxies has no list and ignores it. Both fall back
+     * to config trustedproxy.proxies, as Laravel's middleware does.
+     *
+     * @return list<string>
+     */
+    private function trustedProxies(): array
+    {
+        $proxies = $this->app === self::PORTAL ? config('app.trusted_proxies') : null;
+        if ($proxies === null || $proxies === '' || $proxies === []) {
+            $proxies = config('trustedproxy.proxies');
+        }
+        $list = is_array($proxies) ? $proxies : explode(',', (string) $proxies);
+
+        return array_values(array_filter(array_map(fn ($p) => trim((string) $p), $list), fn ($p) => $p !== ''));
+    }
+
+    private function masterProxies(): void
+    {
+        if ($this->standalone) {
+            return;
+        }
+        $proxies = $this->trustedProxies();
+        // '*' and '**' trust whoever connects; REMOTE_ADDR in a list does the same, and a /0 range is every address.
+        $everyone = array_values(array_filter($proxies, fn ($p) => in_array(strtoupper($p), ['*', '**', 'REMOTE_ADDR'], true) || $this->prefixOf($p) === 0));
+        if (! $this->masterHashSet()) {
+            $this->add('master_proxies', 'app', self::OK, 'No master password is set, so no sign-in depends on the proxy setting.');
+        } elseif ($everyone !== []) {
+            $this->add('master_proxies', 'app', self::FAIL, 'TRUSTED_PROXIES is '.implode(',', $proxies).': every caller is trusted as a proxy, so X-Forwarded-For can be forged by anyone and the master password\'s address check cannot rely on it (behind a real proxy it would see only the proxy).',
+                'Set TRUSTED_PROXIES to the addresses of the proxy in front of this app (or leave it empty when there is none), or remove MASTER_PASSWORD_HASH.');
+        } elseif ($proxies !== []) {
+            $this->add('master_proxies', 'app', self::OK, 'Forwarded addresses are taken only from the proxies '.implode(', ', $proxies).'.');
+        } else {
+            $this->add('master_proxies', 'app', self::OK, $this->app === self::PORTAL
+                ? 'No proxy is trusted: the address the master password checks is the connecting one.'
+                : 'The classic app trusts no proxy (its TrustProxies ignores TRUSTED_PROXIES): the address the master password checks is the connecting one.');
+        }
+    }
+
+    private function masterAllowlist(): void
+    {
+        if ($this->standalone) {
+            return;
+        }
+        $list = config('saas.master_password_allowed_ips', []);
+        $list = array_values(array_filter(array_map(fn ($ip) => trim((string) $ip), is_array($list) ? $list : explode(',', (string) $list)), fn ($ip) => $ip !== ''));
+        $everywhere = $wide = $invalid = [];
+        foreach ($list as $entry) {
+            $prefix = $this->prefixOf($entry);
+            $family = $this->familyOf($entry);
+            if ($family === null || ($prefix === null && str_contains($entry, '/'))) {
+                $invalid[] = $entry;
+            } elseif ($prefix === 0) {
+                $everywhere[] = $entry;
+            } elseif ($prefix !== null && $prefix < self::NARROWEST_WIDE_PREFIX[$family]) {
+                $wide[] = $entry;
+            }
+        }
+        $fix = 'List only the support desk\'s own addresses: single IPs, or ranges no wider than an IPv4 /24 or an IPv6 /48.';
+        if ($everywhere !== []) {
+            $this->add('master_allowlist', 'app', self::FAIL, 'MASTER_PASSWORD_ALLOWED_IPS contains '.implode(', ', $everywhere).': the master password works from every address.', $fix);
+        } elseif ($wide !== []) {
+            $this->add('master_allowlist', 'app', self::WARN, 'MASTER_PASSWORD_ALLOWED_IPS has ranges wider than an IPv4 /24 or an IPv6 /48 ('.implode(', ', $wide).'): many strangers share them.', $fix);
+        } elseif ($invalid !== []) {
+            $this->add('master_allowlist', 'app', self::WARN, 'MASTER_PASSWORD_ALLOWED_IPS has entries that are not addresses or ranges ('.implode(', ', $invalid).'): they never match.', $fix);
+        } elseif ($list === []) {
+            $this->masterHashSet()
+                ? $this->add('master_allowlist', 'app', self::WARN, 'MASTER_PASSWORD_HASH is set, but MASTER_PASSWORD_ALLOWED_IPS is empty: the master password works from nowhere.', 'Add the support desk\'s address to MASTER_PASSWORD_ALLOWED_IPS, or remove MASTER_PASSWORD_HASH.')
+                : $this->add('master_allowlist', 'app', self::OK, 'No master password addresses, and no master password.');
+        } else {
+            $this->add('master_allowlist', 'app', self::OK, 'The master password works only from '.implode(', ', $list).'.');
+        }
+    }
+
+    private function masterSignInForms(): void
+    {
+        if ($this->standalone) {
+            return;
+        }
+        // The key may be missing on an older config: off unless it is clearly on.
+        $on = filter_var(config('saas.master_password_on_sign_in_forms', false), FILTER_VALIDATE_BOOLEAN);
+        if ($on && $this->masterHashSet()) {
+            $this->add('master_sign_in_forms', 'app', self::WARN, 'The master password also works on the sign-in forms (MASTER_PASSWORD_ON_SIGN_IN_FORMS): those uses carry no reason and no signed-in admin.',
+                'Set MASTER_PASSWORD_ON_SIGN_IN_FORMS=false and use "Sign in as" on the Companies screen, which records who and why.');
+        } else {
+            $this->add('master_sign_in_forms', 'app', self::OK, $on ? 'MASTER_PASSWORD_ON_SIGN_IN_FORMS is on, but no master password is set.' : 'The master password is not taken on the sign-in forms.');
+        }
+    }
+
+    /** 'ipv4', 'ipv6', or null when $entry (an IP or IP/prefix) is not an address. */
+    private function familyOf(string $entry): ?string
+    {
+        $address = explode('/', $entry, 2)[0];
+
+        return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false ? 'ipv4'
+            : (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? 'ipv6' : null);
+    }
+
+    /** The prefix length of an IP/prefix range; null for a single address or a prefix that is not one. */
+    private function prefixOf(string $entry): ?int
+    {
+        if (! str_contains($entry, '/')) {
+            return null;
+        }
+        [, $bits] = explode('/', $entry, 2);
+        $family = $this->familyOf($entry);
+        if ($family === null || ! ctype_digit($bits)) {
+            return null;
+        }
+        $bits = (int) $bits;
+
+        return $bits <= ($family === 'ipv4' ? 32 : 128) ? $bits : null;
     }
 
     // ── Mail and messages ────────────────────────────────────────────────
@@ -416,7 +601,7 @@ final class ConfigDoctor
             $acceptable = in_array($key, self::acceptable(), true);
             if ($acceptable && in_array($key, $this->accept, true)) {
                 [$status, $accepted] = [self::WARN, true];
-            } elseif (! $this->production || ($this->standalone && in_array($group, self::BUYER_GROUPS, true))) {
+            } elseif (! $this->live || ($this->standalone && in_array($group, self::BUYER_GROUPS, true))) {
                 $status = self::WARN;
             } elseif ($acceptable) {
                 $fix .= " Or, if the owner decides to go without it for now, add {$key} to CONFIG_DOCTOR_ACCEPT.";

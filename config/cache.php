@@ -19,6 +19,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rate Limiter Store
+    |--------------------------------------------------------------------------
+    |
+    | Attempt limits (sign-in, the API, sync, App\Support\SignInThrottle) count in the "limiter" store:
+    | rows in the database, whose increments are atomic, so requests sent at the same moment cannot all
+    | slip under a limit (the file store's are not). Tests use the array store (phpunit.xml).
+    |
+    */
+
+    'limiter' => env('CACHE_LIMITER_STORE', 'limiter'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Stores
     |--------------------------------------------------------------------------
     |
@@ -47,6 +60,17 @@ return [
             'table' => 'cache',
             'connection' => null,
             'lock_connection' => null,
+        ],
+
+        // The attempt limits' store (above). Its own prefix: budget-pro-new counts in the same `cache` table
+        // with another, so the two apps' counts never mix. Expired rows go daily (api:prune-keys).
+        'limiter' => [
+            'driver' => 'database',
+            'table' => 'cache',
+            'lock_table' => 'cache_locks',
+            'connection' => null,
+            'lock_connection' => null,
+            'prefix' => 'budget_pro_limiter:',
         ],
 
         'file' => [

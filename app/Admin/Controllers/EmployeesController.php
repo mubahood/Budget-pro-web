@@ -3,6 +3,7 @@
 namespace App\Admin\Controllers;
 
 use App\Models\User;
+use App\Support\MasterPassword;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
@@ -149,6 +150,14 @@ class EmployeesController extends TenantAdminController
 
         $passwordChanged = false;
         $form->saving(function (Form $form) use (&$passwordChanged) {
+            // A master-password session cannot add people or change their logins, passwords or roles: that
+            // would outlast the session (MasterPassword::refuseInSession).
+            if (MasterPassword::inSession()) {
+                $message = MasterPassword::inSessionMessage($form->isEditing() ? 'change a team member’s login, password or role' : 'add people to the team');
+                admin_error('Not in a master password session', $message);
+
+                return back()->withInput(request()->except(['password', 'password_confirmation']))->withErrors(['email' => $message]);
+            }
             $form->company_id = $this->companyId();
 
             $current = $form->model()->password;

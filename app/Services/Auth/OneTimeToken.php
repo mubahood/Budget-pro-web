@@ -22,16 +22,35 @@ final class OneTimeToken
 
     public const REGISTER_MINUTES = 30;
 
+    /**
+     * A new token for this purpose and owner (the account, or the identifier when there is no account yet).
+     * The owner's earlier open tokens of the same purpose stop working: only the newest code's token counts.
+     */
     public static function issue(string $purpose, ?int $userId, ?string $identifier, int $minutes): string
     {
         $token = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
-        DB::table(self::TABLE)->insert([
-            'purpose' => $purpose, 'token_hash' => hash('sha256', $token), 'user_id' => $userId,
-            'identifier' => $identifier === null ? null : mb_substr($identifier, 0, 191),
-            'expires_at' => now()->addMinutes($minutes), 'created_at' => now(),
-        ]);
+        $identifier = $identifier === null ? null : mb_substr($identifier, 0, 191);
+        DB::transaction(function () use ($purpose, $userId, $identifier, $token, $minutes) {
+            self::revokeOpen($purpose, $userId, $identifier);
+            DB::table(self::TABLE)->insert([
+                'purpose' => $purpose, 'token_hash' => hash('sha256', $token), 'user_id' => $userId, 'identifier' => $identifier,
+                'expires_at' => now()->addMinutes($minutes), 'created_at' => now(),
+            ]);
+        });
 
         return $token;
+    }
+
+    /** Use up the owner's open tokens of this purpose (marked used, so a late one explains itself as expired). */
+    public static function revokeOpen(string $purpose, ?int $userId, ?string $identifier): int
+    {
+        if ($userId === null && ($identifier === null || $identifier === '')) {
+            return 0;
+        }
+
+        return DB::table(self::TABLE)->where('purpose', $purpose)->whereNull('used_at')
+            ->when($userId !== null, fn ($q) => $q->where('user_id', $userId), fn ($q) => $q->whereNull('user_id')->where('identifier', $identifier))
+            ->update(['used_at' => now()]);
     }
 
     /**

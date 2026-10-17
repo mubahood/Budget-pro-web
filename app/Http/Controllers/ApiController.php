@@ -9,7 +9,10 @@ use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\User;
 use App\Models\Utils;
+use App\Services\Auth\AccountAccess;
+use App\Services\Auth\SignInPassword;
 use App\Services\Onboarding\RegistrationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\DB;
@@ -324,34 +327,35 @@ class ApiController extends BaseController
         }
     }
 
-    public function login(Request $r)
+    /**
+     * Pre-v1 sign-in (POST api/auth/login), in the envelope the shipped app reads: HTTP 200 with code 1 and
+     * data, or code 0 and a message. Returned, not exit()ed, so it can be tested. An unknown email and a
+     * wrong password get one answer at the same cost (SignInPassword), so it cannot be used to find
+     * accounts; a switched-off or removed person is refused (AccountAccess). Limited by `throttle:10,1`
+     * and the `login` limiter (routes/api.php).
+     */
+    public function login(Request $r): JsonResponse
     {
-        //check if email is provided
-        if ($r->email == null) {
-            Utils::error('Email is required.');
+        $email = is_scalar($r->input('email')) ? trim((string) $r->input('email')) : '';
+        $password = is_scalar($r->input('password')) ? (string) $r->input('password') : '';
+        if ($email === '') {
+            return self::legacyError('Email is required.');
         }
-        //check if email is valid
-        if (! filter_var($r->email, FILTER_VALIDATE_EMAIL)) {
-            //Utils::error("Email is invalid.");
-        }
-
-        //check if password is provided
-        if ($r->password == null) {
-            Utils::error('Password is required.');
+        if ($password === '') {
+            return self::legacyError('Password is required.');
         }
 
-        $user = User::where('email', $r->email)->first();
-        if ($user == null) {
-            Utils::error('Account not found.');
-        }
-
-        if (! password_verify($r->password, $user->password)) {
-            Utils::error('Invalid password.');
+        $user = User::where('email', $email)->first();
+        if (! SignInPassword::matches($user, $password) || $user === null) {
+            return self::legacyError('These credentials do not match our records.');
         }
 
         $company = Company::find($user->company_id);
+        if (($refusal = AccountAccess::refusal($user, $company)) !== null) {
+            return self::legacyError($refusal);
+        }
         if ($company == null) {
-            Utils::error('Company not found.');
+            return self::legacyError('Company not found.');
         }
 
         // Additive: issues a Sanctum token alongside the legacy response so
@@ -362,11 +366,17 @@ class ApiController extends BaseController
         // the legacy response shape changes for them.
         $token = $user->createToken((string) ($r->input('device_name') ?: $r->userAgent() ?: 'api-token'))->plainTextToken;
 
-        Utils::success([
+        return response()->json(['code' => 1, 'message' => 'Login successful.', 'data' => [
             'user' => $user,
             'company' => $company,
             'token' => $token,
-        ], 'Login successful.');
+        ]]);
+    }
+
+    /** The legacy envelope's refusal (Utils::error's shape, HTTP 200), returned instead of exit()ed. */
+    private static function legacyError(string $message): JsonResponse
+    {
+        return response()->json(['code' => 0, 'message' => $message, 'data' => null]);
     }
 
     public function register(Request $r)

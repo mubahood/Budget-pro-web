@@ -108,6 +108,11 @@ class User extends Administrator
             if ($model->isDirty('email') && (empty($model->username) || $model->username === $model->getOriginal('email'))) {
                 $model->username = $model->email ?: $model->phone_number;
             }
+            // A new password ends "remember me" on every other browser, whichever screen or API set it
+            // (DECISIONS.md 2026-10-17). The browser that changed it keeps its session.
+            if ($model->isDirty('password')) {
+                $model->remember_token = \Illuminate\Support\Str::random(60);
+            }
 
             return $model;
         });

@@ -227,6 +227,42 @@ class SupportContactTest extends ApiTestCase
         $this->assertNotEmpty($clicks->summary(now()->subMinute()));
     }
 
+    public function test_a_page_path_never_keeps_a_live_token(): void
+    {
+        $token = 'AbCdEf0123456789GhIjKlMnOp';
+        $cases = [
+            "/invite/{$token}" => '/invite/:token',
+            "/invite/{$token}/join" => '/invite/:token/join',
+            'https://shop.example.test/invite/short?x=1' => '/invite/:token',
+            "/budget-pro-new/invite/{$token}" => '/budget-pro-new/invite/:token',
+            '/reset-password/0f1e2d3c4b5a69788796a5b4c3d2e1f0' => '/reset-password/:token',
+            '/web-link/abc' => '/web-link/:token',
+            '/r/0123456789abcdef0123456789ABCDEF/pdf' => '/r/:token/pdf',
+            '/my-licence/claim/550e8400-e29b-41d4-a716-446655440000' => '/my-licence/claim/:token',
+            '/stop/42/abcdefabcdefabcd' => '/stop/:token/:token',
+            '/products/9f8e7d6c5b4a39281706f5e4d3c2b1a0' => '/products/:token',
+            '/sales/550e8400-e29b-41d4-a716-446655440000/receipt' => '/sales/:token/receipt',
+            '/files/x_Y-z_0123456789ab' => '/files/:token',
+            // Route names and ids stay readable.
+            '/purchasing/reorder-suggestions' => '/purchasing/reorder-suggestions',
+            '/products/12/edit' => '/products/12/edit',
+            '/settings/connections?code=AbCdEf0123456789GhIj' => '/settings/connections',
+            '/' => '/',
+        ];
+        foreach ($cases as $page => $expected) {
+            $this->assertSame($expected, SupportContact::pagePath($page), $page);
+            $this->assertSame($expected, SupportContact::pagePath(SupportContact::pagePath($page)), "{$page}, twice");
+        }
+
+        // Stored masked, and passed on masked in a tracked link.
+        (new SupportClicks())->record('auth.signin', 'site', "/invite/{$token}");
+        $this->assertSame('/invite/:token', DB::table('support_clicks')->orderByDesc('id')->value('page'));
+        config(['saas.new_ui_url' => 'https://portal.example.test']);
+        $link = SupportContact::platform()->goLink('auth.signin', [], "/invite/{$token}", 'site');
+        $this->assertStringContainsString('p='.rawurlencode('/invite/:token'), $link);
+        $this->assertStringNotContainsString($token, $link);
+    }
+
     public function test_meta_and_app_version_carry_the_support_block(): void
     {
         $public = $this->getJson('/api/v1/app/version')->assertOk()->json('data');

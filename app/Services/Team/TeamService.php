@@ -6,13 +6,18 @@ use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
 use App\Models\User;
 use App\Services\Messaging\Messenger;
+use App\Support\MasterPassword;
 use App\Support\Phone;
 use App\Support\Rules\PasswordPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/** Invites, roles, deactivation and ownership transfer (plan C5, P3-4). */
+/**
+ * Invites, roles, deactivation and ownership transfer (plan C5, P3-4). A master-password session may not
+ * add people, invite, change roles or role permissions, set passwords, change sign-in emails or phones,
+ * or hand over ownership (MasterPassword::refuseInSession; never applies on the API, which has no session).
+ */
 class TeamService
 {
     public const INVITE_DAYS = 7;
@@ -25,6 +30,7 @@ class TeamService
     /** @return array{invite: object, link: string} */
     public function invite(User $by, string $role, ?string $phone, ?string $email, ?string $name = null): array
     {
+        MasterPassword::refuseInSession('invite people to the team');
         \App\Services\Onboarding\PublicDemo::guard((int) $by->company_id, 'inviting people');
         if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
             throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
@@ -57,6 +63,7 @@ class TeamService
 
     public function resend(object $invite, User $by): string
     {
+        MasterPassword::refuseInSession('send team invites');
         if ($invite->status !== 'pending') {
             throw BusinessRuleException::make('invite_closed', 'This invite is no longer open.');
         }
@@ -174,6 +181,7 @@ class TeamService
 
     public function setRole(Company $company, User $member, string $role): void
     {
+        MasterPassword::refuseInSession('change roles');
         if ((int) $company->owner_id === (int) $member->id) {
             throw BusinessRuleException::make('owner_role', 'Transfer ownership to change the owner’s role.');
         }
@@ -242,6 +250,7 @@ class TeamService
      */
     public function createMember(Company $company, User $by, string $name, ?string $email, ?string $phone, string $password, string $role): User
     {
+        MasterPassword::refuseInSession('add people to the team');
         \App\Services\Onboarding\PublicDemo::guard($company, 'adding people');
         if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
             throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
@@ -294,6 +303,7 @@ class TeamService
      */
     public function setPassword(Company $company, User $by, User $member, string $password): void
     {
+        MasterPassword::refuseInSession('set a password');
         \App\Services\Onboarding\PublicDemo::guardAccount($member, 'changing this password');
         $this->assertMemberOf($company, $member);
         if ((int) $company->owner_id === (int) $member->id && (int) $by->id !== (int) $member->id) {
@@ -330,6 +340,12 @@ class TeamService
         $email = trim((string) ($data['email'] ?? '')) !== '' ? strtolower(trim((string) $data['email'])) : null;
         if (! $e164 && ! $email) {
             throw BusinessRuleException::make('contact_required', 'Keep a phone number or an email: they sign in with it.');
+        }
+        // The email and phone are sign-in logins: a master-password session leaves them as they are.
+        $oldEmail = trim((string) $member->email) !== '' ? strtolower(trim((string) $member->email)) : null;
+        $oldE164 = $member->phone_e164 ?: Phone::e164((string) $member->phone_number, $company->country ?? 'UG');
+        if ($email !== $oldEmail || $e164 !== $oldE164) {
+            MasterPassword::refuseInSession('change a sign-in email or phone number');
         }
         $this->assertLoginFree($company, $email, $e164, (int) $member->id);
 
@@ -395,6 +411,7 @@ class TeamService
 
     public function transferOwnership(Company $company, User $owner, User $to, string $password): void
     {
+        MasterPassword::refuseInSession('hand over ownership');
         \App\Services\Onboarding\PublicDemo::guard($company, 'handing over the shop');
         if (! Hash::check($password, $owner->password)) {
             throw BusinessRuleException::make('wrong_password', 'Your password is not correct.');
@@ -437,6 +454,7 @@ class TeamService
      */
     public function setRolePermissions(Company $company, string $role, array $permissions): void
     {
+        MasterPassword::refuseInSession('change what a role may do');
         if ($role === 'owner' || ! array_key_exists($role, config('permissions.roles'))) {
             throw BusinessRuleException::make('invalid_role', 'This role cannot be changed.');
         }

@@ -20,8 +20,11 @@ use Symfony\Component\HttpFoundation\IpUtils;
  *
  *  - SaaS only: always off on a standalone copy, whatever .env says (STANDALONE_EDITION_PLAN.md §5.4).
  *  - Only its bcrypt hash is configured (MASTER_PASSWORD_HASH, made by `master-password:set`).
- *  - It works only from MASTER_PASSWORD_ALLOWED_IPS (IPs or CIDR ranges; empty = nowhere), on the
- *    classic and web sign-in forms and on "Sign in as" (a platform admin, with a reason).
+ *  - It works only from MASTER_PASSWORD_ALLOWED_IPS (IPs or CIDR ranges; empty = nowhere), judged on the
+ *    connecting address (App\Support\ClientAddress: a forwarded header only from named proxies).
+ *  - "Sign in as" (a platform admin, with a reason) is the supported path: it records who and why. The
+ *    plain classic and web sign-in forms take it only when MASTER_PASSWORD_ON_SIGN_IN_FORMS=true
+ *    (default off), because they cannot say who used it or why ({@see onSignInForms()}).
  *  - It never opens a platform-admin account, a switched-off account, an account removed from its
  *    shop or one without a shop.
  *  - Every attempt with the right master password, allowed or refused, is a row in
@@ -29,6 +32,8 @@ use Symfony\Component\HttpFoundation\IpUtils;
  *    the support contact). A wrong master password is just a failed sign-in.
  *  - The session it opens is marked (session key SESSION_KEY) and ends after
  *    MASTER_PASSWORD_SESSION_MINUTES; both interfaces show a banner until then.
+ *  - That session cannot turn into lasting access: it may not change the person's own password, email
+ *    or phone, add people or invites, change roles or hand over ownership ({@see refuseInSession()}).
  *
  * Used by the classic AuthController, the web portal's AuthenticatedSessionController and the
  * classic SignInAsController.
@@ -70,6 +75,15 @@ final class MasterPassword
         return ! Edition::isStandalone() && self::hash() !== '';
     }
 
+    /**
+     * The plain sign-in forms (classic and web) take it too: only with MASTER_PASSWORD_ON_SIGN_IN_FORMS=true.
+     * Off by default, since a form cannot record who used it or why; "Sign in as" can (DECISIONS.md 2026-10-17).
+     */
+    public static function onSignInForms(): bool
+    {
+        return self::configured() && (bool) config('saas.master_password_on_sign_in_forms', false);
+    }
+
     /** True when $password is the master password (SaaS only, against the configured hash). */
     public static function matches(?string $password): bool
     {
@@ -83,7 +97,7 @@ final class MasterPassword
         }
     }
 
-    /** The address is on MASTER_PASSWORD_ALLOWED_IPS. An empty list allows nobody. */
+    /** The address (ClientAddress::of(), never a forwarded header) is on MASTER_PASSWORD_ALLOWED_IPS. An empty list allows nobody. */
     public static function ipAllowed(?string $ip): bool
     {
         $list = self::allowedIps();
@@ -137,20 +151,22 @@ final class MasterPassword
     }
 
     /**
-     * The sign-in forms (classic and web). Null when $password is not the master password (a plain
-     * failed sign-in). Otherwise the attempt is recorded and the owner told, allowed or not.
+     * The sign-in forms (classic and web). Null when the forms do not take the master password
+     * ({@see onSignInForms()}) or $password is not it (a plain failed sign-in). Otherwise the attempt is
+     * recorded and the owner told, allowed or not.
      *
      * @return array{allowed: bool, refusal: string|null, use_id: int}|null
      */
     public static function attempt(?string $password, User $user, string $where, ?Request $request = null): ?array
     {
-        if (! self::matches($password)) {
+        if (! self::onSignInForms() || ! self::matches($password)) {
             return null;
         }
         $request ??= request();
-        $refusal = self::ipAllowed($request->ip()) ? self::targetRefusal($user) : 'ip_not_allowed';
+        $ip = ClientAddress::of($request);
+        $refusal = self::ipAllowed($ip) ? self::targetRefusal($user) : 'ip_not_allowed';
         $id = self::record($where, $user, $refusal === null, $refusal, $request);
-        self::alert($id, $where, $user, null, $request->ip(), null, $refusal);
+        self::alert($id, $where, $user, null, $ip, null, $refusal);
 
         return ['allowed' => $refusal === null, 'refusal' => $refusal, 'use_id' => $id];
     }
@@ -182,14 +198,47 @@ final class MasterPassword
         if (! self::matches($password)) {
             throw BusinessRuleException::make('master_wrong', 'That master password is not right.');
         }
-        $refusal = self::ipAllowed($request->ip()) ? self::targetRefusal($target) : 'ip_not_allowed';
+        $ip = ClientAddress::of($request);
+        $refusal = self::ipAllowed($ip) ? self::targetRefusal($target) : 'ip_not_allowed';
         $id = self::record(self::SIGN_IN_AS, $target, $refusal === null, $refusal, $request, $admin, $reason);
-        self::alert($id, self::SIGN_IN_AS, $target, $admin, $request->ip(), $reason, $refusal);
+        self::alert($id, self::SIGN_IN_AS, $target, $admin, $ip, $reason, $refusal);
         if ($refusal !== null) {
             throw BusinessRuleException::make($refusal, self::refusalMessage($refusal));
         }
 
         return $id;
+    }
+
+    /** This request's session was opened with the master password (classic or web). Never true on the API. */
+    public static function inSession(?Request $request = null): bool
+    {
+        $request ??= request();
+        if ($request->hasSession()) {
+            return $request->session()->has(self::SESSION_KEY);
+        }
+        // A request object without the session attached (a Livewire test call): the session store this process
+        // loaded, if any. The API and the console never load one, so it holds nothing there.
+        $store = app()->bound('session.store') ? app('session.store') : null;
+
+        return $store instanceof \Illuminate\Contracts\Session\Session && $store->has(self::SESSION_KEY);
+    }
+
+    /**
+     * A master session is for looking and fixing, not for lasting access: it may not $what (change this
+     * password, add people to the team, ...). Used by both interfaces and by TeamService.
+     *
+     * @throws BusinessRuleException master_session
+     */
+    public static function refuseInSession(string $what): void
+    {
+        if (self::inSession()) {
+            throw BusinessRuleException::make('master_session', self::inSessionMessage($what));
+        }
+    }
+
+    public static function inSessionMessage(string $what): string
+    {
+        return 'You signed in with the master password, so you cannot '.$what.'. The account holder can do it from their own sign-in.';
     }
 
     public static function sessionMinutes(): int
@@ -224,16 +273,17 @@ final class MasterPassword
 
     private static function record(string $where, User $target, bool $allowed, ?string $refusal, Request $request, ?User $by = null, ?string $reason = null): int
     {
+        $ip = ClientAddress::of($request);
         $id = (int) DB::table(self::TABLE)->insertGetId([
             'used_by_admin_id' => $by?->id, 'target_user_id' => $target->id, 'company_id' => $target->company_id ?: null,
             'where' => $where, 'reason' => $reason === null ? null : mb_substr($reason, 0, 500),
-            'ip' => $request->ip() === null ? null : mb_substr((string) $request->ip(), 0, 45),
+            'ip' => $ip === '' ? null : mb_substr($ip, 0, 45),
             'user_agent' => mb_substr((string) $request->userAgent(), 0, 255) ?: null,
             'allowed' => $allowed, 'refusal_reason' => $refusal, 'created_at' => now(),
         ]);
         Log::warning($allowed ? '[auth] master password used' : '[auth] master password use refused', [
             'use_id' => $id, 'user_id' => $target->id, 'company_id' => $target->company_id, 'where' => $where,
-            'by' => $by?->id, 'ip' => $request->ip(), 'refusal' => $refusal,
+            'by' => $by?->id, 'ip' => $ip, 'refusal' => $refusal,
         ]);
 
         return $id;

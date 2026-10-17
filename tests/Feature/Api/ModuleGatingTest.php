@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Http\Middleware\EnsureApiModule;
 use App\Models\Company;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Http;
@@ -17,11 +18,48 @@ use Illuminate\Support\Str;
  */
 class ModuleGatingTest extends ApiTestCase
 {
-    /** @return array<int, RoutingRoute> */
+    /** @return array<int, RoutingRoute> every api/v1 route behind a sanctum guard, however the auth middleware is written */
     private function authenticatedV1Routes(): array
     {
         return array_values(array_filter(Route::getRoutes()->getRoutes(),
-            fn (RoutingRoute $r) => str_starts_with($r->uri(), 'api/v1/') && in_array('auth:sanctum', $r->gatherMiddleware(), true)));
+            fn (RoutingRoute $r) => str_starts_with($r->uri(), 'api/v1/') && $this->guardedBySanctum($r)));
+    }
+
+    /**
+     * Whether any auth middleware on the route lets the sanctum guard in: `auth:sanctum`, `auth:sanctum,web`,
+     * `auth:web,sanctum`, `Authenticate::class.':sanctum'`, a group that holds one, or plain `auth` when the default
+     * guard is sanctum. The router resolves aliases and groups to classes first, so a spelling cannot slip past.
+     */
+    private function guardedBySanctum(RoutingRoute $route): bool
+    {
+        foreach (app('router')->gatherRouteMiddleware($route) as $middleware) {
+            if (! is_string($middleware)) {
+                continue;
+            }
+            [$class, $parameters] = array_pad(explode(':', $middleware, 2), 2, '');
+            if ($class !== Authenticate::class && ! is_subclass_of($class, Authenticate::class)) {
+                continue;
+            }
+            $guards = $parameters === '' ? [(string) config('auth.defaults.guard')] : array_map('trim', explode(',', $parameters));
+            if (in_array('sanctum', $guards, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return array<int, string> the authenticated v1 routes with no api.module mark */
+    private function unmarkedRoutes(): array
+    {
+        $missing = [];
+        foreach ($this->authenticatedV1Routes() as $route) {
+            if ($this->moduleMarks($route) === []) {
+                $missing[] = $this->label($route);
+            }
+        }
+
+        return $missing;
     }
 
     /** @return array<int, string> the route's api.module:* entries */
@@ -62,6 +100,26 @@ class ModuleGatingTest extends ApiTestCase
         $this->assertSame([], $missing, "Authenticated v1 routes without an api.module mark (add api.module:<module>, or api.module:core for every account):\n".implode("\n", $missing));
         $this->assertSame([], $several, "Routes with more than one api.module mark:\n".implode("\n", $several));
         $this->assertSame([], $unknown, "Routes with an unknown module:\n".implode("\n", $unknown));
+        $this->assertSame([], $this->unmarkedRoutes());
+    }
+
+    public function test_the_walk_catches_an_unmarked_route_however_its_sanctum_guard_is_written(): void
+    {
+        Route::middleware('auth:sanctum,web')->get('api/v1/zz-probe-mixed-guards', fn () => 'x');
+        Route::middleware('auth:web,sanctum')->get('api/v1/zz-probe-sanctum-second', fn () => 'x');
+        Route::middleware(Authenticate::class.':sanctum')->get('api/v1/zz-probe-class', fn () => 'x');
+        Route::middleware(\App\Http\Middleware\Authenticate::class.':sanctum')->get('api/v1/zz-probe-app-class', fn () => 'x');
+        Route::middleware(Authenticate::using('sanctum', 'web'))->get('api/v1/zz-probe-using', fn () => 'x');
+        Route::middleware(['auth:sanctum', 'api.module:core'])->get('api/v1/zz-probe-marked', fn () => 'x');
+        Route::middleware('auth:web')->get('api/v1/zz-probe-web-only', fn () => 'x');
+
+        $missing = $this->unmarkedRoutes();
+
+        foreach (['mixed-guards', 'sanctum-second', 'class', 'app-class', 'using'] as $probe) {
+            $this->assertContains("GET api/v1/zz-probe-{$probe}", $missing, "{$probe}: a sanctum route with no module is caught");
+        }
+        $this->assertNotContains('GET api/v1/zz-probe-marked', $missing);
+        $this->assertNotContains('GET api/v1/zz-probe-web-only', $missing, 'not a sanctum route, so not the API walk\'s business');
     }
 
     public function test_a_module_mark_runs_straight_after_the_tenant_guard_and_never_without_it(): void
@@ -95,7 +153,7 @@ class ModuleGatingTest extends ApiTestCase
             'GET api/v1/z-reports' => 'shop', 'GET api/v1/reorder-suggestions' => 'shop', 'PUT api/v1/company/engagement' => 'shop',
             'GET api/v1/financial-records' => 'finance', 'GET api/v1/financial-reports' => 'finance',
             'GET api/v1/budget-programs' => 'budget', 'POST api/v1/budget-programs/{id}/print-link' => 'budget', 'GET api/v1/contribution-records' => 'budget',
-            'GET api/v1/poultry/sync/pull' => 'poultry', 'POST api/v1/poultry/sync/push' => 'poultry',
+            'GET api/v1/poultry/sync/pull' => 'core', 'POST api/v1/poultry/sync/push' => 'core',
             'POST api/v1/tracking/devices/{uuid}/locations/batch' => 'pingpin', 'GET api/v1/tracking/devices/{uuid}/config' => 'pingpin',
         ];
         $seen = [];
@@ -145,7 +203,7 @@ class ModuleGatingTest extends ApiTestCase
         $this->getJson('/api/v1/poultry/sync/pull?table=batches&since=0', $h)->assertOk();
     }
 
-    public function test_a_shop_is_refused_budget_routes_and_the_v1_poultry_sync(): void
+    public function test_a_shop_is_refused_budget_routes_but_never_a_sync_route(): void
     {
         $shop = $this->registerTenant();
         $this->companyWith($shop, ['shop', 'finance']);
@@ -156,9 +214,14 @@ class ModuleGatingTest extends ApiTestCase
             ->assertJsonPath('errors.code', 'module_off')->assertJsonPath('errors.module', 'budget');
         $this->postJson('/api/v1/budget-programs/1/print-link', [], $h)->assertStatus(403)->assertJsonPath('errors.module', 'budget');
         $this->postJson('/api/v1/contribution-records/print-link', [], $h)->assertStatus(403)->assertJsonPath('errors.module', 'budget');
-        $this->getJson('/api/v1/poultry/sync/pull', $h)->assertStatus(403)
-            ->assertJsonPath('message', 'Poultry farm is not on your account.')->assertJsonPath('errors.module', 'poultry');
-        $this->postJson('/api/v1/poultry/sync/push', ['records' => []], $h)->assertStatus(403)->assertJsonPath('errors.module', 'poultry');
+
+        // The retiring v1 poultry sync is core, like the v2 sync: an older app's farm records keep moving even with the farm hidden.
+        $pull = $this->getJson('/api/v1/poultry/sync/pull?table=batches&since=0', $h);
+        $this->assertNotSame('module_off', $pull->json('errors.code'));
+        $pull->assertOk();
+        $push = $this->postJson('/api/v1/poultry/sync/push', ['records' => []], $h);
+        $this->assertNotSame('module_off', $push->json('errors.code'));
+        $this->assertLessThan(500, $push->status());
 
         $this->getJson('/api/v1/stock-items', $h)->assertOk();
         $this->getJson('/api/v1/financial-records', $h)->assertOk();

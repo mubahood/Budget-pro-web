@@ -18,9 +18,10 @@ class MasterPasswordTest extends AdminTestCase
 {
     private const MASTER = 'correct-horse-battery-staple-42';
 
-    private function configure(array $ips = ['127.0.0.1']): void
+    private function configure(array $ips = ['127.0.0.1'], bool $forms = true): void
     {
         config([
+            'saas.master_password_on_sign_in_forms' => $forms,
             'saas.master_password_hash' => Hash::make(self::MASTER),
             'saas.master_password_allowed_ips' => $ips,
             'saas.master_password_session_minutes' => 60,
@@ -197,6 +198,105 @@ class MasterPasswordTest extends AdminTestCase
         $this->artisan('master-password:set')->expectsQuestion('New master password (20 characters or more)', self::MASTER)
             ->expectsQuestion('Type it again', self::MASTER)->expectsOutputToContain("MASTER_PASSWORD_HASH='\$2y\$12\$")
             ->doesntExpectOutputToContain(self::MASTER)->assertSuccessful();
+    }
+
+    public function test_the_sign_in_forms_take_it_only_when_switched_on_and_sign_in_as_always_can(): void
+    {
+        $this->assertFalse((bool) config('saas.master_password_on_sign_in_forms'), 'off unless MASTER_PASSWORD_ON_SIGN_IN_FORMS=true');
+        $this->configure(forms: false);
+        $shop = $this->makeTenant('company')['user'];
+
+        $this->post('/auth/login', ['username' => $shop->email, 'password' => self::MASTER])->assertSessionHasErrors(['username' => trans('auth.failed')]);
+        $this->assertGuest('admin');
+        $this->assertSame(0, $this->uses()->count(), 'not even checked: nothing recorded');
+        $this->assertNull(MasterPassword::attempt(self::MASTER, $shop, MasterPassword::CLASSIC));
+
+        $admin = $this->makeTenant('admin')['user'];
+        $t = $this->makeTenant('company');
+        $this->asAdmin($admin)->post('/companies/'.$t['company']->id.'/sign-in-as', [
+            'user_id' => $t['user']->id, 'reason' => 'The owner asked for help on WhatsApp', 'master_password' => self::MASTER,
+        ])->assertRedirect();
+        $this->assertSame('sign_in_as', $this->uses()->last()->where);
+    }
+
+    public function test_the_master_session_also_ends_on_kernel_routes_outside_the_admin_prefix(): void
+    {
+        $this->configure();
+        $shop = $this->makeTenant('company')['user'];
+        $this->post('/auth/login', ['username' => $shop->email, 'password' => self::MASTER]);
+        $this->get('/api/global-search?q=abc')->assertOk();
+
+        $this->travel(61)->minutes();
+        $this->get('/api/global-search?q=abc')->assertRedirect(admin_url('auth/login'));
+        $this->assertGuest('admin');
+
+        // A JSON caller is told why with a 401; a public page without the session mark is untouched.
+        $this->travelBack();
+        $this->post('/auth/login', ['username' => $shop->email, 'password' => self::MASTER]);
+        $this->travel(61)->minutes();
+        $this->getJson('/api/global-search?q=abc')->assertStatus(401)->assertJson(['message' => 'The master password session has ended. Sign in again to carry on.']);
+        $this->get('/api/openapi.json')->assertOk();
+    }
+
+    public function test_a_master_session_cannot_make_itself_lasting_access_on_the_classic_side(): void
+    {
+        $this->configure();
+        $t = $this->makeTenant('company');
+        $shop = $t['user'];
+        $hash = $shop->password;
+        $this->post('/auth/login', ['username' => $shop->email, 'password' => self::MASTER]);
+
+        // Their own password.
+        $this->put('/auth/setting', ['name' => 'Owner', 'password' => 'takeover2026', 'password_confirmation' => 'takeover2026'])
+            ->assertSessionHasErrors(['password' => MasterPassword::inSessionMessage('change this password')]);
+        $this->assertSame($hash, $shop->fresh()->password);
+        // The name is fine.
+        $this->put('/auth/setting', ['name' => 'Renamed Owner', 'password' => $hash, 'password_confirmation' => $hash])->assertSessionHasNoErrors();
+
+        // A new team member, or an invite.
+        $email = 'support_'.uniqid().'@example.test';
+        $this->post('/employees', ['first_name' => 'Back', 'last_name' => 'Door', 'sex' => 'Male', 'email' => $email, 'phone_number' => '+256700000009',
+            'password' => 'backdoor2026', 'password_confirmation' => 'backdoor2026', 'team_role' => 'manager', 'status' => 'Active'])->assertSessionHasErrors('email');
+        $this->assertFalse(User::withoutGlobalScopes()->where('email', $email)->exists());
+        try {
+            app(\App\Services\Team\TeamService::class)->invite($shop, 'manager', null, 'invitee_'.uniqid().'@example.test');
+            $this->fail('an invite from a master session must be refused');
+        } catch (\App\Exceptions\BusinessRuleException $e) {
+            $this->assertSame('master_session', $e->errorCode());
+        }
+
+        // Out of the master session (a plain sign-in), the same changes work.
+        $this->get('/auth/logout');
+        $this->post('/auth/login', ['username' => $shop->email, 'password' => 'secret123'])->assertRedirect();
+        $this->assertFalse(MasterPassword::inSession());
+        $this->put('/auth/setting', ['name' => 'Owner', 'password' => 'mine2026x', 'password_confirmation' => 'mine2026x'])->assertSessionHasNoErrors();
+        $this->assertTrue(Hash::check('mine2026x', $shop->fresh()->password));
+    }
+
+    public function test_the_allow_list_uses_the_connecting_address_unless_proxies_are_named(): void
+    {
+        $this->configure(['203.0.113.7']);
+        $shop = $this->makeTenant('company')['user'];
+        $spoofed = ['REMOTE_ADDR' => '198.51.100.66', 'HTTP_X_FORWARDED_FOR' => '203.0.113.7'];
+
+        // Trusting every proxy (`*`) must not let anyone write an allowed address into X-Forwarded-For.
+        config(['app.trusted_proxies' => '*']);
+        \Illuminate\Http\Request::setTrustedProxies(['198.51.100.66'], \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR);
+        $request = \Illuminate\Http\Request::create('/auth/login', 'POST', [], [], [], $spoofed);
+        $this->assertSame('203.0.113.7', $request->ip(), 'what the framework would believe');
+        $this->assertSame('198.51.100.66', \App\Support\ClientAddress::of($request));
+        $this->withServerVariables($spoofed)->post('/auth/login', ['username' => $shop->email, 'password' => self::MASTER])->assertSessionHasErrors('username');
+        $this->assertGuest('admin');
+        $this->assertSame(['ip_not_allowed', '198.51.100.66'], [$this->uses()->last()->refusal_reason, $this->uses()->last()->ip]);
+
+        // A named proxy list: the forwarded address from that proxy counts.
+        config(['app.trusted_proxies' => '198.51.100.66']);
+        \Illuminate\Http\Request::setTrustedProxies(['198.51.100.66'], \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR); // the request above reset them
+        $this->assertSame('203.0.113.7', \App\Support\ClientAddress::of($request));
+        // Nothing configured: the connecting address.
+        config(['app.trusted_proxies' => null, 'trustedproxy.proxies' => null]);
+        $this->assertSame('198.51.100.66', \App\Support\ClientAddress::of($request));
+        \Illuminate\Http\Request::setTrustedProxies([], \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR);
     }
 
     public function test_the_api_never_takes_the_master_password(): void

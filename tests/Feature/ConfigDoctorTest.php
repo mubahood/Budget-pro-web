@@ -14,6 +14,9 @@ use Tests\TestCase;
  */
 class ConfigDoctorTest extends TestCase
 {
+    /** Any non-empty MASTER_PASSWORD_HASH: the doctor only asks whether one is set. */
+    private const HASH = '$2y$12$abcdefghijklmnopqrstuuJ2w9yH0E8eG1rCqv0W3f2m4b8r6Hqfe';
+
     /** A production SaaS server with everything right, plus $over. */
     private function production(array $over = []): void
     {
@@ -21,6 +24,8 @@ class ConfigDoctorTest extends TestCase
             'app.env' => 'production', 'edition.name' => 'saas', 'app.debug' => false, 'app.url' => 'https://bp.example.test',
             'queue.default' => 'database', 'saas.data_key' => 'base64:'.base64_encode(str_repeat('k', 32)),
             'saas.master_password_plaintext_set' => false, 'saas.config_doctor_accept' => [],
+            'saas.master_password_hash' => '', 'saas.master_password_allowed_ips' => [], 'saas.master_password_on_sign_in_forms' => false,
+            'app.trusted_proxies' => null, 'trustedproxy.proxies' => null,
             'mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.example.test', 'saas.mail_enabled' => true,
             'messaging.mail.driver' => 'mail',
             'messaging.sms.driver' => 'africastalking', 'messaging.sms.africastalking.username' => 'bp', 'messaging.sms.africastalking.api_key' => 'at-key',
@@ -65,6 +70,9 @@ class ConfigDoctorTest extends TestCase
             'no data key' => [['saas.data_key' => ''], 'data_key'],
             'data key too short' => [['saas.data_key' => 'base64:'.base64_encode('short')], 'data_key'],
             'plaintext master password' => [['saas.master_password_plaintext_set' => true], 'master_password_plaintext'],
+            'master password behind every proxy' => [['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7'], 'trustedproxy.proxies' => '*'], 'master_proxies'],
+            'master password from every IPv4 address' => [['saas.master_password_allowed_ips' => ['203.0.113.7', '0.0.0.0/0']], 'master_allowlist'],
+            'master password from every IPv6 address' => [['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['::/0']], 'master_allowlist'],
             'mail to the log' => [['mail.default' => 'log'], 'mail_mailer'],
             'mail to an array' => [['mail.default' => 'array'], 'mail_mailer'],
             'smtp with no host' => [['mail.mailers.smtp.host' => '', 'mail.mailers.smtp.url' => null], 'mail_mailer'],
@@ -118,6 +126,11 @@ class ConfigDoctorTest extends TestCase
             'no support hours' => [['support.hours' => null], 'support_details'],
             'no portal address' => [['saas.new_ui_url' => ''], 'new_ui_url'],
             'no invite address' => [['saas.invite_url' => ''], 'invite_url'],
+            'wide IPv4 master range' => [['saas.master_password_allowed_ips' => ['198.51.100.0/16']], 'master_allowlist'],
+            'wide IPv6 master range' => [['saas.master_password_allowed_ips' => ['2001:db8::/32']], 'master_allowlist'],
+            'master address that is not one' => [['saas.master_password_allowed_ips' => ['office-wifi', '203.0.113.7/99']], 'master_allowlist'],
+            'master password with no addresses' => [['saas.master_password_hash' => self::HASH], 'master_allowlist'],
+            'master password on the sign-in forms' => [['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7'], 'saas.master_password_on_sign_in_forms' => true], 'master_sign_in_forms'],
         ];
     }
 
@@ -129,6 +142,89 @@ class ConfigDoctorTest extends TestCase
 
         $this->assertSame(ConfigDoctor::WARN, $checks[$key]['status']);
         $this->assertSame(ConfigDoctor::WARN, ConfigDoctor::overall($checks), 'A warning never stops a deploy.');
+    }
+
+    #[DataProvider('failures')]
+    public function test_a_live_address_fails_whatever_app_env_says(array $over, string $key): void
+    {
+        $this->production(['app.env' => 'local', 'app.url' => 'https://shop.example.com'] + $over);
+        $checks = $this->checks();
+
+        $this->assertSame(ConfigDoctor::FAIL, $checks[$key]['status'], "a live server left on APP_ENV=local: {$key}");
+        $this->assertSame(ConfigDoctor::FAIL, ConfigDoctor::overall($checks));
+        $this->assertSame(ConfigDoctor::WARN, $checks['app_env']['status']);
+        $this->assertStringContainsString('failures still fail', $checks['app_env']['message']);
+        $this->assertSame('Set APP_ENV=production.', $checks['app_env']['fix']);
+    }
+
+    public function test_debug_mode_on_a_live_address_fails_on_any_app_env(): void
+    {
+        foreach (['local', 'staging', 'testing'] as $env) {
+            $this->production(['app.env' => $env, 'app.debug' => true, 'app.url' => 'https://budget-dynamics.schooldynamics.ug']);
+            $this->assertSame(ConfigDoctor::FAIL, $this->checks()['app_debug']['status'], $env);
+        }
+        $this->production(['app.env' => 'local', 'app.debug' => true, 'app.url' => 'http://localhost:8888/budget-pro']);
+        $checks = $this->checks();
+        $this->assertSame(ConfigDoctor::WARN, $checks['app_debug']['status'], 'a developer\'s own machine only warns');
+        $this->assertSame(ConfigDoctor::OK, $checks['app_env']['status']);
+        $this->assertStringContainsString('only a warning here', $checks['app_env']['message']);
+    }
+
+    public function test_which_addresses_are_live(): void
+    {
+        foreach (['https://budget-dynamics.schooldynamics.ug', 'https://shop.example.com/sub/', 'HTTPS://Shop.Example.com', 'https://203.0.113.7:8443'] as $url) {
+            $this->assertTrue(ConfigDoctor::liveAddress($url), $url);
+        }
+        foreach (['http://shop.example.com', '', 'https://localhost', 'https://localhost:8443/x', 'https://127.0.0.1', 'https://127.0.1.1',
+            'https://[::1]:8443/', 'https://budget-pro.test', 'https://shop.local', 'https://app.localhost', 'https://localhost.'] as $url) {
+            $this->assertFalse(ConfigDoctor::liveAddress($url), $url);
+        }
+    }
+
+    public function test_the_kernel_ignores_trusted_proxies_and_the_web_app_reads_it(): void
+    {
+        $this->production(['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7'], 'app.trusted_proxies' => '*']);
+
+        $kernel = $this->checks(ConfigDoctor::KERNEL)['master_proxies'];
+        $this->assertSame(ConfigDoctor::OK, $kernel['status'], 'App\Http\Middleware\TrustProxies has no list and never reads TRUSTED_PROXIES');
+        $this->assertStringContainsString('connecting one', $kernel['message']);
+
+        $portal = $this->checks(ConfigDoctor::PORTAL)['master_proxies'];
+        $this->assertSame(ConfigDoctor::FAIL, $portal['status']);
+        $this->assertStringContainsString('X-Forwarded-For', $portal['message']);
+        $this->assertStringNotContainsString('CONFIG_DOCTOR_ACCEPT', $portal['fix'], 'never acceptable');
+
+        foreach (['10.0.0.1,REMOTE_ADDR', '0.0.0.0/0', '**'] as $proxies) {
+            config(['app.trusted_proxies' => $proxies]);
+            $this->assertSame(ConfigDoctor::FAIL, $this->checks(ConfigDoctor::PORTAL)['master_proxies']['status'], $proxies);
+        }
+        config(['app.trusted_proxies' => '10.0.0.1, 10.0.0.2']);
+        $named = $this->checks(ConfigDoctor::PORTAL)['master_proxies'];
+        $this->assertSame([ConfigDoctor::OK, 'Forwarded addresses are taken only from the proxies 10.0.0.1, 10.0.0.2.'], [$named['status'], $named['message']]);
+
+        // Without a master password nothing depends on it.
+        config(['app.trusted_proxies' => '*', 'saas.master_password_hash' => '']);
+        $this->assertSame(ConfigDoctor::OK, $this->checks(ConfigDoctor::PORTAL)['master_proxies']['status']);
+    }
+
+    public function test_a_narrow_master_allowlist_passes_and_names_its_addresses(): void
+    {
+        $this->production(['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7', '198.51.100.0/24', '2001:db8:1234::/48']]);
+        $checks = $this->checks();
+
+        $this->assertSame(ConfigDoctor::OK, $checks['master_allowlist']['status']);
+        $this->assertSame('The master password works only from 203.0.113.7, 198.51.100.0/24, 2001:db8:1234::/48.', $checks['master_allowlist']['message']);
+        $this->assertSame(ConfigDoctor::OK, $checks['master_sign_in_forms']['status']);
+        $this->assertSame(ConfigDoctor::OK, ConfigDoctor::overall($checks));
+
+        // A comma-separated string (an older config) reads the same.
+        config(['saas.master_password_allowed_ips' => '203.0.113.7, 0.0.0.0/0']);
+        $this->assertSame(ConfigDoctor::FAIL, $this->checks()['master_allowlist']['status']);
+        // The sign-in forms key may be missing from an older config: off.
+        config(['saas.master_password_allowed_ips' => ['203.0.113.7'], 'saas.master_password_on_sign_in_forms' => null]);
+        $this->assertSame(ConfigDoctor::OK, $this->checks()['master_sign_in_forms']['status']);
+        config(['saas.master_password_on_sign_in_forms' => 'true']);
+        $this->assertSame(ConfigDoctor::WARN, $this->checks()['master_sign_in_forms']['status']);
     }
 
     public function test_http_is_fine_off_production(): void
@@ -158,6 +254,9 @@ class ConfigDoctorTest extends TestCase
         $this->assertStringContainsString('No email, SMS or WhatsApp', $checks['connections']['message']);
         $this->assertArrayNotHasKey('new_ui_url', $checks, 'SaaS links do not apply to a standalone copy.');
         $this->assertArrayNotHasKey('invite_url', $checks);
+        foreach (['master_proxies', 'master_allowlist', 'master_sign_in_forms'] as $key) {
+            $this->assertArrayNotHasKey($key, $checks, 'the master password is always off on a standalone copy');
+        }
         $this->assertSame(ConfigDoctor::WARN, ConfigDoctor::overall($checks), 'A buyer\'s update is never blocked by messaging or payments.');
 
         // What is not the buyer's own account still fails.
@@ -224,6 +323,8 @@ class ConfigDoctorTest extends TestCase
             'queue_sync' => ['queue.default' => 'sync'],
             'flutterwave_test_mode' => ['flutterwave.secret_key' => 'FLWSECK_TEST-abc-X'],
             'master_password_plaintext' => ['saas.master_password_plaintext_set' => true],
+            'master_proxies' => ['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7'], 'trustedproxy.proxies' => '*'],
+            'master_allowlist' => ['saas.master_password_allowed_ips' => ['0.0.0.0/0']],
         ];
         $this->assertEqualsCanonicalizing(ConfigDoctor::NEVER_ACCEPTED, array_keys($broken));
 

@@ -34,6 +34,24 @@ class SyncMasterTablesTest extends ApiTestCase
             ->assertOk()->json('data.results.0');
     }
 
+    public function test_a_period_from_an_older_phone_without_a_status_never_takes_over_the_active_one(): void
+    {
+        $active = fn () => \App\Models\FinancialPeriod::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->where('status', 'Active')->value('id');
+        $current = $active();
+        $this->assertNotNull($current);
+
+        $quiet = (string) Str::uuid();
+        $r = $this->push([$this->op('financial_periods', ['name' => 'Term 3', 'start_date' => '2027-09-01', 'end_date' => '2027-12-15'], $quiet)]);
+        $this->assertSame('applied', $r['status'], json_encode($r));
+        $this->assertSame('Inactive', \App\Models\FinancialPeriod::withoutGlobalScopes()->where('uuid', $quiet)->value('status'));
+        $this->assertSame($current, $active(), 'new sales and expenses still land in the same period');
+
+        $taking = (string) Str::uuid();
+        $r = $this->push([$this->op('financial_periods', ['name' => 'FY 2028', 'start_date' => '2028-01-01', 'end_date' => '2028-12-31', 'status' => 'Active'], $taking)]);
+        $this->assertSame('applied', $r['status'], json_encode($r));
+        $this->assertSame(\App\Models\FinancialPeriod::withoutGlobalScopes()->where('uuid', $taking)->value('id'), $active(), 'a phone that says Active still takes over');
+    }
+
     public function test_offline_created_catalogue_product_and_restock(): void
     {
         $cat = (string) Str::uuid();

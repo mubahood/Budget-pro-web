@@ -48,13 +48,6 @@ class FinancialPeriod extends Model
     protected $with = ['company'];
 
     /**
-     * A new period is Active unless told otherwise: the same default as the column, set here so save() sees it and
-     * demotes the period that was Active first. Without it the database default made the row Active behind save()'s
-     * back and the one-active-period unique index failed with a 500.
-     */
-    protected $attributes = ['status' => 'Active'];
-
-    /**
      * The attributes that are mass assignable.
      */
     protected $fillable = [
@@ -116,10 +109,21 @@ class FinancialPeriod extends Model
         });
     }
 
-    /** Insert with the right conflict semantics: activating while another is Active demotes it first. */
+    /**
+     * Insert with the right conflict semantics: activating while another is Active demotes it first.
+     *
+     * A new period sent without a status (the API, or a sync from an older phone) is Active only when the shop has
+     * no Active period yet, else Inactive: it never quietly takes over from the current one, where new sales and
+     * expenses land. An explicit status=Active still takes over. The status is always set before the insert, so the
+     * column's own 'Active' default never applies behind save()'s back (that broke the one-active-period index: a 500).
+     */
     public function save(array $options = [])
     {
         return DB::transaction(function () use ($options) {
+            if (! $this->exists && blank($this->status)) {
+                $this->status = $this->company_id && DB::table('financial_periods')->where('company_id', $this->company_id)->where('status', 'Active')->lockForUpdate()->exists()
+                    ? 'Inactive' : 'Active';
+            }
             if ($this->status === 'Active' && $this->company_id) {
                 DB::table('financial_periods')
                     ->where('company_id', $this->company_id)

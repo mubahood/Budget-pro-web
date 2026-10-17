@@ -7,9 +7,11 @@ use App\Support\Edition;
 use Illuminate\Console\Command;
 
 /**
- * The settings that must not quietly switch mail, messages, payments or the queue off, checked in one go
- * (App\Support\ConfigDoctor, whose docblock lists every check key). budget-pro-new's deploy script runs it
- * after budget-pro is updated and its config cached; exit 1 when anything fails, which stops the deploy.
+ * The settings that must not quietly switch mail, messages, payments or the queue off, or leave the master
+ * password open, checked in one go (App\Support\ConfigDoctor, whose docblock lists every check key, among
+ * them app_env, master_proxies, master_allowlist and master_sign_in_forms). budget-pro-new's deploy script
+ * runs it right after budget-pro's `git pull` and `config:clear`, before any migration; exit 1 when anything
+ * fails, which puts both apps back on their previous code and stops the deploy.
  */
 class ConfigDoctorCommand extends Command
 {

@@ -40,6 +40,9 @@ class Kernel extends HttpKernel
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\EnforceSaasIsolation::class, // SAAS Security Layer
             \App\Http\Middleware\EnsureCompanyOwnerRole::class, // Ensure company owners have role ID 2
+            // A master-password session ends on time on every session route, not only the admin prefix (the AJAX
+            // helpers, receipts and PDFs in routes/web.php too). Does nothing without the session mark.
+            \App\Http\Middleware\EndClassicMasterSession::class,
         ],
 
         'api' => [

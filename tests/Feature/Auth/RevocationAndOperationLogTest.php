@@ -19,12 +19,14 @@ class RevocationAndOperationLogTest extends AdminTestCase
         $t = $this->makeTenant('company');
         $t['user']->createToken('phone', ['*'], now()->addDay());
         $this->assertSame(1, $t['user']->tokens()->count());
+        DB::table('admin_users')->where('id', $t['user']->id)->update(['remember_token' => 'other-browser-token']);
 
         $this->asAdmin($t['user'])->put('/auth/setting', ['name' => 'Owner', 'password' => 'changed2026', 'password_confirmation' => 'changed2026'])
             ->assertSessionHasNoErrors();
 
         $this->assertTrue(Hash::check('changed2026', $t['user']->fresh()->password));
         $this->assertSame(0, $t['user']->tokens()->count());
+        $this->assertNotSame('other-browser-token', $t['user']->fresh()->remember_token, '"remember me" ends on other browsers');
         $row = DB::table('admin_operation_log')->where('user_id', $t['user']->id)->where('path', 'auth/setting')->latest('id')->first();
         $this->assertNotNull($row);
         $this->assertStringNotContainsString('changed2026', $row->input);

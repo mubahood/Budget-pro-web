@@ -6,7 +6,6 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Validation\UncompromisedVerifier;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\NotPwnedVerifier;
 use Illuminate\Validation\Rules\Password;
 
 /**
@@ -15,7 +14,8 @@ use Illuminate\Validation\Rules\Password;
  * At least 8 characters with letters and numbers, and, where the server can ask, not a password
  * already published in a breach (Have I Been Pwned's k-anonymity range API: only the first five
  * characters of the SHA-1 hash leave the server). The breach check fails open: a server with no
- * internet still lets a person set a password. PASSWORD_BREACH_CHECK=false switches it off.
+ * internet still lets a person set a password, without an error report each time (QuietNotPwnedVerifier).
+ * PASSWORD_BREACH_CHECK=false switches it off.
  *
  * It applies whenever a password is set: sign-up on every channel, change, reset, team members,
  * invites, the classic Employees form and the classic settings page. A password set before this
@@ -92,10 +92,11 @@ final class PasswordPolicy
 
     /**
      * The framework waits 30 seconds for the breach API; a sign-up must not hang that long when the
-     * host has no internet. Called from each app's service provider (register).
+     * host has no internet. And an offline host must not report an error on every password set
+     * (QuietNotPwnedVerifier). Called from each app's service provider (register).
      */
     public static function shortenBreachCheck(Container $app): void
     {
-        $app->extend(UncompromisedVerifier::class, fn ($verifier, $app) => new NotPwnedVerifier($app->make(HttpFactory::class), self::BREACH_TIMEOUT));
+        $app->extend(UncompromisedVerifier::class, fn ($verifier, $app) => new QuietNotPwnedVerifier($app->make(HttpFactory::class), self::BREACH_TIMEOUT));
     }
 }

@@ -42,6 +42,16 @@ final class SupportContact
     /** An error reference: E + the error's fingerprint, or R + a request's own id (8 hex characters). */
     public const REFERENCE_PATTERN = '/^[ER][0-9A-F]{8}$/';
 
+    /** What a secret in a page path becomes before it is stored (support_clicks.page) or put in a link. */
+    public const MASKED_TOKEN = ':token';
+
+    /**
+     * Paths whose next segments are secrets, with how many: an invite, a password reset, a sign-in link from the
+     * app, a public receipt, a licence claim, an unsubscribe link (customer and token). Matched anywhere in the
+     * path, so a copy hosted in a sub-folder (/budget-pro-new/invite/…) is covered too.
+     */
+    private const SECRET_AFTER = ['invite' => 1, 'reset-password' => 1, 'web-link' => 1, 'r' => 1, 'my-licence/claim' => 1, 'stop' => 2];
+
     /** @param array{whatsapp: string, phone: string, email: string, hours: string} $values */
     private function __construct(private readonly array $values, private readonly string $who, private readonly string $name)
     {
@@ -322,13 +332,50 @@ final class SupportContact
         return $this->waLink($context, $vars);
     }
 
-    /** A page as stored and passed on: its path only (no host, no query), at most 191 characters. */
+    /**
+     * A page as stored and passed on: its path only (no host, no query), with every secret in it masked
+     * (maskTokens), at most 191 characters. Running it again on its own result changes nothing.
+     */
     public static function pagePath(string $page): string
     {
         $path = (string) (parse_url($page, PHP_URL_PATH) ?? '');
-        $path = '/'.ltrim(preg_replace('#[^A-Za-z0-9/_.\-]#', '', $path) ?? '', '/');
+        $path = '/'.ltrim(preg_replace('#[^A-Za-z0-9/_.:\-]#', '', $path) ?? '', '/');
 
-        return mb_substr($path, 0, 191);
+        return mb_substr(self::maskTokens($path), 0, 191);
+    }
+
+    /**
+     * A path with its secrets replaced by MASKED_TOKEN, so a tap on "WhatsApp us" from an invite or a reset page
+     * never stores or forwards a live token: the segments after the SECRET_AFTER paths, and any segment that
+     * looks like a token (16 or more letters, digits, - or _). A plain lower-case slug such as
+     * reorder-suggestions is a route's name, not a token (random tokens carry digits or capitals), so it stays.
+     */
+    public static function maskTokens(string $path): string
+    {
+        $out = [];
+        $secret = 0;
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '') {
+                $out[] = $segment;
+
+                continue;
+            }
+            if ($secret > 0 || (preg_match('/^[A-Za-z0-9_-]{16,}$/', $segment) === 1 && preg_match('/^[a-z]+(?:-[a-z]+)*$/', $segment) !== 1)) {
+                $out[] = self::MASKED_TOKEN;
+                $secret = max(0, $secret - 1);
+
+                continue;
+            }
+            $out[] = $segment;
+            $sofar = '/'.strtolower(trim(implode('/', $out), '/'));
+            foreach (self::SECRET_AFTER as $prefix => $count) {
+                if (str_ends_with($sofar, '/'.$prefix)) {
+                    $secret = $count;
+                }
+            }
+        }
+
+        return implode('/', $out);
     }
 
     /**

@@ -16,11 +16,14 @@ return [
     // Only its bcrypt hash is kept: make it with `php artisan master-password:set` (20 characters or more) and paste
     // the same line into both apps' .env. Empty = off. A plaintext MASTER_PASSWORD is ignored.
     'master_password_hash' => trim((string) env('MASTER_PASSWORD_HASH', '')),
-    // Where the master password works on the sign-in forms and "Sign in as": comma-separated IPs or CIDR ranges
+    // Where the master password works ("Sign in as", and the sign-in forms when they take it): comma-separated IPs or CIDR ranges
     // (203.0.113.7, 198.51.100.0/24, 2001:db8::/32). Empty = nowhere.
     'master_password_allowed_ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('MASTER_PASSWORD_ALLOWED_IPS', ''))))),
     // A session opened with it is marked and ends after this many minutes.
     'master_password_session_minutes' => max(1, (int) env('MASTER_PASSWORD_SESSION_MINUTES', 60)),
+    // Whether the plain classic and web sign-in forms take it too. Off by default: a form cannot record who used it
+    // or why. "Sign in as" on the classic Companies screen (a platform admin, with a reason) always can.
+    'master_password_on_sign_in_forms' => (bool) env('MASTER_PASSWORD_ON_SIGN_IN_FORMS', false),
     // Who hears about each use (email and WhatsApp). Empty = the support contact (config/support.php).
     'owner_alert_email' => trim((string) env('OWNER_ALERT_EMAIL', '')),
     'owner_alert_whatsapp' => trim((string) env('OWNER_ALERT_WHATSAPP', '')),
@@ -38,7 +41,8 @@ return [
 
     // config:doctor failures the owner has decided to live with for now: comma-separated check keys (e.g. "sms,whatsapp").
     // Each still shows, as a warning marked "accepted by the owner", in config:doctor, shop:check and System health.
-    // Never accepted: app_debug, data_key, queue_sync, flutterwave_test_mode, master_password_plaintext, edition.
+    // Never accepted: app_debug, data_key, queue_sync, flutterwave_test_mode, master_password_plaintext, edition,
+    // master_proxies, master_allowlist (App\Support\ConfigDoctor::NEVER_ACCEPTED).
     // Each app reads its own .env (budget-pro-new loads this file too), so each has its own list.
     'config_doctor_accept' => array_values(array_filter(array_map('trim', explode(',', strtolower((string) env('CONFIG_DOCTOR_ACCEPT', '')))))),
 

@@ -5,9 +5,11 @@ namespace App\Admin\Controllers;
 use App\Exceptions\BusinessRuleException;
 use App\Models\User;
 use App\Services\Auth\AccountLookup;
+use App\Services\Auth\SignInPassword;
 use App\Services\Onboarding\RegistrationService;
 use App\Support\MasterPassword;
 use App\Support\Rules\PasswordPolicy;
+use App\Support\SignInThrottle;
 use Encore\Admin\Controllers\AuthController as BaseAuthController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
@@ -16,18 +18,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends BaseAuthController
 {
-    /** Wrong tries one login may make from one address per minute (the web portal's number). */
-    public const LOGIN_TRIES = 6;
+    /** Tries one account may make per minute (App\Support\SignInThrottle, shared with the web portal and the API). */
+    public const LOGIN_TRIES = SignInThrottle::ACCOUNT_TRIES;
 
-    /** Wrong tries one address may make per minute, whatever the login (the API's per-address number). */
-    public const IP_TRIES = 10;
+    /** Tries one address may make per minute, whatever the login. */
+    public const IP_TRIES = SignInThrottle::IP_TRIES;
 
-    public const DECAY_SECONDS = 60;
+    public const DECAY_SECONDS = SignInThrottle::DECAY_SECONDS;
 
     /**
      * Show the login page.
@@ -44,10 +45,13 @@ class AuthController extends BaseAuthController
     }
 
     /**
-     * Sign in, with attempt limits: LOGIN_TRIES wrong tries per login and address, and IP_TRIES per
-     * address, each per minute. The account is found by username, then email, phone or username
-     * (AccountLookup). A switched-off account is refused, as on the web portal; platform admins sign
-     * in as always. The master password works only under App\Support\MasterPassword's rules.
+     * Sign in, with attempt limits (App\Support\SignInThrottle): LOGIN_TRIES per account and IP_TRIES per
+     * address, each per minute, counted before the password is checked. The account is found by
+     * username, then email, phone or username (AccountLookup), and the limit follows the account, however
+     * its login is written. An unknown account costs the same password work as a known one
+     * (SignInPassword). A switched-off account is refused, as on the web portal; platform admins sign in as
+     * always. The master password works here only under App\Support\MasterPassword's rules, and only
+     * when MASTER_PASSWORD_ON_SIGN_IN_FORMS is on.
      */
     public function postLogin(Request $request)
     {
@@ -55,14 +59,14 @@ class AuthController extends BaseAuthController
         $login = trim((string) $request->input($this->username()));
         $password = (string) $request->input('password');
 
-        [$loginKey, $ipKey] = self::throttleKeys($login, (string) $request->ip());
-        if (RateLimiter::tooManyAttempts($loginKey, self::LOGIN_TRIES) || RateLimiter::tooManyAttempts($ipKey, self::IP_TRIES)) {
-            return $this->lockedOut($request, max(RateLimiter::availableIn($loginKey), RateLimiter::availableIn($ipKey)));
+        $user = $login === '' ? null : (User::withoutGlobalScopes()->where('username', $login)->first() ?? AccountLookup::find($login));
+        if (($wait = SignInThrottle::hit(SignInThrottle::CLASSIC, $user, $login, $request)) !== null) {
+            return $this->lockedOut($request, $wait);
         }
 
-        $user = $login === '' ? null : (User::withoutGlobalScopes()->where('username', $login)->first() ?? AccountLookup::find($login));
-        if ($user !== null && Hash::check($password, (string) $user->password)) {
-            RateLimiter::clear($loginKey);
+        $own = SignInPassword::matches($user, $password);
+        if ($own && $user !== null) {
+            SignInThrottle::clear(SignInThrottle::CLASSIC, $user, $login);
             if (strtolower(trim((string) $user->status)) === 'inactive') {
                 return back()->withInput($request->only($this->username(), 'remember'))
                     ->withErrors([$this->username() => 'This account has been switched off. Ask the shop owner to switch it back on.']);
@@ -74,26 +78,18 @@ class AuthController extends BaseAuthController
         }
 
         $master = $user !== null ? MasterPassword::attempt($password, $user, MasterPassword::CLASSIC, $request) : null;
-        if ($master !== null && $master['allowed']) {
-            RateLimiter::clear($loginKey);
+        if ($user !== null && $master !== null && $master['allowed']) {
+            SignInThrottle::clear(SignInThrottle::CLASSIC, $user, $login);
 
             return $this->masterLogin($request, $user, $master['use_id']);
         }
         $refusal = $master['refusal'] ?? null;
 
-        RateLimiter::hit($loginKey, self::DECAY_SECONDS);
-        RateLimiter::hit($ipKey, self::DECAY_SECONDS);
         // The right master password from an allowed address, for an account it may not open: say why.
         // From any other address it is just a wrong password.
         $message = $refusal !== null && $refusal !== 'ip_not_allowed' ? MasterPassword::refusalMessage($refusal) : $this->getFailedLoginMessage();
 
         return back()->withInput($request->only($this->username(), 'remember'))->withErrors([$this->username() => $message]);
-    }
-
-    /** @return array{0: string, 1: string} the per-login-and-address key and the per-address key */
-    public static function throttleKeys(string $login, string $ip): array
-    {
-        return ['classic-login:'.mb_strtolower(trim($login)).'|'.$ip, 'classic-login-ip:'.$ip];
     }
 
     /**
@@ -159,7 +155,8 @@ class AuthController extends BaseAuthController
 
     /**
      * The person's own settings (auth/setting): Encore's form with the one password rule and its hint.
-     * A new password signs the person out of the phone app everywhere, as the API and Team paths do.
+     * A new password signs the person out of the phone app everywhere, as the API and Team paths do, and
+     * ends their "remember me" on other browsers (User::updating). Not during a master-password session.
      *
      * @return Form
      */
@@ -189,11 +186,13 @@ class AuthController extends BaseAuthController
         $form->saving(function (Form $form) use (&$changed) {
             if ($form->password && $form->model()->password != $form->password) {
                 try {
+                    // A master-password session cannot make itself lasting access (MasterPassword::refuseInSession).
+                    MasterPassword::refuseInSession('change this password');
                     \App\Services\Onboarding\PublicDemo::guardAccount($form->model(), 'changing the password');
                 } catch (BusinessRuleException $e) {
                     admin_toastr($e->getMessage(), 'error');
 
-                    return back();
+                    return back()->withErrors(['password' => $e->getMessage()]);
                 }
                 $form->password = Hash::make($form->password);
                 $changed = true;

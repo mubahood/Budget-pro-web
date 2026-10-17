@@ -6,6 +6,7 @@ use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\User;
+use App\Support\ClientAddress;
 use App\Support\MasterPassword;
 use App\Support\WebLink;
 use Encore\Admin\Facades\Admin;
@@ -37,8 +38,8 @@ class SignInAsController extends Controller
                 'accounts' => $this->accounts($company),
                 'portal' => trim((string) config('saas.new_ui_url')) !== '',
                 'configured' => MasterPassword::configured(),
-                'ipAllowed' => MasterPassword::ipAllowed(request()->ip()),
-                'ip' => (string) request()->ip(),
+                'ipAllowed' => MasterPassword::ipAllowed(ClientAddress::of(request())),
+                'ip' => ClientAddress::of(request()),
                 'minutes' => MasterPassword::sessionMinutes(),
                 'minReason' => MasterPassword::MIN_REASON,
             ]));

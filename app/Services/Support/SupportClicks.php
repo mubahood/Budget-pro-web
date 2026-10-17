@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\DB;
  * Counts taps on "WhatsApp us" (docs/roadmap/06 §4): the web app's /go/whatsapp records one row per
  * tap, then redirects to wa.me. What a row holds is decided here, so no caller can add more: the
  * message's context, where the link was, the page's path, and the signed-in shop. Never an IP
- * address, a name or a phone number. A failed write never stands between a person and help.
+ * address, a name or a phone number, and never a live token: the path is stored through
+ * SupportContact::pagePath, which masks invite, reset, receipt and other secrets as `:token`.
+ * A failed write never stands between a person and help.
  */
 class SupportClicks
 {

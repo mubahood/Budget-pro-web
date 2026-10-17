@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Phase 0: stabilise and lock (2026-10-17, docs/roadmap/phase-0-plan.md)
+- **Config cannot silently switch things off:**
+  - `.env.example` lists every key, and a test fails on a missing one.
+  - The queue defaults to `database`.
+  - `config:doctor` fails a production deploy on mail off, `sync` queue, log-only messaging, test or missing Flutterwave keys, an empty data key or support number, debug on, or a plaintext master password. `CONFIG_DOCTOR_ACCEPT` makes chosen failures visible warnings.
+  - System health shows the list.
+- **Sign-in:**
+  - Attempt limits on the classic sign-in.
+  - A per-account API login limiter.
+  - Master password: hash only, from allowed addresses only, never for a platform admin or on the API. Every use is audited and alerted to the owner. Platform admins get "Sign in as" with a reason.
+  - One password rule (8 characters with letters and numbers, plus the breached check) everywhere, the phone included.
+  - Reset and sign-up tokens are random, single-use and stored hashed.
+  - A new password signs the person out of the phone.
+  - Passwords are redacted from the operation log, and the old rows are scrubbed.
+- **Modules in the API:**
+  - `api.module` on every authenticated route.
+  - `403 module_off` with the endpoint that adds the module.
+  - A route-walk test.
+- **Tenancy:**
+  - `CompanyScope` narrows API requests too.
+  - Eight unscoped tenant models are scoped.
+  - The global-on-purpose models are listed.
+  - Isolation tests for every route group.
+- **Support everywhere:**
+  - `SupportContact` and `config/support.php`.
+  - A `support` block in `meta` and `app/version`.
+  - Help lines on the classic screens and a footer on every platform email.
+  - An optional receipt line.
+  - Tap counting without personal data.
+  - A CI scan that keeps the number out of code.
+- **Fixes:**
+  - Creating a financial period without a status no longer answers 500.
+  - `financial-reports/options` and `/search` no longer answer 500.
+  - The API docs keep the password fields.
+- **Operations:**
+  - The kernel CI runs again (MySQL 8 and 5.7, scan, doctor, Pint, PHPStan with a baseline, tests).
+  - The root `.htaccess` denies the app tree and sensitive files.
+  - The test-result cache is untracked.
+
 ### One account, four apps (2026-10-17, budget-pro-new docs/FAMILY_PLAN.md)
 - **Modules at sign-up:** `POST /api/v1/auth/register` and `PUT /api/v1/onboarding/business` accept an optional `modules` list.
   - It needs at least one of shop, poultry or budget, and `finance` is added. The business type follows: the shop's type, or `poultry` / `fundraising` without a shop.

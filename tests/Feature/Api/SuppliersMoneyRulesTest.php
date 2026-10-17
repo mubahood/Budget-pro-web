@@ -75,18 +75,49 @@ class SuppliersMoneyRulesTest extends ApiTestCase
         $this->postJson('/api/v1/financial-records', ['type' => 'Expense', 'amount' => 10], $this->h)->assertStatus(422)->assertJsonValidationErrors('financial_category_id');
         $this->postJson('/api/v1/financial-periods', ['name' => 'Bad', 'start_date' => '2026-02-01', 'end_date' => '2026-01-01'], $this->h)->assertStatus(422)->assertJsonValidationErrors('end_date');
 
-        // No status sent: the new period becomes the Active one and the previous Active period steps down (it used to 500).
-        $before = \App\Models\FinancialPeriod::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->where('status', 'Active')->value('id');
-        $new = $this->postJson('/api/v1/financial-periods', ['name' => 'Next year', 'start_date' => '2027-01-01', 'end_date' => '2027-12-31'], $this->h)->assertStatus(201)->json('data');
-        $this->assertSame('Active', $new['status']);
-        if ($before) {
-            $this->assertSame('Inactive', \App\Models\FinancialPeriod::withoutGlobalScopes()->find($before)->status);
-        }
+        $this->assertPeriodStatusRules();
         $this->postJson('/api/v1/shifts/open', ['opening_float' => -1], $this->h)->assertStatus(422)->assertJsonValidationErrors('opening_float');
         $shift = $this->postJson('/api/v1/shifts/open', ['opening_float' => 20000], $this->h)->assertStatus(201)->json('data.id');
         $this->postJson("/api/v1/shifts/{$shift}/close", [], $this->h)->assertStatus(422)->assertJsonValidationErrors('counted_cash');
         $this->postJson("/api/v1/shifts/{$shift}/close", ['counted_cash' => 19000], $this->h)->assertOk()->assertJsonPath('data.variance', '-1000.00');
         $this->assertSame(0, FinancialRecord::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->where('source_type', 'shift')->count());
+    }
+
+    /** The Active period of this shop (where new sales and expenses land), by id. */
+    private function activePeriodId(): ?int
+    {
+        $id = \App\Models\FinancialPeriod::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->where('status', 'Active')->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
+    /**
+     * A period created without a status never takes over from the Active one (it used to, and before that it answered
+     * 500); it is Active only when the shop has none. An explicit status=Active still takes over, without a 500.
+     */
+    private function assertPeriodStatusRules(): void
+    {
+        $current = $this->activePeriodId();
+        $this->assertNotNull($current, 'registration made the first period Active');
+
+        foreach ([['name' => 'Next year'], ['name' => 'Next term', 'status' => null], ['name' => 'Blank', 'status' => '']] as $i => $body) {
+            $this->postJson('/api/v1/financial-periods', $body + ['start_date' => '2027-01-01', 'end_date' => '2027-12-31'], $this->h)
+                ->assertStatus(201)->assertJsonPath('data.status', 'Inactive');
+            $this->assertSame($current, $this->activePeriodId(), "case {$i}: the Active period did not move");
+        }
+        $this->assertSame(1, \App\Models\FinancialPeriod::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->where('status', 'Active')->count());
+
+        // Saying so still makes the new period the Active one, and the old one steps down.
+        $taking = $this->postJson('/api/v1/financial-periods', ['name' => 'FY 2028', 'start_date' => '2028-01-01', 'end_date' => '2028-12-31', 'status' => 'Active'], $this->h)
+            ->assertStatus(201)->assertJsonPath('data.status', 'Active')->json('data.id');
+        $this->assertSame((int) $taking, $this->activePeriodId());
+        $this->assertSame('Inactive', \App\Models\FinancialPeriod::withoutGlobalScopes()->find($current)->status);
+
+        // A shop with no Active period: the first period sent without a status becomes the Active one.
+        \App\Models\FinancialPeriod::withoutGlobalScopes()->where('company_id', $this->t['company_id'])->update(['status' => 'Inactive']);
+        $first = $this->postJson('/api/v1/financial-periods', ['name' => 'Fresh start', 'start_date' => '2029-01-01', 'end_date' => '2029-12-31'], $this->h)
+            ->assertStatus(201)->assertJsonPath('data.status', 'Active')->json('data.id');
+        $this->assertSame((int) $first, $this->activePeriodId());
     }
 
     public function test_a_period_can_be_closed_only_when_finished_and_not_active(): void
