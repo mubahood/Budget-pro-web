@@ -1311,6 +1311,168 @@
                     }
                 },
                 {
+                    "name": "GET /budget-programs/{id}/members",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/members",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "members"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "{user_id, role} for a teammate, or {phone|email, name?, role} to invite someone new. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/members",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "members"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"user_id\": 1,\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"name\": \"\",\n    \"role\": \"\",\n    \"uuid\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "{role} */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/members/:memberId",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "members",
+                                ":memberId"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"role\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "{role} */",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/members/:memberId",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "members",
+                                ":memberId"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"role\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "DELETE /budget-programs/{id}/members/{memberId}",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/members/:memberId",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "members",
+                                ":memberId"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "POST budget-programs/{id}/print-link — a 30-minute link to this event's budget PDF (routes/web.php",
                     "request": {
                         "method": "POST",
@@ -2043,6 +2205,46 @@
             ]
         },
         {
+            "name": "Contribution payments",
+            "item": [
+                {
+                    "name": "POST contribution-payments/{id}/reverse {reason, uuid?} — a new negative row; the payment itself stays. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/contribution-payments/:id/reverse",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "contribution-payments",
+                                ":id",
+                                "reverse"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"reason\": \"\",\n    \"uuid\": \"\"\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Contribution records",
             "item": [
                 {
@@ -2099,7 +2301,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"budget_program_id\": 1,\n    \"treasurer_id\": 1,\n    \"name\": \"\",\n    \"amount\": 1000,\n    \"paid_amount\": 1000,\n    \"fully_paid\": \"Yes\",\n    \"custom_amount\": 1000,\n    \"custom_paid_amount\": 1000,\n    \"category_id\": \"\"\n}"
+                            "raw": "{\n    \"budget_program_id\": 1,\n    \"treasurer_id\": 1,\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"amount\": 1000,\n    \"paid_amount\": 1000,\n    \"fully_paid\": \"Yes\",\n    \"custom_amount\": 1000,\n    \"custom_paid_amount\": 1000,\n    \"category_id\": \"\"\n}"
                         }
                     }
                 },
@@ -2245,7 +2447,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"budget_program_id\": 1,\n    \"treasurer_id\": 1,\n    \"name\": \"\",\n    \"amount\": 1000,\n    \"paid_amount\": 1000,\n    \"fully_paid\": \"Yes\",\n    \"custom_amount\": 1000,\n    \"custom_paid_amount\": 1000,\n    \"category_id\": \"\"\n}"
+                            "raw": "{\n    \"budget_program_id\": 1,\n    \"treasurer_id\": 1,\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"amount\": 1000,\n    \"paid_amount\": 1000,\n    \"fully_paid\": \"Yes\",\n    \"custom_amount\": 1000,\n    \"custom_paid_amount\": 1000,\n    \"category_id\": \"\"\n}"
                         }
                     }
                 },
@@ -2279,7 +2481,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"budget_program_id\": 1,\n    \"treasurer_id\": 1,\n    \"name\": \"\",\n    \"amount\": 1000,\n    \"paid_amount\": 1000,\n    \"fully_paid\": \"Yes\",\n    \"custom_amount\": 1000,\n    \"custom_paid_amount\": 1000,\n    \"category_id\": \"\"\n}"
+                            "raw": "{\n    \"budget_program_id\": 1,\n    \"treasurer_id\": 1,\n    \"name\": \"\",\n    \"phone\": \"\",\n    \"amount\": 1000,\n    \"paid_amount\": 1000,\n    \"fully_paid\": \"Yes\",\n    \"custom_amount\": 1000,\n    \"custom_paid_amount\": 1000,\n    \"category_id\": \"\"\n}"
                         }
                     }
                 },
@@ -2306,6 +2508,68 @@
                                 "contribution-records",
                                 ":id"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET contribution-records/{id}/payments — the pledge's payments, newest first, with its figures. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/contribution-records/:id/payments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "contribution-records",
+                                ":id",
+                                "payments"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST contribution-records/{id}/payments {amount, paid_on?, method?, receipt_no?, reference?, notes?, uuid?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/contribution-records/:id/payments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "contribution-records",
+                                ":id",
+                                "payments"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"amount\": 1000,\n    \"paid_on\": \"2026-10-17\",\n    \"method\": \"\",\n    \"receipt_no\": \"\",\n    \"reference\": \"\",\n    \"notes\": \"\",\n    \"uuid\": \"\"\n}"
                         }
                     }
                 }
@@ -2965,6 +3229,10 @@
                     }
                 }
             ]
+        },
+        {
+            "name": "Demo",
+            "item": []
         },
         {
             "name": "Devices",
