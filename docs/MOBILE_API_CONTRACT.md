@@ -20,6 +20,12 @@ Server: budget-pro (Laravel 10). Every path below is under `/api/v1`. The machin
   resolve_conflicts, manage_team, manage_settings, billing.
 - **Supermarket features.** Each supermarket endpoint is gated by a StoreFeatures switch. When the switch is off:
   `403 {errors: {code: "feature_off", feature: "<key>", any_of?: [...]}}`. Read the switches from `auth/me → store`.
+- **Modules.** Every endpoint belongs to a module (`x-module` in `openapi.json`): `shop`, `finance`, `budget`, `poultry`,
+  `pingpin`, or `core` (every account: auth, meta, company, team, billing, onboarding, devices, sync, files, uploads,
+  chat, members, dashboard, `tracking/devices/register`). An account without the module gets
+  `403 {message: "Shop is not on your account.", errors: {code: "module_off", module: "shop", add: "PUT /api/v1/company/modules"}}`
+  (for `pingpin`, `add` is `POST /api/v1/tracking/devices/register`). Read the account's modules from `auth/me → company.modules`.
+  Sync stays core: a hidden module's rows keep syncing and are never lost.
 - **Business rules.** A broken rule answers `422 {errors: {code: "<rule>", …meta}}`. Validation errors answer
   `422 {errors: {field: [messages]}}`.
 - **Headers.**

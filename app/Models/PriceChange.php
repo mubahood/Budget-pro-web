@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -17,4 +18,9 @@ class PriceChange extends Model
     protected $casts = [
         'old' => 'decimal:2', 'new' => 'decimal:2', 'starts_at' => 'datetime', 'applied_at' => 'datetime', 'cancelled_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
 }

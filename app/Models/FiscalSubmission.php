@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Model;
 
 /** One sale (or return, as a credit note) sent to a fiscal adapter (supermarket plan F2). Written by FiscalService only. */
@@ -16,6 +17,11 @@ class FiscalSubmission extends Model
     protected $hidden = ['raw_request', 'raw_response'];
 
     protected $casts = ['next_attempt_at' => 'datetime', 'last_attempt_at' => 'datetime', 'sent_at' => 'datetime', 'owner_notified' => 'boolean'];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
 
     public function sale()
     {

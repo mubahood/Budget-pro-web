@@ -84,10 +84,16 @@ class TrackingTest extends ApiTestCase
     public function test_push_locations_rejects_unregistered_device(): void
     {
         $t = $this->registerTenant();
-
-        $this->postJson('/api/v1/tracking/devices/not-a-real-uuid/locations/batch', [
+        $push = fn () => $this->postJson('/api/v1/tracking/devices/not-a-real-uuid/locations/batch', [
             'points' => [['recorded_at' => 1787900001000, 'lat' => 1.0, 'lng' => 32.0]],
-        ], $this->auth($t['token']))->assertStatus(404);
+        ], $this->auth($t['token']));
+
+        // No tracked device and no Ping Pin plan yet: Ping Pin is not on the account (api.module:pingpin).
+        $push()->assertStatus(403)->assertJsonPath('errors.code', 'module_off')->assertJsonPath('errors.add', 'POST /api/v1/tracking/devices/register');
+
+        // Once one phone is registered, an unknown uuid is a plain 404.
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'Phone'], $this->auth($t['token']))->assertOk();
+        $push()->assertStatus(404);
     }
 
     public function test_get_config_returns_pending_commands_and_updates_last_seen(): void
@@ -137,6 +143,8 @@ class TrackingTest extends ApiTestCase
         $uuid = (string) \Illuminate\Support\Str::uuid();
 
         $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Company A Phone'], $this->auth($a['token']))->assertOk();
+        // B uses Ping Pin too (its own phone), so the module gate lets it through to the device lookup.
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'Company B Phone'], $this->auth($b['token']))->assertOk();
 
         // Company B pushing to the SAME uuid must not see/touch company A's device.
         $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
@@ -244,6 +252,11 @@ class TrackingTest extends ApiTestCase
         $uuid = (string) \Illuminate\Support\Str::uuid();
         $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'Phone'], $this->auth($a['token']))->assertOk();
 
+        // Without Ping Pin, B is refused before any device is looked up.
+        $this->postJson("/api/v1/tracking/devices/$uuid/config", ['tracking_interval_seconds' => 999], $this->auth($b['token']))
+            ->assertStatus(403)->assertJsonPath('errors.code', 'module_off');
+        // With Ping Pin (its own phone), A's device is still a 404.
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'B Phone'], $this->auth($b['token']))->assertOk();
         $this->postJson("/api/v1/tracking/devices/$uuid/config", ['tracking_interval_seconds' => 999], $this->auth($b['token']))
             ->assertStatus(404);
     }

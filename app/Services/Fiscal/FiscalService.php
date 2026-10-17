@@ -9,6 +9,7 @@ use App\Models\FiscalSubmission;
 use App\Models\SaleRecord;
 use App\Models\SaleReturn;
 use App\Models\User;
+use App\Scopes\CompanyScope;
 use App\Services\Notifications\Notifier;
 use App\Support\StoreFeatures;
 use Illuminate\Support\Carbon;
@@ -42,7 +43,8 @@ class FiscalService
 
     public static function setting(int $companyId): ?FiscalSetting
     {
-        return FiscalSetting::query()->where('company_id', $companyId)->first();
+        // By the company asked for, whatever company the caller is signed in to (the scheduler's sweep sends every shop's receipts).
+        return FiscalSetting::query()->withoutGlobalScope(CompanyScope::class)->where('company_id', $companyId)->first();
     }
 
     /** The feature is on and a configured connector is switched on. */
@@ -112,7 +114,9 @@ class FiscalService
     public function processDue(int $limit = 100): array
     {
         $out = ['sent' => 0, 'failed' => 0, 'waiting' => 0];
-        $ids = FiscalSubmission::query()->where('status', 'pending')->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())
+        // Every company's due submissions on purpose: the scheduler's sweep (no user, so CompanyScope narrows nothing).
+        // Unscoped by construction, not by luck; process() then works by the id found here.
+        $ids = FiscalSubmission::query()->withoutGlobalScope(CompanyScope::class)->where('status', 'pending')->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())
             ->orderBy('next_attempt_at')->orderBy('id')->limit($limit)->pluck('id');
         foreach ($ids as $id) {
             $s = $this->process((int) $id);
@@ -130,13 +134,13 @@ class FiscalService
     {
         $now = now();
         // Claim it (the scheduler and "Retry now" never send the same row twice at once).
-        $claimed = FiscalSubmission::query()->whereKey($id)->where('status', 'pending')
+        $claimed = FiscalSubmission::query()->withoutGlobalScope(CompanyScope::class)->whereKey($id)->where('status', 'pending')
             ->where(fn ($q) => $q->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', $now))
             ->update(['next_attempt_at' => $now->copy()->addMinutes(10), 'last_attempt_at' => $now]);
         if ($claimed === 0) {
             return null;
         }
-        $s = FiscalSubmission::query()->findOrFail($id);
+        $s = FiscalSubmission::query()->withoutGlobalScope(CompanyScope::class)->findOrFail($id);
         $sale = SaleRecord::withoutGlobalScopes()->with(['saleRecordItems' => fn ($q) => $q->withoutGlobalScopes()])->find($s->sale_record_id);
         $setting = self::setting((int) $s->company_id);
         $adapter = $this->adapters[$s->adapter] ??= FiscalRegistry::get($s->adapter);
@@ -151,7 +155,7 @@ class FiscalService
         try {
             $config = $setting->decrypted();
             if ($s->sale_return_id !== null) {
-                $original = FiscalSubmission::query()->where('company_id', $s->company_id)->where('sale_record_id', $s->sale_record_id)
+                $original = FiscalSubmission::query()->withoutGlobalScope(CompanyScope::class)->where('company_id', $s->company_id)->where('sale_record_id', $s->sale_record_id)
                     ->whereNull('sale_return_id')->where('status', 'sent')->first();
                 if ($original === null) {
                     $result = $this->ageOrWait($s, 'The sale has no fiscal receipt yet; the credit note waits for it.');

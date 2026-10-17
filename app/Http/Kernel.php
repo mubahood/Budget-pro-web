@@ -73,6 +73,7 @@ class Kernel extends HttpKernel
         'saas' => \App\Http\Middleware\EnforceSaasIsolation::class, // SAAS Enforcement (web)
         'force.json' => \App\Http\Middleware\ForceJsonResponse::class,
         'api.tenant' => \App\Http\Middleware\EnsureApiTenant::class, // API: user has active company
+        'api.module' => \App\Http\Middleware\EnsureApiModule::class, // API: the route's module is on the account (after api.tenant; roadmap 02 §3)
         'api.subscription' => \App\Http\Middleware\EnsureActiveSubscription::class, // API: plan/license valid
         'perm' => \App\Http\Middleware\RequirePermission::class,
         'api.perm' => \App\Http\Middleware\ApiPermissionMap::class,

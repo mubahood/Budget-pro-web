@@ -42,7 +42,7 @@ class Generator
                 'schemas' => [
                     'Envelope' => ['type' => 'object', 'properties' => ['code' => ['type' => 'integer', 'enum' => [0, 1]], 'message' => ['type' => 'string'], 'data' => [], 'meta' => ['type' => 'object'], 'errors' => ['type' => 'object']]],
                     'Error' => ['type' => 'object', 'properties' => ['code' => ['type' => 'integer', 'enum' => [0]], 'message' => ['type' => 'string'],
-                        'errors' => ['type' => 'object', 'properties' => ['code' => ['type' => 'string', 'description' => 'machine-readable reason, e.g. forbidden, plan_limit_reached, insufficient_stock']]]]],
+                        'errors' => ['type' => 'object', 'properties' => ['code' => ['type' => 'string', 'description' => 'machine-readable reason, e.g. forbidden, module_off, plan_limit_reached, insufficient_stock']]]]],
                 ],
                 'parameters' => ['DeviceId' => ['name' => 'X-Device-Id', 'in' => 'header', 'required' => false, 'schema' => ['type' => 'string'], 'description' => 'Registered device id (sync and offline documents)']],
             ],
@@ -63,7 +63,7 @@ class Generator
             'responses' => [
                 $method === 'post' ? '201' : '200' => ['description' => 'OK', 'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/Envelope']]]],
                 '401' => ['description' => 'Not signed in'],
-                '403' => ['description' => 'Role or plan does not allow it', 'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/Error']]]],
+                '403' => ['description' => 'Role, plan or module does not allow it', 'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/Error']]]],
                 '422' => ['description' => 'Validation or business rule', 'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/Error']]]],
             ],
         ];
@@ -75,6 +75,13 @@ class Generator
         if (in_array('auth:sanctum', $route->gatherMiddleware(), true)) {
             $op['security'] = [['bearer' => []]];
             $params[] = ['$ref' => '#/components/parameters/DeviceId'];
+            // The module the endpoint belongs to (api.module, EnsureApiModule): `core` answers every account;
+            // any other answers 403 module_off when the account does not have it.
+            foreach ($route->gatherMiddleware() as $m) {
+                if (is_string($m) && str_starts_with($m, 'api.module:')) {
+                    $op['x-module'] = substr($m, strlen('api.module:'));
+                }
+            }
         }
         if ($rules !== []) {
             $schema = $this->schema($rules);

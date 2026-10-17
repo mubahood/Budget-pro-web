@@ -21,6 +21,14 @@ class FinancialReportController extends BaseCrudController
 
     protected array $filterable = ['type', 'period_type'];
 
+    // financial_reports has no `name`: options/search ordered by it answered 500 (found by TenantIsolationTest).
+    protected string $optionLabel = 'period_type';
+
+    protected function optionLabel(Model $model): string
+    {
+        return trim($model->type.' · '.$model->period_type.($model->start_date ? ' · '.substr((string) $model->start_date, 0, 10) : ''), ' ·');
+    }
+
     protected function fill(Model $model, array $validated, Request $request): void
     {
         parent::fill($model, $validated, $request);

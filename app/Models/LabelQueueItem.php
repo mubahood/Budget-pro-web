@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -17,4 +18,9 @@ class LabelQueueItem extends Model
     protected $guarded = ['id'];
 
     protected $casts = ['printed_at' => 'datetime'];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
 }

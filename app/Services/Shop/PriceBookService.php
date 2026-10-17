@@ -6,6 +6,7 @@ use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
 use App\Models\PriceChange;
 use App\Models\StockItem;
+use App\Scopes\CompanyScope;
 use App\Support\StoreFeatures;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -83,12 +84,14 @@ class PriceBookService
         }
         $now = $now ? Carbon::parse($now)->utc() : now();
         $applied = 0;
-        $due = PriceChange::query()->whereNull('applied_at')->whereNull('cancelled_at')->whereNotNull('starts_at')->where('starts_at', '<=', $now)
+        // Every company's due changes on purpose: the scheduler's sweep (no user, so CompanyScope narrows nothing),
+        // or one company with --company. Unscoped by construction, not by luck: it never depends on who is signed in.
+        $due = PriceChange::query()->withoutGlobalScope(CompanyScope::class)->whereNull('applied_at')->whereNull('cancelled_at')->whereNotNull('starts_at')->where('starts_at', '<=', $now)
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('starts_at')->orderBy('id')->limit(1000)->get();
         foreach ($due as $change) {
             try {
                 DB::transaction(function () use ($change, &$applied) {
-                    $row = PriceChange::query()->lockForUpdate()->find($change->id);
+                    $row = PriceChange::query()->withoutGlobalScope(CompanyScope::class)->lockForUpdate()->find($change->id);
                     if (! $row || $row->applied_at || $row->cancelled_at) {
                         return; // another run took it
                     }
@@ -123,7 +126,7 @@ class PriceBookService
                 });
             } catch (\Throwable $e) {
                 Log::warning('prices:apply-due could not apply price change '.$change->id.': '.$e->getMessage());
-                PriceChange::query()->whereKey($change->id)->whereNull('applied_at')->update(['cancelled_at' => now(), 'updated_at' => now()]);
+                PriceChange::query()->withoutGlobalScope(CompanyScope::class)->whereKey($change->id)->whereNull('applied_at')->update(['cancelled_at' => now(), 'updated_at' => now()]);
             }
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -15,4 +16,9 @@ class HeldCart extends Model
     protected $guarded = ['id'];
 
     protected $casts = ['lines' => 'array', 'total' => 'decimal:2', 'line_count' => 'integer'];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
 }

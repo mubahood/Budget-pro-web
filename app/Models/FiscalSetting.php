@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Scopes\CompanyScope;
 use App\Support\DataCrypt;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * A shop's fiscal / e-invoicing connector (supermarket plan F2). Written by FiscalService only.
@@ -19,6 +20,11 @@ class FiscalSetting extends Model
     protected $hidden = ['config'];
 
     protected $casts = ['is_active' => 'boolean', 'last_test_ok' => 'boolean', 'last_tested_at' => 'datetime'];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
 
     /** @return array<string, mixed> the decrypted config ([] when none or unreadable) */
     public function decrypted(): array

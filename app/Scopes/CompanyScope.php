@@ -15,18 +15,30 @@ use Illuminate\Support\Facades\Schema;
  * Resolves the current user from the session guards (`web`, then `admin`) so
  * the scope is live inside the laravel-admin panel too — previously it only
  * looked at the default `web` guard, which the admin panel never uses, so every
- * admin `findOrFail($id)` was an IDOR (P0-2). The API is deliberately NOT
- * covered here: `BaseCrudController` scopes explicitly with
- * `withoutGlobalScopes()->where(company_id)`, and Ping Pin's multi-organisation
- * membership must not be filtered by a single company_id.
+ * admin `findOrFail($id)` was an IDOR (P0-2).
+ *
+ * The API (Sanctum) is covered through the request's company, not the `sanctum`
+ * guard (roadmap 02 §4, phase-0 P0-4): `api.tenant` (EnsureApiTenant) resolves the
+ * token user's company and runs the rest of the request inside forRequest(), so
+ * every scoped query in an API request is narrowed to it. The hand-written filters
+ * (`BaseCrudController` and the services' `withoutGlobalScopes()->where(company_id)`)
+ * stay as the second wall. Ping Pin's multi-organisation routes do not use
+ * `api.tenant`, so they are untouched: membership must not be filtered by a single
+ * company_id. A streamed body (file exports) is written after the middleware has
+ * returned, so EnsureApiTenant wraps its callback in forRequest() as well.
+ *
+ * Which tables carry a company_id on purpose without this scope: App\Support\TenantModels.
  */
 class CompanyScope implements Scope
 {
-    /** Guards consulted, in order. Never `sanctum` (see class docblock). */
+    /** Guards consulted, in order. Never `sanctum`: the API is scoped by forRequest() (see class docblock). */
     public const GUARDS = ['web', 'admin'];
 
     /** @var array<string,bool> table => has company_id column */
     private static array $columnCache = [];
+
+    /** The company `api.tenant` resolved for the API request being handled (forRequest), else null. */
+    private static ?int $requestCompanyId = null;
 
     public function apply(Builder $builder, Model $model)
     {
@@ -42,7 +54,10 @@ class CompanyScope implements Scope
         $builder->where($model->getTable().'.company_id', '=', $companyId);
     }
 
-    /** The authenticated session user's company_id, or null when unauthenticated / no company. */
+    /**
+     * The authenticated session user's company_id; else the company of the API request being
+     * handled (forRequest); else null (console, scheduler, queue, guests: no narrowing).
+     */
     public static function currentCompanyId(): ?int
     {
         foreach (self::GUARDS as $guard) {
@@ -52,7 +67,33 @@ class CompanyScope implements Scope
             }
         }
 
-        return null;
+        return self::$requestCompanyId;
+    }
+
+    /**
+     * Run $callback with every scoped query narrowed to $companyId, then restore what was there
+     * before, even when it throws. EnsureApiTenant wraps the rest of an API request in it.
+     *
+     * @template T
+     *
+     * @param  \Closure(): T  $callback
+     * @return T
+     */
+    public static function forRequest(int $companyId, \Closure $callback): mixed
+    {
+        $previous = self::$requestCompanyId;
+        self::$requestCompanyId = $companyId;
+        try {
+            return $callback();
+        } finally {
+            self::$requestCompanyId = $previous;
+        }
+    }
+
+    /** The company forRequest() set for the request being handled, or null outside one. */
+    public static function requestCompanyId(): ?int
+    {
+        return self::$requestCompanyId;
     }
 
     protected function hasCompanyIdColumn(Model $model): bool

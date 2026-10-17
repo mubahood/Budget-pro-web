@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -18,6 +19,11 @@ class PurchaseOrderItem extends Model
     protected $fillable = ['company_id', 'purchase_order_id', 'stock_item_id', 'quantity', 'received_quantity', 'unit_cost'];
 
     protected $casts = ['quantity' => 'decimal:3', 'received_quantity' => 'decimal:3', 'unit_cost' => 'decimal:2'];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
 
     /** @return BelongsTo<StockItem, PurchaseOrderItem> */
     public function product(): BelongsTo

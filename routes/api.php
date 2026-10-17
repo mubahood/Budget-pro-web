@@ -139,7 +139,8 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // too, since it's a password check an attacker could otherwise
         // brute-force. Only needs auth:sanctum (checks the CALLER's own
         // password), not pingpin.member — it isn't scoped to an organisation.
-        Route::middleware(['edition:saas', 'auth:sanctum'])->post('pingpin/auth/verify-password', [PingPinAuthController::class, 'verifyPassword']);
+        // Module: core (the caller's own password, whatever the account has on).
+        Route::middleware(['edition:saas', 'auth:sanctum', 'api.module:core'])->post('pingpin/auth/verify-password', [PingPinAuthController::class, 'verifyPassword']);
     });
 
     // ── Public billing: pricing page (SaaS only) + Flutterwave webhook (signature-verified) ──
@@ -155,7 +156,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     });
 
     // ── Authenticated: session/profile (no subscription gate) ──
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm', 'api.idempotent'])->group(function () {
+    // Module: core (every account). The account itself: who I am, the phone's meta, notifications, the business,
+    // its supermarket switches, billing, onboarding, its data, team and PINs. `company/modules` must stay core:
+    // it is where an owner adds a module back (EnsureApiModule::ADD), so it can never be behind a module.
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:core', 'api.perm', 'api.idempotent'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
         // The phone's meta (business, plan badge, person, enums, web pages…) and "Open on the web" (MOBILE_EXCELLENCE_PLAN D1, D7).
         // Outside api.subscription on purpose: a lapsed shop still reads its plan nudge and can open My plan on the web.
@@ -247,7 +251,9 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     // not built yet (Phase 2), so gating on the other product's billing here
     // would be exactly the cross-product coupling D2 exists to avoid.
     // pingpin.member does the real per-organisation authorization itself.
-    Route::middleware(['edition:saas', 'auth:sanctum'])->group(function () {
+    // Module: core. These are Ping Pin's own product surface: its membership and its billing are the gate, and
+    // api.module (like api.tenant) would ask about the caller's primary company, the wrong question here.
+    Route::middleware(['edition:saas', 'auth:sanctum', 'api.module:core'])->group(function () {
         Route::get('pingpin/organisations', [OrganisationController::class, 'index']);
         Route::post('pingpin/organisations/members/{membershipId}/accept', [OrganisationController::class, 'acceptInvite'])->middleware('api.idempotent');
         Route::middleware(['pingpin.member', 'api.idempotent'])->group(function () {
@@ -266,10 +272,12 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         });
     });
 
-    // ── Authenticated + active subscription: the product surface ──
-    // Offline sync v2 (plan Appendix A). Deliberately outside api.subscription: a lapsed
+    // ── Authenticated: devices, offline sync v2 (plan Appendix A) and files ──
+    // Deliberately outside api.subscription: a lapsed
     // tenant's devices keep syncing; batches are held (not lost) once the grace ends.
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.perm', 'api.idempotent'])->group(function () {
+    // Module: core on purpose. One sync engine carries every module (ADR 0001) and a refused op rolls the
+    // whole batch back (SyncApplier), so sync is never cut by a module; a hidden module keeps its data.
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:core', 'api.perm', 'api.idempotent'])->group(function () {
         Route::post('devices/register', [DeviceController::class, 'register']);
         Route::get('devices', [DeviceController::class, 'index']);
         Route::post('devices/{id}/revoke', [DeviceController::class, 'revoke'])->whereNumber('id');
@@ -282,16 +290,46 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('files', [FileController::class, 'store']);
     });
 
-    Route::middleware(['auth:sanctum', 'api.tenant', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
+    // ── Authenticated + active subscription: the product surface, one group per module ──
+    // Each group is auth:sanctum, api.tenant, api.module:<module>, api.subscription, api.perm, api.idempotent.
+    // api.module comes straight after api.tenant (it reads the company the tenant guard resolved), so an account
+    // without the module hears module_off (EnsureApiModule) before the plan, permission and idempotency checks.
+    // tests/Feature/Api/ModuleGatingTest fails when an authenticated v1 route has no api.module mark.
+
+    // Module: core. What every account's app opens: the home dashboard and its suggestions (they read whichever
+    // modules are on), uploads, team chat and presence, the member picker, and registering a phone with Find My
+    // Phone: the first tracked device is what turns Ping Pin on, so registering can never wait for Ping Pin.
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:core', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index']);
-        // Phone record pages, "worth a look" and list exports (MOBILE_EXCELLENCE_PLAN D2, D3, D4, D6). Records by id or uuid.
+        // "Worth a look" on the phone's home (MOBILE_EXCELLENCE_PLAN D3).
         Route::get('dashboard/suggestions', [DashboardController::class, 'suggestions']);
+
+        Route::post('uploads', [UploadController::class, 'store']);
+
+        // Team chat (ChatService; any active member, whatever the role). Another shop's id answers 404, a chat one is not in 403.
+        Route::get('chat/conversations', [\App\Http\Controllers\Api\V1\ChatController::class, 'index']);
+        Route::get('chat/conversations/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'messages'])->whereNumber('id');
+        Route::post('chat/conversations/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'send'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post('chat/conversations/{id}/read', [\App\Http\Controllers\Api\V1\ChatController::class, 'read'])->whereNumber('id');
+        Route::post('chat/conversations/{id}/typing', [\App\Http\Controllers\Api\V1\ChatController::class, 'typing'])->whereNumber('id');
+        Route::post('chat/direct', [\App\Http\Controllers\Api\V1\ChatController::class, 'direct']);
+        Route::delete('chat/messages/{id}', [\App\Http\Controllers\Api\V1\ChatController::class, 'destroy'])->whereNumber('id');
+        Route::get('chat/unread', [\App\Http\Controllers\Api\V1\ChatController::class, 'unread']);
+        Route::post('presence', [\App\Http\Controllers\Api\V1\ChatController::class, 'presence']);
+        Route::get('members', [\App\Http\Controllers\Api\V1\MemberController::class, 'index']);
+
+        // Find My Phone — device registration (location push and config/command pull are in the pingpin group).
+        Route::post('tracking/devices/register', [TrackingController::class, 'register']);
+    });
+
+    // Module: shop. Products and stock, sales and the till, customers and suppliers, purchasing, stores and
+    // transfers, debts, reports, the supermarket back office, and the record pages and exports built on them.
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:shop', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
+        // Phone record pages and list exports (MOBILE_EXCELLENCE_PLAN D2, D4, D6). Records by id or uuid.
         Route::get('customers/{id}/summary', [\App\Http\Controllers\Api\V1\SummaryController::class, 'customer'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
         Route::get('customers/{id}/statement.pdf', [\App\Http\Controllers\Api\V1\SummaryController::class, 'statementPdf'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}')->middleware('throttle:30,1');
         Route::get('stock-items/{id}/summary', [\App\Http\Controllers\Api\V1\SummaryController::class, 'stockItem'])->where('id', '[0-9]+|[0-9a-fA-F-]{36}');
         Route::get('exports/{kind}', [\App\Http\Controllers\Api\V1\ExportController::class, 'show'])->where('kind', 'sales|products|customers')->middleware('throttle:10,1');
-
-        Route::post('uploads', [UploadController::class, 'store']);
 
         // Inventory
         apiCrud('stock-categories', StockCategoryController::class);
@@ -402,24 +440,19 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
         Route::get('reorder-suggestions', [\App\Http\Controllers\Api\V1\ReorderController::class, 'index']);
         Route::post('reorder-suggestions/orders', [\App\Http\Controllers\Api\V1\ReorderController::class, 'orders']);
+    });
 
-        // Team chat (ChatService; any active member, whatever the role). Another shop's id answers 404, a chat one is not in 403.
-        Route::get('chat/conversations', [\App\Http\Controllers\Api\V1\ChatController::class, 'index']);
-        Route::get('chat/conversations/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'messages'])->whereNumber('id');
-        Route::post('chat/conversations/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'send'])->whereNumber('id')->middleware('throttle:60,1');
-        Route::post('chat/conversations/{id}/read', [\App\Http\Controllers\Api\V1\ChatController::class, 'read'])->whereNumber('id');
-        Route::post('chat/conversations/{id}/typing', [\App\Http\Controllers\Api\V1\ChatController::class, 'typing'])->whereNumber('id');
-        Route::post('chat/direct', [\App\Http\Controllers\Api\V1\ChatController::class, 'direct']);
-        Route::delete('chat/messages/{id}', [\App\Http\Controllers\Api\V1\ChatController::class, 'destroy'])->whereNumber('id');
-        Route::get('chat/unread', [\App\Http\Controllers\Api\V1\ChatController::class, 'unread']);
-        Route::post('presence', [\App\Http\Controllers\Api\V1\ChatController::class, 'presence']);
+    // Module: finance (Income & expenses).
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:finance', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
         // Finance
         apiCrud('financial-categories', FinancialCategoryController::class);
         apiCrud('financial-periods', FinancialPeriodController::class);
         apiCrud('financial-records', FinancialRecordController::class);
         apiCrud('financial-reports', \App\Http\Controllers\Api\V1\FinancialReportController::class);
-        Route::get('members', [\App\Http\Controllers\Api\V1\MemberController::class, 'index']);
+    });
 
+    // Module: budget (Budgets & pledges).
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:budget', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
         // Budget / fundraising
         // A 30-minute signed link to the event's budget PDF (routes/web.php budget-program.pdf).
         Route::post('budget-programs/{id}/print-link', [BudgetProgramController::class, 'printLink'])->whereNumber('id')->middleware('throttle:30,1');
@@ -429,14 +462,19 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // A 30-minute signed link to the printable pledge list (routes/web.php data-exports.print).
         Route::post('contribution-records/print-link', [ContributionRecordController::class, 'printLink'])->middleware('throttle:30,1');
         apiCrud('contribution-records', ContributionRecordController::class);
+    });
 
+    // Module: poultry. The v1 poultry sync (retiring, roadmap 02 §7); the app's poultry records move on the core sync v2.
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:poultry', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
         // Poultry module sync (§Phase 8/9) — mobile-facing, matches the
         // Flutter client's PoultrySyncTransport push/pull contract exactly.
         Route::get('poultry/sync/pull', [PoultrySyncController::class, 'pull']);
         Route::post('poultry/sync/push', [PoultrySyncController::class, 'push']);
+    });
 
-        // Find My Phone — device registration, location push, config/command pull.
-        Route::post('tracking/devices/register', [TrackingController::class, 'register']);
+    // Module: pingpin (Find My Phone), on once the company has a tracked device or a Ping Pin plan (AdminMenu::modulesOn).
+    Route::middleware(['auth:sanctum', 'api.tenant', 'api.module:pingpin', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
+        // Find My Phone — location push, config/command pull.
         Route::post('tracking/devices/{uuid}/locations/batch', [TrackingController::class, 'pushLocations']);
         Route::get('tracking/devices/{uuid}/config', [TrackingController::class, 'getConfig']);
         Route::post('tracking/devices/{uuid}/config', [TrackingController::class, 'updateConfig']);

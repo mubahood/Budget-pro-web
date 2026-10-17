@@ -60,6 +60,10 @@ class TenantIsolationTest extends ApiTestCase
         $b = $this->registerTenant();
         $uuid = (string) \Illuminate\Support\Str::uuid();
         $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'B Phone'], $this->auth($b['token']))->assertOk();
+        // A without Ping Pin is refused before any device is looked up (api.module:pingpin)...
+        $this->getJson("/api/v1/tracking/devices/$uuid/config", $this->auth($a['token']))->assertStatus(403)->assertJsonPath('errors.code', 'module_off');
+        // ...and A with Ping Pin (its own phone) still cannot reach B's device.
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'A Phone'], $this->auth($a['token']))->assertOk();
 
         // A's token, B's device uuid — every read-shaped endpoint must 404,
         // not silently return B's config as if it were empty/default.
@@ -72,6 +76,8 @@ class TenantIsolationTest extends ApiTestCase
         $b = $this->registerTenant();
         $uuid = (string) \Illuminate\Support\Str::uuid();
         $this->postJson('/api/v1/tracking/devices/register', ['uuid' => $uuid, 'name' => 'B Phone'], $this->auth($b['token']))->assertOk();
+        // A uses Ping Pin too (its own phone), so the module gate lets it through to the device lookup.
+        $this->postJson('/api/v1/tracking/devices/register', ['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'A Phone'], $this->auth($a['token']))->assertOk();
 
         $this->postJson("/api/v1/tracking/devices/$uuid/locations/batch", [
             'points' => [['recorded_at' => 1787900001000, 'lat' => 1.0, 'lng' => 32.0]],
