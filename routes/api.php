@@ -124,6 +124,8 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('auth/otp/request', [AuthController::class, 'otpRequest'])->middleware('throttle:login');
         Route::post('auth/otp/verify', [AuthController::class, 'otpVerify'])->middleware('throttle:login');
         Route::post('auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:login');
+        // "Try the live demo" in the phone apps: a short-lived token for the public demo account (DemoSessionController).
+        Route::post('demo/session', [\App\Http\Controllers\Api\V1\DemoSessionController::class, 'store'])->middleware(['edition:saas', 'throttle:demo-session']);
 
         // Ping Pin's own, independent signup/login (Task 3.1) — NOT the
         // routes above. Same admin_users/Sanctum identity (DECISIONS.md D6),

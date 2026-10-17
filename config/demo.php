@@ -21,6 +21,9 @@ return [
 
     'rebuild_hours' => (int) env('DEMO_REBUILD_HOURS', 72),
 
+    // How long a phone's "Try the live demo" sign-in lasts (POST /api/v1/demo/session).
+    'token_hours' => (int) env('DEMO_TOKEN_HOURS', 12),
+
     // How much trading history a fresh build has.
     'days' => (int) env('DEMO_DAYS', 60),
 

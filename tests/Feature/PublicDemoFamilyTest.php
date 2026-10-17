@@ -9,15 +9,17 @@ use App\Services\Onboarding\PublicDemoBuilder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Concerns\RunsAsStandalone;
 use Tests\TestCase;
 
 /**
  * The public demo with every module on: the shop as it was, plus the Mukono farm and the Brian & Grace
- * wedding (in the shop's dollars), added once on a build, kept up by the heal without a row twice.
+ * wedding (in the shop's dollars), added once on a build, kept up by the heal without a row twice, and
+ * the phones' "Try the live demo" sign-in (POST /api/v1/demo/session).
  */
 class PublicDemoFamilyTest extends TestCase
 {
-    use DatabaseTransactions;
+    use DatabaseTransactions, RunsAsStandalone;
 
     private const FARM_TABLES = ['poultry_batches', 'poultry_daily_records', 'poultry_sales', 'poultry_expenses', 'poultry_feed_stock', 'poultry_customers',
         'poultry_vaccination_events', 'poultry_mortality_events', 'poultry_health_events', 'poultry_egg_transactions', 'poultry_feed_types'];
@@ -162,5 +164,29 @@ class PublicDemoFamilyTest extends TestCase
         $this->assertMatchesRegularExpression('/^\+2567[0-8]\d{7}$/', DemoPledgeExtras::phoneFor('Okello James'));
         $this->assertSame(DemoPledgeExtras::phoneFor('Okello James'), DemoPledgeExtras::phoneFor('Okello James'));
         $this->assertSame([], (new DemoPledgeExtras())->apply(0, 0), 'no event, nothing to do');
+    }
+
+    public function test_the_phone_signs_into_the_live_demo_without_its_password_and_the_demo_locks_hold(): void
+    {
+        $this->postJson('/api/v1/demo/session')->assertStatus(409)->assertJsonPath('errors.code', 'demo_rebuilding');
+
+        app(PublicDemo::class)->run();
+        $res = $this->postJson('/api/v1/demo/session', ['device_name' => 'android'])->assertOk()
+            ->assertJsonPath('data.demo', true)->assertJsonPath('data.company.id', (int) PublicDemo::company()->id);
+        $this->assertStringNotContainsString('demo2026', $res->getContent(), 'the password is never sent');
+        $token = $res->json('data.token');
+
+        $this->withToken($token)->getJson('/api/v1/auth/me')->assertOk();
+        $this->withToken($token)->putJson('/api/v1/auth/password', ['current_password' => 'demo2026', 'password' => 'Another-pass-99', 'password_confirmation' => 'Another-pass-99'])
+            ->assertStatus(422);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('demo2026', PublicDemo::owner()->fresh()->password));
+        $expires = DB::table('personal_access_tokens')->where('tokenable_id', PublicDemo::owner()->id)->orderByDesc('id')->value('expires_at');
+        $this->assertLessThanOrEqual(now()->addHours(12)->addMinute()->timestamp, strtotime((string) $expires), 'a short-lived token');
+
+        config(['demo.enabled' => false]);
+        $this->postJson('/api/v1/demo/session')->assertNotFound();
+        config(['demo.enabled' => true]);
+        $this->asStandalone();
+        $this->postJson('/api/v1/demo/session')->assertStatus(404);
     }
 }

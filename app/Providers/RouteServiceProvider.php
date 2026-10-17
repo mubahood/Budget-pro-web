@@ -48,6 +48,13 @@ class RouteServiceProvider extends ServiceProvider
         // minute per address across them (App\Support\SignInThrottle, the same keys as the classic and web sign-in).
         RateLimiter::for('login', fn (Request $request) => SignInThrottle::apiLimits($request));
 
+        // The phones' "Try the live demo" (DemoSessionController): 5 a minute and 30 an hour per address, 1,000 an hour in all.
+        RateLimiter::for('demo-session', fn (Request $request) => [
+            Limit::perMinute(5)->by('demo-session|'.$request->ip()),
+            Limit::perHour(30)->by('demo-session-h|'.$request->ip()),
+            Limit::perHour(1000)->by('demo-session-all'),
+        ]);
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')
