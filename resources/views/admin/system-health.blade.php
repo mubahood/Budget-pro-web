@@ -75,6 +75,18 @@
             <p>Old app (14 days): <strong>{{ $h['legacy']['legacy_percent'] }}%</strong> of active shops · {{ $h['legacy']['legacy_calls'] }} calls
                 {!! $h['legacy']['ready'] ? '<span class="label label-success">ready to retire</span>' : '<span class="label label-default">keep</span>' !!}</p>
         </div></div>
+        <div class="box"><div class="box-header"><h3 class="box-title">SACCO ledgers</h3></div><div class="box-body">
+            @php($sl = $h['sacco_ledger'] ?? null)
+            @if($sl === null)
+                <p class="text-muted">The nightly ledger check (sacco:ledger-verify, 03:10) has not run yet.</p>
+            @else
+                <p>Last check: <small>{{ $sl['at'] }}</small> · {{ $sl['companies'] }} SACCO(s) {!! $ok($sl['failed'] === []) !!}</p>
+                @foreach($sl['failed'] as $f)
+                    <p class="text-danger">SACCO #{{ $f['company_id'] }}: {{ implode(', ', $f['checks']) }}@if($f['first_broken_entry']) (chain breaks at {{ $f['first_broken_entry'] }})@endif</p>
+                @endforeach
+                <p>Journal triggers: <strong>{{ $sl['triggers'] }}</strong>@if($sl['triggers'] === 'absent') <small class="text-muted">(the model guards and the hash chain still hold)</small>@endif</p>
+            @endif
+        </div></div>
         <div class="box"><div class="box-header"><h3 class="box-title">Backups & drills</h3></div><div class="box-body no-padding"><table class="table table-condensed">
             @forelse($h['backups'] as $b)
                 <tr><td>{{ $b->kind }}</td><td>{!! $ok($b->status === 'ok') !!}</td><td><small>{{ $b->created_at }}</small></td><td class="text-right"><small>{{ $b->bytes ? number_format($b->bytes / 1048576, 1).' MB' : '' }}</small></td></tr>

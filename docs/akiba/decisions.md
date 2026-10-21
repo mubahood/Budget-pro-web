@@ -582,3 +582,24 @@ approval.**
   there. `PostingService` validates every line before any write (one side, non-negative, the sub-ledger pair), and
   `SchemaIntegrity::STATUS_MODELS` guards the sacco status columns on save.
 - The immutability triggers do install on 5.7. On MySQL 8.0.16+ the CHECKs are added as designed.
+
+**AK-57: Member sub-ledgers plug into the ledger; month-close checks plug into the close.**
+
+- `Ledger\SubLedger` (lock, project, balances) is implemented by the module that owns each table and registered in
+  `Ledger\SubLedgers` at boot: shares (P1.11), savings (P1.12), loans (P2). `PostingService` refuses a line naming
+  an unregistered type (`sub_ledger_unavailable`) and `LedgerVerifier` checks every registered one.
+- `Ledger\CloseChecks` holds the other modules' conditions for closing a month (the approvals engine's "nothing
+  pending from that month"; P2's accrual runs). `PeriodService::close` always runs the ledger check itself.
+- *Why:* P1.5 builds the posting service before the savings, shares and loan tables exist (P1.11, P1.12, P2), and
+  the ledger must not know their tables. The ledger tests prove the mechanism with a stand-in sub-ledger.
+- `ChartOfAccounts::seed` also creates each account's empty balance row and the ledger head (the books exist the
+  moment their chart does); `LedgerWritersTest` lists it beside `PostingService` for that reason.
+
+**AK-58: Group mode posts only what its chart holds.**
+
+- The group chart (the ADR 0009 §3 ✓ rows) has no 4420 Other fees, so `PostingRules::fee` is office-only
+  (`not_in_group_mode`); a group charges fines (P5). Cash in group mode is 1020 Cash box, never 1010.
+- System accounts get a `system_key` even where the ADR table gave only `control_of` (1320 `loans.interest`, 2110
+  `savings.voluntary`, 2120 `savings.compulsory`, 2130 `savings.fixed`, 3100 `shares.capital`, 2510 `fund.social`,
+  1440 `fines.receivable`, 2400 `payables`, 3600 `reserve.general`, 5400 `exp.governance`, 5740 `exp.software`), so
+  code never finds an account by its code.

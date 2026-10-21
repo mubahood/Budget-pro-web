@@ -26,6 +26,8 @@ class NumberSequencer
         'purchase_return' => 'PRT',
         'transfer' => 'TRF',
         'stock_request' => 'REQ',
+        // Akiba Ledger: journal entries (JE-2026-000001, ADR 0009 §4.3).
+        'je' => 'JE',
     ];
 
     public static function next(int $companyId, string $kind, ?\DateTimeInterface $on = null): string

@@ -30,6 +30,8 @@ class Kernel extends ConsoleKernel
         $schedule->call($task('saas:hourly'))->name('saas:hourly')->hourly()->withoutOverlapping(); // standalone: notices + debt reminders only, no billing Lifecycle
         $schedule->call($task('customers:adopt-named'))->name('customers:adopt-named')->hourlyAt(40)->withoutOverlapping();
         $schedule->call($task('shop:product-stats'))->name('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
+        // Akiba Ledger (ADR 0009 §7): every SACCO's books proved sound each night; failures reach the owner and System health.
+        $schedule->call($task('sacco:ledger-verify'))->name('sacco:ledger-verify')->dailyAt('03:10')->withoutOverlapping();
         $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
