@@ -22,11 +22,11 @@ final class LoanBooks
 
     /**
      * Whether the SACCO is licensed (an UMRA licence number on its settings): only then do the checks that enforce a
-     * law block a loan action (AK-90; the same test as SaccoRules::strict). An unlicensed SACCO keeps its own rules.
+     * law block a loan action (AK-90): SaccoRules::strict, the module's one test. An unlicensed SACCO keeps its own rules.
      */
     public static function strict(int $companyId): bool
     {
-        return filled(SaccoSetting::for($companyId)?->licence_no);
+        return \App\Support\Rules\SaccoRules::strict($companyId);
     }
 
     public static function money(int $companyId, int $minor): Amount
