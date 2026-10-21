@@ -18,13 +18,17 @@ class OtpService
     public const PURPOSES = ['login', 'register', 'reset', 'verify'];
 
     /** @return array{sent: bool, channel: string|null, sent_to: string, expires_in: int} */
-    public function request(string $identifier, string $purpose, ?string $ip = null): array
+    /**
+     * @param  string|null  $deliverTo  where the code goes when the identifier is not an address itself (a SACCO
+     *                                  member's codes are keyed `sacco:{email}` and sent to that email, AK-61)
+     */
+    public function request(string $identifier, string $purpose, ?string $ip = null, ?string $deliverTo = null): array
     {
         if (! in_array($purpose, self::PURPOSES, true)) {
             throw BusinessRuleException::make('invalid_purpose', 'Unknown code purpose.');
         }
         $cfg = config('messaging.otp');
-        $to = $this->deliverTo($identifier, $purpose);
+        $to = $deliverTo ?? $this->deliverTo($identifier, $purpose);
         $recent = DB::table('otp_codes')->where('identifier', $identifier)->where('created_at', '>=', now()->subHour())->count();
         if ($recent >= $cfg['max_per_hour']) {
             throw BusinessRuleException::make('otp_rate_limited', 'Too many codes requested. Please wait a while and try again.');

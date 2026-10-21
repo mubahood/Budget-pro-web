@@ -21,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         \App\Support\SchemaIntegrity::guardModels();
+        \App\Services\Sacco\SaccoModule::boot(); // Akiba Ledger: the module's parts register with each other
         // One password rule wherever Password::defaults() is used (App\Support\Rules\PasswordPolicy).
         \Illuminate\Validation\Rules\Password::defaults(fn () => \App\Support\Rules\PasswordPolicy::rule());
 

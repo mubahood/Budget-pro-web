@@ -65,7 +65,7 @@ trait AuditLogger
             }
 
             // Filter out sensitive fields
-            $sensitiveFields = ['password', 'remember_token', 'api_token', 'otp_code', 'reset_token'];
+            $sensitiveFields = ['password', 'remember_token', 'api_token', 'otp_code', 'reset_token', ...$this->auditSensitive()];
             if ($oldValues) {
                 $oldValues = $this->filterSensitiveData($oldValues, $sensitiveFields);
             }
@@ -99,12 +99,22 @@ trait AuditLogger
     }
 
     /**
+     * More fields this model keeps out of the audit log (the SACCO's NIN columns, AK-31). Override to add some.
+     *
+     * @return array<int, string>
+     */
+    protected function auditSensitive(): array
+    {
+        return [];
+    }
+
+    /**
      * Filter out sensitive data from audit logs.
      */
     protected function filterSensitiveData(array $data, array $sensitiveFields): array
     {
         foreach ($sensitiveFields as $field) {
-            if (isset($data[$field])) {
+            if (array_key_exists($field, $data) && $data[$field] !== null) {
                 $data[$field] = '[FILTERED]';
             }
         }

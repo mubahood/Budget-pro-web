@@ -629,3 +629,22 @@ approval.**
 - The founder is seated as chairperson (or treasurer) at setup. `SaccoAccess::refuseSyncOp` is wired into
   `SyncApplier` now; the sacco tables join `SyncRegistry` in P1.16.
 - `TeamRules::editableRoles()` without a company still answers the family's roles; callers pass the company.
+
+**AK-61: Members sign in to the web with a member sign-in of their own, one per membership.**
+
+- `sacco_member_logins` (company, member, email, phone, password hash, lockout) beside the staff `admin_users`.
+  An officer with `sacco_members` opens it (`Members\MemberLogin::enable`); the member signs in with email (or
+  phone) and password, or with a code sent by email (`OtpService`, keyed `sacco:{address}` so it never collides
+  with the same address's staff code; phone codes only when `OTP_PHONE_CODES` is on). Five wrong passwords lock
+  it for 15 minutes; an unknown address gets the same answer as a known one.
+- One person in two SACCOs has two member sign-ins (the same email is fine): a sign-in answers every membership it
+  opens and the person picks one. The one-business-per-account rule for staff logins is untouched: a member is
+  never an `admin_users` row and never holds a staff permission.
+- The portal keeps `(company_id, member_id)` in its own session and calls `MemberLogin::resolve()` on every request
+  (a disabled sign-in, a member who is no longer active, or another SACCO ends the session) and `MemberLogin::owns()`
+  for every record it shows. The API's member tokens (P3.7, §6.4) will sit on the same table.
+- *Why:* the owner wants every role, members included, on the web portal now; AK-19's reasons (unique staff phones,
+  one business per staff account, no staff permissions for members) rule out making members staff users.
+- **Also in P1.9:** `NumberSequencer` kind `mem` is numbered for life (`M-000123`, no year); `AuditLogger` gains
+  `auditSensitive()`, so the NIN columns are never logged; `DuplicateService` lists members with the same phone
+  and refuses to merge them there (`merge_elsewhere`): member merges move money by journal (ADR 0009).

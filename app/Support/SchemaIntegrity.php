@@ -73,6 +73,12 @@ class SchemaIntegrity
         ['sacco_account_balances', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
         ['sacco_settings', 'company_id', 'companies', 'restrict'],
         ['sacco_officers', 'company_id', 'companies', 'restrict'],
+        ['sacco_officers', 'member_id', 'sacco_members', 'restrict'],
+        ['sacco_members', 'company_id', 'companies', 'restrict'],
+        ['sacco_member_relations', 'member_id', 'sacco_members', 'restrict'],
+        ['sacco_member_documents', 'member_id', 'sacco_members', 'restrict'],
+        ['sacco_member_documents', 'file_id', 'files', 'restrict'],
+        ['sacco_member_logins', 'member_id', 'sacco_members', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -91,6 +97,11 @@ class SchemaIntegrity
         ['sacco_settings', 'mode', ['office', 'group']],
         ['sacco_settings', 'receipts_channel', ['sms', 'whatsapp', 'app', 'none']],
         ['sacco_settings', 'employee_loans_policy', ['salary_advance_only', 'committee']],
+        ['sacco_members', 'status', ['applicant', 'active', 'dormant', 'suspended', 'exited', 'deceased', 'rejected']],
+        ['sacco_members', 'kyc_status', ['pending', 'verified', 'rejected']],
+        ['sacco_members', 'kind', ['individual', 'group', 'institution']],
+        ['sacco_member_relations', 'role', ['nominee', 'next_of_kin']],
+        ['sacco_member_documents', 'type', ['national_id', 'passport', 'photo', 'signature', 'application', 'nomination', 'other']],
         ['sacco_officers', 'position', ['chairperson', 'vice_chair', 'treasurer', 'secretary', 'manager', 'board_member', 'loans_committee', 'supervisory', 'key_holder', 'money_counter', 'teller', 'custom']],
     ];
 
@@ -117,6 +128,9 @@ class SchemaIntegrity
         'sacco_journal_lines' => \App\Models\SaccoJournalLine::class,
         'sacco_settings' => \App\Models\SaccoSetting::class,
         'sacco_officers' => \App\Models\SaccoOfficer::class,
+        'sacco_members' => \App\Models\SaccoMember::class,
+        'sacco_member_relations' => \App\Models\SaccoMemberRelation::class,
+        'sacco_member_documents' => \App\Models\SaccoMemberDocument::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */

@@ -26,14 +26,19 @@ class NumberSequencer
         'purchase_return' => 'PRT',
         'transfer' => 'TRF',
         'stock_request' => 'REQ',
-        // Akiba Ledger: journal entries (JE-2026-000001, ADR 0009 §4.3).
+        // Akiba Ledger: journal entries (JE-2026-000001, ADR 0009 §4.3) and member numbers (M-000123, never per year).
         'je' => 'JE',
+        'mem' => 'M',
     ];
+
+    /** Kinds numbered once for the company's whole life, not per year: M-000123. */
+    public const PERPETUAL = ['mem'];
 
     public static function next(int $companyId, string $kind, ?\DateTimeInterface $on = null): string
     {
         $prefix = self::FORMATS[$kind] ?? strtoupper($kind);
-        $periodKey = ($on ? \Illuminate\Support\Carbon::instance($on) : now())->format('Y');
+        $perpetual = in_array($kind, self::PERPETUAL, true);
+        $periodKey = $perpetual ? '0000' : ($on ? \Illuminate\Support\Carbon::instance($on) : now())->format('Y');
 
         $value = DB::transaction(function () use ($companyId, $kind, $periodKey) {
             $row = DB::table('number_sequences')
@@ -62,6 +67,6 @@ class NumberSequencer
             return $next;
         });
 
-        return sprintf('%s-%s-%06d', $prefix, $periodKey, $value);
+        return $perpetual ? sprintf('%s-%06d', $prefix, $value) : sprintf('%s-%s-%06d', $prefix, $periodKey, $value);
     }
 }

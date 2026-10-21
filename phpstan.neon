@@ -31,6 +31,10 @@ parameters:
         - app/Models/SaccoPeriodBalance.php
         - app/Models/SaccoSetting.php
         - app/Models/SaccoOfficer.php
+        - app/Models/SaccoMember.php
+        - app/Models/SaccoMemberRelation.php
+        - app/Models/SaccoMemberDocument.php
+        - app/Models/SaccoMemberLogin.php
         - app/Scopes
     excludePaths:
         - app/Services/AutoReorderService.php

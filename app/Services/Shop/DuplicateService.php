@@ -21,7 +21,12 @@ class DuplicateService
         'stock_categories' => ['Categories with the same name', 'LOWER(TRIM(name))', 'name'],
         'units' => ['Units with the same name', 'LOWER(TRIM(name))', 'name'],
         'stock_items' => ['Products with the same barcode', 'TRIM(barcode)', 'name'],
+        // Akiba Ledger: listed here, merged by the SACCO's own member merge (balances move by transfer journals, ADR 0009).
+        'sacco_members' => ['Members with the same phone', 'phone_e164', 'first_name'],
     ];
+
+    /** Kinds found here but merged elsewhere. */
+    public const MERGED_ELSEWHERE = ['sacco_members' => 'Members are merged from the SACCO\'s members screen, so their savings and shares move with them.'];
 
     /** Every column that points at a row of that table (table => [[child table, column], …]). */
     private const REFERENCES = [
@@ -58,6 +63,9 @@ class DuplicateService
     {
         if (! isset(self::KINDS[$table])) {
             throw BusinessRuleException::make('invalid_kind', 'That kind of record cannot be merged.');
+        }
+        if (isset(self::MERGED_ELSEWHERE[$table])) {
+            throw BusinessRuleException::make('merge_elsewhere', self::MERGED_ELSEWHERE[$table]);
         }
         $mergeIds = array_values(array_diff(array_map('intval', $mergeIds), [$keepId]));
         $ids = DB::table($table)->where('company_id', $companyId)->where('is_deleted', false)->whereIn('id', [$keepId, ...$mergeIds])->pluck('id')->all();
