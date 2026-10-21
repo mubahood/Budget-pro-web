@@ -26,6 +26,8 @@ final class SaccoModule
         Approvals\WithdrawalExecutor::class, Approvals\ProductTermsChangeExecutor::class,
         // P1.11 shares
         Approvals\ShareTransferExecutor::class,
+        // P1.13 opening balances
+        Approvals\OpeningBalancesExecutor::class,
     ];
 
     public static function boot(): void

@@ -22,12 +22,12 @@ final class PostingRules
     public const RECEIPT_CHANNELS = ['cash', 'bank'];
 
     /** The P1 kinds that exist in group mode (its chart has no 4420 Other fees: a group charges fines, P5). */
-    public const GROUP_KINDS = ['deposit', 'withdrawal', 'share_purchase', 'share_transfer', 'entrance_fee', 'internal_transfer', 'held_receipt', 'held_receipt_allocation', 'manual', 'reversal'];
+    public const GROUP_KINDS = ['deposit', 'withdrawal', 'share_purchase', 'share_transfer', 'entrance_fee', 'internal_transfer', 'held_receipt', 'held_receipt_allocation', 'manual', 'reversal', 'opening_balance'];
 
     /** The system accounts each P1 rule may use, per mode (ChartOfAccountsTest proves each chart has them). */
     public const SYSTEM_KEYS = [
-        'office' => ['cash.office', 'bank.main', 'inc.fees', 'inc.entrance', 'suspense.receipts'],
-        'group' => ['cash.box', 'bank.main', 'inc.entrance', 'suspense.receipts'],
+        'office' => ['cash.office', 'bank.main', 'inc.fees', 'inc.entrance', 'suspense.receipts', 'opening'],
+        'group' => ['cash.box', 'bank.main', 'inc.entrance', 'suspense.receipts', 'opening'],
     ];
 
     public function __construct(private readonly int $companyId, private readonly string $mode)
@@ -117,6 +117,39 @@ final class PostingRules
     {
         return $this->draft('held_receipt_allocation', $key)->debit(ChartOfAccounts::id($this->companyId, 'suspense.receipts'), $amount, memberId: $target->memberId)
             ->credit($target->accountId, $amount, $target->type, $target->id, $target->memberId);
+    }
+
+    /**
+     * An opening balance brought over from the books before Akiba (04 §5.1 "Opening balances"): each line against
+     * 3900 Opening balance equity, which nets to zero once the whole import is in. $lines are [account id, signed
+     * minor on the account's normal side as a debit (+) or credit (−), optional SubRef]; 3900 takes the difference.
+     *
+     * @param  list<array{0: int, 1: int, 2?: ?SubRef}>  $lines  [account id, +debit / −credit, member account]
+     */
+    public function opening(string $key, string $currency, array $lines, ?int $memberId = null): JournalDraft
+    {
+        $draft = JournalDraft::make($this->companyId, 'opening_balance', $key);
+        $net = 0;
+        foreach ($lines as $l) {
+            [$accountId, $signed] = [$l[0], $l[1]];
+            $sub = $l[2] ?? null;
+            if ($signed === 0) {
+                continue;
+            }
+            $amount = Amount::of(abs($signed), $currency);
+            $signed > 0
+                ? $draft->debit($accountId, $amount, $sub?->type, $sub?->id, $sub?->memberId ?? $memberId)
+                : $draft->credit($accountId, $amount, $sub?->type, $sub?->id, $sub?->memberId ?? $memberId);
+            $net += $signed;
+        }
+        $opening = ChartOfAccounts::id($this->companyId, 'opening');
+        if ($net > 0) {
+            $draft->credit($opening, Amount::of($net, $currency), memberId: $memberId);
+        } elseif ($net < 0) {
+            $draft->debit($opening, Amount::of(-$net, $currency), memberId: $memberId);
+        }
+
+        return $draft;
     }
 
     private function draft(string $kind, string $key): JournalDraft

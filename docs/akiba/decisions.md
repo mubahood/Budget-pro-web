@@ -763,3 +763,20 @@ approval.**
   code sent to the guarantor (OtpService, purpose `verify`, keyed `sacco_guarantee:{id}`).
 - *Why:* one account per lien keeps recovery and release exact; locking the borrower's own savings would freeze
   most of a typical borrower's money for the whole term.
+
+**AK-65: Opening balances (P1.13) come in two files through one approval each; amounts in major units.**
+
+- `members` (member_no, shares as a count, `savings_{PRODUCT CODE}` per product, `loan_principal`) and `ledger`
+  (account_code, debit, credit, memo). Amounts are typed as people type them ("1250000", "1250.50") and read
+  exactly with `Amount::fromMajor`; shares are counted and valued at par.
+- `opening_balances` (maker sacco_accounts, checker sacco_approve): `prepare` re-reads the file and freezes the
+  parsed rows, so a checker approves exactly what posts; a file with any bad row is refused whole. Each row posts
+  one `opening_balance` entry against 3900 with the key `open:{approval uuid}:{row}`, dated `as_of` (an open
+  month: entry and value date both), opening savings and share accounts that are missing. The one-third share cap
+  is not applied to history.
+- Control accounts (savings, shares, loans) come only from member rows; the ledger file brings everything else.
+  `OpeningBalances::status()` gives 3900's balance and each file's part of it; the verifier warns until it is zero.
+- `loan_principal` belongs to the loans module: it registers the column with `OpeningBalances::memberColumn()`
+  (a schedule-less opening loan); until then a non-zero value is refused (`loans_later`).
+- `PostingRules::opening()` builds these drafts; `Ledger\TrialBalance` (between dates, or a closed month's
+  snapshot) and `Ledger\AccountStatement` (a ledger account, or one member account) read the journal lines.
