@@ -28,6 +28,13 @@ final class LoanNotices
         'guarantor_request' => '{sacco}: {borrower} asks you to guarantee {amount}. Reply: {link}',
         'guarantor_exposure' => "{sacco}: {borrower}'s loan is in arrears. Up to {amount} of your savings may be used.",
         'guarantor_recovery' => "{sacco}: {amount} was taken from your savings for {borrower}'s loan {loan}, which you guaranteed.",
+        // The simple flow (Simple\LoanFlow): each step tells the next person.
+        'guarantor_ask' => '{sacco}: {borrower} asks you to guarantee a loan of {amount}. Open the app to approve or decline.',
+        'loan_guaranteed' => '{sacco}: {guarantor} guaranteed your loan request {loan}. It now waits for the chairperson.',
+        'loan_declined' => '{sacco}: your loan request {loan} was declined by {by}.',
+        'loan_request_approved' => '{sacco}: your loan {loan} of {amount} is approved. The treasurer will pay it out.',
+        'loan_paid_out' => '{sacco}: loan {loan} of {amount} paid out. First instalment {due} on {date}.',
+        'loan_not_paid_out' => '{sacco}: your approved loan {loan} was not paid out. {note}',
     ];
 
     /** Reminders are not receipts: they need the member's consent to messages, not just no opt-out. */
