@@ -1,0 +1,1383 @@
+{
+    "version": "2026.10.1",
+    "currency": "UGX",
+    "updated": "2026-10-21",
+    "rates": {"UGX": 1, "USD": 3700, "EUR": 4000, "GBP": 4700, "KES": 28, "TZS": 1.4, "RWF": 2.6},
+    "event_types": [
+        {"key": "wedding", "label": "Wedding"},
+        {"key": "introduction", "label": "Introduction (Kwanjula)"},
+        {"key": "giveaway", "label": "Give-away (Kuhingira, Nyom)"},
+        {"key": "nikah", "label": "Nikah and Walima"},
+        {"key": "civil", "label": "Civil wedding"},
+        {"key": "send_off", "label": "Send-off (Kasiki)"},
+        {"key": "visitation", "label": "Visitation (Kukyala)"},
+        {"key": "graduation", "label": "Graduation"},
+        {"key": "fundraiser", "label": "Fundraiser"},
+        {"key": "other", "label": "Other"}
+    ],
+    "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+    "messages": {
+        "reminder": {
+            "en": "Hello {name}, a friendly reminder about your pledge to {event} on {date}.\nYou pledged {amount} and have paid {paid}; {balance} is still outstanding.\nPay to: {payment_number}\nTreasurer: {treasurer} {treasurer_phone}\nThank you for your support!",
+            "lg": "Gyebale ko {name}! Tukujjukiza ku bweyamo bwo eri {event} nga {date}.\nWeeyama {amount}, osasudde {paid}, osigazza {balance}.\nSasula ku: {payment_number}\nOmuwanika: {treasurer} {treasurer_phone}\nWebale nnyo okutuwagira!",
+            "sw": "Habari {name}, tunakukumbusha kwa upendo kuhusu ahadi yako kwa {event} tarehe {date}.\nUliahidi {amount} na umelipa {paid}; {balance} bado inasubiriwa.\nLipa kwa: {payment_number}\nMweka hazina: {treasurer} {treasurer_phone}\nAsante kwa msaada wako!"
+        },
+        "thanks": {
+            "en": "Dear {name}, thank you so much! We have received {paid} of your pledge of {amount} for {event}.\nGod bless you.",
+            "lg": "Webale nnyo {name}! Tufunye {paid} ku bweyamo bwo obwa {amount} eri {event}.\nKatonda akuwe omukisa.",
+            "sw": "Mpendwa {name}, asante sana! Tumepokea {paid} kati ya ahadi yako ya {amount} kwa {event}.\nMungu akubariki."
+        },
+        "confirmation": {
+            "en": "Payment received: {payment} from {name} for {event} ({how}).\nPaid so far {paid} of {amount}; balance {balance}.\nThank you!",
+            "lg": "Tufunye {payment} okuva ewa {name} eri {event} ({how}).\nOsasudde {paid} ku {amount}; osigazza {balance}.\nWebale nnyo!",
+            "sw": "Malipo yamepokelewa: {payment} kutoka kwa {name} kwa {event} ({how}).\nUmelipa {paid} kati ya {amount}; bado {balance}.\nAsante!"
+        },
+        "invitation": {
+            "en": "Hello {name}, you are warmly invited to support {event} on {date}.\nVenue: {venue}\nPledge any amount and pay to:\n{payment_details}\nThank you!",
+            "lg": "Gyebale ko {name}! Tukusaba otuwagire ku {event} nga {date}.\nWa: {venue}\nWeeyame kyonna ky'osobola era osasule ku:\n{payment_details}\nWebale nnyo!",
+            "sw": "Habari {name}, unakaribishwa kwa upendo kuchangia {event} tarehe {date}.\nMahali: {venue}\nAhidi kiasi chochote na ulipe kwa:\n{payment_details}\nAsante!"
+        },
+        "meeting": {
+            "en": "Dear {name}, the {event} committee meets {meeting_when} at {meeting_where}.\nYou are kindly requested to attend. Thank you.",
+            "lg": "Gyebale ko {name}, olukiiko lwa {event} lujja kutuula {meeting_when} e {meeting_where}.\nTukusaba obeewo. Webale.",
+            "sw": "Mpendwa {name}, kamati ya {event} itakutana {meeting_when} katika {meeting_where}.\nUnaombwa kuhudhuria. Asante."
+        }
+    },
+    "templates": [
+        {
+            "key": "kukyala-visitation",
+            "name": "Kukyala (visit before the introduction)",
+            "description": "The groom's small party visits the bride's family with the ssenga to ask for the introduction date. Gifts, a letter for the father and a light meal.",
+            "event_type": "visitation",
+            "culture": ["baganda"],
+            "religion": ["any"],
+            "size": "small",
+            "guests": 30,
+            "groups": ["Groom's family", "Friends", "Others"],
+            "roles": [
+                {"title": "Organiser", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Ssenga (go-between)", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Gifts for the bride's family",
+                    "items": [
+                        {"name": "Envelope for the ssenga", "unit": "envelope", "qty": 1, "price": 200000},
+                        {"name": "Envelope with the letter for the bride's father", "unit": "envelope", "qty": 1, "price": 300000},
+                        {"name": "Gift basket: sugar, salt, soap, cooking oil", "unit": "basket", "qty": 1, "price": 150000},
+                        {"name": "Fruit basket", "unit": "basket", "qty": 1, "price": 100000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Light meal (local buffet)", "unit": "plate", "qty": 1, "per": 1, "price": 15000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Car hire and fuel for the visiting party", "unit": "trip", "qty": 1, "price": 250000}
+                    ]
+                },
+                {
+                    "name": "Seating (when hosted at home)",
+                    "items": [
+                        {"name": "Small tent (50 seats)", "unit": "tent", "qty": 1, "price": 150000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 1500}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "kwanjula-buganda",
+            "name": "Kwanjula (Buganda introduction)",
+            "description": "The introduction at the bride's home: the omutwalo and envelopes, the bintu (gifts), outfits for the delegation, a spokesman and a meal for about 300 guests.",
+            "event_type": "introduction",
+            "culture": ["baganda"],
+            "religion": ["any"],
+            "size": "medium",
+            "guests": 300,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Omwogezi (spokesman) contact", "role": "member"},
+                {"title": "Gifts (bintu) in-charge", "role": "member"},
+                {"title": "Ssenga coordinator", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Omutwalo and envelopes",
+                    "items": [
+                        {"name": "Omutwalo (bride price envelope)", "unit": "envelope", "qty": 1, "price": 2000000},
+                        {"name": "Gate fee (omulyango)", "unit": "envelope", "qty": 1, "price": 300000},
+                        {"name": "Envelope for the bride's father", "unit": "envelope", "qty": 1, "price": 500000},
+                        {"name": "Envelope for the bride's mother", "unit": "envelope", "qty": 1, "price": 500000},
+                        {"name": "Envelope for the ssenga", "unit": "envelope", "qty": 1, "price": 400000},
+                        {"name": "Envelopes for the elders (bakadde)", "unit": "envelope", "qty": 5, "price": 100000}
+                    ]
+                },
+                {
+                    "name": "Gifts (bintu)",
+                    "items": [
+                        {"name": "Kanzu for the bride's father", "unit": "piece", "qty": 1, "price": 150000},
+                        {"name": "Coat (jacket) for the bride's father", "unit": "piece", "qty": 1, "price": 400000},
+                        {"name": "Gomesi for the bride's mother", "unit": "piece", "qty": 1, "price": 300000},
+                        {"name": "Gomesi for the ssenga", "unit": "piece", "qty": 1, "price": 250000},
+                        {"name": "Gomesi for the aunts", "unit": "piece", "qty": 4, "price": 200000},
+                        {"name": "Kanzu for the uncles", "unit": "piece", "qty": 4, "price": 120000},
+                        {"name": "Sugar (10 kg)", "unit": "bag", "qty": 1, "price": 50000},
+                        {"name": "Salt (10 kg)", "unit": "bag", "qty": 1, "price": 15000},
+                        {"name": "Rice (25 kg)", "unit": "bag", "qty": 1, "price": 120000},
+                        {"name": "Cooking oil (10 L)", "unit": "jerrycan", "qty": 1, "price": 70000},
+                        {"name": "Soap (box)", "unit": "box", "qty": 1, "price": 60000},
+                        {"name": "Paraffin (10 L)", "unit": "jerrycan", "qty": 1, "price": 50000},
+                        {"name": "Matooke", "unit": "bunch", "qty": 3, "price": 25000},
+                        {"name": "Meat (a goat or equal)", "unit": "lot", "qty": 1, "price": 400000},
+                        {"name": "Fruit baskets", "unit": "basket", "qty": 2, "price": 100000},
+                        {"name": "Coffee beans (5 kg)", "unit": "bag", "qty": 1, "price": 75000},
+                        {"name": "Cock for the bride's father (enkoko)", "unit": "bird", "qty": 1, "price": 50000},
+                        {"name": "Baskets and wrapping for the gifts", "unit": "set", "qty": 1, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "The groom's delegation",
+                    "items": [
+                        {"name": "Kanzu and coat for the groom", "unit": "set", "qty": 1, "price": 550000},
+                        {"name": "Matching kanzus for the delegation", "unit": "piece", "qty": 10, "price": 120000},
+                        {"name": "Gomesi for the women of the delegation", "unit": "piece", "qty": 10, "price": 150000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet for the guests", "unit": "plate", "qty": 1, "per": 1, "price": 25000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 15, "price": 85000}
+                    ]
+                },
+                {
+                    "name": "Venue and decor",
+                    "items": [
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor: stage, drapes and flowers", "unit": "package", "qty": 1, "price": 3500000},
+                        {"name": "Generator hire", "unit": "day", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Spokesman, music and pictures",
+                    "items": [
+                        {"name": "Omwogezi (spokesman)", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Traditional dancers", "unit": "troupe", "qty": 1, "price": 500000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 1500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Coaster bus for the delegation", "unit": "bus-day", "qty": 2, "price": 550000},
+                        {"name": "Fuel for the convoy", "unit": "litre", "qty": 100, "price": 5200}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 5000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "kuhingira-ankole-kiga",
+            "name": "Kuhingira (Ankole and Kiga give-away)",
+            "description": "The bride's family gives her away: the bride price in cows and goats, gifts for the parents and aunt, local brew and a big meal for about 400 guests.",
+            "event_type": "giveaway",
+            "culture": ["banyankole", "bakiga"],
+            "religion": ["any"],
+            "size": "large",
+            "guests": 400,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Spokesman", "role": "member"},
+                {"title": "Cows and gifts in-charge", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Bride price (enjugano)",
+                    "items": [
+                        {"name": "Cows", "unit": "cow", "qty": 4, "price": 2500000},
+                        {"name": "Goats", "unit": "goat", "qty": 4, "price": 300000},
+                        {"name": "Envelope for the bride's father", "unit": "envelope", "qty": 1, "price": 500000},
+                        {"name": "Envelope for the aunt (ishenkazi)", "unit": "envelope", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Gifts for the family",
+                    "items": [
+                        {"name": "Kanzu and coat for the bride's father", "unit": "set", "qty": 1, "price": 550000},
+                        {"name": "Suuka (busuuti) for the bride's mother", "unit": "piece", "qty": 1, "price": 300000},
+                        {"name": "Milk gourds (ebyanzi) and baskets", "unit": "set", "qty": 2, "price": 150000},
+                        {"name": "Sugar, salt, soap and paraffin", "unit": "set", "qty": 1, "price": 250000},
+                        {"name": "Bananas (ebitooke)", "unit": "bunch", "qty": 4, "price": 25000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet for the guests", "unit": "plate", "qty": 1, "per": 1, "price": 20000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Local brew (omuramba / tonto)", "unit": "jerrycan", "qty": 10, "price": 30000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 15, "price": 85000}
+                    ]
+                },
+                {
+                    "name": "Venue and decor",
+                    "items": [
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor", "unit": "package", "qty": 1, "price": 2500000},
+                        {"name": "Generator hire", "unit": "day", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Outfits",
+                    "items": [
+                        {"name": "Suit for the groom", "unit": "piece", "qty": 1, "price": 800000},
+                        {"name": "Suuka for the bride", "unit": "piece", "qty": 1, "price": 500000},
+                        {"name": "Outfits for the bridal party", "unit": "piece", "qty": 6, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "Traditional dancers (ekitaguriro)", "unit": "troupe", "qty": 1, "price": 500000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 1500000}
+                    ]
+                },
+                {
+                    "name": "Transport and lodging",
+                    "items": [
+                        {"name": "Coaster bus", "unit": "bus-day", "qty": 3, "price": 550000},
+                        {"name": "Fuel for the convoy", "unit": "litre", "qty": 150, "price": 5200},
+                        {"name": "Rooms for visiting relatives", "unit": "room-night", "qty": 6, "price": 100000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "acholi-lango-traditional",
+            "name": "Nyom (Acholi and Lango traditional marriage)",
+            "description": "The traditional marriage in the north: bride wealth in cows and goats as the clans agree (the Ker Kwaro Acholi by-law guides the amounts), gifts for the elders, local brew and a feast.",
+            "event_type": "giveaway",
+            "culture": ["acholi", "langi", "iteso"],
+            "religion": ["any"],
+            "size": "medium",
+            "guests": 300,
+            "groups": ["Groom's clan", "Bride's clan", "Friends", "Workmates", "Church", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Clan spokesman (lawang)", "role": "member"},
+                {"title": "Livestock in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Bride wealth (nyom)",
+                    "items": [
+                        {"name": "Cows (dyang)", "unit": "cow", "qty": 6, "price": 1800000},
+                        {"name": "Goats (dyel)", "unit": "goat", "qty": 6, "price": 250000},
+                        {"name": "Goats for the uncle, the paternal aunt and the new home", "unit": "goat", "qty": 3, "price": 250000}
+                    ]
+                },
+                {
+                    "name": "Gifts for the elders",
+                    "items": [
+                        {"name": "Suit or kanzu for the bride's father", "unit": "piece", "qty": 1, "price": 400000},
+                        {"name": "Cloth, saucepans and basins for the bride's mother", "unit": "set", "qty": 1, "price": 300000},
+                        {"name": "Envelopes for the clan elders", "unit": "envelope", "qty": 6, "price": 100000},
+                        {"name": "Sugar, salt, soap and paraffin", "unit": "set", "qty": 1, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet for the guests", "unit": "plate", "qty": 1, "per": 1, "price": 15000},
+                        {"name": "Goats for the feast", "unit": "goat", "qty": 3, "price": 300000},
+                        {"name": "Local brew (kwete / kongo)", "unit": "jerrycan", "qty": 10, "price": 30000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000}
+                    ]
+                },
+                {
+                    "name": "Venue",
+                    "items": [
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor", "unit": "package", "qty": 1, "price": 1500000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "Larakaraka or bwola dancers", "unit": "troupe", "qty": 1, "price": 500000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 600000},
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 1000000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Coaster bus", "unit": "bus-day", "qty": 2, "price": 550000},
+                        {"name": "Fuel for the convoy", "unit": "litre", "qty": 100, "price": 5200}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "catholic-wedding",
+            "name": "Catholic church wedding",
+            "description": "A parish wedding (with the three months of instruction) and a reception for about 300 guests: tents, a buffet, cake, music and pictures.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["catholic"],
+            "size": "large",
+            "guests": 300,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Parish wedding fee", "unit": "wedding", "qty": 1, "price": 400000},
+                        {"name": "Marriage instruction", "unit": "course", "qty": 1, "price": 100000},
+                        {"name": "Choir", "unit": "event", "qty": 1, "price": 300000},
+                        {"name": "Offertory and thanksgiving gifts", "unit": "set", "qty": 1, "price": 200000},
+                        {"name": "Church flowers", "unit": "set", "qty": 1, "price": 500000}
+                    ]
+                },
+                {
+                    "name": "Reception venue",
+                    "items": [
+                        {"name": "Garden or hall hire", "unit": "event", "qty": 1, "price": 2500000},
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor package", "unit": "package", "qty": 1, "price": 3500000},
+                        {"name": "Generator hire", "unit": "day", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 30000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Juice for the high table", "unit": "crate", "qty": 4, "price": 35000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 12, "price": 85000},
+                        {"name": "Wine for the toast", "unit": "bottle", "qty": 1, "per": 6, "price": 50000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 3, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Wedding gown", "unit": "piece", "qty": 1, "price": 2000000},
+                        {"name": "Groom's suit", "unit": "piece", "qty": 1, "price": 1000000},
+                        {"name": "Bridesmaids' dresses", "unit": "piece", "qty": 6, "price": 250000},
+                        {"name": "Groomsmen's suits (hire)", "unit": "piece", "qty": 6, "price": 150000},
+                        {"name": "Hair and make-up", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 1000000},
+                        {"name": "DJ", "unit": "event", "qty": 1, "price": 1000000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 2500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Bridal car (with driver and fuel)", "unit": "day", "qty": 1, "price": 1500000},
+                        {"name": "Convoy cars", "unit": "set", "qty": 1, "price": 1000000},
+                        {"name": "Coaster bus for the families", "unit": "bus-day", "qty": 2, "price": 550000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 5000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "anglican-wedding",
+            "name": "Anglican wedding (Church of Uganda)",
+            "description": "A Church of Uganda wedding (cathedral or parish fees, counselling, the choir and Mothers' Union) and a reception for about 300 guests.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["anglican"],
+            "size": "large",
+            "guests": 300,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Church wedding fees (booking, service, certificate)", "unit": "wedding", "qty": 1, "price": 900000},
+                        {"name": "Pre-marital counselling", "unit": "course", "qty": 1, "price": 100000},
+                        {"name": "Choir and Mothers' Union appreciation", "unit": "event", "qty": 1, "price": 300000},
+                        {"name": "Visiting priest", "unit": "event", "qty": 1, "price": 100000},
+                        {"name": "Church flowers", "unit": "set", "qty": 1, "price": 500000}
+                    ]
+                },
+                {
+                    "name": "Reception venue",
+                    "items": [
+                        {"name": "Garden or hall hire", "unit": "event", "qty": 1, "price": 2500000},
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor package", "unit": "package", "qty": 1, "price": 3500000},
+                        {"name": "Generator hire", "unit": "day", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 30000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Juice for the high table", "unit": "crate", "qty": 4, "price": 35000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 12, "price": 85000},
+                        {"name": "Wine for the toast", "unit": "bottle", "qty": 1, "per": 6, "price": 50000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 3, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Wedding gown", "unit": "piece", "qty": 1, "price": 2000000},
+                        {"name": "Groom's suit", "unit": "piece", "qty": 1, "price": 1000000},
+                        {"name": "Bridesmaids' dresses", "unit": "piece", "qty": 6, "price": 250000},
+                        {"name": "Groomsmen's suits (hire)", "unit": "piece", "qty": 6, "price": 150000},
+                        {"name": "Hair and make-up", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 1000000},
+                        {"name": "DJ", "unit": "event", "qty": 1, "price": 1000000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 2500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Bridal car (with driver and fuel)", "unit": "day", "qty": 1, "price": 1500000},
+                        {"name": "Convoy cars", "unit": "set", "qty": 1, "price": 1000000},
+                        {"name": "Coaster bus for the families", "unit": "bus-day", "qty": 2, "price": 550000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 5000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "pentecostal-wedding",
+            "name": "Pentecostal (born-again) wedding",
+            "description": "A born-again church wedding with counselling and the worship team, and an alcohol-free reception for about 250 guests (more sodas and juice).",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["pentecostal"],
+            "size": "medium",
+            "guests": 250,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Church wedding fee", "unit": "wedding", "qty": 1, "price": 600000},
+                        {"name": "Pre-marital counselling", "unit": "course", "qty": 1, "price": 100000},
+                        {"name": "Worship team and choir", "unit": "event", "qty": 1, "price": 400000},
+                        {"name": "Church flowers", "unit": "set", "qty": 1, "price": 500000}
+                    ]
+                },
+                {
+                    "name": "Reception venue",
+                    "items": [
+                        {"name": "Garden or hall hire", "unit": "event", "qty": 1, "price": 2000000},
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor package", "unit": "package", "qty": 1, "price": 3000000},
+                        {"name": "Generator hire", "unit": "day", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 30000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 8, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Juice (crate)", "unit": "crate", "qty": 1, "per": 20, "price": 35000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 3, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Wedding gown", "unit": "piece", "qty": 1, "price": 1800000},
+                        {"name": "Groom's suit", "unit": "piece", "qty": 1, "price": 900000},
+                        {"name": "Bridesmaids' dresses", "unit": "piece", "qty": 5, "price": 250000},
+                        {"name": "Groomsmen's suits (hire)", "unit": "piece", "qty": 5, "price": 150000},
+                        {"name": "Hair and make-up", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Gospel band or DJ", "unit": "event", "qty": 1, "price": 1500000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 2500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Bridal car (with driver and fuel)", "unit": "day", "qty": 1, "price": 1500000},
+                        {"name": "Convoy cars", "unit": "set", "qty": 1, "price": 1000000},
+                        {"name": "Coaster bus for the families", "unit": "bus-day", "qty": 1, "price": 550000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 5000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "nikah-walima",
+            "name": "Nikah and Walima (Muslim wedding)",
+            "description": "The nikah at the mosque (mahr, the imam and the certificate) and the walima feast for about 300 guests: a halal cow, pilau, sodas and juice, qaswida.",
+            "event_type": "nikah",
+            "culture": ["any"],
+            "religion": ["muslim"],
+            "size": "large",
+            "guests": 300,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Mosque", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Walima catering in-charge", "role": "member"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Nikah",
+                    "items": [
+                        {"name": "Mahr (for the bride)", "unit": "gift", "qty": 1, "price": 2000000},
+                        {"name": "Imam or sheikh", "unit": "event", "qty": 1, "price": 300000},
+                        {"name": "Marriage certificate (kadhi)", "unit": "certificate", "qty": 1, "price": 100000},
+                        {"name": "Sadaqah for the mosque", "unit": "gift", "qty": 1, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "Gifts for the bride's family",
+                    "items": [
+                        {"name": "Kanzu and coat for the bride's father", "unit": "set", "qty": 1, "price": 550000},
+                        {"name": "Busuuti for the bride's mother", "unit": "piece", "qty": 1, "price": 300000},
+                        {"name": "Hijab and busuuti for the aunts", "unit": "set", "qty": 4, "price": 150000},
+                        {"name": "Dates and sweets", "unit": "set", "qty": 1, "price": 150000}
+                    ]
+                },
+                {
+                    "name": "Walima feast",
+                    "items": [
+                        {"name": "Halal cow", "unit": "cow", "qty": 1, "price": 2500000},
+                        {"name": "Pilau, matooke and sides", "unit": "plate", "qty": 1, "per": 1, "price": 12000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 10, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Juice (crate)", "unit": "crate", "qty": 1, "per": 25, "price": 35000}
+                    ]
+                },
+                {
+                    "name": "Venue",
+                    "items": [
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor package", "unit": "package", "qty": 1, "price": 2500000},
+                        {"name": "Prayer mats and ablution water", "unit": "set", "qty": 1, "price": 150000}
+                    ]
+                },
+                {
+                    "name": "Outfits",
+                    "items": [
+                        {"name": "Bride's gown and hijab", "unit": "set", "qty": 1, "price": 1200000},
+                        {"name": "Groom's kanzu and coat", "unit": "set", "qty": 1, "price": 550000},
+                        {"name": "Bridesmaids' outfits", "unit": "piece", "qty": 4, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "Qaswida and pictures",
+                    "items": [
+                        {"name": "Qaswida group", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Sound system (PA)", "unit": "event", "qty": 1, "price": 600000},
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 600000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 1500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Car for the couple (with driver and fuel)", "unit": "day", "qty": 1, "price": 1000000},
+                        {"name": "Coaster bus for the families", "unit": "bus-day", "qty": 1, "price": 550000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "civil-wedding",
+            "name": "Civil wedding (registrar)",
+            "description": "A marriage before the registrar (notice, ceremony and certificate, now with NIRA) with two witnesses and a small lunch for about 30 people.",
+            "event_type": "civil",
+            "culture": ["any"],
+            "religion": ["civil"],
+            "size": "small",
+            "guests": 30,
+            "groups": ["Family", "Friends", "Workmates", "Others"],
+            "roles": [
+                {"title": "Organiser", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"}
+            ],
+            "categories": [
+                {
+                    "name": "Registration",
+                    "items": [
+                        {"name": "Marriage notice, ceremony and certificate", "unit": "couple", "qty": 1, "price": 260000}
+                    ]
+                },
+                {
+                    "name": "Outfits and rings",
+                    "items": [
+                        {"name": "Bride's dress", "unit": "piece", "qty": 1, "price": 500000},
+                        {"name": "Groom's suit", "unit": "piece", "qty": 1, "price": 500000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Lunch",
+                    "items": [
+                        {"name": "Lunch at a restaurant", "unit": "plate", "qty": 1, "per": 1, "price": 35000},
+                        {"name": "Drinks", "unit": "guest", "qty": 1, "per": 1, "price": 10000},
+                        {"name": "Cake", "unit": "tier", "qty": 1, "price": 250000}
+                    ]
+                },
+                {
+                    "name": "Pictures and transport",
+                    "items": [
+                        {"name": "Photographer (half day)", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Transport (car hire or fuel)", "unit": "day", "qty": 1, "price": 150000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "intro-and-wedding",
+            "name": "Introduction and wedding together",
+            "description": "The introduction and the church wedding on one weekend with one venue and one tent: the bride price and gifts, church fees, outfit changes and a meal for about 400 guests.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "large",
+            "guests": 400,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Introduction: bride price and envelopes",
+                    "items": [
+                        {"name": "Bride price envelope", "unit": "envelope", "qty": 1, "price": 2000000},
+                        {"name": "Gate fee", "unit": "envelope", "qty": 1, "price": 300000},
+                        {"name": "Envelopes for the bride's parents", "unit": "envelope", "qty": 2, "price": 500000},
+                        {"name": "Envelope for the aunt (ssenga)", "unit": "envelope", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Introduction: gifts",
+                    "items": [
+                        {"name": "Kanzu and coat for the bride's father", "unit": "set", "qty": 1, "price": 550000},
+                        {"name": "Gomesi for the bride's mother", "unit": "piece", "qty": 1, "price": 300000},
+                        {"name": "Gomesi for the aunts", "unit": "piece", "qty": 3, "price": 200000},
+                        {"name": "Foodstuffs: sugar, salt, rice, oil, soap", "unit": "set", "qty": 1, "price": 350000},
+                        {"name": "Meat (a goat or equal)", "unit": "lot", "qty": 1, "price": 400000},
+                        {"name": "Fruit baskets", "unit": "basket", "qty": 2, "price": 100000}
+                    ]
+                },
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Church wedding fee", "unit": "wedding", "qty": 1, "price": 600000},
+                        {"name": "Pre-marital counselling", "unit": "course", "qty": 1, "price": 100000},
+                        {"name": "Choir", "unit": "event", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Venue and decor",
+                    "items": [
+                        {"name": "Garden hire (two days)", "unit": "day", "qty": 2, "price": 2000000},
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 10000},
+                        {"name": "Decor (introduction and wedding looks)", "unit": "package", "qty": 1, "price": 5000000},
+                        {"name": "Generator hire", "unit": "day", "qty": 2, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 30000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 12, "price": 85000},
+                        {"name": "Wine for the toast", "unit": "bottle", "qty": 1, "per": 8, "price": 50000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 3, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Wedding gown", "unit": "piece", "qty": 1, "price": 2000000},
+                        {"name": "Gomesi for the bride (introduction)", "unit": "piece", "qty": 1, "price": 400000},
+                        {"name": "Kanzu, coat and suit for the groom", "unit": "set", "qty": 1, "price": 1500000},
+                        {"name": "Bridesmaids' dresses", "unit": "piece", "qty": 6, "price": 250000},
+                        {"name": "Groomsmen's suits (hire)", "unit": "piece", "qty": 6, "price": 150000},
+                        {"name": "Hair and make-up (two days)", "unit": "day", "qty": 2, "price": 500000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC and spokesman", "unit": "event", "qty": 1, "price": 1200000},
+                        {"name": "DJ and sound (two days)", "unit": "day", "qty": 2, "price": 1000000},
+                        {"name": "Traditional dancers", "unit": "troupe", "qty": 1, "price": 500000},
+                        {"name": "Photo and video (two days)", "unit": "package", "qty": 1, "price": 3500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Bridal car (with driver and fuel)", "unit": "day", "qty": 1, "price": 1500000},
+                        {"name": "Coaster bus for the families", "unit": "bus-day", "qty": 3, "price": 550000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 5000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "village-wedding",
+            "name": "Simple village wedding",
+            "description": "A small, affordable wedding at the local church and home: hired chairs and tents, a local buffet, a hired gown and a village photographer, about 150 guests.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "small",
+            "guests": 150,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Church", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Catering in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Local church fee", "unit": "wedding", "qty": 1, "price": 200000},
+                        {"name": "Pre-marital counselling", "unit": "course", "qty": 1, "price": 50000}
+                    ]
+                },
+                {
+                    "name": "Seating",
+                    "items": [
+                        {"name": "Tents (hired, 100 seats)", "unit": "tent", "qty": 1, "per": 100, "price": 150000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 1000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Local buffet", "unit": "plate", "qty": 1, "per": 1, "price": 12000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 2, "price": 150000}
+                    ]
+                },
+                {
+                    "name": "Outfits",
+                    "items": [
+                        {"name": "Wedding gown (hire)", "unit": "piece", "qty": 1, "price": 300000},
+                        {"name": "Groom's suit (hire)", "unit": "piece", "qty": 1, "price": 250000},
+                        {"name": "Bridesmaids' dresses (tailored)", "unit": "piece", "qty": 4, "price": 150000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 300000},
+                        {"name": "DJ and sound", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Photographer", "unit": "event", "qty": 1, "price": 500000}
+                    ]
+                },
+                {
+                    "name": "Transport and printing",
+                    "items": [
+                        {"name": "Fuel for a borrowed car", "unit": "litre", "qty": 40, "price": 5200},
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 3, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "kampala-hotel-wedding",
+            "name": "Kampala hotel wedding (mid-range)",
+            "description": "A reception in a mid-range Kampala hotel for about 250 guests: the hotel's per-guest package (buffet, hall, basic decor), corkage, cake, MC, DJ and pictures.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "medium",
+            "guests": 250,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Church wedding fee", "unit": "wedding", "qty": 1, "price": 600000},
+                        {"name": "Choir", "unit": "event", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Hotel",
+                    "items": [
+                        {"name": "Hotel package (buffet, hall, basic decor)", "unit": "guest", "qty": 1, "per": 1, "price": 105000},
+                        {"name": "Decor upgrade", "unit": "package", "qty": 1, "price": 2000000},
+                        {"name": "Corkage", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Room for the couple (wedding night)", "unit": "room-night", "qty": 1, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Drinks",
+                    "items": [
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Wine for the toast", "unit": "bottle", "qty": 1, "per": 6, "price": 60000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 3, "price": 350000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Wedding gown", "unit": "piece", "qty": 1, "price": 2500000},
+                        {"name": "Groom's suit", "unit": "piece", "qty": 1, "price": 1200000},
+                        {"name": "Bridesmaids' dresses", "unit": "piece", "qty": 6, "price": 250000},
+                        {"name": "Groomsmen's suits (hire)", "unit": "piece", "qty": 6, "price": 150000},
+                        {"name": "Hair and make-up", "unit": "event", "qty": 1, "price": 700000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 800000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 1500000},
+                        {"name": "DJ", "unit": "event", "qty": 1, "price": 1200000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 3500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Bridal car (with driver and fuel)", "unit": "day", "qty": 1, "price": 1500000},
+                        {"name": "Convoy cars", "unit": "set", "qty": 1, "price": 1000000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 7000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "garden-wedding",
+            "name": "Garden wedding",
+            "description": "A reception in a hired garden for about 300 guests: tents, generator, toilets and security, a full decor package, a live band and a buffet.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "large",
+            "guests": 300,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Church wedding fee", "unit": "wedding", "qty": 1, "price": 600000},
+                        {"name": "Choir", "unit": "event", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Garden",
+                    "items": [
+                        {"name": "Garden hire", "unit": "event", "qty": 1, "price": 3500000},
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 350000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2500},
+                        {"name": "Tables with cloths (10 seats)", "unit": "table", "qty": 1, "per": 10, "price": 15000},
+                        {"name": "Decor package", "unit": "package", "qty": 1, "price": 6000000},
+                        {"name": "Generator hire", "unit": "day", "qty": 1, "price": 500000},
+                        {"name": "Mobile toilets", "unit": "unit", "qty": 2, "price": 250000},
+                        {"name": "Security guards", "unit": "guard", "qty": 1, "per": 50, "price": 80000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 35000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 12, "price": 85000},
+                        {"name": "Wine for the toast", "unit": "bottle", "qty": 1, "per": 6, "price": 50000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Wedding cake", "unit": "tier", "qty": 4, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Wedding gown", "unit": "piece", "qty": 1, "price": 2500000},
+                        {"name": "Groom's suit", "unit": "piece", "qty": 1, "price": 1200000},
+                        {"name": "Bridesmaids' dresses", "unit": "piece", "qty": 6, "price": 250000},
+                        {"name": "Groomsmen's suits (hire)", "unit": "piece", "qty": 6, "price": 150000},
+                        {"name": "Hair and make-up", "unit": "event", "qty": 1, "price": 700000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 800000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 1500000},
+                        {"name": "Live band", "unit": "event", "qty": 1, "price": 3000000},
+                        {"name": "DJ", "unit": "event", "qty": 1, "price": 1000000},
+                        {"name": "Photo and video", "unit": "package", "qty": 1, "price": 3500000}
+                    ]
+                },
+                {
+                    "name": "Transport",
+                    "items": [
+                        {"name": "Bridal car (with driver and fuel)", "unit": "day", "qty": 1, "price": 1500000},
+                        {"name": "Convoy cars", "unit": "set", "qty": 1, "price": 1000000},
+                        {"name": "Coaster bus for the families", "unit": "bus-day", "qty": 2, "price": 550000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 5000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "luxury-wedding",
+            "name": "Luxury wedding",
+            "description": "A five-star celebration for about 500 guests: hotel plates, designer decor, a live band, a luxury car fleet, an imported gown, cinematic video, a planner and a honeymoon.",
+            "event_type": "wedding",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "luxury",
+            "guests": 500,
+            "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Vice chairperson", "role": "member"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser (pledges follow-up)", "role": "member"},
+                {"title": "Catering in-charge", "role": "member"},
+                {"title": "Transport in-charge", "role": "member"},
+                {"title": "Decor and venue in-charge", "role": "member"},
+                {"title": "Guest relations in-charge", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Church",
+                    "items": [
+                        {"name": "Cathedral wedding fees", "unit": "wedding", "qty": 1, "price": 2000000},
+                        {"name": "Choir and organist", "unit": "event", "qty": 1, "price": 1000000}
+                    ]
+                },
+                {
+                    "name": "Venue and decor",
+                    "items": [
+                        {"name": "Five-star hotel plates (venue included)", "unit": "plate", "qty": 1, "per": 1, "price": 140000},
+                        {"name": "Designer decor and flowers", "unit": "package", "qty": 1, "price": 20000000},
+                        {"name": "Security guards", "unit": "guard", "qty": 1, "per": 50, "price": 150000}
+                    ]
+                },
+                {
+                    "name": "Drinks",
+                    "items": [
+                        {"name": "Wine", "unit": "bottle", "qty": 1, "per": 4, "price": 80000},
+                        {"name": "Champagne for the toast", "unit": "bottle", "qty": 1, "per": 10, "price": 200000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Designer wedding cake", "unit": "tier", "qty": 5, "price": 600000}
+                    ]
+                },
+                {
+                    "name": "Outfits and beauty",
+                    "items": [
+                        {"name": "Imported wedding gown", "unit": "piece", "qty": 1, "price": 8000000},
+                        {"name": "Groom's bespoke suit", "unit": "piece", "qty": 1, "price": 3000000},
+                        {"name": "Bridal party outfits", "unit": "piece", "qty": 10, "price": 500000},
+                        {"name": "Hair and make-up (bride and party)", "unit": "event", "qty": 1, "price": 1500000},
+                        {"name": "Wedding rings", "unit": "pair", "qty": 1, "price": 5000000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "Celebrity MC", "unit": "event", "qty": 1, "price": 3000000},
+                        {"name": "Live band", "unit": "event", "qty": 1, "price": 6000000},
+                        {"name": "DJ", "unit": "event", "qty": 1, "price": 2000000},
+                        {"name": "Cinematic photo and video", "unit": "package", "qty": 1, "price": 10000000}
+                    ]
+                },
+                {
+                    "name": "Transport and lodging",
+                    "items": [
+                        {"name": "Luxury car fleet", "unit": "day", "qty": 1, "price": 6000000},
+                        {"name": "Hotel rooms for family from upcountry", "unit": "room-night", "qty": 10, "price": 400000}
+                    ]
+                },
+                {
+                    "name": "Planning and honeymoon",
+                    "items": [
+                        {"name": "Wedding planner", "unit": "event", "qty": 1, "price": 5000000},
+                        {"name": "Honeymoon (lodge, a week)", "unit": "trip", "qty": 1, "price": 10000000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 15000},
+                        {"name": "Printed programmes", "unit": "copy", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "send-off-kasiki",
+            "name": "Send-off party (kasiki)",
+            "description": "The bride's family and friends see her off before the wedding: a small tent, a buffet, music, a cake, gifts for her new home and the ssenga's counsel. About 120 guests.",
+            "event_type": "send_off",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "small",
+            "guests": 120,
+            "groups": ["Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Others"],
+            "roles": [
+                {"title": "Organiser", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Ssenga", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "Venue and decor",
+                    "items": [
+                        {"name": "Hall or compound", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 2000},
+                        {"name": "Decor", "unit": "package", "qty": 1, "price": 1000000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 20000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000},
+                        {"name": "Beer (crate of 25)", "unit": "crate", "qty": 1, "per": 10, "price": 85000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Cake", "unit": "tier", "qty": 2, "price": 250000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "DJ and sound", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Photographer", "unit": "event", "qty": 1, "price": 700000}
+                    ]
+                },
+                {
+                    "name": "For the bride",
+                    "items": [
+                        {"name": "Send-off dress", "unit": "piece", "qty": 1, "price": 600000},
+                        {"name": "Gifts for her new home (kitchen set, basket)", "unit": "set", "qty": 1, "price": 500000},
+                        {"name": "Ssenga's counsel and envelope", "unit": "envelope", "qty": 1, "price": 200000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "graduation-party",
+            "name": "Graduation party",
+            "description": "A home party after the graduation: a tent and chairs, a buffet, a cake, an MC and DJ and a photo shoot in the gown. About 100 guests.",
+            "event_type": "graduation",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "small",
+            "guests": 100,
+            "groups": ["Family", "Friends", "Classmates", "Church", "Neighbours", "Others"],
+            "roles": [
+                {"title": "Organiser", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"}
+            ],
+            "categories": [
+                {
+                    "name": "Venue",
+                    "items": [
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 1500},
+                        {"name": "Decor", "unit": "package", "qty": 1, "price": 800000}
+                    ]
+                },
+                {
+                    "name": "Food and drinks",
+                    "items": [
+                        {"name": "Buffet", "unit": "plate", "qty": 1, "per": 1, "price": 20000},
+                        {"name": "Sodas (crate of 24)", "unit": "crate", "qty": 1, "per": 12, "price": 22000},
+                        {"name": "Drinking water (carton of 24 × 500 ml)", "unit": "carton", "qty": 1, "per": 24, "price": 12000}
+                    ]
+                },
+                {
+                    "name": "Cake",
+                    "items": [
+                        {"name": "Cake", "unit": "tier", "qty": 2, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "Music and pictures",
+                    "items": [
+                        {"name": "DJ and sound", "unit": "event", "qty": 1, "price": 600000},
+                        {"name": "MC", "unit": "event", "qty": 1, "price": 400000},
+                        {"name": "Photographer", "unit": "event", "qty": 1, "price": 500000},
+                        {"name": "Gown hire and photo shoot", "unit": "event", "qty": 1, "price": 200000}
+                    ]
+                },
+                {
+                    "name": "Printing",
+                    "items": [
+                        {"name": "Invitation cards", "unit": "card", "qty": 1, "per": 2, "price": 2000}
+                    ]
+                }
+            ]
+        },
+        {
+            "key": "fundraiser",
+            "name": "Fundraiser (church, school fees or medical bill)",
+            "description": "A fundraising drive with a launch gathering: the amount to raise (edit it to your target), refreshments, pledge cards, a banner, sound and MC. About 150 guests.",
+            "event_type": "fundraiser",
+            "culture": ["any"],
+            "religion": ["any"],
+            "size": "small",
+            "guests": 150,
+            "groups": ["Family", "Friends", "Church", "Workmates", "Well-wishers", "Others"],
+            "roles": [
+                {"title": "Chairperson", "role": "chair"},
+                {"title": "Treasurer", "role": "treasurer"},
+                {"title": "Secretary", "role": "secretary"},
+                {"title": "Mobiliser", "role": "member"}
+            ],
+            "categories": [
+                {
+                    "name": "The cause",
+                    "items": [
+                        {"name": "Amount to raise (edit to your target)", "unit": "target", "qty": 1, "price": 10000000}
+                    ]
+                },
+                {
+                    "name": "Launch gathering",
+                    "items": [
+                        {"name": "Tents (100 seats each)", "unit": "tent", "qty": 1, "per": 100, "price": 250000},
+                        {"name": "Chairs with covers", "unit": "chair", "qty": 1, "per": 1, "price": 1500},
+                        {"name": "Refreshments", "unit": "guest", "qty": 1, "per": 1, "price": 8000},
+                        {"name": "Sound system and MC", "unit": "event", "qty": 1, "price": 800000},
+                        {"name": "Transport and thanks for the guest of honour", "unit": "event", "qty": 1, "price": 300000}
+                    ]
+                },
+                {
+                    "name": "Publicity",
+                    "items": [
+                        {"name": "Pledge cards", "unit": "card", "qty": 1, "per": 1, "price": 1000},
+                        {"name": "Banner and posters", "unit": "set", "qty": 1, "price": 300000},
+                        {"name": "Mobile money charges", "unit": "estimate", "qty": 1, "price": 100000}
+                    ]
+                }
+            ]
+        }
+    ]
+}

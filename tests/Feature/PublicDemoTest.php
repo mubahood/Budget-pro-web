@@ -121,7 +121,7 @@ class PublicDemoTest extends TestCase
                 $this->assertSame('demo_locked', $e->errorCode());
             }
         }
-        $this->assertSame('USD', $company->fresh()->currency);
+        $this->assertSame('UGX', $company->fresh()->currency);
     }
 
     public function test_the_private_demo_clean_up_never_deletes_the_public_demo_and_real_shops_are_not_demos(): void

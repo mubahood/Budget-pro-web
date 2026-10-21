@@ -168,7 +168,9 @@ class SyncApplier
                 }
                 $op['_user_id'] = $userId;
                 $need = self::permissionFor($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
-                if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)) {
+                if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)
+                    // An event's settings and payment details belong to its chair (and treasurer): BudgetAccess.
+                    && ! \App\Services\Budget\BudgetAccess::allowsSettingsSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))) {
                     $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role does not allow this.', 'permission' => $need];
                     $failed = true;
                     break;

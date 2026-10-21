@@ -15,7 +15,10 @@ class BudgetProgramController extends BaseCrudController
     protected string $resourceName = 'Budget program';
 
     // Financial totals are rollups computed from children.
-    protected array $writable = ['name', 'status', 'deadline', 'rsvp', 'logo', 'title', 'bottom', 'groups', 'is_default', 'is_active'];
+    // event_type … payment_details: the event's settings (App\Services\Budget\EventSettings, cleaned by the model);
+    // budget-programs/{id}/settings changes them for the chair and the treasurer too.
+    protected array $writable = ['name', 'status', 'deadline', 'rsvp', 'logo', 'title', 'bottom', 'groups', 'is_default', 'is_active',
+        'event_type', 'template_key', 'venue', 'settings', 'payment_details'];
 
     protected array $searchable = ['name', 'title'];
 
@@ -56,7 +59,12 @@ class BudgetProgramController extends BaseCrudController
             'logo' => ['nullable', 'string', 'max:255'],
             'title' => ['nullable', 'string', 'max:191'],
             'bottom' => ['nullable', 'string', 'max:1000'],
-            'groups' => ['nullable', 'string', 'max:1000'],
+            'groups' => ['nullable', 'max:4000'],
+            'event_type' => ['nullable', 'string', 'max:40'],
+            'template_key' => ['nullable', 'string', 'max:60'],
+            'venue' => ['nullable', 'string', 'max:191'],
+            'settings' => ['nullable'],
+            'payment_details' => ['nullable'],
             'is_default' => ['nullable'],
             'is_active' => ['nullable'],
         ];

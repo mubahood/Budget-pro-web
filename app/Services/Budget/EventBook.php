@@ -160,14 +160,19 @@ final class EventBook
         return ['count' => (int) ($t->n ?? 0), 'pledged' => Decimal::of((string) ($t->a ?? 0)), 'paid' => Decimal::of((string) ($t->p ?? 0)), 'owed' => Decimal::of((string) ($t->o ?? 0))];
     }
 
-    /** The groups of an event's pledges (the phone's list first, then any other used), with how many pledges each. @return array<string, array{label: string, count: int}> */
+    /**
+     * The groups of an event's pledges, with how many pledges each: the event's own list (EventSettings, or the
+     * default list when it has none, as the phone offers them) first, then any other group a pledge uses.
+     * Keys are what pledges store (groupKey: "Friends" is the older key "Friend"). @return array<string, array{label: string, count: int}>
+     */
     public function groups(int $companyId, int $programId): array
     {
         $used = DB::table('contribution_records')->where('company_id', $companyId)->where('budget_program_id', $programId)->where('is_deleted', 0)
             ->whereNotNull('category_id')->where('category_id', '!=', '')->groupBy('category_id')->selectRaw('category_id AS k, COUNT(*) AS n')->pluck('n', 'k');
         $out = [];
-        foreach (array_keys(self::GROUPS) as $key) {
-            $out[$key] = ['label' => self::GROUPS[$key], 'count' => (int) ($used[$key] ?? 0)];
+        foreach (EventSettings::groupsOf($companyId, $programId) as $label) {
+            $key = (string) self::groupKey($label);
+            $out[$key] ??= ['label' => $label, 'count' => (int) ($used[$key] ?? 0)];
         }
         foreach ($used as $key => $n) {
             $out[(string) $key] ??= ['label' => self::groupLabel((string) $key), 'count' => (int) $n];

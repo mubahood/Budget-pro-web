@@ -27,11 +27,13 @@ return [
     // How much trading history a fresh build has.
     'days' => (int) env('DEMO_DAYS', 60),
 
+    // A Kampala market in Uganda shillings (Uganda is the market). Every amount in database/data/public_demo.php,
+    // PublicDemoBuilder and PublicDemoWedding is in UGX, so the currency is not an env setting.
     'shop' => [
         'name' => 'Fresh Corner Market',
-        'currency' => 'USD',
-        'country' => 'US',
-        'timezone' => 'UTC', // trading hours line up with visitors in Africa, Europe and the Middle East
-        'address' => '214 Harbor Street',
+        'currency' => 'UGX',
+        'country' => 'UG',
+        'timezone' => 'Africa/Kampala',
+        'address' => 'Plot 14, Ntinda Road, Kampala',
     ],
 ];

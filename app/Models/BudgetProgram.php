@@ -22,6 +22,9 @@ class BudgetProgram extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        // The event's settings columns (type, venue, groups, settings, payment details) arrive from the API, the web
+        // and phones of every version: cleaned here, never refused (App\Services\Budget\EventSettings).
+        static::saving(fn (self $program) => \App\Services\Budget\EventSettings::normalize($program));
     }
 
     /**

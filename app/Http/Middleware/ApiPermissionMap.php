@@ -56,6 +56,8 @@ class ApiPermissionMap
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^contribution-records(/\d+(/payments)?)?$#', null],
         [['POST'], '#^contribution-payments/\d+/reverse$#', null],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^budget-programs/\d+/members(/\d+)?$#', null],
+        // An event's settings (chair; payment details also the treasurer) and applying a budget template (chair): BudgetAccess.
+        [['POST', 'PUT', 'PATCH'], '#^budget-programs/\d+/(settings|apply-template)$#', null],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(budget-programs|budget-item-categories|budget-items)(/\d+)?$#', 'manage_budget'],
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],

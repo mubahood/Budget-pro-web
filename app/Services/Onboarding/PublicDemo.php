@@ -139,7 +139,8 @@ class PublicDemo
             $company = self::company();
             $state = $company ? (array) (($company->onboarding_state ?? [])['public_demo'] ?? []) : [];
             $age = isset($state['built_at']) ? Carbon::parse($state['built_at'])->diffInHours(now()) : PHP_INT_MAX;
-            if ($forceRebuild || $company === null || ! isset($state['snapshot']) || $age >= (int) config('demo.rebuild_hours', 72) || ! $this->healthy($company)) {
+            $outdated = (int) ($state['snapshot']['build'] ?? 1) < PublicDemoBuilder::BUILD; // built by an older version (dollars, one wedding)
+            if ($forceRebuild || $company === null || ! isset($state['snapshot']) || $outdated || $age >= (int) config('demo.rebuild_hours', 72) || ! $this->healthy($company)) {
                 return ['action' => $company ? 'rebuilt' : 'built'] + $this->rebuild($owner, $company);
             }
 
@@ -176,8 +177,8 @@ class PublicDemo
         });
         Permissions::flush();
         app(ApprovalService::class)->setPin($owner->fresh(), self::PIN);
-        if (! empty($snapshot['wedding'])) {
-            (new DemoPledgeExtras())->apply((int) $snapshot['wedding'], (int) $owner->id, [(int) $owner->id => 'chair']); // the demo account chairs the wedding
+        foreach (array_unique(array_filter([...array_values((array) ($snapshot['events'] ?? [])), (int) ($snapshot['wedding'] ?? 0)])) as $eventId) {
+            (new DemoPledgeExtras())->apply((int) $eventId, (int) $owner->id, [(int) $owner->id => 'chair'], false); // the demo account chairs Brian and Grace's events
         }
 
         $new = $new->fresh();
@@ -265,6 +266,7 @@ class PublicDemo
         $family = $builder->keepFamily();
         $snap['farm'] = $family['farm'];
         $snap['wedding'] = $family['wedding'];
+        $snap['events'] = $family['events'];
         $repairs = array_merge($repairs, $family['repairs']);
 
         $state['snapshot'] = $snap;

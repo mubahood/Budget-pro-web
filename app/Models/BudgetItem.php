@@ -46,6 +46,9 @@ class BudgetItem extends Model
         'date' => 'date',
     ];
 
+    /** Off while a whole budget is written at once (a template applied, the demo built): one email per item would flood the team. */
+    public static bool $notify = true;
+
     //boot
     protected static function boot()
     {
@@ -174,6 +177,9 @@ class BudgetItem extends Model
         }
 
         // Dispatch email notification job (async)
+        if (! self::$notify) {
+            return;
+        }
         try {
             SendBudgetItemNotification::dispatch(
                 $data->id,

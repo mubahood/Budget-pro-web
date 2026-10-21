@@ -82,6 +82,53 @@ final class BudgetAccess
         return self::fullAccess($user) || self::roleOn($user, $programId) === 'chair';
     }
 
+    /**
+     * May change the event's settings (EventSettings::SETTINGS_FIELDS: its type, venue, pledge groups, message
+     * templates, amount presets): full access or the event's chair. Through sync too, as long as the op carries
+     * nothing but those fields (allowsSettingsSyncOp), so a chair without manage_budget can keep them up to date.
+     */
+    public static function canEditSettings(?User $user, int $programId): bool
+    {
+        return self::canManageEvent($user, $programId);
+    }
+
+    /** May change where pledgers pay (payment_details): the chair, the treasurer, or full access. */
+    public static function canEditPaymentDetails(?User $user, int $programId): bool
+    {
+        if (self::canManageEvent($user, $programId)) {
+            return true;
+        }
+
+        return $user !== null && Permissions::roleOf($user) !== 'none' && self::roleOn($user, $programId) === 'treasurer';
+    }
+
+    /**
+     * A pushed budget_programs update that changes only the event's settings and/or payment details, by someone
+     * those belong to (canEditSettings / canEditPaymentDetails): allowed even without manage_budget. Anything else
+     * (a new event, a delete, its name or date) still needs manage_budget (SyncApplier::permissionFor).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function allowsSettingsSyncOp(?User $actor, int $companyId, string $table, string $action, array $data, string $uuid): bool
+    {
+        if ($actor === null || $table !== 'budget_programs' || ! in_array($action, ['update', 'upsert'], true) || $data === []) {
+            return false;
+        }
+        $fields = array_keys($data);
+        $settings = array_intersect($fields, EventSettings::SETTINGS_FIELDS);
+        $payment = array_intersect($fields, [EventSettings::PAYMENT_FIELD]);
+        if (count($settings) + count($payment) !== count($fields)) {
+            return false;
+        }
+        $programId = DB::table('budget_programs')->where('company_id', $companyId)->where('uuid', $uuid)->where('is_deleted', 0)->value('id');
+        if ($programId === null) {
+            return false;
+        }
+
+        return ($settings === [] || self::canEditSettings($actor, (int) $programId))
+            && ($payment === [] || self::canEditPaymentDetails($actor, (int) $programId));
+    }
+
     /** @return list<string> what the person may do on this event (for the API answer and the phone) */
     public static function abilities(User $user, int $programId): array
     {

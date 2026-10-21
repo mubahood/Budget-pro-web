@@ -470,6 +470,12 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::get('contribution-records/{id}/payments', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'index'])->whereNumber('id');
         Route::post('contribution-records/{id}/payments', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'store'])->whereNumber('id');
         Route::post('contribution-payments/{id}/reverse', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'reverse'])->whereNumber('id');
+        // Budget templates (read only, ETag) and an event's settings; who may change what: BudgetAccess, in the controller.
+        Route::get('budget-templates', [\App\Http\Controllers\Api\V1\BudgetTemplateController::class, 'index']);
+        Route::get('budget-templates/{key}', [\App\Http\Controllers\Api\V1\BudgetTemplateController::class, 'show'])->where('key', '[a-z0-9-]+');
+        Route::get('budget-programs/{id}/settings', [\App\Http\Controllers\Api\V1\BudgetProgramSettingsController::class, 'show'])->whereNumber('id');
+        Route::match(['put', 'patch'], 'budget-programs/{id}/settings', [\App\Http\Controllers\Api\V1\BudgetProgramSettingsController::class, 'update'])->whereNumber('id');
+        Route::post('budget-programs/{id}/apply-template', [\App\Http\Controllers\Api\V1\BudgetProgramSettingsController::class, 'applyTemplate'])->whereNumber('id');
         Route::get('budget-programs/{id}/members', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'index'])->whereNumber('id');
         Route::post('budget-programs/{id}/members', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'store'])->whereNumber('id');
         Route::match(['put', 'patch'], 'budget-programs/{id}/members/{memberId}', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'update'])->whereNumber(['id', 'memberId']);

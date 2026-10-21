@@ -135,7 +135,10 @@ class SyncRegistry
             'financial_records' => ['model' => FinancialRecord::class, 'kind' => self::KIND_MASTER, 'fields' => ['amount', 'quantity', 'type', 'payment_method', 'recipient', 'description', 'receipt', 'date'],
                 'user_fields' => ['created_by_id', 'user_id'],
                 'refs' => ['category_uuid' => ['model' => FinancialCategory::class, 'column' => 'financial_category_id'], 'period_uuid' => ['model' => FinancialPeriod::class, 'column' => 'financial_period_id']]],
-            'budget_programs' => ['model' => BudgetProgram::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'status', 'deadline', 'rsvp', 'title', 'bottom', 'groups', 'is_active', 'is_default', 'logo']],
+            // event_type … payment_details: the event's settings (App\Services\Budget\EventSettings), normalised by the model;
+            // a settings-only update is the chair's (payment details also the treasurer's): BudgetAccess::allowsSettingsSyncOp.
+            'budget_programs' => ['model' => BudgetProgram::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'status', 'deadline', 'rsvp', 'title', 'bottom', 'groups', 'is_active', 'is_default', 'logo'],
+                self::present('budget_programs', ['event_type', 'template_key', 'venue', 'settings', 'payment_details']))],
             'budget_item_categories' => ['model' => BudgetItemCategory::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'target_amount'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
             'budget_items' => ['model' => BudgetItem::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'unit_price', 'quantity', 'approved', 'details', 'priority', 'invested_amount'],

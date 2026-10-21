@@ -29,18 +29,21 @@ class DemoPledgeExtras
     private array $skipped = [];
 
     /**
-     * Add what is missing to one event: phones on its pledges, and the committee ($committee: user id => role).
+     * Add what is missing to one event: phones on its pledges (unless $phones is false: the public demo leaves a
+     * few pledges without a number on purpose), and the committee ($committee: user id => role).
      *
      * @param  array<int, string>  $committee
      * @return list<string> parts skipped because a rule or the schema refused them
      */
-    public function apply(int $programId, int $byUserId, array $committee = []): array
+    public function apply(int $programId, int $byUserId, array $committee = [], bool $phones = true): array
     {
         $program = BudgetProgram::withoutGlobalScopes()->find($programId);
         if ($program === null) {
             return [];
         }
-        $this->phones($programId);
+        if ($phones) {
+            $this->phones($programId);
+        }
         $this->committee($program, $byUserId, $committee);
 
         return $this->skipped;

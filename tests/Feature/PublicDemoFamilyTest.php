@@ -13,8 +13,8 @@ use Tests\Concerns\RunsAsStandalone;
 use Tests\TestCase;
 
 /**
- * The public demo with every module on: the shop as it was, plus the Mukono farm and the Brian & Grace
- * wedding (in the shop's dollars), added once on a build, kept up by the heal without a row twice, and
+ * The public demo with every module on: the shop, the Mukono farm and Brian and Grace's Kukyala, Kwanjula and
+ * wedding (all in Uganda shillings), added once on a build, kept up by the heal without a row twice, and
  * the phones' "Try the live demo" sign-in (POST /api/v1/demo/session).
  */
 class PublicDemoFamilyTest extends TestCase
@@ -48,7 +48,7 @@ class PublicDemoFamilyTest extends TestCase
         $cid = (int) $company->id;
 
         $this->assertSame(['shop', 'poultry', 'budget', 'finance'], $company->enabled_modules);
-        $this->assertSame('USD', $company->currency);
+        $this->assertSame('UGX', $company->currency);
         $this->assertSame(45, DB::table('stock_items')->where('company_id', $cid)->where('is_deleted', 0)->count(), 'the shop as it was');
 
         // The farm: one laying house of 305 hens, today's card written, 38 weeks old.
@@ -59,41 +59,86 @@ class PublicDemoFamilyTest extends TestCase
         $this->assertSame(305, $layers->start_count - (int) $dead);
         $today = now($company->timezone ?: 'UTC')->toDateString();
         $this->assertSame(1, DB::table('poultry_daily_records')->where('batch_id', $layers->id)->where('date', $today)->count(), "today's card");
-        $this->assertEquals(0.9, $layers->cost_per_chick, 'UGX 3,600 a chick in dollars');
-        $this->assertEquals(3.0, DB::table('poultry_daily_records')->where('batch_id', $layers->id)->where('date', $today)->value('egg_unit_price'), 'a tray at $3');
+        $this->assertEquals(3600, $layers->cost_per_chick, 'UGX 3,600 a chick');
+        $this->assertEquals(12000, DB::table('poultry_daily_records')->where('batch_id', $layers->id)->where('date', $today)->value('egg_unit_price'), 'a tray at UGX 12,000');
         $this->assertSame(0, DB::table('financial_records')->where('company_id', $cid)->where('description', 'like', '%Layers Mash%')->count(), "the farm's costs stay in the farm book");
         $this->assertSame(0, DB::table('poultry_daily_records')->where('company_id', $cid)->where('created_at', '>', now()->addMinute())->count(), 'nothing dated in the future');
 
-        // The wedding: 60 pledges in whole dollars, eleven weeks away.
-        $program = DB::table('budget_programs')->where('company_id', $cid)->where('name', FamilyDemoBuilder::WEDDING_NAME)->first();
-        $this->assertNotNull($program);
-        $this->assertSame(60, DB::table('contribution_records')->where('budget_program_id', $program->id)->count());
-        $pledged = array_sum(array_map(fn ($p) => (int) round($p[2] / 4000), FamilyDemoBuilder::WEDDING_PLEDGES));
-        $this->assertSame($pledged, (int) DB::table('contribution_records')->where('budget_program_id', $program->id)->sum('amount'));
-        $this->assertSame(now($company->timezone ?: 'UTC')->addDays(77)->toDateString(), substr((string) $program->deadline, 0, 10));
-        $this->assertSame(1, DB::table('budget_programs')->where('company_id', $cid)->count());
+        // Brian and Grace: the Kukyala done and closed, the Kwanjula in five weeks, the wedding in eleven, in shillings.
+        $today = now($company->timezone ?: 'UTC');
+        $events = DB::table('budget_programs')->where('company_id', $cid)->get()->keyBy('name');
+        $this->assertSame(['Brian & Grace Kukyala', 'Brian & Grace Kwanjula', 'Brian & Grace Wedding'], $events->keys()->sort()->values()->all());
+        $program = $events[FamilyDemoBuilder::WEDDING_NAME];
+        $this->assertSame($today->copy()->addDays(77)->toDateString(), substr((string) $program->deadline, 0, 10));
+        $this->assertSame($today->copy()->addDays(35)->toDateString(), substr((string) $events['Brian & Grace Kwanjula']->deadline, 0, 10));
+        $this->assertLessThan($today->toDateString(), substr((string) $events['Brian & Grace Kukyala']->deadline, 0, 10));
+        $this->assertSame('Inactive', $events['Brian & Grace Kukyala']->status, 'the visit is over and its book closed');
+        $this->assertSame('Active', $events['Brian & Grace Kwanjula']->status);
 
-        // The pledge features of roadmap 02 §6, once their tables exist: phones, payments on their days, the committee.
-        if (DemoPledgeExtras::phonesReady()) {
-            $this->assertSame(0, DB::table('contribution_records')->where('budget_program_id', $program->id)->whereNull('phone')->count(), 'a phone on every pledge');
+        $pledges = DB::table('contribution_records')->where('budget_program_id', $program->id)->get();
+        $this->assertGreaterThanOrEqual(80, $pledges->count());
+        $this->assertLessThanOrEqual(150, $pledges->count());
+        $this->assertCount($pledges->count(), $pledges->unique('name'), 'every pledger once');
+        foreach ($pledges as $p) {
+            $this->assertTrue((float) $p->amount >= 20000 && (float) $p->amount <= 5000000 && fmod((float) $p->amount, 10000) === 0.0, "{$p->name}: {$p->amount}");
         }
-        if (DemoPledgeExtras::paymentsReady()) {
-            $paid = (float) DB::table('contribution_records')->where('budget_program_id', $program->id)->sum('paid_amount');
-            $this->assertGreaterThan(0, $paid);
-            $this->assertEquals($paid, (float) DB::table('contribution_payments')->where('budget_program_id', $program->id)->where('is_deleted', 0)->sum('amount'), 'paid = the history');
-            $this->assertGreaterThan(DB::table('contribution_records')->where('budget_program_id', $program->id)->where('paid_amount', '>', 0)->count(),
-                DB::table('contribution_payments')->where('budget_program_id', $program->id)->count(), 'some pledges paid in two goes');
-            $this->assertGreaterThan(1, DB::table('contribution_payments')->where('budget_program_id', $program->id)->distinct()->count('paid_on'), 'paid on different days');
+        $this->assertGreaterThan(5, $pledges->pluck('category_id')->unique()->count(), 'eight groups');
+        $phones = $pledges->whereNotNull('phone')->pluck('phone');
+        $this->assertGreaterThan($pledges->count() * 0.85, $phones->count(), 'nearly every pledge has a phone');
+        $this->assertLessThan($pledges->count(), $phones->count(), 'a few have none, so the book can say so');
+        foreach ($phones as $phone) {
+            $this->assertMatchesRegularExpression('/^\+2567[0-8]\d{7}$/', $phone);
         }
+
+        foreach ($events as $e) {
+            $paid = (string) DB::table('contribution_records')->where('budget_program_id', $e->id)->sum('paid_amount');
+            $this->assertEquals((float) $paid, (float) DB::table('contribution_payments')->where('budget_program_id', $e->id)->where('is_deleted', 0)->sum('amount'), "{$e->name}: paid = its payments");
+            $this->assertEquals((float) $paid, (float) $e->total_collected, "{$e->name}: the event's total");
+            $this->assertGreaterThan(0, (float) $e->budget_total, "{$e->name} has a budget");
+            $this->assertNotNull($e->template_key);
+            $this->assertNotNull(json_decode((string) $e->payment_details, true)['mtn'] ?? null);
+        }
+        $kukyala = $events['Brian & Grace Kukyala'];
+        $this->assertSame(0, DB::table('contribution_records')->where('budget_program_id', $kukyala->id)->where('fully_paid', '!=', 'Yes')->count(), 'all paid');
+        $this->assertEquals((float) $kukyala->budget_total, (float) $kukyala->budget_spent, 'all paid out');
+
+        $pays = DB::table('contribution_payments')->where('budget_program_id', $program->id)->get();
+        $this->assertGreaterThan(DB::table('contribution_records')->where('budget_program_id', $program->id)->where('paid_amount', '>', 0)->count(), $pays->count(), 'some pledges paid in parts');
+        $this->assertGreaterThan(10, $pays->pluck('paid_on')->unique()->count(), 'paid on many days');
+        $this->assertEqualsCanonicalizing(['bank', 'cash', 'mobile_money'], $pays->pluck('method')->unique()->values()->all());
+        $this->assertSame(0, $pays->where('paid_on', '>', $today->toDateString())->count(), 'nothing paid in the future');
+        $reversal = $pays->firstWhere('source', 'reversal');
+        $this->assertNotNull($reversal, 'one payment reversed');
+        $this->assertStringContainsString('wrong pledge', (string) $reversal->reason);
+        $this->assertGreaterThan(0, DB::table('contribution_records')->where('budget_program_id', $program->id)->where('paid_amount', '>', 0)->where('not_paid_amount', '>', 0)->count(), 'part paid');
+        $this->assertGreaterThan(0, DB::table('contribution_records')->where('budget_program_id', $program->id)->where('paid_amount', 0)->count(), 'not paid yet');
+
+        // The budget: the Church of Uganda template for 300 guests, some of it paid out, the gown over budget.
+        $this->assertSame('anglican-wedding', $program->template_key);
+        $template = \App\Services\Budget\BudgetTemplates::find('anglican-wedding');
+        $this->assertEquals(\App\Services\Budget\BudgetTemplates::total(\App\Services\Budget\BudgetTemplates::plan($template, 300)), (float) $program->budget_total);
+        $this->assertGreaterThan(0, (float) $program->budget_spent);
+        $this->assertSame(1, DB::table('budget_items')->where('budget_program_id', $program->id)->whereColumn('invested_amount', '>', 'target_amount')->count());
+        $this->assertSame(json_decode((string) json_encode($template['groups']), true), json_decode((string) $program->groups, true));
+        $settings = json_decode((string) $program->settings, true);
+        $this->assertSame(300, $settings['guests']);
+        $this->assertStringContainsString('{days_left}', $settings['messages']['reminder']);
+        $this->assertSame('lg', json_decode((string) $events['Brian & Grace Kwanjula']->settings, true)['message_lang'], 'the Kwanjula speaks Luganda');
+
+        // The committee on each event: the demo account chairs, the manager keeps the money.
         if (Schema::hasTable('budget_program_members')) {
-            $roles = DB::table('budget_program_members')->where('budget_program_id', $program->id)->pluck('role', 'user_id')->all();
-            $this->assertSame('chair', $roles[PublicDemo::owner()->id] ?? null, 'the demo account chairs it');
-            $this->assertContains('treasurer', $roles);
+            foreach ($events as $e) {
+                $roles = DB::table('budget_program_members')->where('budget_program_id', $e->id)->where('is_deleted', 0)->pluck('role', 'user_id')->all();
+                $this->assertSame('chair', $roles[PublicDemo::owner()->id] ?? null, "the demo account chairs {$e->name}");
+                $this->assertContains('treasurer', $roles);
+            }
         }
 
         $snap = $company->onboarding_state['public_demo']['snapshot'];
         $this->assertSame((int) $layers->id, $snap['farm']['layers']);
         $this->assertSame((int) $program->id, $snap['wedding']);
+        $this->assertSame((int) $events['Brian & Grace Kwanjula']->id, $snap['events']['kwanjula']);
+        $this->assertSame(\App\Services\Onboarding\PublicDemoBuilder::BUILD, $snap['build']);
     }
 
     public function test_the_heal_adds_no_duplicates_and_puts_back_a_deleted_farm_or_wedding(): void
@@ -116,7 +161,7 @@ class PublicDemoFamilyTest extends TestCase
         $this->assertContains('wedding', $result['repairs']);
         $this->assertSame(0, (int) DB::table('poultry_batches')->where('company_id', $cid)->where('name', PublicDemoBuilder::LAYERS)->value('is_deleted'));
         $this->assertSame($before, $this->counts($cid), 'the same rows again, once');
-        $wedding = DB::table('budget_programs')->where('company_id', $cid)->value('id');
+        $wedding = DB::table('budget_programs')->where('company_id', $cid)->where('name', FamilyDemoBuilder::WEDDING_NAME)->value('id');
         $this->assertSame((int) $wedding, PublicDemo::company()->onboarding_state['public_demo']['snapshot']['wedding']);
     }
 

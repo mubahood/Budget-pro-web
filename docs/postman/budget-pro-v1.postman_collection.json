@@ -1134,7 +1134,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-10-17\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-10-21\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"event_type\": \"\",\n    \"template_key\": \"\",\n    \"venue\": \"\",\n    \"settings\": \"\",\n    \"payment_details\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1246,7 +1246,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-10-17\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-10-21\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"event_type\": \"\",\n    \"template_key\": \"\",\n    \"venue\": \"\",\n    \"settings\": \"\",\n    \"payment_details\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1280,7 +1280,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-10-17\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"status\": \"\",\n    \"deadline\": \"2026-10-21\",\n    \"rsvp\": \"\",\n    \"logo\": \"\",\n    \"title\": \"\",\n    \"bottom\": \"\",\n    \"groups\": \"\",\n    \"event_type\": \"\",\n    \"template_key\": \"\",\n    \"venue\": \"\",\n    \"settings\": \"\",\n    \"payment_details\": \"\",\n    \"is_default\": \"\",\n    \"is_active\": \"\"\n}"
                         }
                     }
                 },
@@ -1307,6 +1307,41 @@
                                 "budget-programs",
                                 ":id"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /budget-programs/{id}/apply-template",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/apply-template",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "apply-template"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"template\": \"\",\n    \"guests\": 1,\n    \"plan\": [\n        {\n            \"name\": \"\",\n            \"items\": [\n                {\n                    \"name\": \"\",\n                    \"unit\": \"\",\n                    \"quantity\": 1000,\n                    \"unit_price\": 1000\n                }\n            ]\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -1495,6 +1530,159 @@
                                 "budget-programs",
                                 ":id",
                                 "print-link"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET /budget-programs/{id}/settings",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/settings",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "settings"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT /budget-programs/{id}/settings",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/settings",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "settings"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"event_type\": \"\",\n    \"venue\": \"\",\n    \"groups\": [\n        \"\"\n    ],\n    \"settings\": [],\n    \"payment_details\": [\n        \"\"\n    ]\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "PATCH /budget-programs/{id}/settings",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-programs/:id/settings",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-programs",
+                                ":id",
+                                "settings"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"event_type\": \"\",\n    \"venue\": \"\",\n    \"groups\": [\n        \"\"\n    ],\n    \"settings\": [],\n    \"payment_details\": [\n        \"\"\n    ]\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Budget templates",
+            "item": [
+                {
+                    "name": "GET /budget-templates",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-templates",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-templates"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET /budget-templates/{key}",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/budget-templates/:key",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "budget-templates",
+                                ":key"
                             ]
                         }
                     }
@@ -2569,7 +2757,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"amount\": 1000,\n    \"paid_on\": \"2026-10-17\",\n    \"method\": \"\",\n    \"receipt_no\": \"\",\n    \"reference\": \"\",\n    \"notes\": \"\",\n    \"uuid\": \"\"\n}"
+                            "raw": "{\n    \"amount\": 1000,\n    \"paid_on\": \"2026-10-21\",\n    \"method\": \"\",\n    \"receipt_no\": \"\",\n    \"reference\": \"\",\n    \"notes\": \"\",\n    \"uuid\": \"\"\n}"
                         }
                     }
                 }
@@ -3838,7 +4026,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-10-17\",\n    \"end_date\": \"2026-10-17\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-10-21\",\n    \"end_date\": \"2026-10-21\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -3950,7 +4138,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-10-17\",\n    \"end_date\": \"2026-10-17\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-10-21\",\n    \"end_date\": \"2026-10-21\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -3984,7 +4172,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-10-17\",\n    \"end_date\": \"2026-10-17\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
+                            "raw": "{\n    \"name\": \"\",\n    \"start_date\": \"2026-10-21\",\n    \"end_date\": \"2026-10-21\",\n    \"status\": \"Active\",\n    \"description\": \"\"\n}"
                         }
                     }
                 },
@@ -4073,7 +4261,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-10-17\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-10-21\"\n}"
                         }
                     }
                 },
@@ -4185,7 +4373,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-10-17\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-10-21\"\n}"
                         }
                     }
                 },
@@ -4219,7 +4407,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-10-17\"\n}"
+                            "raw": "{\n    \"financial_category_id\": 1,\n    \"amount\": 1000,\n    \"quantity\": 1000,\n    \"type\": \"Income\",\n    \"payment_method\": \"\",\n    \"recipient\": \"\",\n    \"description\": \"\",\n    \"receipt\": \"\",\n    \"date\": \"2026-10-21\"\n}"
                         }
                     }
                 },
@@ -4308,7 +4496,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-10-17\",\n    \"end_date\": \"2026-10-17\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-10-21\",\n    \"end_date\": \"2026-10-21\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -4420,7 +4608,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-10-17\",\n    \"end_date\": \"2026-10-17\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-10-21\",\n    \"end_date\": \"2026-10-21\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -4454,7 +4642,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-10-17\",\n    \"end_date\": \"2026-10-17\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
+                            "raw": "{\n    \"type\": \"Financial\",\n    \"period_type\": \"Today\",\n    \"start_date\": \"2026-10-21\",\n    \"end_date\": \"2026-10-21\",\n    \"currency\": \"\",\n    \"include_finance_accounts\": \"Yes\",\n    \"include_finance_records\": \"Yes\",\n    \"inventory_include_categories\": \"Yes\",\n    \"inventory_include_sub_categories\": \"Yes\",\n    \"inventory_include_products\": \"Yes\",\n    \"do_generate\": \"Yes\"\n}"
                         }
                     }
                 },
@@ -4632,7 +4820,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"invoice_ref\": \"\",\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"received_on\": \"2026-10-17\",\n    \"notes\": \"\",\n    \"client_uuid\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-10-17\"\n        }\n    ],\n    \"location_id\": 1\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"invoice_ref\": \"\",\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"received_on\": \"2026-10-21\",\n    \"notes\": \"\",\n    \"client_uuid\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-10-21\"\n        }\n    ],\n    \"location_id\": 1\n}"
                         }
                     }
                 },
@@ -6636,7 +6824,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-10-17\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-10-21\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -6670,7 +6858,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-10-17\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"expected_date\": \"2026-10-21\",\n    \"notes\": \"\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -6758,7 +6946,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"items\": [\n        {\n            \"purchase_order_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-10-17\"\n        }\n    ],\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"invoice_ref\": \"\",\n    \"received_on\": \"2026-10-17\",\n    \"client_uuid\": \"\"\n}"
+                            "raw": "{\n    \"items\": [\n        {\n            \"purchase_order_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000,\n            \"batch_number\": \"\",\n            \"expiry_date\": \"2026-10-21\"\n        }\n    ],\n    \"amount_paid\": 1000,\n    \"payment_method\": \"\",\n    \"invoice_ref\": \"\",\n    \"received_on\": \"2026-10-21\",\n    \"client_uuid\": \"\"\n}"
                         }
                     }
                 },
@@ -6848,7 +7036,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"supplier_id\": 1,\n    \"goods_receipt_id\": 1,\n    \"reason\": \"\",\n    \"refund_amount\": 1000,\n    \"refund_method\": \"\",\n    \"returned_on\": \"2026-10-17\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
+                            "raw": "{\n    \"supplier_id\": 1,\n    \"goods_receipt_id\": 1,\n    \"reason\": \"\",\n    \"refund_amount\": 1000,\n    \"refund_method\": \"\",\n    \"returned_on\": \"2026-10-21\",\n    \"items\": [\n        {\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_cost\": 1000\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -7221,7 +7409,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"customer_name\": \"\",\n    \"customer_phone\": \"\",\n    \"customer_address\": \"\",\n    \"payment_method\": \"\",\n    \"amount_paid\": 1000,\n    \"discount_amount\": 1000,\n    \"discount_reason\": \"\",\n    \"sale_date\": \"2026-10-17\",\n    \"notes\": \"\",\n    \"allow_negative_stock\": true,\n    \"customer_id\": 1,\n    \"shift_id\": 1,\n    \"location_id\": 1,\n    \"items\": [\n        {\n            \"unit_id\": 1,\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_price\": 1000,\n            \"markdown_id\": 1,\n            \"discount_amount\": 1000,\n            \"approval_id\": 1\n        }\n    ],\n    \"coupon_code\": \"\",\n    \"payments\": [\n        {\n            \"method\": \"\",\n            \"amount\": 1000,\n            \"reference\": \"\",\n            \"provider\": \"\",\n            \"tender\": \"gift_card\",\n            \"code\": \"\",\n            \"points\": 1\n        }\n    ]\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"customer_name\": \"\",\n    \"customer_phone\": \"\",\n    \"customer_address\": \"\",\n    \"payment_method\": \"\",\n    \"amount_paid\": 1000,\n    \"discount_amount\": 1000,\n    \"discount_reason\": \"\",\n    \"sale_date\": \"2026-10-21\",\n    \"notes\": \"\",\n    \"allow_negative_stock\": true,\n    \"customer_id\": 1,\n    \"shift_id\": 1,\n    \"location_id\": 1,\n    \"items\": [\n        {\n            \"unit_id\": 1,\n            \"stock_item_id\": 1,\n            \"quantity\": 1000,\n            \"unit_price\": 1000,\n            \"markdown_id\": 1,\n            \"discount_amount\": 1000,\n            \"approval_id\": 1\n        }\n    ],\n    \"coupon_code\": \"\",\n    \"payments\": [\n        {\n            \"method\": \"\",\n            \"amount\": 1000,\n            \"reference\": \"\",\n            \"provider\": \"\",\n            \"tender\": \"gift_card\",\n            \"code\": \"\",\n            \"points\": 1\n        }\n    ]\n}"
                         }
                     }
                 },
@@ -7463,7 +7651,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"provider\": \"\",\n    \"received_at\": \"2026-10-17\",\n    \"notes\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"amount\": 1000,\n    \"method\": \"\",\n    \"reference\": \"\",\n    \"provider\": \"\",\n    \"received_at\": \"2026-10-21\",\n    \"notes\": \"\"\n}"
                         }
                     }
                 },
@@ -8580,7 +8768,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-10-17\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-10-21\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -8718,7 +8906,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-10-17\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-10-21\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
@@ -8752,7 +8940,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-10-17\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
+                            "raw": "{\n    \"client_uuid\": \"\",\n    \"stock_item_id\": 1,\n    \"type\": \"Stock In\",\n    \"quantity\": 1000,\n    \"description\": \"\",\n    \"date\": \"2026-10-21\",\n    \"selling_price\": 1000,\n    \"unit_cost\": 1000,\n    \"reason\": \"damage\",\n    \"image\": \"\"\n}"
                         }
                     }
                 },
