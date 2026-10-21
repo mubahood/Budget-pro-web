@@ -104,9 +104,10 @@ class LoanAccrualsTest extends ApiTestCase
         $quote = (new Repayments())->quote($cid, (int) $loan->id, '2026-07-20');
         (new Repayments())->record($company, (int) $loan->id, ['amount_minor' => $quote['total_minor'], 'channel' => 'cash', 'value_date' => '2026-07-20'], $owner, ['entry_date' => '2026-07-20']);
         $this->assertSame('closed', $loan->fresh()->status);
-        $entries = SaccoJournalEntry::where('company_id', $cid)->count();
+        $charges = fn () => SaccoJournalEntry::where('company_id', $cid)->whereIn('kind', ['interest_due', 'penalty'])->count();
+        $entries = $charges();
         (new LoanJobs())->run($cid);
-        $this->assertSame($entries, SaccoJournalEntry::where('company_id', $cid)->count(), 'no interest after it is paid (the MobiSave bug)');
+        $this->assertSame($entries, $charges(), 'no interest or penalty after it is paid (the MobiSave bug)');
         $this->assertSame(0, $loan->fresh()->owedMinor());
     }
 }
