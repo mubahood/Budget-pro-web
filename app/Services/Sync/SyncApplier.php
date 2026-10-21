@@ -310,6 +310,7 @@ class SyncApplier
             'cash_movement' => $this->applyCashMovement($companyId, $userId, $uuid, $action, $data),
             'supplier_payment' => $this->applySupplierPayment($companyId, $userId, $uuid, $action, $data),
             'contribution_payment' => $this->applyContributionPayment($companyId, $deviceId, $userId, $uuid, $action, $data, $op),
+            'sacco_transaction' => $this->applySaccoTransaction($company, $deviceId, $userId, $uuid, $action, $data, $op),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
     }
@@ -597,6 +598,24 @@ class SyncApplier
         ], $userId, true);
 
         return ['status' => 'applied', 'model' => $r['payment']];
+    }
+
+    /**
+     * A SACCO cash receipt taken on a phone (04 §9.1, AK-24): SaccoTransactions::applySynced, idempotent on the op
+     * uuid. Cash already taken is never refused for where it should go: it is held in 2150 Unallocated receipts with a
+     * conflict-inbox item. What may not come offline was refused before this (SaccoAccess::refuseSyncOp).
+     */
+    private function applySaccoTransaction(Company $company, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array $op): array
+    {
+        if ($action !== 'insert' && $action !== 'upsert') {
+            return ['status' => 'rejected', 'code' => 'immutable_event', 'message' => 'A receipt cannot be changed. Reverse it online and record it again.'];
+        }
+        $user = \App\Models\User::withoutGlobalScopes()->find($userId);
+        if ($user === null) {
+            return ['status' => 'rejected', 'code' => 'forbidden', 'message' => 'Sign in again.'];
+        }
+
+        return (new \App\Services\Sacco\SaccoTransactions())->applySynced($company, $data, $user, $deviceId, $uuid, $op);
     }
 
     private function applyMovement(Company $company, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array &$touchedProducts, array &$stockExceptions): array

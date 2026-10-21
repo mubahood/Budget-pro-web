@@ -38,6 +38,9 @@ class SyncSerializer
         $wire['version'] = (int) $model->version;
         $wire['is_deleted'] = (int) $model->is_deleted;
         unset($wire['client_uuid'], $wire['password']);
+        foreach ($model->getHidden() as $hidden) {
+            unset($wire[$hidden]); // what a model hides never leaves (a SACCO member's NIN and its hash, AK-31)
+        }
 
         return $wire;
     }

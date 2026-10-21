@@ -159,6 +159,23 @@ class SyncRegistry
             'budget_program_members' => ['model' => BudgetProgramMember::class, 'kind' => self::KIND_MASTER, 'fields' => ['user_id', 'role'],
                 'user_fields' => ['user_id', 'added_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
+            // Akiba Ledger (docs/akiba/04-architecture.md §9.3, AK-67): members are master rows a phone may register (a group
+            // offline; an office as applicants), never with a NIN (sent through the API only); the server numbers them.
+            // Cash receipts are events (handler sacco_transaction: idempotent on the op uuid, held in 2150 rather than
+            // refused). Op data: {kind: deposit|share_purchase|entrance_fee|fee, member_id | member_uuid, savings_account_id
+            // | share_account_id (server ids), amount_minor (int), value_date (Y-m-d), receipt_no (the phone's own),
+            // reference?, narration?}. Products and accounts come down as pull-only snapshots.
+            'sacco_members' => ['model' => \App\Models\SaccoMember::class, 'kind' => self::KIND_MASTER, 'fields' => ['kind', 'first_name', 'last_name', 'other_names', 'gender',
+                'date_of_birth', 'phone_e164', 'phone_alt_e164', 'email', 'address', 'district', 'subcounty', 'parish', 'village', 'occupation', 'employer_name', 'payroll_no',
+                'joined_on', 'consent_data_at', 'consent_messages_at', 'messages_opt_out_at', 'guardian_name', 'guardian_phone_e164'],
+                'user_fields' => ['created_by_id'], 'rules' => [\App\Support\Rules\SaccoMemberRules::class, 'syncRules']],
+            'sacco_transactions' => ['model' => \App\Models\SaccoTransaction::class, 'kind' => self::KIND_EVENT, 'handler' => 'sacco_transaction',
+                'refs' => ['member_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'member_id']]],
+            'sacco_savings_products' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'sacco_savings_products', 'where' => ['is_deleted', '=', 0]]],
+            'sacco_savings_accounts' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'sacco_savings_accounts', 'where' => ['is_deleted', '=', 0],
+                'uuids' => ['member_uuid' => ['sacco_members', 'member_id']]]],
+            'sacco_share_accounts' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'sacco_share_accounts', 'where' => ['is_deleted', '=', 0],
+                'uuids' => ['member_uuid' => ['sacco_members', 'member_id']]]],
             // Poultry: same wire keys as the v1 endpoints; push semantics live in PoultrySyncable.
             'farm_types' => ['model' => PoultryFarmType::class, 'kind' => self::KIND_REFERENCE],
             'production_guide_tasks' => ['model' => PoultryProductionGuideTask::class, 'kind' => self::KIND_REFERENCE],
@@ -208,6 +225,9 @@ class SyncRegistry
             if ($key === 'cash_movements') {
                 return in_array('server_seq', self::columns('cash_movements'), true);
             }
+            if (str_starts_with($key, 'sacco_')) {
+                return self::columns($key) !== []; // the Akiba migrations not run yet
+            }
             if ($key === 'contribution_payments' || $key === 'budget_program_members') {
                 return self::columns($key) !== []; // the pledges migrations not run yet
             }
@@ -248,5 +268,7 @@ class SyncRegistry
     }
 
     /** Server-derived columns devices may never set directly. */
-    public const DERIVED_COLUMNS = ['id', 'company_id', 'server_seq', 'version', 'is_deleted', 'created_at', 'updated_at', 'current_quantity', 'receipt_number', 'invoice_number', 'total_amount', 'amount_paid', 'balance', 'change_given', 'subtotal', 'payment_status', 'processed_at', 'voided_at', 'voided_by_id', 'total_income', 'total_expense', 'total_collected', 'total_expected', 'total_in_pledge', 'budget_total', 'budget_spent', 'budget_balance', 'balance', 'percentage_done', 'is_complete', 'not_paid_amount'];
+    public const DERIVED_COLUMNS = ['id', 'company_id', 'server_seq', 'version', 'is_deleted', 'created_at', 'updated_at', 'current_quantity', 'receipt_number', 'invoice_number', 'total_amount', 'amount_paid', 'balance', 'change_given', 'subtotal', 'payment_status', 'processed_at', 'voided_at', 'voided_by_id', 'total_income', 'total_expense', 'total_collected', 'total_expected', 'total_in_pledge', 'budget_total', 'budget_spent', 'budget_balance', 'balance', 'percentage_done', 'is_complete', 'not_paid_amount',
+        // Akiba Ledger (04 §9.3): caches and numbers only the server writes.
+        'balance_minor', 'held_minor', 'shares_count', 'member_no', 'journal_entry_id', 'hold_reason', 'kyc_status', 'nin_hash', 'nin_encrypted'];
 }

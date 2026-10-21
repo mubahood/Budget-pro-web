@@ -54,6 +54,22 @@ final class SaccoMemberRules
         ];
     }
 
+    /**
+     * The fields a phone may push for a member (SyncRegistry `sacco_members`, 04 §9.3): already in their stored form
+     * (phones in E.164, consent as a timestamp). Never a NIN: that goes through the API only (AK-31).
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function syncRules(int $companyId, ?int $ignoreId): array
+    {
+        $phone = ['nullable', 'string', 'regex:/^\+[1-9]\d{7,14}$/'];
+
+        return array_intersect_key(self::rules($ignoreId === null), array_flip(['kind', 'first_name', 'last_name', 'other_names', 'gender', 'date_of_birth', 'email', 'address',
+            'district', 'subcounty', 'parish', 'village', 'occupation', 'employer_name', 'payroll_no', 'joined_on', 'guardian_name']))
+            + ['phone_e164' => $phone, 'phone_alt_e164' => $phone, 'guardian_phone_e164' => $phone, 'consent_data_at' => ['nullable', 'date'], 'consent_messages_at' => ['nullable', 'date'],
+                'messages_opt_out_at' => ['nullable', 'date']];
+    }
+
     /** @return array<string, array<int, mixed>> one nominee of a nomination */
     public static function nominee(): array
     {

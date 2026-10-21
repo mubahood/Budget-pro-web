@@ -825,3 +825,21 @@ approval.**
 - A month closes only when every open loan has been brought past its end (`loan_runs_pending`) and, in office mode,
   its provisioning has posted (`provisioning_pending`).
 - *Why:* member-friendly and simple to explain; the penalty already compensates late money; catch-ups must not drift.
+
+**AK-67: Sync for Akiba (P1.16), as the app was built against 04.**
+
+- `SyncRegistry`: `sacco_members` (master; the fields of 04 §9.3 in stored form, phones in E.164, consent as a
+  timestamp; never a NIN, a member number, a status or a KYC result), `sacco_transactions` (event, handler
+  `sacco_transaction`), and pull-only snapshots `sacco_savings_products`, `sacco_savings_accounts`,
+  `sacco_share_accounts` (with `member_uuid`). A receipt names accounts and members by server id, or a member the
+  phone registered by `member_uuid`; the phone's own `receipt_no` is kept as `device_receipt_no`.
+- A member pushed from a phone is numbered by the server (`SaccoMember::creating`), counted against the plan,
+  active in a group and an applicant in an office, and refused without the consent timestamp (`consent_required`).
+  Registering members from a phone needs `sacco_members` (a teller does not have it).
+- `SyncSerializer` drops every attribute a model hides, so the NIN and its hash never reach a phone.
+- A receipt that cannot reach its account (unknown, closed, a member who left, not whole shares, over the offline
+  limit…) posts to 2150 as `held` with a conflict-inbox item (`held_receipt`); when the account is known, the
+  system also asks for its `held_receipt_allocation`. Only `cash` deposits, share purchases, entrance fees and fees
+  may come from a phone; everything else is `offline_not_allowed`.
+- `sync:soak` stays the shop's soak; the SACCO soak (three phones, lost answers, out-of-order replays) is
+  `SaccoSyncReplayTest`, and the shop soak still passes with the sacco tables registered.

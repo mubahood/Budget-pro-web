@@ -45,6 +45,26 @@ class SaccoMember extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        static::creating(function (self $m) {
+            // A member pushed from a phone (SyncRegistry `sacco_members`): MemberService numbers its own members; a synced
+            // row is numbered here, counted against the plan, starts as the mode says (a group: active; an office:
+            // applicant) and needs the member's consent to keep their data (AK-47).
+            if (filled($m->member_no)) {
+                return;
+            }
+            $company = Company::withoutGlobalScopes()->findOrFail($m->company_id);
+            if ($m->consent_data_at === null) {
+                throw BusinessRuleException::make('consent_required', 'Record the member\'s consent to keep their details first.');
+            }
+            app(\App\Services\Billing\Quotas::class)->assertCanAdd($company, 'members');
+            $group = SaccoSetting::for((int) $m->company_id)?->isGroup() ?? false;
+            $m->member_no = \App\Services\Shop\NumberSequencer::next((int) $m->company_id, 'mem');
+            $m->status = $group ? 'active' : 'applicant';
+            $m->kyc_status = 'pending';
+            $m->joined_on ??= \App\Support\LocalDate::today((int) $m->company_id)->toDateString();
+            $m->setAttribute('status_changed_on', \App\Support\LocalDate::today((int) $m->company_id)->toDateString());
+            $m->consent_version ??= \App\Services\Sacco\Members\MemberService::CONSENT_VERSION;
+        });
         static::deleting(function () {
             throw BusinessRuleException::make('member_history', 'A member is never deleted: their record stays for ten years (SI 51 reg. 33). Change their status instead.');
         });
