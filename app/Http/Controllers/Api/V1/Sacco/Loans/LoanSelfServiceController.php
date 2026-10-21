@@ -55,6 +55,15 @@ class LoanSelfServiceController extends Controller
             ->map(fn ($l) => LoanPresent::loan($l))->all());
     }
 
+    /** GET sacco/me/loan-products: the active products a member may apply for, with their terms (the key facts come from the preview). */
+    public function products(Request $request): JsonResponse
+    {
+        $m = $this->member($request);
+
+        return $this->success(\App\Models\SaccoLoanProduct::withoutGlobalScopes()->where('company_id', $m->company_id)->where('is_active', true)->where('is_deleted', 0)
+            ->orderBy('code')->get()->map(fn ($p) => LoanPresent::product($p))->all());
+    }
+
     /** GET sacco/me/loans/{id}: with its schedule */
     public function loan(Request $request, int $id): JsonResponse
     {

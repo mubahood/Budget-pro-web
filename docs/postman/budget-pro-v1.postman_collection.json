@@ -8601,6 +8601,29 @@
                     }
                 },
                 {
+                    "name": "GET sacco/me/loan-products: the active products a member may apply for, with their terms (the key facts come from the preview). */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/loan-products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "loan-products"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/me/loans */",
                     "request": {
                         "method": "GET",

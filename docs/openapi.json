@@ -22384,6 +22384,50 @@
                 }
             }
         },
+        "/sacco/me/loan-products": {
+            "get": {
+                "tags": [
+                    "Sacco"
+                ],
+                "summary": "GET sacco/me/loan-products: the active products a member may apply for, with their terms (the key facts come from the preview). */",
+                "operationId": "get_sacco_me_loan_products",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role, plan or module does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/sacco/me/loans": {
             "get": {
                 "tags": [

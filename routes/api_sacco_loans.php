@@ -42,13 +42,14 @@ Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sa
 
 Route::prefix('sacco/me')->middleware([\App\Http\Middleware\SaccoMemberAuth::class, 'throttle:60,1'])->group(function () {
     Route::get('loans', [LoanSelfServiceController::class, 'loans']);
+    Route::get('loan-products', [LoanSelfServiceController::class, 'products']);
     Route::get('loans/{id}', [LoanSelfServiceController::class, 'loan'])->whereNumber('id');
     Route::post('loan-applications', [LoanSelfServiceController::class, 'apply']);
     Route::get('guarantee-requests', [LoanSelfServiceController::class, 'guarantees']);
     Route::post('guarantee-requests/{id}/{action}', [LoanSelfServiceController::class, 'guarantee'])->whereNumber('id')->whereIn('action', ['code', 'consent', 'decline']);
 });
 
-Route::prefix('sacco/consent')->middleware(['throttle:10,1'])->group(function () {
+Route::prefix('sacco/consent')->middleware(['throttle:10,1,sacco-consent'])->group(function () {
     Route::get('{token}', [LoanSelfServiceController::class, 'notice'])->where('token', '[A-Za-z0-9]{32,64}');
     Route::post('{token}/{action}', [LoanSelfServiceController::class, 'consent'])->where('token', '[A-Za-z0-9]{32,64}')->whereIn('action', ['code', 'consent', 'decline']);
 });

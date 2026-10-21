@@ -98,6 +98,7 @@ class LoanApiTest extends ApiTestCase
             'token' => hash('sha256', $plain), 'abilities' => ['sacco:member'], 'expires_at' => now()->addDay()]);
         $hm = ['Authorization' => 'Bearer '.$pat->id.'|'.$plain, 'Accept' => 'application/json'];
         $this->getJson('/api/v1/sacco/me/loans', $hm)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $id);
+        $this->assertContains('ORD', array_column($this->getJson('/api/v1/sacco/me/loan-products', $hm)->assertOk()->json('data'), 'code'));
         $this->getJson("/api/v1/sacco/me/loans/{$id}", $hm)->assertOk()->assertJsonCount(6, 'data.schedule');
         $otherLoan = $this->activeLoan($a, $guarantorA, 100_000, 3, ['channel' => 'savings']);
         $this->getJson("/api/v1/sacco/me/loans/{$otherLoan->id}", $hm)->assertNotFound();
