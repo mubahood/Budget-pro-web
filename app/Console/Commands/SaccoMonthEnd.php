@@ -28,6 +28,7 @@ class SaccoMonthEnd extends Command
                 $jobs->run((int) $cid);
                 if (\App\Services\Sacco\YearEnd\YearEndModule::ready()) {
                     (new \App\Services\Sacco\YearEnd\SavingsInterest())->catchUp((int) $cid); // P4.6: a SACCO with no loans still earns interest on savings
+                    (new \App\Services\Sacco\YearEnd\Dormancy())->run((int) $cid); // P4.10: quiet accounts onto the dormant register
                 }
                 $this->line("SACCO {$cid}: month end done.");
             } catch (\Throwable $e) {

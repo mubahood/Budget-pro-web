@@ -21,7 +21,8 @@ class SaccoJournalEntry extends Model
     public const KINDS = ['deposit', 'withdrawal', 'fee', 'share_purchase', 'share_transfer', 'entrance_fee', 'internal_transfer',
         'held_receipt', 'held_receipt_allocation', 'opening_balance', 'manual', 'reversal',
         'loan_disbursement', 'loan_repayment', 'loan_cancellation', 'interest_due', 'penalty', 'provision', 'write_off', 'recovery',
-        'fine', 'fine_payment', 'fund_contribution', 'savings_interest', 'year_end', 'appropriation', 'dividend', 'shareout', 'payout', 'till_variance'];
+        'fine', 'fine_payment', 'fund_contribution', 'savings_interest', 'year_end', 'appropriation', 'dividend', 'shareout', 'payout', 'till_variance',
+        'stf_buyback', 'dormant_transfer'];
 
     protected $guarded = ['id'];
 
