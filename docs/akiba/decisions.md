@@ -855,3 +855,20 @@ approval.**
   may come from a phone; everything else is `offline_not_allowed`.
 - `sync:soak` stays the shop's soak; the SACCO soak (three phones, lost answers, out-of-order replays) is
   `SaccoSyncReplayTest`, and the shop soak still passes with the sacco tables registered.
+
+**AK-68: Receipts and member messages (P1.17); Akiba Ledger never names the family.**
+
+- `Messaging\SaccoMessages`: English and Kiswahili (Luganda falls back to English); each SMS form at most 160
+  characters (free text is shortened, never a figure), a WhatsApp form beside it; signed with the SACCO's short
+  name. `Messaging\SaccoNotices` sends every posted receipt (a `SaccoTransactions::afterPosted` hook) and the
+  notice of a savings rate change through Messenger, after the commit. `receipts_channel`: `sms` only on a plan
+  with `sacco_sms_receipts` and within the month's allowance (else WhatsApp), `whatsapp`, `app` (read in the app,
+  nothing sent), `none`.
+- `Messenger::send` gains the member branch (`meta.sacco_member_id` → `SaccoNotices::consentRefusal`): an opted-out
+  member gets nothing (logged `opted_out`); reminders and offers also need `consent_messages_at`.
+- `GET sacco/transactions/{id}/receipt?format=json|text|pdf`: a 32-column ASCII receipt for the Bluetooth printer,
+  a small PDF, and the WhatsApp and SMS texts to share.
+- The owner's rule (2026-10-21): nothing a SACCO's staff or members receive names Budget Pro or another app. So a
+  SACCO's welcome says Akiba Ledger and its own first steps; its mail carries no family footer and defaults its
+  subject to "Akiba Ledger"; members' sign-in codes go out in the SACCO's name (Akiba Ledger when one address opens
+  several SACCOs), with no footer. The loans module's messages follow the same rule.

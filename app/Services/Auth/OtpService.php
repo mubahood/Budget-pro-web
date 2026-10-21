@@ -47,6 +47,10 @@ class OtpService
         $text = 'Your '.$product." code is {$code}. It expires in {$cfg['ttl_minutes']} minutes. Never share it.";
         $channels = $isEmail ? ['mail'] : ['whatsapp', 'sms'];
         $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];
+        if ($sender !== null) {
+            // A SACCO's member: the email names the SACCO and carries no platform footer (Akiba Ledger stands alone).
+            $meta['options']['mail'] = ['subject' => $sender.': your sign-in code', 'support_footer' => false];
+        }
         $logId = app(Messenger::class)->send($to, $text, $channels, $meta, now: true);
         /** @var object{status: string, channel: string|null}|null $row */
         $row = DB::table('message_log')->find($logId);

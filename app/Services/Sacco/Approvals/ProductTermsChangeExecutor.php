@@ -37,6 +37,10 @@ final class ProductTermsChangeExecutor extends BaseExecutor
         $version = (new SavingsProducts())->applyTerms((int) $approval->company_id, (int) $p['product_id'], (array) $p['terms'], (string) $p['effective_from'],
             (int) $approval->id, $approval->requested_by_id === null ? null : (int) $approval->requested_by_id);
 
+        if ((int) ($p['terms']['interest_rate_bp'] ?? 0) !== (int) ($p['old']['interest_rate_bp'] ?? 0)) {
+            \App\Services\Sacco\Messaging\SaccoNotices::termsChange((int) $approval->company_id, (int) $p['product_id'], (string) ($p['name'] ?? ''), (int) $p['terms']['interest_rate_bp'], (string) $p['effective_from']);
+        }
+
         return ['product_id' => (int) $p['product_id'], 'terms_version' => (int) $version->terms_version, 'effective_from' => (string) $p['effective_from']];
     }
 }

@@ -41,6 +41,28 @@ class TransactionController extends SaccoController
         return $this->success(Present::transaction($t) + ['reversed_by' => $reversal === null ? null : Present::transaction($reversal)]);
     }
 
+    /**
+     * GET sacco/transactions/{id}/receipt?format=json|text|pdf: the receipt as lines and texts (json: `text` for the
+     * Bluetooth printer, `whatsapp` and `sms` for sharing), as plain text, or as a small PDF.
+     */
+    public function receipt(Request $request, int $id): \Symfony\Component\HttpFoundation\Response
+    {
+        if (! $this->mayRead($request)) {
+            return $this->refuseRead();
+        }
+        $t = SaccoTransaction::withoutGlobalScopes()->where('company_id', $this->cid($request))->find($id);
+        if ($t === null) {
+            return $this->notFound('That receipt is not in this SACCO.');
+        }
+
+        return match ((string) $request->query('format', 'json')) {
+            'text' => response(\App\Services\Sacco\Messaging\SaccoReceipt::text($t), 200, ['Content-Type' => 'text/plain; charset=utf-8']),
+            'pdf' => response(\App\Services\Sacco\Messaging\SaccoReceipt::pdf($t), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="receipt-'.$t->receipt_no.'.pdf"']),
+            default => $this->success(\App\Services\Sacco\Messaging\SaccoReceipt::parts($t) + ['text' => \App\Services\Sacco\Messaging\SaccoReceipt::text($t)]
+                + array_intersect_key(\App\Services\Sacco\Messaging\SaccoMessages::forReceipt($t) ?? [], array_flip(['whatsapp', 'sms']))),
+        };
+    }
+
     /** POST sacco/transactions {uuid, kind: deposit|fee|internal_transfer|share_purchase|entrance_fee, …} (sacco_teller) */
     public function store(Request $request): JsonResponse
     {

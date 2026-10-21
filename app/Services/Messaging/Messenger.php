@@ -40,6 +40,12 @@ class Messenger
 
             return $id;
         }
+        if (! empty($meta['sacco_member_id']) && ($refusal = \App\Services\Sacco\Messaging\SaccoNotices::consentRefusal((int) $meta['sacco_member_id'], $meta['purpose'] ?? null)) !== null) {
+            // Akiba Ledger (04 §10): a SACCO member who opted out gets no message; reminders need their consent too.
+            DB::table('message_log')->where('id', $id)->update(['status' => $refusal[0], 'error' => $refusal[1], 'updated_at' => now()]);
+
+            return $id;
+        }
         if (self::isDemo($meta['company_id'] ?? null)) {
             // Demo shops (DemoShopService) never message anyone: their customers are made up.
             DB::table('message_log')->where('id', $id)->update(['status' => 'skipped', 'error' => 'demo shop', 'updated_at' => now()]);

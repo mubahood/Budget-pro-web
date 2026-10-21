@@ -9324,6 +9324,34 @@
                     }
                 },
                 {
+                    "name": "GET sacco/transactions/{id}/receipt?format=json|text|pdf: the receipt as lines and texts (json: `text` for the",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/transactions/:id/receipt",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "transactions",
+                                ":id",
+                                "receipt"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "POST sacco/transactions/{id}/reverse {reason, uuid?} (sacco_teller): a reversal request for a second officer (202). */",
                     "request": {
                         "method": "POST",

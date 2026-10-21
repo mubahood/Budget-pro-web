@@ -65,6 +65,7 @@ Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sa
     Route::post('transactions', [TransactionController::class, 'store']);
     Route::get('transactions/{id}', [TransactionController::class, 'show'])->whereNumber('id');
     Route::post('transactions/{id}/reverse', [TransactionController::class, 'reverse'])->whereNumber('id');
+    Route::get('transactions/{id}/receipt', [TransactionController::class, 'receipt'])->whereNumber('id');
     Route::post('withdrawals', [TransactionController::class, 'withdraw']);
 
     Route::get('approvals', [ApprovalController::class, 'index']);

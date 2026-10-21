@@ -195,6 +195,8 @@ class SaccoApiTest extends ApiTestCase
         $row = \Illuminate\Support\Facades\DB::table('message_log')->where('to', 'self@example.com')->orderByDesc('id')->first();
         preg_match('/code is (\d{4,8})/', (string) $row?->body, $mm);
         $this->assertNotEmpty($mm[1] ?? null, 'the code went out through message_log');
+        $this->assertStringContainsString('Test Teachers SACCO', (string) $row->body, 'the code goes out in the SACCO\'s name');
+        $this->assertStringNotContainsString('Budget Pro', (string) $row->body);
 
         return $mm[1];
     }

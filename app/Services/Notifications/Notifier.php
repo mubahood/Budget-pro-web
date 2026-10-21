@@ -88,6 +88,19 @@ class Notifier
 
     public function welcome(User $user, Company $company): void
     {
+        if (in_array('sacco', $company->modules(), true)) {
+            // Akiba Ledger stands alone (the owner's rule): its own name, its own first steps, no family footer.
+            $to = $user->phone_e164 ?: $user->email;
+            if ($to) {
+                $this->messenger->send($to, "Welcome to Akiba Ledger, {$user->first_name}! {$company->name} is ready: set up the SACCO's books, then register your members.",
+                    Messenger::channelsFor($user->phone_e164, $user->email), ['company_id' => $company->id, 'user_id' => $user->id, 'purpose' => 'welcome',
+                        'options' => ['mail' => ['subject' => 'Welcome to Akiba Ledger', 'support_footer' => false]]]);
+            }
+            DB::table('app_notifications')->insert(['company_id' => $company->id, 'user_id' => $user->id, 'type' => 'welcome', 'title' => 'Welcome!',
+                'body' => 'Start by setting up your SACCO\'s books.', 'created_at' => now(), 'updated_at' => now()]);
+
+            return;
+        }
         $text = 'Welcome to '.config('app.name').", {$user->first_name}! {$company->name} is ready. Add your products and make your first sale — everything works offline.";
         $to = $user->phone_e164 ?: $user->email;
         if ($to) {

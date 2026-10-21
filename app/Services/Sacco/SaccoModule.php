@@ -67,5 +67,7 @@ final class SaccoModule
         // P1.11: the shares sub-ledger under 3100, share purchases and entrance fees, activation and nomination rules.
         Ledger\SubLedgers::register(new Shares\SharesLedger());
         Shares\ShareService::boot();
+        // P1.17: every posted receipt is messaged to its member after the commit (SaccoNotices).
+        SaccoTransactions::afterPosted('receipt', fn (\App\Models\SaccoTransaction $tx) => Messaging\SaccoNotices::receipt($tx));
     }
 }

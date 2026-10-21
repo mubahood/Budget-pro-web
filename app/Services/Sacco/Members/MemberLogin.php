@@ -111,7 +111,11 @@ final class MemberLogin
         if ($email === null) {
             return ['sent' => true, 'sent_to' => null]; // no enumeration: the answer looks the same
         }
-        $r = app(OtpService::class)->request(self::otpKey($identifier), 'login', $ip, (string) $email);
+        $first = $logins->first();
+        $sacco = $first === null ? null : (SaccoSetting::for((int) $first->company_id)?->short_name ?: null);
+        // Codes go out in the SACCO's own name (one SACCO), or Akiba Ledger's when the address opens several.
+        $sender = $logins->pluck('company_id')->unique()->count() > 1 ? 'Akiba Ledger' : ($sacco ?? 'Akiba Ledger');
+        $r = app(OtpService::class)->request(self::otpKey($identifier), 'login', $ip, (string) $email, $sender);
 
         return ['sent' => $r['sent'], 'sent_to' => $r['sent_to']];
     }

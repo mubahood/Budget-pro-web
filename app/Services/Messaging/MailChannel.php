@@ -39,9 +39,11 @@ class MailChannel implements MessagingChannel
 
                 return ['ok' => true];
             }
-            $line = $footer ? SupportContact::platform()->mailLine($context, $vars) : '';
-            Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options) {
-                $m->to($to)->subject($options['subject'] ?? config('app.name'));
+            // Akiba Ledger stands alone: a SACCO's mail carries neither the family's footer nor its name.
+            $sacco = isset($options['company_id']) && in_array('sacco', (array) (\App\Models\Company::withoutGlobalScopes()->find((int) $options['company_id'])?->modules() ?? []), true);
+            $line = $footer && ! $sacco ? SupportContact::platform()->mailLine($context, $vars) : '';
+            Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options, $sacco) {
+                $m->to($to)->subject($options['subject'] ?? ($sacco ? 'Akiba Ledger' : config('app.name')));
             });
 
             return ['ok' => true];
