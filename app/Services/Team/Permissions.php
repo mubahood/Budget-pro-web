@@ -75,11 +75,21 @@ class Permissions
     {
         self::fresh();
         if (! array_key_exists($companyId, self::$modules)) {
-            $company = Company::withoutGlobalScopes()->find($companyId);
-            self::$modules[$companyId] = $company?->modules() ?? [];
+            self::loadCompany($companyId);
         }
 
         return self::$modules[$companyId];
+    }
+
+    /**
+     * One read of the company per request: its owner and its modules (the role memo and the module memo come from
+     * the same row, so module-aware permissions cost no query a shop did not already make).
+     */
+    private static function loadCompany(int $companyId): void
+    {
+        $company = Company::withoutGlobalScopes()->select(['id', 'owner_id', 'enabled_modules', 'business_type'])->find($companyId);
+        self::$owners[$companyId] = $company?->owner_id === null ? null : (int) $company->owner_id;
+        self::$modules[$companyId] = $company?->modules() ?? [];
     }
 
     public static function defaultsFor(string $role): array
@@ -188,8 +198,7 @@ class Permissions
         }
         $cid = (int) $user->company_id;
         if (! array_key_exists($cid, self::$owners)) {
-            $owner = Company::withoutGlobalScopes()->whereKey($cid)->value('owner_id');
-            self::$owners[$cid] = $owner === null ? null : (int) $owner;
+            self::loadCompany($cid);
         }
         $member = DB::table('company_members')->where('company_id', $cid)->where('user_id', $user->id)->first();
         if (self::$owners[$cid] !== null && self::$owners[$cid] === (int) $user->id) {
