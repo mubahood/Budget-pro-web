@@ -94,7 +94,7 @@ class Notifier
             if ($to) {
                 $this->messenger->send($to, "Welcome to Akiba Ledger, {$user->first_name}! {$company->name} is ready: set up the SACCO's books, then register your members.",
                     Messenger::channelsFor($user->phone_e164, $user->email), ['company_id' => $company->id, 'user_id' => $user->id, 'purpose' => 'welcome',
-                        'options' => ['mail' => ['subject' => 'Welcome to Akiba Ledger', 'support_footer' => false]]]);
+                        'options' => ['mail' => ['subject' => 'Welcome to Akiba Ledger', 'akiba' => true]]]);
             }
             DB::table('app_notifications')->insert(['company_id' => $company->id, 'user_id' => $user->id, 'type' => 'welcome', 'title' => 'Welcome!',
                 'body' => 'Start by setting up your SACCO\'s books.', 'created_at' => now(), 'updated_at' => now()]);

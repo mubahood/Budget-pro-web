@@ -41,6 +41,8 @@ class OtpService
             'ip' => $ip, 'created_at' => now(), 'updated_at' => now(),
         ]);
         $isEmail = str_contains($to, '@');
+        // Staff of a SACCO account (a reset or sign-in code) hear from their SACCO, never another product (AK-68).
+        $sender ??= self::saccoSender($identifier);
         // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
         // An Akiba Ledger SACCO speaks only in its own name ($sender), never the family's.
         $product = $sender ?? (\App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name'));
@@ -48,8 +50,8 @@ class OtpService
         $channels = $isEmail ? ['mail'] : ['whatsapp', 'sms'];
         $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];
         if ($sender !== null) {
-            // A SACCO's member: the email names the SACCO and carries no platform footer (Akiba Ledger stands alone).
-            $meta['options']['mail'] = ['subject' => $sender.': your sign-in code', 'support_footer' => false];
+            // A SACCO (a member, or staff of a SACCO account): the email names the SACCO, and its footer Akiba Ledger only.
+            $meta['options']['mail'] = ['subject' => $sender.': your code', 'akiba' => true];
         }
         $logId = app(Messenger::class)->send($to, $text, $channels, $meta, now: true);
         /** @var object{status: string, channel: string|null}|null $row */
@@ -59,6 +61,20 @@ class OtpService
         }
 
         return ['sent' => $row?->status === 'sent', 'channel' => $row?->channel, 'sent_to' => $isEmail ? self::mask($to) : $to, 'expires_in' => $cfg['ttl_minutes'] * 60];
+    }
+
+    /** The SACCO's name when the identifier is a staff login of a SACCO account, else null. */
+    private static function saccoSender(string $identifier): ?string
+    {
+        $id = trim($identifier);
+        $user = str_contains($id, '@')
+            ? \App\Models\User::withoutGlobalScopes()->where('email', $id)->first()
+            : \App\Models\User::withoutGlobalScopes()->where('phone_e164', $id)->first();
+        if ($user === null || $user->company_id === null || ! \App\Support\SupportContact::isSacco((int) $user->company_id)) {
+            return null;
+        }
+
+        return \App\Models\SaccoSetting::for((int) $user->company_id)?->short_name ?: 'Akiba Ledger';
     }
 
     /** Phone codes cost money per message; whether they are sent at all (off unless OTP_PHONE_CODES=true). */

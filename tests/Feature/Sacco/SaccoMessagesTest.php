@@ -21,7 +21,7 @@ class SaccoMessagesTest extends ApiTestCase
 {
     use MakesSaccoBooks, MakesSaccoTeam;
 
-    private const FAMILY = ['Budget Pro', 'Shelfie', 'Kuku Tally', 'Pledge', 'budget-pro', 'BudgetPro'];
+    private const FAMILY = ['Budget Pro', 'Shelfie', 'Kuku Tally', 'Pledge', 'budget-pro', 'BudgetPro', 'family'];
 
     private function log(int $companyId)
     {
@@ -137,5 +137,34 @@ class SaccoMessagesTest extends ApiTestCase
             }
         }
         $this->assertSame(SaccoMessages::render('receipt_deposit', 'en', ['sacco' => 'S'])['sms'], SaccoMessages::render('receipt_deposit', 'lg', ['sacco' => 'S'])['sms']);
+    }
+
+    public function test_a_saccos_staff_codes_mail_footers_and_refusals_name_no_other_product(): void
+    {
+        config(['support.whatsapp' => '+256700000001', 'support.email' => 'help@example.com', 'mail.default' => 'array']);
+        $s = $this->saccoCompany();
+        $c = $s['company'];
+        $email = $s['treasurer']->email;
+        $this->postJson('/api/v1/auth/otp/request', ['identifier' => $email, 'purpose' => 'reset'])->assertOk();
+        $code = DB::table('message_log')->where('to', $email)->where('purpose', 'otp')->orderByDesc('id')->first();
+        $this->assertStringContainsString('Your Test Teachers SACCO code is', $code->body);
+        $this->assertIndependent($code->body);
+
+        // What the mail itself carries: the subject and the footer the kernel adds.
+        app()->forgetInstance('mail.manager');
+        $ok = (new \App\Services\Messaging\MailChannel())->send($email, $code->body, ['subject' => 'Test Teachers SACCO: your code', 'akiba' => true]);
+        $this->assertTrue($ok['ok'], (string) ($ok['error'] ?? ''));
+        $sent = collect(app('mailer')->getSymfonyTransport()->messages())->last();
+        $raw = $sent->getOriginalMessage()->toString();
+        $this->assertStringContainsString('Hello%20Akiba%20Ledger', quoted_printable_decode($raw), 'the WhatsApp link greets Akiba Ledger');
+        $this->assertIndependent(rawurldecode(quoted_printable_decode($raw)));
+        $staff = (new \App\Services\Messaging\MailChannel())->send($email, 'Your term as treasurer starts today.', ['company_id' => $c->id, 'subject' => 'Office']);
+        $this->assertTrue($staff['ok']);
+        $this->assertStringContainsString('Hello%20Akiba%20Ledger', quoted_printable_decode(collect(app('mailer')->getSymfonyTransport()->messages())->last()->getOriginalMessage()->toString()));
+
+        $this->assertIndependent(\App\Support\Rules\CompanyRules::EXCLUSIVE_MESSAGE);
+        $this->assertNull(\App\Support\SupportContact::receiptLine($c), 'no "Powered by" line for a SACCO');
+        $this->assertIndependent(\App\Support\SupportContact::forSacco()->message('mail.general'));
+        $this->assertStringContainsString('Budget Pro', \App\Support\SupportContact::platform()->message('mail.general'), 'the family keeps its own words');
     }
 }

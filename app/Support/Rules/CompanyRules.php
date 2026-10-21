@@ -46,7 +46,8 @@ class CompanyRules
      */
     public const EXCLUSIVE_MODULES = ['sacco'];
 
-    public const EXCLUSIVE_MESSAGE = 'A SACCO account keeps only the SACCO books. Use a separate account for a shop, farm or event.';
+    // Names no other product (AK-68): a SACCO's staff only ever hear about their SACCO.
+    public const EXCLUSIVE_MESSAGE = 'A SACCO keeps its books in an account of its own, and other books stay in theirs.';
 
     /** Older profile fields the phone app still sends (kept writable for it; phone_number_2 and slogan are also in 'profile'). */
     public const LEGACY = [

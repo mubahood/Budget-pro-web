@@ -103,6 +103,33 @@ final class SupportContact
         }
     }
 
+    /** The product name the prefilled messages greet (Akiba Ledger stands alone: AK-68). */
+    private string $product = 'Budget Pro';
+
+    /**
+     * Our contact as Akiba Ledger: the same line, but every prefilled message greets "Akiba Ledger" and names no other
+     * product (the owner's rule for anything a SACCO's staff or members receive).
+     */
+    public static function forSacco(): self
+    {
+        $c = self::platform();
+        $c->product = 'Akiba Ledger';
+
+        return $c;
+    }
+
+    /** Whether a company keeps SACCO books (its mail, footers and receipts speak as Akiba Ledger). */
+    public static function isSacco(Company|int|null $company): bool
+    {
+        try {
+            $company = is_int($company) ? Company::withoutGlobalScopes()->find($company) : $company;
+
+            return $company !== null && in_array('sacco', $company->modules(), true);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     /** The contact for whoever is looking now: a standalone copy's own, else ours. */
     public static function current(): self
     {
@@ -241,7 +268,9 @@ final class SupportContact
     {
         $templates = self::templates();
 
-        return self::fill($templates[$context] ?? $templates[self::FALLBACK] ?? '', $vars);
+        $text = self::fill($templates[$context] ?? $templates[self::FALLBACK] ?? '', $vars);
+
+        return $this->product === 'Budget Pro' ? $text : str_replace('Budget Pro', $this->product, $text);
     }
 
     /**
@@ -434,7 +463,8 @@ final class SupportContact
             $line .= ' '.rtrim($this->hours(), '.').'.';
         }
 
-        return ['text' => $line, 'link' => $this->goLink($context, $vars, null, 'mail')];
+        // Akiba Ledger's mail links straight to WhatsApp with its own greeting (the tracked link fills ours).
+        return ['text' => $line, 'link' => $this->product === 'Budget Pro' ? $this->goLink($context, $vars, null, 'mail') : $this->waLink($context, $vars)];
     }
 
     /** Whether this business's receipts and invoices carry the small "Powered by Budget Pro" line. */
@@ -443,6 +473,9 @@ final class SupportContact
         try {
             if (! ShopBrand::poweredBy()) {
                 return false; // a white-label licence never names us
+            }
+            if (self::isSacco($company)) {
+                return false; // Akiba Ledger names no other product (AK-68)
             }
             $chosen = $company->getAttribute('receipt_support_line');
             if ($chosen === null) {
