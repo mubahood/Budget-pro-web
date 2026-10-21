@@ -35,6 +35,8 @@ parameters:
         - app/Models/SaccoMemberRelation.php
         - app/Models/SaccoMemberDocument.php
         - app/Models/SaccoMemberLogin.php
+        - app/Models/SaccoApproval.php
+        - app/Models/SaccoApprovalVote.php
         - app/Scopes
     excludePaths:
         - app/Services/AutoReorderService.php

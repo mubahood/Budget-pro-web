@@ -648,3 +648,15 @@ approval.**
 - **Also in P1.9:** `NumberSequencer` kind `mem` is numbered for life (`M-000123`, no year); `AuditLogger` gains
   `auditSensitive()`, so the NIN columns are never logged; `DuplicateService` lists members with the same phone
   and refuses to merge them there (`merge_elsewhere`): member merges move money by journal (ADR 0009).
+
+**AK-62: P1.10 ships seven executors; `withdrawal` and `product_terms_change` come with savings (P1.12).**
+
+- Executors registered in `SaccoModule::EXECUTORS`: `reversal`, `manual_journal`, `period_close`, `period_reopen`,
+  `ledger_account_create`, `member_kyc`, `held_receipt_allocation`. `withdrawal` needs `sacco_transactions` and the
+  savings account's `available()`, and `product_terms_change` needs `sacco_savings_products`; both tables are P1.12's,
+  so their executors register there through `SaccoApprovals::register()`.
+- If an approved request cannot execute (the money moved, an account was switched off), it stays `approved` with
+  `last_error` and runs again with `SaccoApprovals::execute()`: the approval is not lost (04 §5.2 step 3).
+- Requests still open from a month block its close (`approvals_pending`, a `CloseChecks` entry); an expired request
+  blocks nothing and never executes. `sacco:approvals-expire` marks them hourly.
+- The system may ask without an officer as maker only for `held_receipt_allocation` (`SaccoApprovals::SYSTEM_ACTIONS`).

@@ -12,11 +12,27 @@ use App\Models\SaccoOfficer;
  *
  * - Officers (P1.8) and members (P1.9): an officer who is a member is one of this SACCO's current members and an
  *   adult (Coop s.13), and holding an office makes the member an insider (loan routing, guarantor rules).
+ * - Approvals (P1.10): the P1 executors, and a month never closes with a request from it still waiting.
  */
 final class SaccoModule
 {
+    /** The maker-checker actions of P1 (04 §7); withdrawal and product_terms_change register with savings (P1.12, AK-62). */
+    public const EXECUTORS = [
+        Approvals\ReversalExecutor::class, Approvals\ManualJournalExecutor::class, Approvals\PeriodCloseExecutor::class, Approvals\PeriodReopenExecutor::class,
+        Approvals\LedgerAccountCreateExecutor::class, Approvals\MemberKycExecutor::class, Approvals\HeldReceiptAllocationExecutor::class,
+    ];
+
     public static function boot(): void
     {
+        foreach (self::EXECUTORS as $class) {
+            SaccoApprovals::register(new $class());
+        }
+        Ledger\CloseChecks::register('approvals', function (int $companyId, \App\Models\SaccoPeriod $period) {
+            $open = SaccoApprovals::openIn($companyId, $period);
+            if ($open > 0) {
+                throw BusinessRuleException::make('approvals_pending', "{$open} request(s) from ".$period->label().' still wait for a decision: approve, reject or cancel them first.');
+            }
+        });
         OfficerService::check('member', function (int $companyId, array $data) {
             if (empty($data['member_id'])) {
                 return;

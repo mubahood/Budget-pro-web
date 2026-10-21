@@ -79,6 +79,8 @@ class SchemaIntegrity
         ['sacco_member_documents', 'member_id', 'sacco_members', 'restrict'],
         ['sacco_member_documents', 'file_id', 'files', 'restrict'],
         ['sacco_member_logins', 'member_id', 'sacco_members', 'restrict'],
+        ['sacco_approvals', 'company_id', 'companies', 'restrict'],
+        ['sacco_approval_votes', 'approval_id', 'sacco_approvals', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -102,6 +104,8 @@ class SchemaIntegrity
         ['sacco_members', 'kind', ['individual', 'group', 'institution']],
         ['sacco_member_relations', 'role', ['nominee', 'next_of_kin']],
         ['sacco_member_documents', 'type', ['national_id', 'passport', 'photo', 'signature', 'application', 'nomination', 'other']],
+        ['sacco_approvals', 'status', ['pending', 'approved', 'rejected', 'cancelled', 'expired', 'executed']],
+        ['sacco_approval_votes', 'decision', ['approve', 'reject']],
         ['sacco_officers', 'position', ['chairperson', 'vice_chair', 'treasurer', 'secretary', 'manager', 'board_member', 'loans_committee', 'supervisory', 'key_holder', 'money_counter', 'teller', 'custom']],
     ];
 
@@ -131,6 +135,8 @@ class SchemaIntegrity
         'sacco_members' => \App\Models\SaccoMember::class,
         'sacco_member_relations' => \App\Models\SaccoMemberRelation::class,
         'sacco_member_documents' => \App\Models\SaccoMemberDocument::class,
+        'sacco_approvals' => \App\Models\SaccoApproval::class,
+        'sacco_approval_votes' => \App\Models\SaccoApprovalVote::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */
