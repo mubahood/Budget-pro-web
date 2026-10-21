@@ -40,7 +40,7 @@ class ConcurrentLoanMoneyTest extends TestCase
             DB::reconnect();
             $cid = $this->companyId;
             DB::statement('SET @sacco_ledger_purge = 1');
-            foreach (['sacco_loan_repayments', 'sacco_loan_changes', 'sacco_loan_schedule_lines', 'sacco_loan_guarantors', 'sacco_loans', 'sacco_loan_products', 'sacco_transactions',
+            foreach (['sacco_provision_runs', 'sacco_payouts', 'sacco_member_exits', 'sacco_loan_votes', 'sacco_loan_documents', 'sacco_loan_collateral', 'sacco_loan_repayments', 'sacco_loan_changes', 'sacco_loan_schedule_lines', 'sacco_loan_guarantors', 'sacco_loans', 'sacco_loan_products', 'sacco_transactions', 'sacco_share_accounts',
                 'sacco_approval_votes', 'sacco_approvals', 'sacco_journal_lines', 'sacco_journal_entries', 'sacco_account_balances', 'sacco_period_balances', 'sacco_periods',
                 'sacco_ledger_heads', 'sacco_savings_accounts', 'sacco_savings_product_versions', 'sacco_savings_products', 'sacco_members', 'sacco_settings', 'message_log',
                 'number_sequences', 'audit_logs', 'company_members', 'financial_categories'] as $table) {

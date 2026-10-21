@@ -87,7 +87,7 @@ final class Guarantors
         return ['sacco' => $settings->short_name, 'borrower' => $borrower->first_name, 'guaranteed_minor' => (int) $g->guaranteed_minor,
             'loan_minor' => (int) ($loan->approved_minor ?? $loan->applied_minor), 'currency' => $loan->currency, 'term' => $terms->term, 'frequency' => $terms->frequency,
             'status' => $g->consent_status, 'expires_at' => $g->token_expires_at?->toIso8601String(),
-            'liability' => 'If '.$borrower->first_name.' does not repay, the SACCO may recover up to the amount you guarantee from your savings and other money you hold in the SACCO (Cooperative Societies Act s.55AK). Your savings stay yours, but this amount is held and cannot be withdrawn until the loan is repaid or you are released.'];
+            'liability' => 'If '.$borrower->first_name.' does not repay, the SACCO may recover up to the amount you guarantee from your savings and other money you hold in the SACCO. Your savings stay yours, but this amount is held and cannot be withdrawn until the loan is repaid or you are released.'];
     }
 
     /** Send a fresh code to the guarantor's phone for the public page. @return array{sent: bool, sent_to: ?string} */
@@ -253,8 +253,8 @@ final class Guarantors
         if (! in_array($guarantor->status, ['active', 'dormant'], true)) {
             throw BusinessRuleException::make('guarantor_not_allowed', "A member who is {$guarantor->status} cannot guarantee a loan.");
         }
-        if (OfficerService::memberHoldsOffice($cid, (int) $guarantor->id)) {
-            throw BusinessRuleException::make('guarantor_not_allowed', 'Officers, staff and board members may not guarantee loans (Cooperative Societies Act s.55AP(3)).');
+        if (LoanBooks::strict($cid) && OfficerService::memberHoldsOffice($cid, (int) $guarantor->id)) {
+            throw BusinessRuleException::make('guarantor_not_allowed', 'Officers, staff and board members may not guarantee loans.');
         }
         $product = SaccoLoanProduct::withoutGlobalScopes()->where('company_id', $cid)->findOrFail($loan->product_id);
         $exposure = self::exposure($cid, (int) $guarantor->id);

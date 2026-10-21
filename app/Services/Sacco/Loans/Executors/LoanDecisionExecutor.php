@@ -70,8 +70,8 @@ final class LoanDecisionExecutor extends BaseExecutor implements ChecksChecker, 
         SaccoAccess::authorize($checker, 'sacco_approve');
         $cid = (int) $approval->company_id;
         $loan = LoanBooks::find($cid, (int) $approval->payload['loan_id']);
-        if ($loan->is_insider) {
-            throw BusinessRuleException::make('insider_to_committee', 'An insider\'s loan goes to the committee.');
+        if ($loan->is_insider && LoanBooks::strict($cid)) {
+            throw BusinessRuleException::make('insider_to_committee', 'An officer\'s own loan goes to the committee.');
         }
         $limit = (int) SaccoOfficer::withoutGlobalScopes()->where('company_id', $cid)->where('user_id', $checker->id)->activeOn(LoanBooks::today($cid))
             ->max('approval_limit_minor');

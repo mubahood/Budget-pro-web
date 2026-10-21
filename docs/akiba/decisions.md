@@ -884,3 +884,20 @@ approval.**
 - Loan messages use SaccoNotices' purpose families (`sacco_receipt`, `sacco_notice`: unless opted out;
   `sacco_reminder`: also needs consent) and the same channel rule (SMS within the plan's allowance, else WhatsApp).
   English only for now; Kiswahili joins when the loan texts enter `SaccoMessages`' catalogue.
+
+**AK-90: The law's checks on loans apply only to a licensed SACCO; refusals speak plainly (the owner).**
+
+- `LoanBooks::strict($companyId)` is true when the SACCO has an UMRA licence number (the same test as
+  `SaccoRules::strict`). Only then are these refused: flat interest in office mode, interest and fees above 100 % a
+  year, a penalty above half the monthly rate, a cooling-off under 5 working days or a cancellation fee above 2 %
+  (SI 108 reg. 4, 9, 11); an ID, passport, ATM card, PIN, passbook or transfer deed as collateral and a sale before 60
+  days after the demand (reg. 8); an officer, employee or board member as guarantor (Coop s.55AP(3)); an insider's
+  loan decided within a delegated limit (SI 51 reg. 38); signing without a witness (reg. 5); a reschedule without the
+  borrower's recorded consent (reg. 6); a write-off without a reason (SI 51 reg. 44); and the single-borrower limit
+  (Coop s.55AN(3)).
+- An unlicensed SACCO keeps its own rules: its products' terms, cooling-off and charges are what it sets, as group
+  mode already could. What is never a law but arithmetic or the books stays for everyone: Σ principal = the loan,
+  one open loan, the savings multiple, guarantee capacity, maker ≠ checker, the NPL cap on suspense, no early-
+  repayment fee (Akiba never charges one), a receipt for every payment.
+- Refusal messages never cite a law, regulation or decision number; the citations stay in the code's comments and
+  these docs.

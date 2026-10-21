@@ -32,13 +32,13 @@ use Illuminate\Support\Str;
  */
 final class WriteOffs
 {
-    public function request(Company $company, int $loanId, User $maker, string $reason, ?string $uuid = null): SaccoApproval
+    public function request(Company $company, int $loanId, User $maker, ?string $reason = null, ?string $uuid = null): SaccoApproval
     {
         SaccoAccess::authorize($maker, 'sacco_loans');
-        if (blank($reason)) {
-            throw BusinessRuleException::make('reason_required', 'Say why the loan is written off (SI 51 reg. 44).');
-        }
         $cid = (int) $company->id;
+        if (blank($reason) && LoanBooks::strict($cid)) {
+            throw BusinessRuleException::make('reason_required', 'Say why the loan is written off.');
+        }
         if (LoanBooks::settings($cid)->isGroup()) {
             throw BusinessRuleException::make('not_in_group_mode', 'A savings group settles a bad loan at share-out, not by write-off.');
         }
@@ -46,7 +46,7 @@ final class WriteOffs
         LoanBooks::assertStatus($loan, ['active'], 'written off');
 
         return (new SaccoApprovals())->request($company, 'write_off', ['loan_id' => (int) $loan->id, 'loan_no' => $loan->loan_no, 'member_id' => (int) $loan->member_id,
-            'reason' => mb_substr($reason, 0, 255), 'classification' => $loan->classification, 'days_past_due' => (int) $loan->days_past_due,
+            'reason' => mb_substr((string) $reason, 0, 255), 'classification' => $loan->classification, 'days_past_due' => (int) $loan->days_past_due,
             'amount_minor' => (int) $loan->principal_outstanding_minor + (int) $loan->interest_due_minor + (int) $loan->penalty_due_minor + (int) $loan->fees_due_minor], $maker, $uuid ?? (string) Str::uuid());
     }
 

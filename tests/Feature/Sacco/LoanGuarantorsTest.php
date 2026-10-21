@@ -57,7 +57,7 @@ class LoanGuarantorsTest extends ApiTestCase
         $token = Str::afterLast($ga->consent_link, '/');
         $notice = Guarantors::notice($token);
         $this->assertSame([100_000, 300_000, 'requested'], [$notice['guaranteed_minor'], $notice['loan_minor'], $notice['status']]);
-        $this->assertStringContainsString('s.55AK', $notice['liability']);
+        $this->assertStringContainsString('may recover up to the amount you guarantee', $notice['liability']);
         $this->assertSame('link_invalid', $this->errorCode(fn () => Guarantors::notice('nonsense-token-that-is-long-enough-to-check-xxx')));
         $g->requestCode($token);
         $this->assertNotSame('none', $this->errorCode(fn () => $g->consentByLink($token, '999999')), 'a wrong code consents to nothing');

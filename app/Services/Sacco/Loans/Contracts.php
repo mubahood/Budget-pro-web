@@ -122,17 +122,18 @@ final class Contracts
         SaccoAccess::authorize($by, 'sacco_loans');
         $cid = (int) $company->id;
         $witness = trim((string) ($data['witness_name'] ?? ''));
-        if ($witness === '') {
-            throw BusinessRuleException::make('witness_required', 'A third party witnesses the signing (Lending Conditions Regulations 2024, reg. 5).');
+        $strict = LoanBooks::strict($cid);
+        if ($witness === '' && $strict) {
+            throw BusinessRuleException::make('witness_required', 'Someone other than the borrower witnesses the signing: give their name.');
         }
 
-        return DB::transaction(function () use ($cid, $loanId, $by, $data, $witness) {
+        return DB::transaction(function () use ($cid, $loanId, $by, $data, $witness, $strict) {
             $loan = LoanBooks::lock($cid, $loanId);
             LoanBooks::assertStatus($loan, ['approved'], 'signed');
             $contract = SaccoLoanDocument::withoutGlobalScopes()->where('loan_id', $loan->id)->where('type', 'contract')->orderByDesc('id')->first()
                 ?? throw BusinessRuleException::make('contract_required', 'Print the contract and key facts first: the member signs what they were shown.');
             $member = SaccoMember::withoutGlobalScopes()->findOrFail($loan->member_id);
-            if (mb_strtolower($witness) === mb_strtolower((string) $member->full_name)) {
+            if ($strict && mb_strtolower($witness) === mb_strtolower((string) $member->full_name)) {
                 throw BusinessRuleException::make('witness_required', 'The witness is someone other than the borrower.');
             }
             $signedOn = Carbon::parse($data['signed_on'] ?? LoanBooks::today($cid))->startOfDay();
@@ -142,8 +143,8 @@ final class Contracts
             $days = $loan->loanTerms()->coolingOffWorkingDays;
             SaccoLoanDocument::create(['company_id' => $cid, 'loan_id' => $loan->id, 'type' => 'signed_contract', 'file_id' => $data['signed_file_id'] ?? null,
                 'path' => $contract->path, 'sha256' => $contract->sha256, 'schedule_version' => $contract->schedule_version, 'generated_at' => $contract->generated_at,
-                'signed_by_member_at' => $signedOn, 'witness_name' => mb_substr($witness, 0, 150), 'witness_phone_e164' => $data['witness_phone'] ?? null, 'created_by_id' => $by->id]);
-            $loan->update(['status' => 'signed', 'signed_at' => now(), 'signed_on' => $signedOn->toDateString(), 'witness_name' => mb_substr($witness, 0, 150),
+                'signed_by_member_at' => $signedOn, 'witness_name' => $witness === '' ? null : mb_substr($witness, 0, 150), 'witness_phone_e164' => $data['witness_phone'] ?? null, 'created_by_id' => $by->id]);
+            $loan->update(['status' => 'signed', 'signed_at' => now(), 'signed_on' => $signedOn->toDateString(), 'witness_name' => $witness === '' ? null : mb_substr($witness, 0, 150),
                 'witness_phone_e164' => $data['witness_phone'] ?? null, 'cooling_off_ends_on' => WorkingDays::add($signedOn, $days, 'UG')->toDateString(), 'updated_by_id' => $by->id]);
             SaccoAudit::record('sacco.loan.signed', $loan, $cid, ['witness' => $witness, 'contract_sha256' => $contract->sha256], (int) $by->id);
 

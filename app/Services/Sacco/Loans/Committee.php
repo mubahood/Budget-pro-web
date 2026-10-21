@@ -206,8 +206,8 @@ final class Committee
         SaccoAccess::authorize($maker, 'sacco_loans');
         $loan = LoanBooks::find($cid, $loanId);
         LoanBooks::assertStatus($loan, $appeal ? ['rejected'] : ['appraised'], $appeal ? 'appealed' : 'sent for a decision');
-        if ($route === 'delegated' && $loan->is_insider) {
-            throw BusinessRuleException::make('insider_to_committee', 'An insider\'s loan goes to the committee, with the insider out of the room (SI 51 reg. 38).');
+        if ($route === 'delegated' && $loan->is_insider && LoanBooks::strict($cid)) {
+            throw BusinessRuleException::make('insider_to_committee', 'An officer\'s own loan goes to the committee, with the officer out of the room.');
         }
         if ($route !== 'delegated') {
             $this->tally($loan, self::ROUNDS[$route]); // refuses an empty committee or board

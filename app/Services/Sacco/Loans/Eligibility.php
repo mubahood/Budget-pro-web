@@ -88,9 +88,9 @@ final class Eligibility
                 $policy = (string) $settings->employee_loans_policy;
                 $ok = $product->is_salary_advance || $policy === 'committee';
                 $add('employee_loan_policy', $ok, true, $ok ? 'An employee\'s loan: '.($product->is_salary_advance ? 'a salary advance.' : 'the committee decides (the SACCO\'s policy).')
-                    : 'An employee may take a salary advance only (the SACCO\'s policy, AK-43).');
+                    : 'An employee may take a salary advance only (the SACCO\'s policy).');
             }
-            if (! $settings->isGroup()) {
+            if (! $settings->isGroup() && LoanBooks::strict($cid)) {
                 $cost = SaccoLoanProductRules::costPerYearBp($amount, $terms, (string) $loan->currency);
                 $add('cost_cap_exceeded', $cost <= SaccoLoanProductRules::MAX_COST_PER_YEAR_BP, true, 'Interest and fees cost '.bcdiv((string) $cost, '100', 2).' % of the principal a year (at most 100 %).',
                     ['value' => $cost, 'limit' => SaccoLoanProductRules::MAX_COST_PER_YEAR_BP]);
@@ -119,7 +119,7 @@ final class Eligibility
             $liquid = self::liquidity($cid);
             $add('liquidity', $liquid >= $amount || $loan->disbursement_channel === 'savings', $stage === 'disburse', "Cash, bank and mobile money on hand: {$liquid}.", ['value' => $amount, 'limit' => $liquid]);
         }
-        if ($at('approve') && ! $settings->isGroup()) {
+        if ($at('approve') && ! $settings->isGroup() && LoanBooks::strict($cid)) {
             $exposure = $amount + (int) SaccoLoan::withoutGlobalScopes()->where('company_id', $cid)->where('member_id', $member->id)->whereIn('status', SaccoLoan::OPEN)
                 ->where('id', '!=', $loan->id)->when($loan->top_up_of_loan_id !== null, fn ($q) => $q->where('id', '!=', $loan->top_up_of_loan_id))->sum('principal_outstanding_minor');
             $limit = self::singleBorrowerLimit($cid);

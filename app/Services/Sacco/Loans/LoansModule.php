@@ -60,12 +60,12 @@ final class LoansModule
     {
         $own = SaccoLoan::withoutGlobalScopes()->where('company_id', $companyId)->where('member_id', $account->member_id)->where('status', 'active')->where('days_past_due', '>', 0)->value('loan_no');
         if ($own !== null) {
-            return "The member's loan {$own} is in arrears (s.55AK first charge).";
+            return "The member's loan {$own} is in arrears.";
         }
         $guaranteed = \App\Models\SaccoLoanGuarantor::withoutGlobalScopes()->from('sacco_loan_guarantors as g')->join('sacco_loans as l', 'l.id', '=', 'g.loan_id')
             ->where('g.company_id', $companyId)->where('g.guarantor_member_id', $account->member_id)->where('g.consent_status', 'consented')
             ->where('l.status', 'active')->where('l.days_past_due', '>', 0)->value('l.loan_no');
 
-        return $guaranteed !== null ? "A loan the member guarantees ({$guaranteed}) is in arrears (s.55AK)." : null;
+        return $guaranteed !== null ? "A loan the member guarantees ({$guaranteed}) is in arrears." : null;
     }
 }

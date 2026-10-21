@@ -48,18 +48,19 @@ final class Restructure
         $cid = (int) $company->id;
         $loan = LoanBooks::find($cid, $loanId);
         LoanBooks::assertStatus($loan, ['active'], 'rescheduled');
-        if (blank($data['consent_signed_on'] ?? null) || (blank($data['consent_file_id'] ?? null) && blank($data['consent_witness'] ?? null))) {
-            throw BusinessRuleException::make('consent_required', 'A loan is changed only with the borrower\'s written consent (Lending Conditions Regulations 2024, reg. 6): record the signed consent.');
+        if (LoanBooks::strict($cid) && (blank($data['consent_signed_on'] ?? null) || (blank($data['consent_file_id'] ?? null) && blank($data['consent_witness'] ?? null)))) {
+            throw BusinessRuleException::make('consent_required', 'Record the borrower\'s signed consent to the new terms first.');
         }
         if (blank($data['reason'] ?? null)) {
             throw BusinessRuleException::make('reason_required', 'Say why the loan is rescheduled.');
         }
+        $data['consent_signed_on'] = $data['consent_signed_on'] ?? null;
         $term = (int) ($data['term'] ?? 0);
         $terms = $loan->loanTerms()->with($term, (int) ($data['principal_grace_periods'] ?? 0)); // validates the term and the grace
 
         return (new SaccoApprovals())->request($company, 'reschedule', ['loan_id' => (int) $loan->id, 'loan_no' => $loan->loan_no, 'member_id' => (int) $loan->member_id,
             'term' => $terms->term, 'principal_grace_periods' => $terms->principalGracePeriods, 'first_due_on' => $data['first_due_on'] ?? null, 'on' => $data['on'] ?? null,
-            'reason' => mb_substr((string) $data['reason'], 0, 255), 'consent_signed_on' => (string) $data['consent_signed_on'], 'consent_file_id' => $data['consent_file_id'] ?? null,
+            'reason' => mb_substr((string) $data['reason'], 0, 255), 'consent_signed_on' => $data['consent_signed_on'], 'consent_file_id' => $data['consent_file_id'] ?? null,
             'consent_witness' => $data['consent_witness'] ?? null, 'amount_minor' => (int) $loan->principal_outstanding_minor], $maker, $uuid ?? (string) Str::uuid());
     }
 
@@ -111,7 +112,7 @@ final class Restructure
         $change = SaccoLoanChange::create(['company_id' => $cid, 'loan_id' => $loan->id, 'kind' => 'reschedule', 'from_version' => $from, 'to_version' => $to, 'before' => $before,
             'after' => ['term' => $terms->term, 'first_due_on' => $first->toDateString(), 'maturity_on' => end($lines)->dueOn, 'instalment_minor' => $lines[min(count($lines) - 1, $terms->principalGracePeriods)]->instalment(),
                 'interest_to_day_minor' => $toDay, 'consent_witness' => $p['consent_witness'] ?? null],
-            'amount_minor' => $principal, 'reason' => $p['reason'], 'approval_id' => $approval->id, 'borrower_consented_at' => Carbon::parse($p['consent_signed_on']),
+            'amount_minor' => $principal, 'reason' => $p['reason'], 'approval_id' => $approval->id, 'borrower_consented_at' => $p['consent_signed_on'] !== null ? Carbon::parse($p['consent_signed_on']) : null,
             'effective_on' => $on->toDateString(), 'created_by_id' => $checker->id]);
         SaccoAudit::record('sacco.loan.rescheduled', $loan, $cid, ['from' => $from, 'to' => $to, 'term' => $terms->term], (int) $checker->id);
 

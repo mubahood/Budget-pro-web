@@ -28,10 +28,10 @@ final class Collateral
         SaccoAccess::authorize($by, 'sacco_loans');
         $cid = (int) $company->id;
         $type = (string) ($data['type'] ?? '');
-        if (in_array($type, SaccoLoanProductRules::FORBIDDEN_COLLATERAL, true)) {
-            throw BusinessRuleException::make('collateral_not_allowed', 'A national ID, passport, ATM card or PIN, savings passbook or a signed transfer deed may never be held as security (reg. 8).');
+        if (LoanBooks::strict($cid) && in_array($type, SaccoLoanProductRules::FORBIDDEN_COLLATERAL, true)) {
+            throw BusinessRuleException::make('collateral_not_allowed', 'A national ID, passport, ATM card or PIN, savings passbook or a signed transfer deed cannot be held as security.');
         }
-        if (! in_array($type, SaccoLoanProductRules::COLLATERAL_TYPES, true)) {
+        if (! in_array($type, SaccoLoanProductRules::COLLATERAL_TYPES, true) && ! in_array($type, SaccoLoanProductRules::FORBIDDEN_COLLATERAL, true)) {
             throw BusinessRuleException::make('invalid_collateral', "\"{$type}\" is not a kind of security the books know.");
         }
         $value = $data['value_minor'] ?? null;
@@ -74,8 +74,8 @@ final class Collateral
         SaccoAccess::authorize($by, 'sacco_loans');
 
         return $this->change($company, $collateralId, function (SaccoLoanCollateral $c) use ($soldOn, $realisedMinor) {
-            if ($c->demand_notice_on === null || $c->demand_notice_on->copy()->addDays(self::DEMAND_DAYS)->gt(Carbon::parse($soldOn))) {
-                throw BusinessRuleException::make('demand_notice_period', 'Security may be sold only 60 days after the written demand (Lending Conditions Regulations 2024, reg. 8).',
+            if (LoanBooks::strict((int) $c->company_id) && ($c->demand_notice_on === null || $c->demand_notice_on->copy()->addDays(self::DEMAND_DAYS)->gt(Carbon::parse($soldOn)))) {
+                throw BusinessRuleException::make('demand_notice_period', 'Security may be sold only 60 days after the written demand.',
                     ['earliest' => $c->demand_notice_on?->copy()->addDays(self::DEMAND_DAYS)->toDateString()]);
             }
 

@@ -31,7 +31,7 @@ final class LoanProducts
             $data = array_merge(SaccoLoanProductRules::preset((string) $data['preset'], $settings->currency), array_filter($data, fn ($v) => $v !== null));
         }
         $data = $this->validated($data, true);
-        SaccoLoanProductRules::check($settings->mode, $data, $settings->currency);
+        SaccoLoanProductRules::check($settings->mode, $data, $settings->currency, LoanBooks::strict($companyId));
 
         return DB::transaction(function () use ($companyId, $data, $byUserId, $settings) {
             if (SaccoLoanProduct::withoutGlobalScopes()->where('company_id', $companyId)->where('code', $data['code'])->exists()) {
@@ -58,7 +58,7 @@ final class LoanProducts
             $product = SaccoLoanProduct::withoutGlobalScopes()->where('company_id', $companyId)->lockForUpdate()->find($productId)
                 ?? throw BusinessRuleException::make('product_not_found', 'That loan product is not in this SACCO.');
             $merged = array_merge($product->only(array_filter(array_keys(SaccoLoanProductRules::fields()), fn ($k) => ! str_contains($k, '.'))), $changes);
-            SaccoLoanProductRules::check($settings->mode, $merged, $settings->currency);
+            SaccoLoanProductRules::check($settings->mode, $merged, $settings->currency, LoanBooks::strict($companyId));
             $termChanged = false;
             foreach (SaccoLoanProductRules::TERM_FIELDS as $f) {
                 if (array_key_exists($f, $changes) && $changes[$f] != $product->{$f}) {

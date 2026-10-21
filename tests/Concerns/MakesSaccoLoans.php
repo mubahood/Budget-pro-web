@@ -31,8 +31,12 @@ trait MakesSaccoLoans
     /** @var array<int, array{officer: User, manager: User}> per company: the loans officer and a manager with a large limit */
     protected array $loanStaff = [];
 
-    /** @return array{0: Company, 1: User} the SACCO and its owner (seated as chairperson) */
-    protected function loanSacco(string $mode = 'office', string $name = 'Loans SACCO'): array
+    /**
+     * A licensed SACCO by default (the law's checks apply, AK-90); $licensed = false for one without an UMRA licence.
+     *
+     * @return array{0: Company, 1: User} the SACCO and its owner (seated as chairperson)
+     */
+    protected function loanSacco(string $mode = 'office', string $name = 'Loans SACCO', bool $licensed = true): array
     {
         if (! Plan::where('slug', 'akiba-enterprise')->exists()) {
             $this->seed(AkibaPlanSeeder::class);
@@ -41,7 +45,7 @@ trait MakesSaccoLoans
         $company = Company::find($t['company_id']);
         Subscription::where('company_id', $company->id)->update(['plan_id' => Plan::where('slug', 'akiba-enterprise')->value('id')]);
         $owner = User::withoutGlobalScopes()->find($t['user_id']);
-        app(SaccoSetupService::class)->setup($company->fresh(), ['mode' => $mode, 'legal_name' => $name.' '.uniqid()], $owner);
+        app(SaccoSetupService::class)->setup($company->fresh(), ['mode' => $mode, 'legal_name' => $name.' '.uniqid()] + ($licensed ? ['licence_no' => 'T4/'.random_int(1000, 9999)] : []), $owner);
 
         return [$company->fresh(), $owner];
     }

@@ -12,8 +12,9 @@ use Illuminate\Validation\Rule;
 
 /**
  * A loan product's fields and the law it must keep (the CustomerRules pattern; 02 §1.4 SI 108 of 2024, AK-07, AK-26,
- * AK-28). In office mode every guard holds; a savings group in group mode is a self-help group, which SI 108 exempts,
- * so flat interest and a shorter cooling-off are allowed there, but a group's chart has no penalty account (AK-58).
+ * AK-28). For a licensed SACCO in office mode every guard holds (AK-90); a savings group (a self-help group, which SI
+ * 108 exempts) and an unlicensed SACCO may use flat interest, a shorter cooling-off and their own caps, but a group's
+ * chart has no penalty account (AK-58).
  *
  * | Guard | Code | Law |
  * |---|---|---|
@@ -91,12 +92,12 @@ final class SaccoLoanProductRules
      *
      * @param  array<string, mixed>  $p
      */
-    public static function check(string $mode, array $p, string $currency): void
+    public static function check(string $mode, array $p, string $currency, bool $strict = true): void
     {
         $method = (string) $p['interest_method'];
         $frequency = (string) ($p['repayment_frequency'] ?? 'monthly');
-        if ($mode === 'office' && $method === 'flat') {
-            throw BusinessRuleException::make('flat_interest_not_allowed', 'A SACCO charges interest on the reducing balance (Lending Conditions Regulations 2024, reg. 9). Flat interest is for savings groups only.');
+        if ($mode === 'office' && $strict && $method === 'flat') {
+            throw BusinessRuleException::make('flat_interest_not_allowed', 'A licensed SACCO charges interest on the reducing balance, not flat.');
         }
         if ((int) $p['min_term'] > (int) $p['max_term']) {
             throw BusinessRuleException::make('invalid_product', 'The shortest term cannot be longer than the longest.');
@@ -108,10 +109,10 @@ final class SaccoLoanProductRules
             throw BusinessRuleException::make('invalid_product', 'The interest-only start must be shorter than the shortest term.');
         }
         foreach ((array) ($p['collateral_types'] ?? []) as $type) {
-            if (in_array($type, self::FORBIDDEN_COLLATERAL, true)) {
-                throw BusinessRuleException::make('collateral_not_allowed', 'A national ID, passport, ATM card or PIN, savings passbook or a signed transfer deed may never be held as security (reg. 8).', ['type' => $type]);
+            if ($strict && in_array($type, self::FORBIDDEN_COLLATERAL, true)) {
+                throw BusinessRuleException::make('collateral_not_allowed', 'A national ID, passport, ATM card or PIN, savings passbook or a signed transfer deed cannot be held as security.', ['type' => $type]);
             }
-            if (! in_array($type, self::COLLATERAL_TYPES, true)) {
+            if (! in_array($type, self::COLLATERAL_TYPES, true) && ! in_array($type, self::FORBIDDEN_COLLATERAL, true)) {
                 throw BusinessRuleException::make('invalid_product', "\"{$type}\" is not a kind of security the books know.", ['type' => $type]);
             }
         }
@@ -126,24 +127,24 @@ final class SaccoLoanProductRules
         if ($mode === 'group' && $terms->penaltyRateBp > 0) {
             throw BusinessRuleException::make('not_in_group_mode', 'A savings group charges fines, not penalty interest: set the penalty to 0.');
         }
-        if ($terms->penaltyRateBp > $penaltyCap) {
-            throw BusinessRuleException::make('penalty_rate_too_high', 'The penalty may be at most half the monthly interest rate ('.Rate::bp($penaltyCap)->percentString().' a month), on overdue principal only (reg. 4(5)).',
+        if ($strict && $terms->penaltyRateBp > $penaltyCap) {
+            throw BusinessRuleException::make('penalty_rate_too_high', 'The penalty may be at most half the monthly interest rate ('.Rate::bp($penaltyCap)->percentString().' a month), on overdue principal only.',
                 ['max_bp' => $penaltyCap]);
         }
-        if ($mode !== 'office') {
-            return;
+        if ($mode !== 'office' || ! $strict) {
+            return; // a savings group (a self-help group) or an unlicensed SACCO keeps its own rules (AK-90)
         }
         if ($terms->coolingOffWorkingDays < self::MIN_COOLING_OFF_DAYS) {
-            throw BusinessRuleException::make('cooling_off_too_short', 'A borrower may cancel for at least 5 working days after signing (reg. 11).');
+            throw BusinessRuleException::make('cooling_off_too_short', 'A borrower may cancel for at least 5 working days after signing.');
         }
         if ($terms->cancellationFeeBp > self::MAX_CANCELLATION_FEE_BP) {
-            throw BusinessRuleException::make('cancellation_fee_too_high', 'The cancellation fee is at most 2 % of the loan (reg. 11).');
+            throw BusinessRuleException::make('cancellation_fee_too_high', 'The cancellation fee is at most 2 % of the loan.');
         }
         foreach ([(int) $p['min_amount_minor'], (int) $p['max_amount_minor']] as $amount) {
             foreach (array_unique([(int) $p['min_term'], (int) $p['max_term']]) as $term) {
                 $cost = self::costPerYearBp($amount, $terms->with($term), $currency);
                 if ($cost > self::MAX_COST_PER_YEAR_BP) {
-                    throw BusinessRuleException::make('cost_cap_exceeded', 'Interest and all fees may not pass 100 % of the principal a year (reg. 4(2)): a loan of '
+                    throw BusinessRuleException::make('cost_cap_exceeded', 'Interest and all fees may not pass 100 % of the principal a year: a loan of '
                         .Amount::of($amount, $currency)->toMajorString()." over {$term} instalments would cost ".bcdiv((string) $cost, '100', 2).' % a year.',
                         ['cost_bp' => $cost, 'amount_minor' => $amount, 'term' => $term]);
                 }

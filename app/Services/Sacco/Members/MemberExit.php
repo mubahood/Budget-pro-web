@@ -51,7 +51,7 @@ final class MemberExit
         if ($shares !== null && (int) $shares->shares_count > 0) {
             $to = isset($data['shares_to_member_id']) ? SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->whereIn('status', ['active', 'dormant'])->find((int) $data['shares_to_member_id']) : null;
             if ($to === null || (int) $to->id === (int) $member->id) {
-                throw BusinessRuleException::make('shares_buyer_required', 'Name the member who takes the shares (the Share Transfer Fund buys back from P4).');
+                throw BusinessRuleException::make('shares_buyer_required', 'Name the member who takes the shares.');
             }
             $plan['shares'] = ['count' => (int) $shares->shares_count, 'amount_minor' => (int) $shares->balance_minor, 'to_member_id' => (int) $to->id, 'to_member_no' => $to->member_no];
         }
