@@ -9665,6 +9665,123 @@
                     }
                 },
                 {
+                    "name": "GET sacco/payouts?status&purpose&member_id */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/payouts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "payouts"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/payouts/{id} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/payouts/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "payouts",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/payouts/{id}/resolve {status: successful|failed, note} (sacco_approve, not the maker): after a day without an answer. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/payouts/:id/resolve",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "payouts",
+                                ":id",
+                                "resolve"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"status\": \"successful\",\n    \"note\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/payouts/{id}/retry (sacco_disburse): the same idempotency key, so never a second payment. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/payouts/:id/retry",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "payouts",
+                                ":id",
+                                "retry"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/periods */",
                     "request": {
                         "method": "GET",

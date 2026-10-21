@@ -24795,6 +24795,277 @@
                 ]
             }
         },
+        "/sacco/payouts": {
+            "get": {
+                "tags": [
+                    "Sacco"
+                ],
+                "summary": "GET sacco/payouts?status&purpose&member_id */",
+                "operationId": "get_sacco_payouts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role, plan or module does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "x-module": "sacco",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/sacco/payouts/{id}": {
+            "get": {
+                "tags": [
+                    "Sacco"
+                ],
+                "summary": "GET sacco/payouts/{id} */",
+                "operationId": "get_sacco_payouts_id",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role, plan or module does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "x-module": "sacco",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/sacco/payouts/{id}/resolve": {
+            "post": {
+                "tags": [
+                    "Sacco"
+                ],
+                "summary": "POST sacco/payouts/{id}/resolve {status: successful|failed, note} (sacco_approve, not the maker): after a day without an answer. */",
+                "operationId": "post_sacco_payouts_id_resolve",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role, plan or module does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "x-module": "sacco",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "successful",
+                                            "failed"
+                                        ]
+                                    },
+                                    "note": {
+                                        "type": "string",
+                                        "maxLength": 200
+                                    }
+                                },
+                                "required": [
+                                    "status",
+                                    "note"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
+        "/sacco/payouts/{id}/retry": {
+            "post": {
+                "tags": [
+                    "Sacco"
+                ],
+                "summary": "POST sacco/payouts/{id}/retry (sacco_disburse): the same idempotency key, so never a second payment. */",
+                "operationId": "post_sacco_payouts_id_retry",
+                "responses": {
+                    "201": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role, plan or module does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ],
+                "x-module": "sacco",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/DeviceId"
+                    }
+                ]
+            }
+        },
         "/sacco/periods": {
             "get": {
                 "tags": [

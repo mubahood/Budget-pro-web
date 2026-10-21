@@ -94,6 +94,8 @@ class ApiPermissionMap
         // Akiba Ledger P3: money channels (collections, payouts), check-off, tills, statement imports, messaging.
         [['POST'], '#^sacco/collections/setup$#', 'sacco_settings'],
         [['POST'], '#^sacco/collections(/\d+/check)?$#', 'sacco_teller'],
+        [['POST'], '#^sacco/payouts/\d+/retry$#', 'sacco_disburse'],
+        [['POST'], '#^sacco/payouts/\d+/resolve$#', 'sacco_approve'],
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],

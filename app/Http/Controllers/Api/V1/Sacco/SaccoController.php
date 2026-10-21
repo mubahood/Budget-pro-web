@@ -23,7 +23,7 @@ abstract class SaccoController extends Controller
 
     /** Refusal codes that mean "not in this SACCO". */
     public const NOT_FOUND = ['member_not_found', 'account_not_found', 'product_not_found', 'transaction_not_found', 'approval_not_found', 'entry_not_found',
-        'period_not_found', 'officer_not_found', 'not_found', 'relation_not_found', 'unknown_report', 'loan_not_found'];
+        'period_not_found', 'officer_not_found', 'not_found', 'relation_not_found', 'unknown_report', 'loan_not_found', 'payout_not_found'];
 
     protected function company(Request $request): Company
     {

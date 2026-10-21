@@ -930,3 +930,16 @@ approval.**
   closed meanwhile (or a loan paid off) is held in 2150 (Dr 1160) for an officer to allocate, never refused.
 - Amounts are compared in whole minor units; a provider's JSON number is fixed to the currency's decimals at that
   boundary only. A payment for less than asked, another currency or another reference records nothing.
+
+**AK-101: MoMo payouts gain the `flutterwave` driver, tested only against Http::fake (P3.2; extends AK-86).**
+
+- `Payouts\FlutterwavePayouts` speaks the Transfers API through Laravel's Http client: the payout's idempotency key is
+  the transfer `reference`, so a retry can never pay twice, and Flutterwave's "reference already exists" is read as
+  "already sent: ask its status", never as a failure. A network error or 5xx is `unknown` (polled by its reference
+  until the provider gives the transfer id); a 4xx refusal is `failed` (the sent journal is reversed).
+- The driver is used only when `SACCO_PAYOUTS_DRIVER=flutterwave` and `FLW_SECRET_KEY` is set; production stays `off`.
+  In tests the class refuses stray HTTP requests, so only `Http::fake` ever answers.
+- The plan needs `sacco_payouts`. `retry()` (sacco_disburse) sends a queued payout or asks about a sent or unknown one,
+  with the same key. After 24 hours without a final answer, a second officer with sacco_approve (never the one who
+  asked for the payout) settles it by hand with a note of what the provider said: `successful` posts Dr 2160 Cr 1150,
+  `failed` reverses the sent journal. Payouts carry the SACCO's own name on the member's wallet.

@@ -9,6 +9,7 @@
 
 use App\Http\Controllers\Api\V1\Sacco\CollectionController;
 use App\Http\Controllers\Api\V1\Sacco\MemberMoneyController;
+use App\Http\Controllers\Api\V1\Sacco\PayoutController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sacco', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
@@ -17,6 +18,11 @@ Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sa
     Route::post('collections/setup', [CollectionController::class, 'setup'])->middleware('throttle:10,1');
     Route::get('collections/{id}', [CollectionController::class, 'show'])->whereNumber('id');
     Route::post('collections/{id}/check', [CollectionController::class, 'check'])->whereNumber('id')->middleware('throttle:30,1');
+
+    Route::get('payouts', [PayoutController::class, 'index']);
+    Route::get('payouts/{id}', [PayoutController::class, 'show'])->whereNumber('id');
+    Route::post('payouts/{id}/retry', [PayoutController::class, 'retry'])->whereNumber('id')->middleware('throttle:30,1');
+    Route::post('payouts/{id}/resolve', [PayoutController::class, 'resolve'])->whereNumber('id');
 });
 
 Route::prefix('sacco/me')->middleware([\App\Http\Middleware\SaccoMemberAuth::class, 'throttle:60,1'])->group(function () {
