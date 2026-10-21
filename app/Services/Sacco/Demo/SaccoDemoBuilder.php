@@ -1354,9 +1354,8 @@ final class SaccoDemoBuilder
     {
         $out = [];
         foreach (self::WAITING as $step => [$classes, $what]) {
-            if (! $this->available($classes)) {
-                $out[] = "{$step}: {$what}";
-            }
+            // Pending until the step is written, whether or not its service has landed yet.
+            $out[] = $this->available($classes) ? "{$step} (its service exists; write the step): {$what}" : "{$step}: {$what}";
         }
 
         return $out;
