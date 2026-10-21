@@ -3,6 +3,8 @@
 namespace Tests\Feature\Sacco;
 
 use App\Models\Company;
+use App\Models\SaccoApproval;
+use App\Models\SaccoDividendLine;
 use App\Models\SaccoInterestRun;
 use App\Models\SaccoJournalEntry;
 use App\Models\SaccoMember;
@@ -13,9 +15,14 @@ use App\Models\User;
 use App\Services\Sacco\Ledger\ChartOfAccounts;
 use App\Services\Sacco\Ledger\LedgerVerifier;
 use App\Services\Sacco\Ledger\PeriodService;
+use App\Services\Sacco\SaccoApprovals;
 use App\Services\Sacco\SaccoTransactions;
 use App\Services\Sacco\Savings\SavingsAccounts;
 use App\Services\Sacco\Savings\SavingsProducts;
+use App\Services\Sacco\Shares\ShareService;
+use App\Services\Sacco\YearEnd\Appropriation;
+use App\Services\Sacco\YearEnd\Closing;
+use App\Services\Sacco\YearEnd\Dividends;
 use App\Services\Sacco\YearEnd\SavingsInterest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,7 +30,8 @@ use Tests\TestCase;
 
 /**
  * Akiba Ledger P4 money runs (ADR 0009 §9): real processes (pcntl_fork), real locks, no wrapping transaction. Several
- * processes running the same month's savings interest post one accrual and one credit; the books stay sound.
+ * processes running the same month's savings interest post one accrual and one credit; three executing one approved
+ * dividend run pay each member once; the books stay sound.
  */
 class ConcurrentYearEndTest extends TestCase
 {
@@ -151,6 +159,44 @@ class ConcurrentYearEndTest extends TestCase
         $this->assertSame(1, SaccoInterestRun::withoutGlobalScopes()->where('company_id', $cid)->where('kind', 'credit')->count());
         $this->assertSame($entries + 2, SaccoJournalEntry::withoutGlobalScopes()->where('company_id', $cid)->count(), 'one accrual entry and one credit entry');
         $this->assertSame(0, (int) DB::table('sacco_account_balances')->where('ledger_account_id', ChartOfAccounts::id($cid, 'savings.interest_payable'))->value('balance_minor'));
+        $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
+    }
+
+    public function test_three_processes_executing_one_dividend_run_pay_it_once(): void
+    {
+        [$company, $owner] = $this->books(licensed: false); // no Registrar's consent on file: a warning for an unlicensed SACCO
+        $cid = (int) $company->id;
+        (new PeriodService())->ensureAhead($cid, \Illuminate\Support\Carbon::parse((now()->year - 1).'-01-01'), 14);
+        $year = now()->year - 1;
+        $ord = SaccoSavingsProduct::withoutGlobalScopes()->where('company_id', $cid)->where('code', 'ORD')->firstOrFail();
+        foreach ([400_000, 350_000, 250_000] as $i => $shares) {
+            $m = $this->member($company, 'M-98000'.$i);
+            $this->savings($company, $m, $ord, 100_000, "{$year}-02-01");
+            (new ShareService())->purchase($company, ['member_id' => $m->id, 'amount_minor' => $shares, 'channel' => 'cash', 'value_date' => "{$year}-03-01"], $owner, ['entry_date' => "{$year}-03-01"]);
+        }
+        $income = \App\Support\Sacco\Amount::of(5_000_000, 'UGX');
+        (new \App\Services\Sacco\Ledger\PostingService())->post(\App\Services\Sacco\Ledger\JournalDraft::make($cid, 'manual', 'race:income')
+            ->debit(ChartOfAccounts::id($cid, 'bank.main'), $income)->credit(ChartOfAccounts::id($cid, 'inc.interest'), $income)->dated("{$year}-06-30", "{$year}-06-30"));
+        foreach (\App\Models\SaccoPeriod::withoutGlobalScopes()->where('company_id', $cid)->where('year', $year)->orderBy('month')->get() as $p) {
+            (new PeriodService())->close($cid, (int) $p->id);
+        }
+        $approve = function (SaccoApproval $a) use ($company, $owner) {
+            $a->forceFill(['status' => 'approved', 'decided_at' => now()])->save(); // the two officers' approvals, outside the race
+
+            return (new SaccoApprovals())->execute($company, (int) $a->id, $owner);
+        };
+        $approve((new Closing())->request($company, $year, $owner));
+        $approve((new Appropriation())->request($company, $year, ['dividend_rate_bp' => 1000], $owner));
+        $run = (new Dividends())->request($company, $year, ['pay_to' => 'savings'], $owner);
+        $run->forceFill(['status' => 'approved', 'decided_at' => now()])->save();
+
+        $results = $this->race(3, fn () => (new SaccoApprovals())->execute(Company::find($cid), (int) $run->id, User::withoutGlobalScopes()->find($owner->id)));
+
+        $this->assertSame(['ok', 'ok', 'ok'], $results, 'every process sees the one execution');
+        $this->assertSame(1, SaccoJournalEntry::withoutGlobalScopes()->where('company_id', $cid)->where('kind', 'dividend')->count());
+        $this->assertSame(['paid', 'paid', 'paid'], SaccoDividendLine::withoutGlobalScopes()->where('company_id', $cid)->orderBy('member_id')->pluck('status')->all());
+        $this->assertSame([40_000, 35_000, 25_000], SaccoDividendLine::withoutGlobalScopes()->where('company_id', $cid)->orderBy('member_id')->pluck('amount_minor')->all());
+        $this->assertSame(0, (int) DB::table('sacco_account_balances')->where('ledger_account_id', ChartOfAccounts::id($cid, 'dividends.payable'))->value('balance_minor'));
         $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
     }
 }

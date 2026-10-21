@@ -6,7 +6,9 @@
 | rows marked `group`. Each row:
 |   [code, name, type, parent code, control_of, system_key, umra_line, group, normal side (null = the type's)]
 | A parent is a header (not postable). `system_key` names the accounts the code posts to; `control_of` marks the
-| sub-ledger control accounts; `umra_line` maps the account to its Schedule 4 return line (the first form it feeds).
+| sub-ledger control accounts; `umra_line` maps the account to its Schedule 4 return line (the first form it feeds;
+| App\Services\Sacco\Reports\UmraLines places each on the statements). 2450 and 3610 came with P4 (dormant balances due
+| to the regulator, the member education reserve): seeding again adds them to an existing chart.
 */
 return [
     ['1000', 'Cash and equivalents', 'asset', null, null, null, null, true, null],
@@ -32,8 +34,8 @@ return [
     ['1720', 'Furniture and equipment', 'asset', null, null, null, 'F5.PPE', false, null],
     ['1730', 'Computers', 'asset', null, null, null, 'F5.PPE', false, null],
     ['1790', 'Accumulated depreciation', 'asset', null, null, null, 'F5.PPE', false, 'credit'],
-    ['1800', 'Intangible assets', 'asset', null, null, null, 'F5', false, null],
-    ['1900', 'Other assets', 'asset', null, null, null, 'F5', false, null],
+    ['1800', 'Intangible assets', 'asset', null, null, null, 'F5.INT', false, null],
+    ['1900', 'Other assets', 'asset', null, null, null, 'F5.OA', false, null],
 
     ['2110', 'Member savings: voluntary', 'liability', null, 'savings', 'savings.voluntary', 'F5.SAV', true, null],
     ['2120', 'Member savings: compulsory (non-withdrawable)', 'liability', null, 'savings', 'savings.compulsory', 'F5.NWD', false, null],
@@ -44,13 +46,14 @@ return [
     ['2310', 'External borrowings: MSC / Emyooga', 'liability', null, null, null, 'F5.EB', false, null],
     ['2320', 'External borrowings: banks and others', 'liability', null, null, null, 'F5.EB', false, null],
     ['2330', 'Parish Revolving Fund (PDM)', 'liability', null, null, null, 'F5.EB', false, null],
-    ['2400', 'Accounts payable and accruals', 'liability', null, null, 'payables', 'F5', true, null],
-    ['2410', 'Tax payable', 'liability', null, null, null, 'F5', false, null],
-    ['2420', 'Dividends payable', 'liability', null, null, 'dividends.payable', 'F5', false, null],
+    ['2400', 'Accounts payable and accruals', 'liability', null, null, 'payables', 'F5.AP', true, null],
+    ['2410', 'Tax payable', 'liability', null, null, null, 'F5.TAX', false, null],
+    ['2420', 'Dividends payable', 'liability', null, null, 'dividends.payable', 'F5.DIV', false, null],
     ['2430', 'Share-out payable', 'liability', null, null, 'shareout.payable', null, true, null],
-    ['2440', 'Cooperative Education Fund payable (1 %)', 'liability', null, null, 'ncef.payable', 'F5', false, null],
+    ['2440', 'Cooperative Education Fund payable (1 %)', 'liability', null, null, 'ncef.payable', 'F5.OL', false, null],
+    ['2450', 'Unclaimed balances due to the regulator', 'liability', null, null, 'unclaimed.regulator', 'F5.OL', false, null],
     ['2510', 'Social / welfare fund', 'liability', null, 'fund', 'fund.social', 'F5.OL', true, null],
-    ['2600', 'Deferred grants', 'liability', null, null, null, 'F5', false, null],
+    ['2600', 'Deferred grants', 'liability', null, null, null, 'F5.DG', false, null],
 
     ['3100', 'Share capital', 'equity', null, 'shares', 'shares.capital', 'F3.1.1.1', true, null],
     ['3200', 'Statutory reserve', 'equity', null, null, 'reserve.statutory', 'F3.1.1.2', false, null],
@@ -59,8 +62,9 @@ return [
     ['3410', 'Current-year surplus', 'equity', null, null, 're.current', 'F3.1.1.4', true, null],
     ['3500', 'Capital grants and donations', 'equity', null, null, null, 'F3.1.1.5', false, null],
     ['3600', 'General and other reserves', 'equity', null, null, 'reserve.general', 'F3.1.1.6', false, null],
-    ['3700', 'Revaluation reserve', 'equity', null, null, null, 'F5', false, null],
-    ['3800', 'Proposed dividends', 'equity', null, null, null, 'F5', false, null],
+    ['3610', 'Member education reserve', 'equity', null, null, 'reserve.education', 'F3.1.1.6', false, null],
+    ['3700', 'Revaluation reserve', 'equity', null, null, null, 'F5.REV', false, null],
+    ['3800', 'Proposed dividends', 'equity', null, null, null, 'F5.PD', false, null],
     ['3900', 'Opening balance equity (migration only; nets to zero)', 'equity', null, null, 'opening', null, true, null],
 
     ['4100', 'Interest on loans', 'income', null, null, 'inc.interest', 'F6.2.1', true, null],

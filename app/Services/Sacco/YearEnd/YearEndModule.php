@@ -17,7 +17,8 @@ use App\Services\Sacco\SaccoApprovals;
 final class YearEndModule
 {
     /** The P4 maker-checker actions (04 §7). */
-    public const EXECUTORS = [Executors\InterestRunExecutor::class];
+    public const EXECUTORS = [Executors\InterestRunExecutor::class, Executors\YearEndCloseExecutor::class, Executors\AppropriationExecutor::class,
+        Executors\DividendRunExecutor::class];
 
     public static function boot(): void
     {
@@ -26,6 +27,7 @@ final class YearEndModule
         }
         // The loan book's daily run ends each month with its month-end work; savings interest is part of it (04 §16).
         LoanJobs::onMonthEnd('savings_interest', fn (int $companyId, string $month) => self::ready() ? (new SavingsInterest())->run($companyId, $month) : null);
+        \App\Services\Sacco\Payouts\PayoutService::onResult('dividend', [Dividends::class, 'payoutResult']);
         // ADR 0009 §8: a month closes only once its savings interest is worked out.
         CloseChecks::register('savings_interest', [self::class, 'interestCheck']);
     }
