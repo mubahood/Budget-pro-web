@@ -46,9 +46,9 @@ class LoanGuarantorsTest extends ApiTestCase
         $this->assertNotNull($ga->notice_sent_at, 'the written notice');
         $this->assertStringContainsString('/sacco/consent/', $ga->consent_link);
         $this->assertSame('guarantor_exists', $this->errorCode(fn () => $g->add($company, (int) $loan->id, (int) $ann->id, 10_000, $owner)));
-        $sms = DB::table('message_log')->where('company_id', $cid)->where('purpose', 'sacco_guarantor_request')->latest('id')->first();
+        $sms = DB::table('message_log')->where('company_id', $cid)->where('purpose', 'sacco_notice')->where('body', 'like', '%asks you to guarantee%')->latest('id')->first();
         $this->assertNotNull($sms, 'the guarantor is told after the commit');
-        $this->assertStringContainsString('may be liable for up to', (string) $sms->body);
+        $this->assertStringContainsString('asks you to guarantee', (string) $sms->body);
         $this->assertStringNotContainsString((string) $borrower->last_name, (string) $sms->body, 'only the borrower\'s first name');
 
         [$needed, $consented, $count] = Guarantors::coverage($loan->fresh());

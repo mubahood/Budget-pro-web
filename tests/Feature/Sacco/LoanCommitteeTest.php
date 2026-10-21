@@ -59,7 +59,7 @@ class LoanCommitteeTest extends ApiTestCase
         $this->assertSame('executed', SaccoApproval::find($approval->id)->status);
         $this->assertSame(3, SaccoLoanVote::where('loan_id', $loan->id)->count());
         $this->assertTrue((bool) SaccoLoanVote::where('loan_id', $loan->id)->where('user_id', $c3->id)->value('recused'));
-        $this->assertNotNull(DB::table('message_log')->where('company_id', $company->id)->where('purpose', 'sacco_loan_approved')->first());
+        $this->assertNotNull(DB::table('message_log')->where('company_id', $company->id)->where('purpose', 'sacco_notice')->where('body', 'like', '%approved%')->first());
     }
 
     public function test_rejection_appeal_and_seats_that_cannot_vote(): void

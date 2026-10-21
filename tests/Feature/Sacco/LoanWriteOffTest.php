@@ -110,7 +110,7 @@ class LoanWriteOffTest extends ApiTestCase
         $this->assertSame([50_000, 150_000], [$g->held_minor, $g->recovered_minor]);
         $this->assertSame(800_000 - 150_000, (int) SaccoSavingsAccount::find($gAcct->id)->balance_minor);
         $this->assertSame(50_000, (int) SaccoSavingsAccount::find($gAcct->id)->held_minor);
-        $this->assertNotNull(DB::table('message_log')->where('company_id', $cid)->where('purpose', 'sacco_guarantor_recovery')->first());
+        $this->assertNotNull(DB::table('message_log')->where('company_id', $cid)->where('purpose', 'sacco_notice')->where('body', 'like', '%taken from your savings%')->first());
         $this->assertLessThan(300_000, $loan->fresh()->principal_outstanding_minor);
         $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
         $this->assertSame('consented', SaccoLoanGuarantor::find($g->id)->consent_status);

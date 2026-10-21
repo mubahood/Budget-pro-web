@@ -51,7 +51,7 @@ final class Guarantors
             if (SaccoLoanGuarantor::withoutGlobalScopes()->where('loan_id', $loan->id)->where('guarantor_member_id', $guarantor->id)->exists()) {
                 throw BusinessRuleException::make('guarantor_exists', "{$guarantor->full_name} is already a guarantor of this loan.");
             }
-            $token = Str::random(48);
+            $token = Str::random(32);
             $g = SaccoLoanGuarantor::create(['company_id' => $cid, 'loan_id' => $loan->id, 'guarantor_member_id' => $guarantor->id, 'guaranteed_minor' => $amountMinor,
                 'consent_status' => 'requested', 'notice_sent_at' => now(), 'consent_token_hash' => hash('sha256', $token), 'token_expires_at' => now()->addDays(self::LINK_DAYS),
                 'requested_by_id' => $by->id]);
@@ -217,10 +217,10 @@ final class Guarantors
         return ['count' => (clone $q)->count(), 'guaranteed_minor' => (int) (clone $q)->sum('guaranteed_minor'), 'held_minor' => (int) (clone $q)->sum('held_minor')];
     }
 
-    /** The public consent page's address (the portal route /sacco/consent/{token}). */
+    /** The public consent page's address on the Akiba Ledger site (the portal route /sacco/consent/{token}; AK-89). */
     public static function link(string $token): string
     {
-        $base = rtrim((string) (config('saas.new_ui_url') ?: config('saas.public_url')), '/');
+        $base = rtrim((string) (config('sacco.public_url') ?: config('app.url')), '/');
 
         return $base.'/sacco/consent/'.$token;
     }
@@ -236,7 +236,7 @@ final class Guarantors
             if ($g->consent_status !== 'requested') {
                 throw BusinessRuleException::make('guarantee_closed', "This guarantee is {$g->consent_status}.");
             }
-            $token = Str::random(48);
+            $token = Str::random(32);
             $g->update(['consent_token_hash' => hash('sha256', $token), 'token_expires_at' => now()->addDays(self::LINK_DAYS), 'notice_sent_at' => now()]);
             $this->tell(LoanBooks::find((int) $company->id, (int) $g->loan_id), $g, $token);
 

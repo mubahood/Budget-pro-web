@@ -42,5 +42,9 @@ return [
         'periods_ahead' => 3,
     ],
 
+    // Where links sent to members and guarantors open (the guarantor's consent page /sacco/consent/{token}): the Akiba
+    // Ledger site, so a member never sees another product's address (AK-89). Empty: the app's own URL.
+    'public_url' => env('SACCO_PUBLIC_URL', env('APP_AKIBA_LEDGER_DOMAIN') ? 'https://'.env('APP_AKIBA_LEDGER_DOMAIN') : ''),
+
     'country' => 'UG',
 ];

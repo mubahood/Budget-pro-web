@@ -66,7 +66,7 @@ class LoanRepaymentsTest extends ApiTestCase
         $this->assertMatchesRegularExpression('/^RCT-/', (string) $tx->receipt_no);
         $line = SaccoLoanScheduleLine::where('loan_id', $loan->id)->where('installment_no', 1)->first();
         $this->assertSame(['partial', 21_500, 24_000], [$line->status, $line->principal_paid_minor, $line->interest_paid_minor]);
-        $this->assertNotNull(DB::table('message_log')->where('purpose', 'sacco_receipt_repayment')->where('company_id', $cid)->first());
+        $this->assertNotNull(DB::table('message_log')->where('purpose', 'sacco_receipt')->where('body', 'like', '%repayment%')->where('company_id', $cid)->first());
         $this->verified($cid);
 
         $this->assertSame('insufficient_available', $this->errorCode(fn () => (new Repayments())->record($company, (int) $loan->id,

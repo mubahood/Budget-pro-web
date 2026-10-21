@@ -872,3 +872,15 @@ approval.**
   SACCO's welcome says Akiba Ledger and its own first steps; its mail carries no family footer and defaults its
   subject to "Akiba Ledger"; members' sign-in codes go out in the SACCO's name (Akiba Ledger when one address opens
   several SACCOs), with no footer. The loans module's messages follow the same rule.
+
+**AK-89: Akiba Ledger speaks only in the SACCO's name; its links open on the Akiba Ledger site.**
+
+- The owner's rule: nothing a SACCO user, member or guarantor receives names another product of the family. Every
+  loan text starts with the SACCO's short name; codes for guarantors come through `OtpService::request(..., $sender)`
+  in the SACCO's name (not the platform's `app.name`); contracts and key facts name the SACCO and its regulator.
+- Links (the guarantor's consent page `/sacco/consent/{token}`) use `config('sacco.public_url')`
+  (`SACCO_PUBLIC_URL`, else `https://` + `APP_AKIBA_LEDGER_DOMAIN`), so no other product's domain appears. The token is
+  32 random characters (hashed at rest), short enough that the guarantor's request fits one SMS.
+- Loan messages use SaccoNotices' purpose families (`sacco_receipt`, `sacco_notice`: unless opted out;
+  `sacco_reminder`: also needs consent) and the same channel rule (SMS within the plan's allowance, else WhatsApp).
+  English only for now; Kiswahili joins when the loan texts enter `SaccoMessages`' catalogue.

@@ -60,7 +60,7 @@ class LoanDisbursementTest extends ApiTestCase
         $this->assertSame($entries, SaccoJournalEntry::where('company_id', $cid)->where('kind', 'loan_disbursement')->count(), 'executing again posts nothing');
         $this->assertSame('2026-10-02', SaccoJournalEntry::find($loan->disbursement_entry_id)->entry_date->toDateString(), 'the payout keeps its own day (backdated history)');
         $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
-        $this->assertNotNull(DB::table('message_log')->where('company_id', $cid)->where('purpose', 'sacco_loan_disbursed')->first());
+        $this->assertNotNull(DB::table('message_log')->where('company_id', $cid)->where('purpose', 'sacco_notice')->where('body', 'like', '%First instalment%')->first());
         $this->assertSame('invalid_loan_status', $this->errorCode(fn () => (new Disbursement())->request($company, (int) $loan->id, $staff['manager'], ['channel' => 'savings'])));
     }
 
