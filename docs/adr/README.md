@@ -14,5 +14,6 @@ answers, E = execution); an ADR is written when a decision changes how the whole
 | [0006](0006-locations-and-batches.md) | Stock per location and FEFO batches as a layer under every movement | Accepted |
 | [0007](0007-duplicates-merge-not-unique.md) | Offline-created master data is merged, not made unique in the database | Accepted |
 | [0008](0008-host-agnostic-ops.md) | Host-agnostic operations: database queue, cron scheduler, no vendor churn | Accepted |
+| [0009](0009-sacco-double-entry-ledger.md) | The sacco module (Akiba Ledger) keeps a true double-entry ledger in integer minor units; extends 0003 | Proposed |
 
 Format: context → decision → consequences. Superseding a decision means a new ADR that links the old one.
