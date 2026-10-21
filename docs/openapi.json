@@ -1141,7 +1141,8 @@
                                             "auto_spares",
                                             "stationery",
                                             "poultry",
-                                            "fundraising"
+                                            "fundraising",
+                                            "sacco"
                                         ]
                                     },
                                     "modules": {
@@ -1155,7 +1156,8 @@
                                                 "shop",
                                                 "finance",
                                                 "budget",
-                                                "poultry"
+                                                "poultry",
+                                                "sacco"
                                             ]
                                         }
                                     },
@@ -6359,7 +6361,8 @@
                                                 "shop",
                                                 "finance",
                                                 "budget",
-                                                "poultry"
+                                                "poultry",
+                                                "sacco"
                                             ]
                                         }
                                     }
@@ -15192,6 +15195,7 @@
                                             "agro_vet",
                                             "poultry",
                                             "fundraising",
+                                            "sacco",
                                             "other"
                                         ]
                                     },
@@ -15319,7 +15323,8 @@
                                                 "shop",
                                                 "finance",
                                                 "budget",
-                                                "poultry"
+                                                "poultry",
+                                                "sacco"
                                             ]
                                         }
                                     },
@@ -19509,6 +19514,50 @@
                         }
                     }
                 ]
+            }
+        },
+        "/sacco/report-download": {
+            "get": {
+                "tags": [
+                    "Sacco"
+                ],
+                "summary": "GET /sacco/report-download",
+                "operationId": "get_sacco_report_download",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Envelope"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in"
+                    },
+                    "403": {
+                        "description": "Role, plan or module does not allow it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation or business rule",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         "/sales": {
@@ -29858,7 +29907,22 @@
                                                 "resolve_conflicts",
                                                 "manage_team",
                                                 "manage_settings",
-                                                "billing"
+                                                "billing",
+                                                "sacco_view",
+                                                "sacco_members",
+                                                "sacco_kyc",
+                                                "sacco_teller",
+                                                "sacco_withdraw",
+                                                "sacco_approve",
+                                                "sacco_loans",
+                                                "sacco_loans_vote",
+                                                "sacco_disburse",
+                                                "sacco_accounts",
+                                                "sacco_reports",
+                                                "sacco_settings",
+                                                "sacco_officers",
+                                                "sacco_audit_view",
+                                                "sacco_meetings"
                                             ]
                                         }
                                     }

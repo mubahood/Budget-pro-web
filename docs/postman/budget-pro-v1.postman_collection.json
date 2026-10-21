@@ -7319,6 +7319,33 @@
             ]
         },
         {
+            "name": "Sacco",
+            "item": [
+                {
+                    "name": "GET /sacco/report-download",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/report-download",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "report-download"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Sales",
             "item": [
                 {

@@ -500,4 +500,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('tracking/devices/{uuid}/config', [TrackingController::class, 'updateConfig']);
         Route::post('tracking/devices/{uuid}/commands/{commandId}/ack', [TrackingController::class, 'ackCommand']);
     });
+
+    // Akiba Ledger (the sacco module): routes/api_sacco.php.
+    require __DIR__.'/api_sacco.php';
 });
