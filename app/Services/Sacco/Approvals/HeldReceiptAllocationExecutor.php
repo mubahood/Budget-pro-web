@@ -65,6 +65,7 @@ final class HeldReceiptAllocationExecutor extends BaseExecutor
                     throw BusinessRuleException::make('over_allocation', 'That is more than is still unallocated of this receipt.');
                 }
             });
+        \App\Services\Sacco\SaccoTransactions::allocating($cid, new SubRef($t['type'], (int) $t['id'], (int) $t['account_id'], $t['member_id']), $amount);
         $entry = (new PostingService())->post($draft);
         \App\Services\Sacco\SaccoTransactions::allocated($cid, (int) $p['held_entry_id'], new SubRef($t['type'], (int) $t['id'], (int) $t['account_id'], $t['member_id']),
             self::unallocated($cid, (int) $p['held_entry_id']));

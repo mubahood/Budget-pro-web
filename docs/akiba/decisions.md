@@ -687,3 +687,21 @@ approval.**
   snapshots. The tables still carry sync columns, for the server's own uuids.
 - Explicit dates: `record(..., opts: ['entry_date' => 'Y-m-d'])` posts history (opening balances, the demo) into
   that day's month while it is open; the value date is never after the entry date, and nothing posts in the future.
+
+**AK-64: Shares (P1.11): the cap from the third shareholder, measured in whole basis points; shares bought by amount.**
+
+- The one-third rule (Tier 4 s.48, `max_holding_bp` 3333) is arithmetically impossible with one or two
+  shareholders, so it applies once three members hold shares. A holding is compared in whole basis points
+  (`intdiv(shares × 10000, total)`), so exactly a third (3333) is allowed. Checked under the ledger head lock with
+  locking reads: two purchases racing at the cap let one through (ConcurrentWithdrawalsTest).
+- A purchase sends `amount_minor` (the phone) or `shares_count` (the counter); shares = amount ÷ par. A remainder is
+  `not_whole_shares` online and a held receipt offline (2150). A held receipt allocated to a share account buys whole
+  shares within the cap (`SaccoTransactions::onAllocate`).
+- A transfer (`share_transfer` approval: maker sacco_teller, checker sacco_approve) moves the count and the shares'
+  part of what was paid for them (half up; all of it when every share moves); the receiver stays within the cap.
+- The entrance fee is exactly the setting's amount, paid once (a reversed fee may be paid again). In office mode an
+  applicant becomes active only with the fee paid and `min_shares` held; two or more nominees need two or more shares.
+- Shares are never withdrawn in office mode: there is no method or route. Leaving members are paid by the exit
+  settlement (P2) or sell to another member.
+- Offline hold reasons widen to the refusal that caused them (`not_whole_shares`, `share_cap_exceeded`,
+  `entrance_fee_paid`, …), so the officer allocating a held receipt sees why.

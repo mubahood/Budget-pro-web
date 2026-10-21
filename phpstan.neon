@@ -34,6 +34,7 @@ parameters:
         - app/Models/SaccoSavingsProductVersion.php
         - app/Models/SaccoSavingsAccount.php
         - app/Models/SaccoTransaction.php
+        - app/Models/SaccoShareAccount.php
         - app/Models/SaccoOfficer.php
         - app/Models/SaccoMember.php
         - app/Models/SaccoMemberRelation.php

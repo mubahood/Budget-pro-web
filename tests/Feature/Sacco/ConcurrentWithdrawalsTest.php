@@ -20,7 +20,8 @@ use Tests\TestCase;
 /**
  * Akiba Ledger P1.12 (ADR 0009 §9, 04 §5.2): real processes (pcntl_fork) and real row locks, no wrapping
  * transaction. Two withdrawals of 60 % of one balance at the same moment: exactly one is paid, the other is refused
- * `insufficient_available`, and the books verify. Five processes sending the same deposit uuid post it once.
+ * `insufficient_available`, and the books verify. Five processes sending the same deposit uuid post it once. Two
+ * share purchases that would each fit under the one-third cap but not together: exactly one passes (P1.11).
  */
 class ConcurrentWithdrawalsTest extends TestCase
 {
@@ -32,7 +33,7 @@ class ConcurrentWithdrawalsTest extends TestCase
             DB::reconnect();
             $cid = $this->companyId;
             DB::statement('SET @sacco_ledger_purge = 1');
-            foreach (['sacco_transactions', 'sacco_approval_votes', 'sacco_approvals', 'sacco_journal_lines', 'sacco_journal_entries', 'sacco_account_balances', 'sacco_period_balances',
+            foreach (['sacco_transactions', 'sacco_share_accounts', 'sacco_approval_votes', 'sacco_approvals', 'sacco_journal_lines', 'sacco_journal_entries', 'sacco_account_balances', 'sacco_period_balances',
                 'sacco_periods', 'sacco_ledger_heads', 'sacco_savings_accounts', 'sacco_savings_product_versions', 'sacco_savings_products', 'sacco_members', 'sacco_settings',
                 'number_sequences', 'audit_logs', 'company_members', 'financial_categories'] as $table) {
                 DB::table($table)->where('company_id', $cid)->delete();
@@ -89,11 +90,9 @@ class ConcurrentWithdrawalsTest extends TestCase
         return $results;
     }
 
-    public function test_two_withdrawals_of_sixty_percent_race_and_exactly_one_is_paid(): void
+    /** @return array{0: Company, 1: User, 2: \App\Models\SaccoSavingsAccount} committed books: an office SACCO, its owner and one member's savings account */
+    private function books(): array
     {
-        if (! function_exists('pcntl_fork')) {
-            $this->markTestSkipped('pcntl is required for the concurrency test.');
-        }
         $company = Company::factory()->create(['name' => 'Race SACCO', 'status' => 'Active', 'currency' => 'UGX', 'enabled_modules' => ['sacco']]);
         $this->companyId = $cid = (int) $company->id;
         $owner = User::factory()->create(['company_id' => $cid, 'email' => 'race_'.uniqid().'@example.com', 'password' => bcrypt('secret123')]);
@@ -109,6 +108,37 @@ class ConcurrentWithdrawalsTest extends TestCase
             'status' => 'active', 'kyc_status' => 'verified']);
         $product = \App\Models\SaccoSavingsProduct::withoutGlobalScopes()->where('company_id', $cid)->where('code', 'ORD')->firstOrFail();
         $account = (new SavingsAccounts())->open($company->fresh(), (int) $member->id, (int) $product->id, null);
+
+        return [$company->fresh(), $owner, $account];
+    }
+
+    public function test_two_share_purchases_racing_at_the_cap_let_only_one_through(): void
+    {
+        if (! function_exists('pcntl_fork')) {
+            $this->markTestSkipped('pcntl is required for the concurrency test.');
+        }
+        [$company, $owner] = $this->books();
+        $cid = (int) $company->id;
+        $ids = [];
+        foreach (['A', 'B', 'C', 'D'] as $i => $name) {
+            $m = SaccoMember::create(['company_id' => $cid, 'member_no' => 'M-90010'.$i, 'first_name' => $name, 'last_name' => 'Holder', 'joined_on' => now()->toDateString(),
+                'status' => 'active', 'kyc_status' => 'verified']);
+            (new \App\Services\Sacco\Shares\ShareService())->purchase($company, ['member_id' => $m->id, 'shares_count' => 10], null);
+            $ids[] = (int) $m->id;
+        }
+        $results = $this->race(2, fn (int $i) => (new \App\Services\Sacco\Shares\ShareService())->purchase(Company::find($cid), ['member_id' => $ids[0], 'shares_count' => 3], null));
+        $this->assertSame(['ok', 'share_cap_exceeded'], $results, '13 of 43 fits; 16 of 46 does not');
+        $this->assertSame(13, (int) DB::table('sacco_share_accounts')->where('company_id', $cid)->where('member_id', $ids[0])->value('shares_count'));
+        $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
+    }
+
+    public function test_two_withdrawals_of_sixty_percent_race_and_exactly_one_is_paid(): void
+    {
+        if (! function_exists('pcntl_fork')) {
+            $this->markTestSkipped('pcntl is required for the concurrency test.');
+        }
+        [$company, $owner, $account] = $this->books();
+        $cid = (int) $company->id;
         $svc = new SaccoTransactions();
         $svc->record($company->fresh(), ['kind' => 'deposit', 'savings_account_id' => $account->id, 'amount_minor' => 1_000_000], null);
 

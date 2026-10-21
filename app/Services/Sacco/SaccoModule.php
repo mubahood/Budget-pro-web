@@ -14,6 +14,7 @@ use App\Models\SaccoOfficer;
  *   adult (Coop s.13), and holding an office makes the member an insider (loan routing, guarantor rules).
  * - Approvals (P1.10): the P1 executors, and a month never closes with a request from it still waiting.
  * - Savings (P1.12): the savings sub-ledger, the withdrawal and terms-change executors, the default products.
+ * - Shares (P1.11): the shares sub-ledger, purchases and entrance fees, transfers, activation and nomination rules.
  */
 final class SaccoModule
 {
@@ -23,6 +24,8 @@ final class SaccoModule
         Approvals\LedgerAccountCreateExecutor::class, Approvals\MemberKycExecutor::class, Approvals\HeldReceiptAllocationExecutor::class,
         // P1.12 savings (AK-62)
         Approvals\WithdrawalExecutor::class, Approvals\ProductTermsChangeExecutor::class,
+        // P1.11 shares
+        Approvals\ShareTransferExecutor::class,
     ];
 
     public static function boot(): void
@@ -59,5 +62,8 @@ final class SaccoModule
         // P1.12: the savings sub-ledger under each product's 21x0, and a new SACCO's default products.
         Ledger\SubLedgers::register(new Savings\SavingsLedger());
         SaccoSetupService::extend('products', fn (\App\Models\Company $company) => (new Savings\SavingsProducts())->ensureDefaults($company));
+        // P1.11: the shares sub-ledger under 3100, share purchases and entrance fees, activation and nomination rules.
+        Ledger\SubLedgers::register(new Shares\SharesLedger());
+        Shares\ShareService::boot();
     }
 }

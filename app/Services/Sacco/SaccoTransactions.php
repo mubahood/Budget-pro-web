@@ -54,6 +54,10 @@ final class SaccoTransactions
     public const PERMISSION = ['deposit' => 'sacco_teller', 'fee' => 'sacco_teller', 'internal_transfer' => 'sacco_teller', 'share_purchase' => 'sacco_teller',
         'entrance_fee' => 'sacco_teller', 'withdrawal' => 'sacco_withdraw'];
 
+    /** Why an offline receipt may be held (sacco_transactions.hold_reason). */
+    public const HOLD_REASONS = ['unknown_account', 'account_closed', 'over_offline_max', 'loan_closed', 'not_whole_shares', 'share_cap_exceeded', 'entrance_fee_paid',
+        'wrong_entrance_fee', 'no_entrance_fee', 'member_not_active', 'not_own_account', 'account_not_found', 'member_not_found'];
+
     /** Members whose money the SACCO still takes in. */
     public const PAYING_STATUSES = ['applicant', 'active', 'dormant', 'suspended'];
 
@@ -90,6 +94,23 @@ final class SaccoTransactions
     public static function recorder(string $kind, callable $recorder): void
     {
         self::$recorders[$kind] = $recorder;
+    }
+
+    /** @var array<string, callable(int, SubRef, int): void> per sub-ledger type: what an allocation of a held receipt also does (shares: the count) */
+    private static array $allocationHooks = [];
+
+    /** @param  callable(int, SubRef, int): void  $hook  (company, target, amount) inside the allocation's transaction */
+    public static function onAllocate(string $type, callable $hook): void
+    {
+        self::$allocationHooks[$type] = $hook;
+    }
+
+    /** Run the target's allocation hook (HeldReceiptAllocationExecutor, before it posts). */
+    public static function allocating(int $companyId, SubRef $target, int $amount): void
+    {
+        if (isset(self::$allocationHooks[$target->type])) {
+            (self::$allocationHooks[$target->type])($companyId, $target, $amount);
+        }
     }
 
     /** @param  callable(SaccoTransaction): void  $hook */
@@ -362,8 +383,9 @@ final class SaccoTransactions
                 if (in_array($e->errorCode(), ['forbidden', 'idempotency_conflict', 'invalid_transaction', 'not_set_up'], true)) {
                     throw $e;
                 }
-                $hold = 'unknown_account'; // the cash was taken: hold it rather than refuse it (AK-24)
-                $target = null;
+                // The cash was taken: hold it rather than refuse it (AK-24), saying why.
+                $hold = in_array($e->errorCode(), self::HOLD_REASONS, true) ? $e->errorCode() : 'unknown_account';
+                $target = in_array($hold, ['share_cap_exceeded', 'not_whole_shares', 'entrance_fee_paid', 'wrong_entrance_fee', 'no_entrance_fee', 'member_not_active'], true) ? null : $target;
             }
         }
 

@@ -137,6 +137,9 @@ class MemberServiceTest extends ApiTestCase
         $this->assertSame('forbidden', $this->code(fn () => $svc->verifyKyc($company, (int) $m->id, $loans, 'verified')), 'needs sacco_kyc');
         $other = $this->saccoStaff($company, 'sacco_secretary');
         $this->assertSame('verified', $svc->verifyKyc($company, (int) $m->id, $other, 'verified', 'ID seen')->kyc_status);
+        // P1.11: the entrance fee and the minimum shares come first.
+        app(\App\Services\Sacco\Shares\ShareService::class)->payEntranceFee($company, ['member_id' => $m->id], $owner);
+        app(\App\Services\Sacco\Shares\ShareService::class)->purchase($company, ['member_id' => $m->id, 'shares_count' => 5], $owner);
         $this->assertSame('active', $svc->setStatus($company, (int) $m->id, 'active', $owner)->status);
         $this->assertSame('invalid_status_change', $this->code(fn () => $svc->setStatus($company, (int) $m->id, 'applicant', $owner)));
         $this->assertSame('reason_required', $this->code(fn () => $svc->setStatus($company, (int) $m->id, 'suspended', $owner)));
@@ -156,6 +159,7 @@ class MemberServiceTest extends ApiTestCase
         [$company, $owner] = $this->sacco();
         $svc = app(MemberService::class);
         $m = $svc->register($company, $this->person(), $owner)['member'];
+        app(\App\Services\Sacco\Shares\ShareService::class)->purchase($company, ['member_id' => $m->id, 'shares_count' => 2], $owner); // two nominees need two shares (P1.11)
         $this->assertSame('nomination_total', $this->code(fn () => $svc->nominate($company, (int) $m->id, [['name' => 'A', 'share_bp' => 6000], ['name' => 'B', 'share_bp' => 3000]], 'W1', 'W2', null, $owner)));
         $this->assertSame('witnesses_required', $this->code(fn () => $svc->nominate($company, (int) $m->id, [['name' => 'A', 'share_bp' => 10000]], 'W1', 'w1', null, $owner)));
         $first = $svc->nominate($company, (int) $m->id, [['name' => 'Son', 'relationship' => 'son', 'share_bp' => 6000], ['name' => 'Daughter', 'share_bp' => 4000]], 'Okello', 'Achan', null, $owner);

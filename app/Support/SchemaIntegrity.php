@@ -107,6 +107,10 @@ class SchemaIntegrity
         ['sacco_transactions', 'savings_account_id', 'sacco_savings_accounts', 'restrict'],
         ['sacco_transactions', 'journal_entry_id', 'sacco_journal_entries', 'restrict'],
         ['sacco_transactions', 'reverses_id', 'sacco_transactions', 'restrict'],
+        ['sacco_share_accounts', 'company_id', 'companies', 'restrict'],
+        ['sacco_share_accounts', 'member_id', 'sacco_members', 'restrict'],
+        ['sacco_share_accounts', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
+        ['sacco_transactions', 'share_account_id', 'sacco_share_accounts', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -149,6 +153,7 @@ class SchemaIntegrity
         ['sacco_savings_products', 'interest_basis', ['none', 'daily_balance', 'min_monthly_balance']],
         ['sacco_savings_products', 'interest_posting', ['monthly', 'quarterly', 'annually']],
         ['sacco_savings_accounts', 'status', ['active', 'dormant', 'frozen', 'closed']],
+        ['sacco_share_accounts', 'status', ['active', 'closed']],
         ['sacco_transactions', 'status', ['posted', 'held', 'pending_approval', 'rejected', 'cancelled']],
         ['sacco_transactions', 'channel', ['cash', 'bank', 'momo', 'checkoff', 'internal']],
         ['sacco_transactions', 'kind', ['deposit', 'withdrawal', 'share_purchase', 'share_transfer', 'entrance_fee', 'fee', 'internal_transfer', 'loan_disbursement', 'loan_repayment', 'loan_cancellation', 'fine_payment', 'fund_contribution', 'reversal']],
@@ -196,6 +201,7 @@ class SchemaIntegrity
         'sacco_savings_products' => \App\Models\SaccoSavingsProduct::class,
         'sacco_savings_accounts' => \App\Models\SaccoSavingsAccount::class,
         'sacco_transactions' => \App\Models\SaccoTransaction::class,
+        'sacco_share_accounts' => \App\Models\SaccoShareAccount::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */
