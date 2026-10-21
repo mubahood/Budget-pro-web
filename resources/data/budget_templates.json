@@ -1,5 +1,5 @@
 {
-    "version": "2026.10.1",
+    "version": "2026.10.2",
     "currency": "UGX",
     "updated": "2026-10-21",
     "rates": {"UGX": 1, "USD": 3700, "EUR": 4000, "GBP": 4700, "KES": 28, "TZS": 1.4, "RWF": 2.6},
@@ -18,9 +18,9 @@
     "groups": ["Groom's family", "Bride's family", "Friends", "Workmates", "Church", "Old school mates", "Committee", "Others"],
     "messages": {
         "reminder": {
-            "en": "Hello {name}, a friendly reminder about your pledge to {event} on {date}.\nYou pledged {amount} and have paid {paid}; {balance} is still outstanding.\nPay to: {payment_number}\nTreasurer: {treasurer} {treasurer_phone}\nThank you for your support!",
-            "lg": "Gyebale ko {name}! Tukujjukiza ku bweyamo bwo eri {event} nga {date}.\nWeeyama {amount}, osasudde {paid}, osigazza {balance}.\nSasula ku: {payment_number}\nOmuwanika: {treasurer} {treasurer_phone}\nWebale nnyo okutuwagira!",
-            "sw": "Habari {name}, tunakukumbusha kwa upendo kuhusu ahadi yako kwa {event} tarehe {date}.\nUliahidi {amount} na umelipa {paid}; {balance} bado inasubiriwa.\nLipa kwa: {payment_number}\nMweka hazina: {treasurer} {treasurer_phone}\nAsante kwa msaada wako!"
+            "en": "Hello {name}, a friendly reminder about your pledge to {event}.\nDate: {date}\nYou pledged {amount} and have paid {paid}; {balance} is still outstanding.\nPay to: {payment_number}\nTreasurer: {treasurer} {treasurer_phone}\nThank you for your support!",
+            "lg": "Gyebale ko {name}! Tukujjukiza ku bweyamo bwo eri {event}.\nOlunaku: {date}\nWeeyama {amount}, osasudde {paid}, osigazza {balance}.\nSasula ku: {payment_number}\nOmuwanika: {treasurer} {treasurer_phone}\nWebale nnyo okutuwagira!",
+            "sw": "Habari {name}, tunakukumbusha kwa upendo kuhusu ahadi yako kwa {event}.\nTarehe: {date}\nUliahidi {amount} na umelipa {paid}; {balance} bado inasubiriwa.\nLipa kwa: {payment_number}\nMweka hazina: {treasurer} {treasurer_phone}\nAsante kwa msaada wako!"
         },
         "thanks": {
             "en": "Dear {name}, thank you so much! We have received {paid} of your pledge of {amount} for {event}.\nGod bless you.",
@@ -33,9 +33,9 @@
             "sw": "Malipo yamepokelewa: {payment} kutoka kwa {name} kwa {event} ({how}).\nUmelipa {paid} kati ya {amount}; bado {balance}.\nAsante!"
         },
         "invitation": {
-            "en": "Hello {name}, you are warmly invited to support {event} on {date}.\nVenue: {venue}\nPledge any amount and pay to:\n{payment_details}\nThank you!",
-            "lg": "Gyebale ko {name}! Tukusaba otuwagire ku {event} nga {date}.\nWa: {venue}\nWeeyame kyonna ky'osobola era osasule ku:\n{payment_details}\nWebale nnyo!",
-            "sw": "Habari {name}, unakaribishwa kwa upendo kuchangia {event} tarehe {date}.\nMahali: {venue}\nAhidi kiasi chochote na ulipe kwa:\n{payment_details}\nAsante!"
+            "en": "Hello {name}, you are warmly invited to support {event}.\nDate: {date}\nVenue: {venue}\nPledge any amount and pay to:\n{payment_details}\nThank you!",
+            "lg": "Gyebale ko {name}! Tukusaba otuwagire ku {event}.\nOlunaku: {date}\nWa: {venue}\nWeeyame kyonna ky'osobola era osasule ku:\n{payment_details}\nWebale nnyo!",
+            "sw": "Habari {name}, unakaribishwa kwa upendo kuchangia {event}.\nTarehe: {date}\nMahali: {venue}\nAhidi kiasi chochote na ulipe kwa:\n{payment_details}\nAsante!"
         },
         "meeting": {
             "en": "Dear {name}, the {event} committee meets {meeting_when} at {meeting_where}.\nYou are kindly requested to attend. Thank you.",

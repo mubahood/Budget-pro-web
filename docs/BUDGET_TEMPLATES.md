@@ -69,7 +69,7 @@ The quantity of an item depends on whether it has `per`, for a guest count G:
 - `culture` and `religion` are tags. A template tagged `any` matches every filter value.
 - `size` is one of `small`, `medium`, `large` or `luxury`.
 
-## The templates (version 2026.10.1), totals at their own guest count
+## The templates (version 2026.10.2), totals at their own guest count
 
 | Key | Template | Guests | Items | Total (UGX) |
 |---|---|---:|---:|---:|

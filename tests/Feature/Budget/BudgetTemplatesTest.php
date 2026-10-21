@@ -102,6 +102,12 @@ class BudgetTemplatesTest extends TestCase
         $this->assertSame("Hello Grace, Wedding on 2 Jan 2027.\nTreasurer: Doreen 0772 123 456\nKeep {unknown}",
             MessageTemplates::render($text, ['name' => 'Grace', 'event' => 'Wedding', 'date' => '2 Jan 2027', 'payment_number' => '', 'treasurer' => 'Doreen', 'treasurer_phone' => '0772 123 456']));
         $this->assertSame("A\n\nB", MessageTemplates::render("A\n\n\n\nB", []));
+        // An event with no date: the default reminder loses its date line instead of reading "on .".
+        foreach (MessageTemplates::LANGS as $lang) {
+            $out = MessageTemplates::render(MessageTemplates::defaultText('reminder', $lang), ['name' => 'Grace', 'event' => 'Wedding', 'date' => '']);
+            $this->assertStringNotContainsString('{date}', $out);
+            $this->assertDoesNotMatchRegularExpression('/ \.|: *\n/', $out, $lang);
+        }
 
         $event = ['name' => 'Brian & Grace Wedding', 'date' => now()->addDays(10)->toDateString(), 'venue' => 'Mukono',
             'settings' => ['currency_display' => 'USh', 'meeting' => ['when' => 'Thursday 6pm', 'where' => 'Mukono']],
@@ -117,7 +123,7 @@ class BudgetTemplatesTest extends TestCase
         $this->assertSame("MTN MoMo: 0772 123 456 (Doreen)\nBank: Stanbic, A/C 9030", $v['payment_details']);
         $msg = MessageTemplates::render(MessageTemplates::defaultText('reminder', 'en'), $v);
         $this->assertStringContainsString('Aunt Grace', $msg);
-        $this->assertStringContainsString('Brian & Grace Wedding on ', $msg);
+        $this->assertStringContainsString("Brian & Grace Wedding.\nDate: ", $msg);
         $this->assertStringContainsString('Pay to: 0772 123 456', $msg);
         $this->assertStringNotContainsString('{', $msg);
         $this->assertSame(MessageTemplates::PLACEHOLDERS, array_keys($v), 'every placeholder has a value');
