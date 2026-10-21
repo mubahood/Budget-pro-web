@@ -3,6 +3,7 @@
 namespace App\Services\Sacco\Loans;
 
 use App\Models\Company;
+use App\Services\Sacco\Ledger\SubLedgers;
 use App\Services\Sacco\SaccoSetupService;
 
 /**
@@ -13,6 +14,7 @@ final class LoansModule
 {
     public static function boot(): void
     {
+        SubLedgers::register(new LoanLedger());
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
     }
 }
