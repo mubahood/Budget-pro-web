@@ -30,6 +30,10 @@ final class InstallChoices
     {
         $types = [];
         foreach ((array) (self::onboarding()['business_types'] ?? []) as $key => $type) {
+            // An exclusive module's type (a SACCO) is made only by its own app's sign-up, never by a shop installer (AK-04).
+            if (array_intersect((array) ($type['modules'] ?? []), \App\Support\Rules\CompanyRules::EXCLUSIVE_MODULES) !== []) {
+                continue;
+            }
             $types[(string) $key] = ['label' => (string) $type['label'], 'group' => (string) ($type['group'] ?? 'Other')];
         }
 
