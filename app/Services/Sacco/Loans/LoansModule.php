@@ -4,6 +4,7 @@ namespace App\Services\Sacco\Loans;
 
 use App\Models\Company;
 use App\Services\Sacco\Ledger\SubLedgers;
+use App\Services\Sacco\SaccoApprovals;
 use App\Services\Sacco\SaccoSetupService;
 
 /**
@@ -12,9 +13,15 @@ use App\Services\Sacco\SaccoSetupService;
  */
 final class LoansModule
 {
+    /** The loan maker-checker actions (04 §7). */
+    public const EXECUTORS = [Executors\LoanDecisionExecutor::class];
+
     public static function boot(): void
     {
         SubLedgers::register(new LoanLedger());
+        foreach (self::EXECUTORS as $class) {
+            SaccoApprovals::register(new $class());
+        }
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
     }
 }

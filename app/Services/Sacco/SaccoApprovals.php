@@ -110,6 +110,9 @@ final class SaccoApprovals
             $a = $this->lockOpen($company, $approvalId, ['pending']);
             $executor = self::executor($a->action);
             $self = SaccoAccess::assertChecker($checker, $a->requested_by_id === null ? null : (int) $a->requested_by_id, $executor->checkerPermission());
+            if ($executor instanceof Approvals\ChecksChecker) {
+                $executor->assertCanCheck($a, $checker, 'approve');
+            }
             if ($executor->checkerPositions() !== [] && ! SaccoAccess::holds($checker, $executor->checkerPositions())) {
                 throw BusinessRuleException::make('position_required', 'This needs an officer holding one of these offices: '.implode(', ', array_map(
                     fn ($p) => \App\Models\SaccoOfficer::LABELS[$p] ?? $p, $executor->checkerPositions())).'.', ['positions' => $executor->checkerPositions()]);
@@ -171,6 +174,9 @@ final class SaccoApprovals
         return $this->expiring($company, $approvalId, fn () => DB::transaction(function () use ($company, $approvalId, $checker, $note) {
             $a = $this->lockOpen($company, $approvalId, ['pending']);
             SaccoAccess::assertChecker($checker, $a->requested_by_id === null ? null : (int) $a->requested_by_id, self::executor($a->action)->checkerPermission());
+            if (self::executor($a->action) instanceof Approvals\ChecksChecker) {
+                self::executor($a->action)->assertCanCheck($a, $checker, 'reject');
+            }
             SaccoApprovalVote::create(['company_id' => $a->company_id, 'approval_id' => $a->id, 'user_id' => $checker->id, 'decision' => 'reject', 'note' => mb_substr($note, 0, 255)]);
             $a->update(['status' => 'rejected', 'decided_at' => now(), 'decided_by_id' => $checker->id, 'decision_note' => mb_substr($note, 0, 255)]);
             self::closeSubject($a, 'rejected');

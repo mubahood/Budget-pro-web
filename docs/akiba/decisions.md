@@ -705,3 +705,61 @@ approval.**
   settlement (P2) or sell to another member.
 - Offline hold reasons widen to the refusal that caused them (`not_whole_shares`, `share_cap_exceeded`,
   `entrance_fee_paid`, …), so the officer allocating a held receipt sees why.
+
+---
+
+## Decisions made while building P2
+
+**AK-80: Loans repay weekly, fortnightly or monthly until group meetings exist.**
+
+- The `meeting` frequency (a group's meeting cycle) arrives with group meetings in P5; until then `LoanTerms` refuses
+  it with `frequency_not_available`, and a group lends on a calendar frequency.
+- A flat line's interest is the original principal × the periodic rate, rounded half-up once per line (04 §5.3:
+  "per instalment"), the same rounding as a reducing line, so reducing balance never costs more than flat, to the unit.
+- The 100 % a year cost ceiling is measured on the nominal year the rate is quoted on (12 months or 52 weeks = 365
+  days), rounded up, so a short February never makes a lawful product look unlawful.
+- *Why:* the meeting calendar is P5's table; a cap must never be met or missed by rounding.
+
+**AK-81: The PDM preset's penalty is the legal maximum, not the handbook's 0.5 % a month.**
+
+- The Parish Revolving Fund lends at 6 % a year, 0.5 % a month, so SI 108 reg. 4(5) caps its penalty at half of
+  that: 0.25 % a month (25 bp). The handbook's 0.5 % a month surcharge is above the ceiling for a SACCO, so the preset
+  carries 25 bp, and a SACCO cannot set more. Emyooga (8 % a year, 66 bp a month) carries 33 bp.
+- *Why:* the regulation binds every Tier 4 institution; the handbook predates it.
+
+**AK-82: The single-borrower limit of a young SACCO is 10 % of its assets.**
+
+- Coop s.55AN(3) is the smaller of 10 % of total assets and 25 % of institutional capital. A SACCO with no reserves,
+  retained earnings or surplus yet has no institutional capital, which would forbid every loan; until it has some,
+  the limit is 10 % of total assets (net of the loss allowance). Institutional capital is equity less share capital
+  and opening-balance equity, plus this year's income less expenses.
+- Liquidity (cash, tills, lockbox, petty cash, bank and MoMo float; not collections in transit) is shown at approval
+  and refused at payout; the single-borrower limit is refused at approval.
+- *Why:* a lawful reading that lets a new SACCO lend at all; the committee sees both figures.
+
+**AK-83: A committee decides by majority of the members who may vote; the request records the carrying vote.**
+
+- Every decision is one `loan_decision` request asked by the appraiser (maker ≠ checker). Routes: `delegated` (an
+  officer with `sacco_approve` whose position's `approval_limit_minor` covers the amount; never an insider's loan),
+  `committee` (the loans committee) and `appeal` (the board: chairperson, vice chair, board members; once).
+- The count is taken at each vote: the deciding body's seats with a login, less the applicant's own seat, the
+  appraiser's and anyone who recused. A majority of those approves; once a majority can no longer be reached, the
+  loan is rejected. Votes are kept per officer per round in `sacco_loan_votes`, final; the request needs one checker,
+  the vote that carried it, cast by `Loans\Committee` only (`committee_vote_only` on the generic approvals screen).
+- `SaccoApprovals` gains `Approvals\ChecksChecker`: an executor whose checker depends on the request is asked before a
+  checker's decision is recorded.
+- An employee (a member seated as manager or teller) is routed like an insider when the policy is `committee`; with
+  `salary_advance_only` only a salary-advance product is allowed (AK-43).
+- *Why:* recusals and absences change the count after the request is made, and `required_approvals` is frozen.
+
+**AK-84: A guarantee's lien sits on one savings account, and the borrower's own savings are not liened.**
+
+- Consent places the whole guaranteed amount on the guarantor's savings account with the most free money (it must
+  cover it), so a recovery debits one account. Capacity is free savings (balances less liens) less the guarantees
+  still waiting for consent; at most `max_guarantees_per_guarantor` (3) live guarantees.
+- The part guaranteed is the loan above the borrower's own free savings, times the product's cover. The borrower's
+  savings stay unliened: the s.55AK first charge and the withdrawal block while in arrears (AK-30) protect them.
+- The consent link carries an opaque token (hashed at rest, 7 days, spent on use); the consent page asks for a fresh
+  code sent to the guarantor (OtpService, purpose `verify`, keyed `sacco_guarantee:{id}`).
+- *Why:* one account per lien keeps recovery and release exact; locking the borrower's own savings would freeze
+  most of a typical borrower's money for the whole term.

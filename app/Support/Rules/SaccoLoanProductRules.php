@@ -163,7 +163,7 @@ final class SaccoLoanProductRules
     /**
      * The presets (02 §7.2), money in the SACCO's currency. PDM: the Parish Revolving Fund's UGX 1 m including charges at
      * 6 % a year, a UGX 5,000 fee, 90 % on inputs, 1 to 3 years; its 0.5 % a month surcharge is above SI 108's half-rate
-     * ceiling for a 6 % loan, so the preset carries the legal maximum (AK-71). Emyooga: 8 % a year. VSLA (group mode):
+     * ceiling for a 6 % loan, so the preset carries the legal maximum (AK-81). Emyooga: 8 % a year. VSLA (group mode):
      * the 10 % a month service charge, flat, up to 3 months, cash.
      *
      * @return array<string, mixed>

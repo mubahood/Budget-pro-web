@@ -16,7 +16,7 @@ final class LoanTerms implements \JsonSerializable
     public const RATE_PERIODS = ['month', 'year'];
 
     /**
-     * Repayment frequencies of P2. `meeting` (a group's meeting cycle) arrives with group meetings (P5, AK-70);
+     * Repayment frequencies of P2. `meeting` (a group's meeting cycle) arrives with group meetings (P5, AK-80);
      * until then a group lends weekly, fortnightly or monthly.
      */
     public const FREQUENCIES = ['weekly', 'fortnightly', 'monthly'];
