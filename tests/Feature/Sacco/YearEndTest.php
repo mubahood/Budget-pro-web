@@ -93,7 +93,8 @@ class YearEndTest extends ApiTestCase
         $members = [];
         $savings = [];
         foreach ([300_000, 300_000, 300_000, 100_000] as $i => $shares) {
-            $m = $this->activeMember($c, $owner, 'Member', chr(65 + $i));
+            $m = app(\App\Services\Sacco\Members\MemberService::class)->register($c, ['first_name' => 'Member', 'last_name' => chr(65 + $i).' '.Str::random(4), 'consent_data' => true,
+                'joined_on' => '2025-01-15'], $owner, ['status' => 'active'])['member'];
             $members[] = $m;
             (new ShareService())->payEntranceFee($c, ['member_id' => $m->id, 'value_date' => '2025-02-0'.($i + 1)], $owner, ['entry_date' => '2025-02-0'.($i + 1)]);
             (new ShareService())->purchase($c, ['member_id' => $m->id, 'amount_minor' => $shares, 'channel' => 'cash', 'value_date' => '2025-03-0'.($i + 1)], $owner, ['entry_date' => '2025-03-0'.($i + 1)]);
@@ -246,6 +247,20 @@ class YearEndTest extends ApiTestCase
         $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
         $bs = Figures::position($cid, '2026-04-30');
         $this->assertSame($bs['totals']['assets'], $bs['totals']['liabilities_and_equity']);
+
+        // the Registrar's annual return and the AGM pack for 2025
+        $reports = new \App\Services\Sacco\Reports\SaccoReports();
+        $annual = $reports->build($c, 'registrar_annual_return', ['to' => '2026-06-30'], $y['owner']);
+        $fields = collect($annual['rows'])->pluck('value', 'field');
+        $this->assertSame([2025, 4, 100, 4_000_000], [$annual['meta']['year'], $annual['meta']['members'], $annual['meta']['shares'], $annual['meta']['indebtedness_minor']]);
+        $this->assertSame(['CS 1234', '10,000', '2026-03-20', 'Limited by shares'], [$fields['Registration number'], $fields['Par value of one share'],
+            $fields['Date of the annual general meeting'], $fields['Liability']]);
+        $this->assertContains('Treasurer', array_column($annual['sections'][0]['rows'], 'office'));
+        $pack = $reports->build($c, 'agm_pack', ['to' => '2026-06-30'], $y['owner']);
+        $this->assertSame(['2025-01-01', '2025-12-31'], [$pack['from'], $pack['to']]);
+        $this->assertSame(5_500_000, collect($pack['sections'][0]['rows'])->firstWhere('line', '14')['current_minor'], 'the closed year\'s income statement');
+        $this->assertSame(100_000, $pack['sections'][3]['totals']['amount_minor'], 'the dividend paid');
+        $this->assertNotEmpty(\App\Services\Sacco\Reports\SaccoReportFormat::render($pack, 'pdf')[0]);
     }
 
     public function test_an_unlicensed_sacco_goes_ahead_with_warnings(): void
@@ -263,6 +278,9 @@ class YearEndTest extends ApiTestCase
         $this->assertSame(0, $this->bal($cid, 're.current'));
         $this->assertSame(120_000, $this->bal($cid, 'dividends.payable'), '12 % of 1,000,000');
         $this->assertNotEmpty(\App\Models\SaccoAppropriation::where('company_id', $cid)->value('warnings'), 'the warnings stay on the appropriation for its report');
+        $report = (new \App\Services\Sacco\Reports\SaccoReports())->build($c, 'appropriation', ['to' => '2026-06-30'], $y['owner']);
+        $this->assertSame('Warnings', $report['sections'][0]['title']);
+        $this->assertCount(5, $report['sections'][0]['rows'], 'shown on the report');
 
         $d = (new Dividends())->preview($cid, 2025, ['pay_to' => 'cash', 'on' => '2026-04-10']);
         $this->assertSame([], $d['refusals']);

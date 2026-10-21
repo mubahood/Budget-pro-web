@@ -32,6 +32,9 @@ final class YearEndModule
         \App\Services\Sacco\Payouts\PayoutService::onResult('dividend', [Dividends::class, 'payoutResult']);
         // ADR 0009 §8: a month closes only once its savings interest is worked out.
         CloseChecks::register('savings_interest', [self::class, 'interestCheck']);
+        // P4.1–P4.4, P4.11: the statements, the regulator's forms, the Registrar's returns, the ratios, the registers.
+        \App\Services\Sacco\Reports\UmraReturns::register();
+        \App\Services\Sacco\Reports\FinancialReports::register();
     }
 
     /** Whether the P4 tables exist (a database not yet migrated to P4 runs everything else as before). */
