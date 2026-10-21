@@ -47,6 +47,24 @@ final class LoansModule
                 throw BusinessRuleException::make('provisioning_pending', 'The loan-loss provisioning for '.$period->label().' has not run yet: run sacco:daily on the 1st.');
             }
         });
+        SaccoTransactions::approvalCheck('loan_arrears', [self::class, 'withdrawalBlock']);
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
+    }
+
+    /**
+     * Coop s.55AK, AK-30: a member in arrears, or whose guaranteed loan is in arrears, withdraws only with a second
+     * officer's approval (the approval, with its reason, is the override).
+     */
+    public static function withdrawalBlock(int $companyId, \App\Models\SaccoSavingsAccount $account, int $amount): ?string
+    {
+        $own = SaccoLoan::withoutGlobalScopes()->where('company_id', $companyId)->where('member_id', $account->member_id)->where('status', 'active')->where('days_past_due', '>', 0)->value('loan_no');
+        if ($own !== null) {
+            return "The member's loan {$own} is in arrears (s.55AK first charge).";
+        }
+        $guaranteed = \App\Models\SaccoLoanGuarantor::withoutGlobalScopes()->from('sacco_loan_guarantors as g')->join('sacco_loans as l', 'l.id', '=', 'g.loan_id')
+            ->where('g.company_id', $companyId)->where('g.guarantor_member_id', $account->member_id)->where('g.consent_status', 'consented')
+            ->where('l.status', 'active')->where('l.days_past_due', '>', 0)->value('l.loan_no');
+
+        return $guaranteed !== null ? "A loan the member guarantees ({$guaranteed}) is in arrears (s.55AK)." : null;
     }
 }
