@@ -21,8 +21,9 @@ class OtpService
     /**
      * @param  string|null  $deliverTo  where the code goes when the identifier is not an address itself (a SACCO
      *                                  member's codes are keyed `sacco:{email}` and sent to that email, AK-61)
+     * @param  string|null  $sender  the name the code is sent in (a SACCO's own name); null = the product's
      */
-    public function request(string $identifier, string $purpose, ?string $ip = null, ?string $deliverTo = null): array
+    public function request(string $identifier, string $purpose, ?string $ip = null, ?string $deliverTo = null, ?string $sender = null): array
     {
         if (! in_array($purpose, self::PURPOSES, true)) {
             throw BusinessRuleException::make('invalid_purpose', 'Unknown code purpose.');
@@ -41,7 +42,8 @@ class OtpService
         ]);
         $isEmail = str_contains($to, '@');
         // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
-        $product = \App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name');
+        // An Akiba Ledger SACCO speaks only in its own name ($sender), never the family's.
+        $product = $sender ?? (\App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name'));
         $text = 'Your '.$product." code is {$code}. It expires in {$cfg['ttl_minutes']} minutes. Never share it.";
         $channels = $isEmail ? ['mail'] : ['whatsapp', 'sms'];
         $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];

@@ -100,7 +100,7 @@ final class Guarantors
         if (blank($to)) {
             throw BusinessRuleException::make('no_contact', 'This guarantor has no phone or email on record: an officer records a signed form instead.');
         }
-        $r = app(OtpService::class)->request(self::otpKey($g), 'verify', $ip, (string) $to);
+        $r = app(OtpService::class)->request(self::otpKey($g), 'verify', $ip, (string) $to, self::sender((int) $g->company_id));
 
         return ['sent' => $r['sent'], 'sent_to' => $r['sent_to']];
     }
@@ -145,7 +145,7 @@ final class Guarantors
             throw BusinessRuleException::make('guarantee_not_found', 'That guarantee request is not yours.');
         }
         $this->assertOpen($g);
-        $r = app(OtpService::class)->request(self::otpKey($g), 'verify', null, (string) ($member->phone_e164 ?: $member->email));
+        $r = app(OtpService::class)->request(self::otpKey($g), 'verify', null, (string) ($member->phone_e164 ?: $member->email), self::sender((int) $company->id));
 
         return ['sent' => $r['sent'], 'sent_to' => $r['sent_to']];
     }
@@ -312,6 +312,12 @@ final class Guarantors
         }
 
         return $g;
+    }
+
+    /** Codes and notices go out in the SACCO's own name (Akiba Ledger is independent of the family). */
+    private static function sender(int $companyId): string
+    {
+        return LoanBooks::settings($companyId)->short_name ?: 'Akiba Ledger';
     }
 
     private static function otpKey(SaccoLoanGuarantor $g): string

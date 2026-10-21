@@ -117,7 +117,7 @@ final class Eligibility
         }
         if ($at('approve', 'disburse')) {
             $liquid = self::liquidity($cid);
-            $add('liquidity', $liquid >= $amount, $stage === 'disburse', "Cash, bank and mobile money on hand: {$liquid}.", ['value' => $amount, 'limit' => $liquid]);
+            $add('liquidity', $liquid >= $amount || $loan->disbursement_channel === 'savings', $stage === 'disburse', "Cash, bank and mobile money on hand: {$liquid}.", ['value' => $amount, 'limit' => $liquid]);
         }
         if ($at('approve') && ! $settings->isGroup()) {
             $exposure = $amount + (int) SaccoLoan::withoutGlobalScopes()->where('company_id', $cid)->where('member_id', $member->id)->whereIn('status', SaccoLoan::OPEN)

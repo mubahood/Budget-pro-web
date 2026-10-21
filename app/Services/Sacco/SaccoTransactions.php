@@ -610,6 +610,7 @@ final class SaccoTransactions
             'receipt_no' => $status === 'pending_approval' ? null : NumberSequencer::next($companyId, 'rct', Carbon::parse($opts['entry_date'] ?? LocalDate::today($companyId))),
             'device_receipt_no' => $opts['device_receipt_no'] ?? null, 'member_id' => $d['member_id'] ?? null, 'savings_account_id' => $d['savings_account_id'] ?? null,
             'share_account_id' => $d['share_account_id'] ?? null, 'counter_account_id' => $d['counter_account_id'] ?? null, 'shares_count' => $d['shares_count'] ?? null,
+            'loan_id' => $d['loan_id'] ?? null, 'payout_id' => $d['payout_id'] ?? null,
             'amount_minor' => (int) $d['amount_minor'], 'fee_minor' => (int) ($d['fee_minor'] ?? 0), 'currency' => PostingService::currency($companyId),
             'value_date' => $d['value_date'], 'status' => $status, 'hold_reason' => $holdReason, 'reference' => $d['reference'] ?? null, 'narration' => $d['narration'] ?? null,
             'received_by_id' => $by?->id, 'meta' => $opts['meta'] ?? null, 'device_id' => $opts['device_id'] ?? null,

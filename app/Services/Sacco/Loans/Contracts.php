@@ -115,7 +115,7 @@ final class Contracts
      * The borrower signs, before a witness (reg. 5). Optionally the scanned signed copy (a file id). Starts the
      * cooling-off.
      *
-     * @param  array{signed_on?: ?string, witness_name: string, witness_phone?: ?string, signed_file_id?: ?int}  $data
+     * @param  array<string, mixed>  $data  witness_name, witness_phone, signed_on, signed_file_id
      */
     public function sign(Company $company, int $loanId, User $by, array $data): SaccoLoan
     {

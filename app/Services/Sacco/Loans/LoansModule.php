@@ -14,7 +14,7 @@ use App\Services\Sacco\SaccoSetupService;
 final class LoansModule
 {
     /** The loan maker-checker actions (04 §7). */
-    public const EXECUTORS = [Executors\LoanDecisionExecutor::class];
+    public const EXECUTORS = [Executors\LoanDecisionExecutor::class, Executors\LoanDisbursementExecutor::class];
 
     public static function boot(): void
     {
@@ -22,6 +22,7 @@ final class LoansModule
         foreach (self::EXECUTORS as $class) {
             SaccoApprovals::register(new $class());
         }
+        \App\Services\Sacco\Payouts\PayoutService::onResult('loan_disbursement', [Disbursement::class, 'payoutResult']);
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
     }
 }

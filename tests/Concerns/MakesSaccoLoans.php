@@ -114,7 +114,7 @@ trait MakesSaccoLoans
 
     /**
      * The loans officer and a manager with a large limit, made once per SACCO; with them a depositor's 200 m in cash, so
-     * the SACCO has the liquidity and the assets (a 20 m single-borrower limit) a loan test needs.
+     * the SACCO has the liquidity, the assets and the reserves (a 20 m single-borrower limit) a loan test needs.
      *
      * @return array{officer: User, manager: User}
      */
@@ -123,6 +123,11 @@ trait MakesSaccoLoans
         if (! isset($this->loanStaff[(int) $company->id])) {
             $owner = User::withoutGlobalScopes()->findOrFail($company->owner_id);
             $this->loanSavings($company, $this->loanMember($company, $owner, 1000, ['first_name' => 'Depositor']), 200_000_000, $owner);
+            // A mature SACCO's reserves (institutional capital, for the single-borrower limit): 80 m in the bank against 3200.
+            $cid = (int) $company->id;
+            (new \App\Services\Sacco\Ledger\PostingService())->post(\App\Services\Sacco\Ledger\JournalDraft::make($cid, 'manual', 'test:reserve:'.$cid)
+                ->debit(\App\Services\Sacco\Ledger\ChartOfAccounts::id($cid, 'bank.main'), \App\Support\Sacco\Amount::of(80_000_000, 'UGX'))
+                ->credit(\App\Services\Sacco\Ledger\ChartOfAccounts::id($cid, 'reserve.statutory'), \App\Support\Sacco\Amount::of(80_000_000, 'UGX')));
             $this->loanStaff[(int) $company->id] = ['officer' => $this->saccoStaff($company, 'sacco_loans_officer'),
                 'manager' => $this->officerUser($company, 'sacco_manager', 'manager', 1_000_000_000)];
         }
@@ -138,5 +143,35 @@ trait MakesSaccoLoans
         (new \App\Services\Sacco\Loans\Committee())->requestDelegated($company, (int) $loan->id, $staff['officer']);
 
         return (new \App\Services\Sacco\Loans\Committee())->decide($company, (int) $loan->id, $staff['manager'], 'approve');
+    }
+
+    /** An approved loan with its contract printed and signed before a witness on $signedOn (today by default). */
+    protected function signedLoan(Company $company, SaccoMember $member, int $amount, int $term, ?string $signedOn = null, ?SaccoLoanProduct $product = null): SaccoLoan
+    {
+        $loan = $this->approvedLoan($company, $member, $amount, $term, $product);
+        $officer = $this->loanStaffOf($company)['officer'];
+        (new \App\Services\Sacco\Loans\Contracts())->generate($company, (int) $loan->id, $officer);
+
+        return (new \App\Services\Sacco\Loans\Contracts())->sign($company, (int) $loan->id, $officer, ['witness_name' => 'Witness '.uniqid(), 'signed_on' => $signedOn]);
+    }
+
+    /** A signed loan paid out (requested by the treasurer, approved by the manager). @param array<string, mixed> $data */
+    protected function activeLoan(Company $company, SaccoMember $member, int $amount, int $term, array $data = ['channel' => 'savings'], ?string $on = null, ?SaccoLoanProduct $product = null): SaccoLoan
+    {
+        $loan = $this->signedLoan($company, $member, $amount, $term, $on, $product);
+        $staff = $this->loanStaffOf($company);
+        $treasurer = $this->loanTreasurer($company);
+        $approval = (new \App\Services\Sacco\Loans\Disbursement())->request($company, (int) $loan->id, $treasurer, $data + ($on !== null ? ['disburse_on' => $on] : []));
+        (new \App\Services\Sacco\SaccoApprovals())->approve($company, (int) $approval->id, $staff['manager']);
+
+        return $loan->fresh();
+    }
+
+    /** @var array<int, User> */
+    protected array $treasurers = [];
+
+    protected function loanTreasurer(Company $company): User
+    {
+        return $this->treasurers[(int) $company->id] ??= $this->saccoStaff($company, 'sacco_treasurer');
     }
 }
