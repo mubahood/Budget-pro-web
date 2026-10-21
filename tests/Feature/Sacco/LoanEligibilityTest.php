@@ -95,7 +95,8 @@ class LoanEligibilityTest extends ApiTestCase
         $this->assertSame('Harvest income in March, letter on file', $ok->appraisal['override_reason']);
         $this->assertSame(113_472, (new Eligibility())->monthlyInstalment(1_200_000, $ok->loanTerms(), 'UGX'));
 
-        // The SACCO holds 1 m in cash (the member's deposit): 1.2 m is more than it has, and more than 10 % of its assets.
+        // The SACCO holds 1 m in cash (the member's deposit): 1.2 m paid in cash is more than it has, and more than 10 % of its assets.
+        $ok->forceFill(['disbursement_channel' => 'cash'])->save();
         $failing = $this->failing($ok, 'approve');
         $this->assertContains('liquidity', $failing);
         $this->assertContains('single_borrower_limit', $failing);

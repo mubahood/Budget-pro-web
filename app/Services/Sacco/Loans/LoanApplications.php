@@ -46,6 +46,21 @@ final class LoanApplications
     }
 
     /**
+     * What a phone may push for a draft (SyncRegistry `sacco_loans`, AK-23): the member, the product, the amount, the term
+     * and the purpose. Everything after `draft` is online only (SaccoAccess::refuseSyncOp).
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function syncRules(int $companyId, ?int $ignoreId): array
+    {
+        return ['member_id' => [$ignoreId === null ? 'required' : 'sometimes', 'integer', Rule::exists('sacco_members', 'id')->where('company_id', $companyId)],
+            'product_id' => [$ignoreId === null ? 'required' : 'sometimes', 'integer', Rule::exists('sacco_loan_products', 'id')->where('company_id', $companyId)->where('is_active', 1)],
+            'applied_minor' => SaccoRules::minor($ignoreId === null, 1), 'term' => [$ignoreId === null ? 'required' : 'sometimes', 'integer', 'min:1', 'max:600'],
+            'purpose' => ['sometimes', 'nullable', 'string', 'max:255'], 'purpose_category' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'inputs_share_bp' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10000'], 'disbursement_channel' => ['sometimes', 'nullable', Rule::in(SaccoLoan::CHANNELS)]];
+    }
+
+    /**
      * Start an application (a draft), or with opts.submit make and submit it. Idempotent on uuid.
      *
      * @param  array<string, mixed>  $data  rules()

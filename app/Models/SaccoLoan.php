@@ -6,6 +6,7 @@ use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Services\Sacco\Loans\LoanTerms;
 use App\Traits\AuditLogger;
+use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,10 +16,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * money is the ledger's. The four outstanding figures are caches of the loan's journal lines, written only by
  * PostingService through LoanLedger (a model save that touches them is refused), and a loan is never deleted: a
  * phone's draft is marked is_deleted, everything later is cancelled, rejected, closed or written off.
+ *
+ * A draft pushed by a phone (sync, AK-23: only drafts) copies its product's terms here when it is created, exactly as
+ * LoanApplications::create does, so the snapshot never depends on the path the draft came by.
  */
 class SaccoLoan extends Model
 {
-    use AuditLogger;
+    use AuditLogger, Syncable;
+
+    /** Fields an application may still change, until it is appraised. */
+    public const APPLICATION_FIELDS = ['product_id', 'applied_minor', 'term', 'member_id'];
 
     public const STATUSES = ['draft', 'submitted', 'appraised', 'in_committee', 'approved', 'rejected', 'appealed', 'signed', 'cancelled', 'disbursing',
         'active', 'closed', 'written_off', 'restructured'];
@@ -54,15 +61,32 @@ class SaccoLoan extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        static::creating(function (self $loan) {
+            if (empty($loan->terms)) {
+                $product = SaccoLoanProduct::withoutGlobalScopes()->where('company_id', $loan->company_id)->find($loan->product_id)
+                    ?? throw BusinessRuleException::make('product_not_found', 'That loan product is not in this SACCO.');
+                \App\Services\Sacco\Loans\LoanProducts::assertFits($product, (int) $loan->applied_minor, (int) $loan->term);
+                $settings = SaccoSetting::for((int) $loan->company_id) ?? throw BusinessRuleException::make('not_set_up', 'Set up the SACCO first.');
+                $loan->terms = $product->terms((int) $loan->term, (string) $settings->allocation_order)->toArray();
+                $loan->currency ??= $settings->currency;
+                $loan->status ??= 'draft';
+                $loan->source = $loan->device_id !== null ? 'phone' : ($loan->source ?? 'staff');
+            }
+        });
         static::updating(function (self $loan) {
+            if (! in_array($loan->getOriginal('status'), ['draft', 'submitted'], true) && $loan->isDirty(self::APPLICATION_FIELDS)) {
+                throw BusinessRuleException::make('loan_locked', 'This application is past appraisal: its amount, term and product no longer change.');
+            }
             foreach (self::LEDGER_CACHES as $column) {
                 if ($loan->isDirty($column)) {
                     throw BusinessRuleException::make('ledger_cache', 'A loan\'s balances move only by posting to the books.');
                 }
             }
         });
-        static::deleting(function () {
-            throw BusinessRuleException::make('loan_history', 'A loan is never deleted: it is cancelled, rejected, closed or written off.');
+        static::deleting(function (self $loan) {
+            if ($loan->status !== 'draft') {
+                throw BusinessRuleException::make('loan_history', 'A loan is never deleted: it is cancelled, rejected, closed or written off.');
+            }
         });
     }
 

@@ -176,6 +176,13 @@ class SyncRegistry
                 'uuids' => ['member_uuid' => ['sacco_members', 'member_id']]]],
             'sacco_share_accounts' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'sacco_share_accounts', 'where' => ['is_deleted', '=', 0],
                 'uuids' => ['member_uuid' => ['sacco_members', 'member_id']]]],
+            // Loans (P2, AK-23): a phone may start a draft (master; the terms are copied from the product when the server
+            // makes the row); submitting and everything after is online only. Products come down as a pull-only snapshot.
+            'sacco_loans' => ['model' => \App\Models\SaccoLoan::class, 'kind' => self::KIND_MASTER, 'fields' => ['member_id', 'product_id', 'applied_minor', 'term', 'purpose',
+                'purpose_category', 'inputs_share_bp', 'disbursement_channel'], 'user_fields' => ['created_by_id', 'officer_id'],
+                'refs' => ['member_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'member_id'], 'product_uuid' => ['model' => \App\Models\SaccoLoanProduct::class, 'column' => 'product_id']],
+                'rules' => [\App\Services\Sacco\Loans\LoanApplications::class, 'syncRules']],
+            'sacco_loan_products' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'sacco_loan_products', 'where' => ['is_deleted', '=', 0]]],
             // Poultry: same wire keys as the v1 endpoints; push semantics live in PoultrySyncable.
             'farm_types' => ['model' => PoultryFarmType::class, 'kind' => self::KIND_REFERENCE],
             'production_guide_tasks' => ['model' => PoultryProductionGuideTask::class, 'kind' => self::KIND_REFERENCE],
