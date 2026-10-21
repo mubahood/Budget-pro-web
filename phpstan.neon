@@ -37,6 +37,8 @@ parameters:
         - app/Models/SaccoMemberLogin.php
         - app/Models/SaccoApproval.php
         - app/Models/SaccoApprovalVote.php
+        - app/Models/SaccoPublicHoliday.php
+        - app/Models/SaccoLoanProduct.php
         - app/Scopes
     excludePaths:
         - app/Services/AutoReorderService.php

@@ -27,6 +27,7 @@ final class SaccoModule
         foreach (self::EXECUTORS as $class) {
             SaccoApprovals::register(new $class());
         }
+        Loans\LoansModule::boot(); // P2: loans register their sub-ledger, executors, jobs and checks there
         Ledger\CloseChecks::register('approvals', function (int $companyId, \App\Models\SaccoPeriod $period) {
             $open = SaccoApprovals::openIn($companyId, $period);
             if ($open > 0) {
