@@ -225,7 +225,7 @@ final class SaccoAccount
         $to = Carbon::parse($to ?? $today)->toDateString();
         $from = Carbon::parse($from ?? Carbon::parse($to)->subDays(90))->toDateString();
         $base = SaccoJournalLine::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('ledger_account_id', $ids);
-        $opening = (int) (clone $base)->where('entry_date', '<', $from)->sum(DB::raw('debit_minor - credit_minor'));
+        $opening = (int) (clone $base)->where('entry_date', '<', $from)->selectRaw('COALESCE(SUM(debit_minor), 0) - COALESCE(SUM(credit_minor), 0) AS v')->value('v'); // the columns are unsigned: subtract the sums, never row by row
         $moves = (clone $base)->whereBetween('entry_date', [$from, $to])->groupBy('journal_entry_id')
             ->selectRaw('journal_entry_id, SUM(debit_minor) AS d, SUM(credit_minor) AS c')->get()->keyBy('journal_entry_id');
         $entries = SaccoJournalEntry::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('id', $moves->keys())->orderBy('entry_date')->orderBy('id')->get();
