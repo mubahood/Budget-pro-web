@@ -51,6 +51,26 @@ class MemberAuthController extends Controller
     }
 
     /**
+     * POST sacco/member-auth/login {login (email or phone), password, device_name?}: the password sign-in. One membership:
+     * a token for it at once (as `token`). More than one: the memberships and a 10-minute ticket for `token`.
+     */
+    public function login(Request $request): JsonResponse
+    {
+        $d = $request->validate(['login' => ['required', 'string', 'max:190'], 'password' => ['required', 'string', 'max:190'], 'device_name' => ['nullable', 'string', 'max:60']]);
+
+        return $this->guard(function () use ($d) {
+            $memberships = app(MemberLogin::class)->attempt($d['login'], $d['password']);
+            if (count($memberships) === 1) {
+                $member = app(MemberLogin::class)->resolve((int) $memberships[0]['company_id'], (int) $memberships[0]['member_id']);
+
+                return $this->created($this->issue($member, $d['device_name'] ?? null) + ['memberships' => $memberships], 'Signed in.');
+            }
+
+            return $this->success($this->ticket($memberships), 'Choose a membership.');
+        });
+    }
+
+    /**
      * POST sacco/member-auth/token {company_id, member_id, ticket} or {company_id, member_id, email, password}: a token for
      * that membership (30 days).
      */
@@ -71,13 +91,20 @@ class MemberAuthController extends Controller
                 throw BusinessRuleException::make('invalid_credentials', 'That membership was not opened by this sign-in.');
             }
             $member = app(MemberLogin::class)->resolve((int) $d['company_id'], (int) $d['member_id']);
-            $login = SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $member->company_id)->where('member_id', $member->id)->firstOrFail();
-            $plain = Str::random(48);
-            $token = PersonalAccessToken::forceCreate(['tokenable_type' => SaccoMemberLogin::class, 'tokenable_id' => $login->id, 'name' => mb_substr($d['device_name'] ?? 'member', 0, 60),
-                'token' => hash('sha256', $plain), 'abilities' => [SaccoMemberAuth::ABILITY], 'expires_at' => now()->addDays(self::TOKEN_DAYS)]);
 
-            return $this->created(['token' => $token->id.'|'.$plain, 'expires_at' => $token->expires_at?->toIso8601String(), 'member' => $this->me($member)], 'Signed in.');
+            return $this->created($this->issue($member, $d['device_name'] ?? null), 'Signed in.');
         });
+    }
+
+    /** A 30-day member token for one membership. @return array<string, mixed> */
+    private function issue(SaccoMember $member, ?string $device): array
+    {
+        $login = SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $member->company_id)->where('member_id', $member->id)->firstOrFail();
+        $plain = Str::random(48);
+        $token = PersonalAccessToken::forceCreate(['tokenable_type' => SaccoMemberLogin::class, 'tokenable_id' => $login->id, 'name' => mb_substr($device ?? 'member', 0, 60),
+            'token' => hash('sha256', $plain), 'abilities' => [SaccoMemberAuth::ABILITY], 'expires_at' => now()->addDays(self::TOKEN_DAYS)]);
+
+        return ['token' => $token->id.'|'.$plain, 'expires_at' => $token->expires_at?->toIso8601String(), 'member' => $this->me($member)];
     }
 
     /** GET sacco/me */

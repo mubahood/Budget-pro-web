@@ -107,6 +107,14 @@ class ApiPermissionMap
         [['POST'], '#^sacco/payouts/\d+/retry$#', 'sacco_disburse'],
         [['POST'], '#^sacco/payouts/\d+/resolve$#', 'sacco_approve'],
         [['POST'], '#^sacco/statement-imports(/\d+(/match|/lines/\d+/[a-z]+))?$#', 'sacco_accounts'],
+        // The simple flows (docs/akiba/flows-plan.md).
+        [['POST'], '#^sacco/account/entries(/\d+/reverse)?$#', 'sacco_accounts'],
+        [['POST', 'PUT', 'PATCH'], '#^sacco/account/categories(/\d+)?$#', 'sacco_accounts'],
+        [['POST'], '#^sacco/share-outs$#', 'sacco_accounts'],
+        [['PUT', 'PATCH'], '#^sacco/loan-settings$#', 'sacco_settings'],
+        [['POST'], '#^sacco/loan-requests/\d+/chair$#', null], // the chairperson (LoanFlow::isChair)
+        [['POST'], '#^sacco/loan-requests/\d+/(pay-out|not-paid-out)$#', 'sacco_disburse'],
+        [['POST'], '#^sacco/loan-requests/\d+/repayments$#', 'sacco_teller'],
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],

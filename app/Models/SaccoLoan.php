@@ -28,13 +28,16 @@ class SaccoLoan extends Model
     public const APPLICATION_FIELDS = ['product_id', 'applied_minor', 'term', 'member_id'];
 
     public const STATUSES = ['draft', 'submitted', 'appraised', 'in_committee', 'approved', 'rejected', 'appealed', 'signed', 'cancelled', 'disbursing',
-        'active', 'closed', 'written_off', 'restructured'];
+        'active', 'closed', 'written_off', 'restructured', 'pending_guarantor', 'pending_chair', 'declined_by_guarantor', 'declined_by_chair', 'not_disbursed'];
+
+    /** The simple flow (docs/akiba/flows-plan.md): a request waits for its guarantor, then the chairperson. */
+    public const SIMPLE_PENDING = ['pending_guarantor', 'pending_chair'];
 
     /** A loan that still owes, or may soon (one open loan per member, MobiSave). */
     public const OPEN = ['approved', 'signed', 'disbursing', 'active'];
 
     /** An application still on its way to a decision (one pending application per member). */
-    public const PENDING = ['submitted', 'appraised', 'in_committee', 'appealed'];
+    public const PENDING = ['submitted', 'appraised', 'in_committee', 'appealed', 'pending_guarantor', 'pending_chair'];
 
     public const CLASSES = ['performing', 'watch', 'substandard', 'doubtful', 'loss'];
 

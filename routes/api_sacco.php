@@ -101,8 +101,12 @@ require __DIR__.'/api_sacco_year_end.php';
 // Money channels, check-off, tills and the member's own requests (P3): their own file.
 require __DIR__.'/api_sacco_channels.php';
 
+// The simple flows (docs/akiba/flows-plan.md): shares, the SACCO account, share-out, loan requests and repayments.
+require __DIR__.'/api_sacco_flows.php';
+
 // Members (04 §6.4): their own sign-in (public, throttled) and their own records (a member token, never a staff one).
 Route::prefix('sacco/member-auth')->middleware(['edition:saas', 'throttle:10,1'])->group(function () {
+    Route::post('login', [MemberAuthController::class, 'login']);
     Route::post('otp', [MemberAuthController::class, 'otp']);
     Route::post('verify', [MemberAuthController::class, 'verify']);
     Route::post('token', [MemberAuthController::class, 'token']);
