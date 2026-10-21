@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Services\Sacco\Ledger\SubLedgers;
 use App\Services\Sacco\SaccoApprovals;
 use App\Services\Sacco\SaccoSetupService;
+use App\Services\Sacco\SaccoTransactions;
 
 /**
  * Wires loans (P2) into the rest of the SACCO module at boot, called once from SaccoModule::boot, so the shared boot
@@ -23,6 +24,9 @@ final class LoansModule
             SaccoApprovals::register(new $class());
         }
         \App\Services\Sacco\Payouts\PayoutService::onResult('loan_disbursement', [Disbursement::class, 'payoutResult']);
+        SaccoTransactions::recorder('loan_repayment', [Repayments::class, 'recorder']);
+        SaccoTransactions::offlineCheck('loan_repayment', [Repayments::class, 'offlineCheck']);
+        SaccoTransactions::onReverse('loan_repayment', 'loans', [Repayments::class, 'reversed']);
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
     }
 }

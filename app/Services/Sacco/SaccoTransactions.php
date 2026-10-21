@@ -48,11 +48,11 @@ use Illuminate\Validation\Rule;
 final class SaccoTransactions
 {
     /** Kinds a teller records with record() (withdrawals need sacco_withdraw; the loan kinds are P2's). */
-    public const RECORD_KINDS = ['deposit', 'withdrawal', 'fee', 'internal_transfer', 'share_purchase', 'entrance_fee'];
+    public const RECORD_KINDS = ['deposit', 'withdrawal', 'fee', 'internal_transfer', 'share_purchase', 'entrance_fee', 'loan_repayment'];
 
     /** The permission each kind needs from the officer who records it. */
     public const PERMISSION = ['deposit' => 'sacco_teller', 'fee' => 'sacco_teller', 'internal_transfer' => 'sacco_teller', 'share_purchase' => 'sacco_teller',
-        'entrance_fee' => 'sacco_teller', 'withdrawal' => 'sacco_withdraw'];
+        'entrance_fee' => 'sacco_teller', 'withdrawal' => 'sacco_withdraw', 'loan_repayment' => 'sacco_teller'];
 
     /** Why an offline receipt may be held (sacco_transactions.hold_reason). */
     public const HOLD_REASONS = ['unknown_account', 'account_closed', 'over_offline_max', 'loan_closed', 'not_whole_shares', 'share_cap_exceeded', 'entrance_fee_paid',
@@ -130,6 +130,7 @@ final class SaccoTransactions
             'savings_account_id' => ['nullable', 'integer'],
             'share_account_id' => ['nullable', 'integer'],
             'counter_account_id' => ['nullable', 'integer'],
+            'loan_id' => ['nullable', 'integer'], // a loan repayment (P2: Loans\Repayments records it)
             'amount_minor' => SaccoRules::minor(true, 1),
             'value_date' => ['nullable', 'date'],
             'reference' => ['nullable', 'string', 'max:80'],
@@ -361,7 +362,11 @@ final class SaccoTransactions
                 $record['savings_account_id'] = (int) $account->id;
                 $target = new SubRef('savings', (int) $account->id, (int) $account->ledger_account_id, (int) $account->member_id);
             }
-        } elseif ($kind === 'share_purchase' || $kind === 'entrance_fee' || $kind === 'fee') {
+        } elseif ($kind === 'share_purchase' || $kind === 'entrance_fee' || $kind === 'fee' || $kind === 'loan_repayment') {
+            if ($kind === 'loan_repayment') {
+                $record['loan_id'] = isset($data['loan_id']) && is_numeric($data['loan_id']) ? (int) $data['loan_id']
+                    : (! empty($data['loan_uuid']) ? DB::table('sacco_loans')->where('company_id', $cid)->where('uuid', (string) $data['loan_uuid'])->value('id') : null);
+            }
             if ($kind === 'share_purchase') {
                 $record['share_account_id'] = isset($data['share_account_id']) && is_numeric($data['share_account_id']) ? (int) $data['share_account_id'] : null;
             }
