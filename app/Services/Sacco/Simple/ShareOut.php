@@ -16,7 +16,6 @@ use App\Services\Sacco\Ledger\ChartOfAccounts;
 use App\Services\Sacco\Ledger\JournalDraft;
 use App\Services\Sacco\Ledger\PostingService;
 use App\Services\Sacco\Loans\LoanBooks;
-use App\Services\Sacco\Loans\MemberFunds;
 use App\Services\Sacco\SaccoAccess;
 use App\Services\Sacco\SaccoAudit;
 use App\Services\Sacco\SaccoTransactions;

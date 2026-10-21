@@ -500,8 +500,10 @@ final class LoanFlow
     {
         $db = [];
         foreach ($statuses ?? [] as $s) {
-            $db = array_merge($db, match ($s) { 'disbursed' => ['active', 'disbursing', 'restructured'], 'pending_chair' => ['pending_chair', 'submitted', 'appraised', 'in_committee', 'appealed'],
-                'declined_by_chair' => ['declined_by_chair', 'rejected'], 'not_disbursed' => ['not_disbursed', 'cancelled'], default => [$s] });
+            $db = array_merge($db, match ($s) {
+                'disbursed' => ['active', 'disbursing', 'restructured'], 'pending_chair' => ['pending_chair', 'submitted', 'appraised', 'in_committee', 'appealed'],
+                'declined_by_chair' => ['declined_by_chair', 'rejected'], 'not_disbursed' => ['not_disbursed', 'cancelled'], default => [$s]
+            });
         }
 
         return SaccoLoan::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->where('status', '!=', 'draft')
