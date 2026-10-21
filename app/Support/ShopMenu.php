@@ -49,7 +49,7 @@ final class ShopMenu
                 ['label' => 'Savings', 'icon' => 'fa-piggy-bank', 'route' => 'sacco.savings', 'path' => '/sacco/savings', 'match' => ['sacco.savings*', 'sacco.teller', 'sacco.withdrawals'], 'can' => ['sacco_view', 'sacco_audit_view']],
                 ['label' => 'Loans', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.loans.requests', 'path' => '/sacco/loan-requests', 'match' => ['sacco.loans*'], 'can' => ['sacco_view', 'sacco_audit_view'], 'sacco' => 'simple'],
                 ['label' => 'Loans', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.loans', 'path' => '/sacco/loans', 'match' => ['sacco.loans*'], 'can' => ['sacco_view', 'sacco_audit_view'], 'sacco' => 'strict'],
-                ['label' => 'SACCO account', 'icon' => 'fa-building-columns', 'route' => 'sacco.account', 'path' => '/sacco/account', 'match' => ['sacco.account'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['label' => 'SACCO account', 'icon' => 'fa-landmark', 'route' => 'sacco.account', 'path' => '/sacco/account', 'match' => ['sacco.account'], 'can' => ['sacco_view', 'sacco_audit_view']],
                 ['label' => 'Share-out', 'icon' => 'fa-chart-pie', 'route' => 'sacco.shareout', 'path' => '/sacco/share-out', 'match' => ['sacco.shareout*'], 'can' => ['sacco_view', 'sacco_audit_view']],
                 ['key' => 'sacco_books', 'label' => 'Books', 'icon' => 'fa-book', 'sacco' => 'strict', 'items' => [
                     ['label' => 'Chart of accounts', 'icon' => 'fa-list-check', 'route' => 'sacco.accounts', 'path' => '/sacco/accounts', 'match' => ['sacco.accounts'], 'can' => ['sacco_view', 'sacco_audit_view']],
