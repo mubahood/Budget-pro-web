@@ -70,10 +70,10 @@ final class LoanFlow
         $currency = LoanBooks::settings($companyId)->currency;
 
         return (new LoanProducts())->create($companyId, ['code' => self::PRODUCT_CODE, 'name' => 'Member loan', 'interest_method' => 'reducing_annuity', 'rate_bp' => 100,
-            'rate_period' => 'month', 'repayment_frequency' => 'monthly', 'min_term' => 1, 'max_term' => 60, 'min_amount_minor' => 1,
+            'rate_period' => 'month', 'repayment_frequency' => 'monthly', 'min_term' => 1, 'max_term' => 60, 'min_amount_minor' => Amount::fromMajor('1000', $currency)->minor,
             'max_amount_minor' => SaccoRules::MAX_MINOR / 1000, 'savings_multiplier_bp' => 0, 'min_membership_days' => 0, 'min_shares' => 0,
             'guarantors_required' => 1, 'guarantee_cover_bp' => 0, 'processing_fee_bp' => 0, 'processing_fee_minor' => 0, 'insurance_bp' => 0,
-            'penalty_rate_bp' => 0, 'grace_days' => 0, 'principal_grace_periods' => 0, 'cooling_off_working_days' => 0, 'cancellation_fee_bp' => 0,
+            'penalty_rate_bp' => 0, 'grace_days' => 0, 'principal_grace_periods' => 0, 'cooling_off_working_days' => LoanBooks::strict($companyId) ? 5 : 0, 'cancellation_fee_bp' => 0,
             'allowed_channels' => ['savings', 'cash', 'bank'], 'collateral_types' => ['other'], 'is_active' => true]);
     }
 

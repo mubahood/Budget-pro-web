@@ -37,22 +37,29 @@ final class ShopMenu
             // exclusive). Each page is gated by its sacco_* permission; officer positions are checked by SaccoAccess.
             // The auditor (sacco_audit_view) reads every page that shows the books, read-only (04 §6.1).
             ['key' => 'sacco', 'label' => 'SACCO', 'module' => 'sacco', 'entries' => [
-                ['label' => 'Overview', 'icon' => 'fa-vault', 'route' => 'sacco.overview', 'path' => '/sacco', 'match' => ['sacco.overview', 'sacco.setup'], 'can' => ['sacco_view', 'sacco_audit_view']],
-                ['label' => 'Receive money', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.teller', 'path' => '/sacco/teller', 'match' => ['sacco.teller'], 'can' => 'sacco_teller'],
+                // The simple menu (docs/akiba/flows-plan.md): Home, Members, Shares, Savings, Loans, SACCO account, Share-out,
+                // Reports, Settings. Entries marked 'sacco' => 'strict' show only for a licensed SACCO (SaccoRules::strict),
+                // 'simple' only for every other one; the pages behind them keep working either way.
+                ['label' => 'Home', 'icon' => 'fa-vault', 'route' => 'sacco.overview', 'path' => '/sacco', 'match' => ['sacco.overview', 'sacco.setup'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['label' => 'Receive money', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.teller', 'path' => '/sacco/teller', 'match' => ['sacco.teller'], 'can' => 'sacco_teller', 'sacco' => 'strict'],
                 ['label' => 'Members', 'icon' => 'fa-users', 'route' => 'sacco.members', 'path' => '/sacco/members', 'match' => ['sacco.members*'], 'can' => ['sacco_view', 'sacco_audit_view']],
-                ['label' => 'Withdrawals', 'icon' => 'fa-money-bill-transfer', 'route' => 'sacco.withdrawals', 'path' => '/sacco/withdrawals', 'match' => ['sacco.withdrawals'], 'can' => 'sacco_withdraw'],
-                ['label' => 'Approvals', 'icon' => 'fa-check-double', 'route' => 'sacco.approvals', 'path' => '/sacco/approvals', 'match' => ['sacco.approvals'], 'can' => ['sacco_approve', 'sacco_audit_view']],
-                ['label' => 'Savings', 'icon' => 'fa-piggy-bank', 'route' => 'sacco.savings', 'path' => '/sacco/savings', 'match' => ['sacco.savings*'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['label' => 'Withdrawals', 'icon' => 'fa-money-bill-transfer', 'route' => 'sacco.withdrawals', 'path' => '/sacco/withdrawals', 'match' => ['sacco.withdrawals'], 'can' => 'sacco_withdraw', 'sacco' => 'strict'],
+                ['label' => 'Approvals', 'icon' => 'fa-check-double', 'route' => 'sacco.approvals', 'path' => '/sacco/approvals', 'match' => ['sacco.approvals'], 'can' => ['sacco_approve', 'sacco_audit_view'], 'sacco' => 'strict'],
                 ['label' => 'Shares', 'icon' => 'fa-coins', 'route' => 'sacco.shares', 'path' => '/sacco/shares', 'match' => ['sacco.shares'], 'can' => ['sacco_view', 'sacco_audit_view']],
-                ['key' => 'sacco_books', 'label' => 'Books', 'icon' => 'fa-book', 'items' => [
+                ['label' => 'Savings', 'icon' => 'fa-piggy-bank', 'route' => 'sacco.savings', 'path' => '/sacco/savings', 'match' => ['sacco.savings*', 'sacco.teller', 'sacco.withdrawals'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['label' => 'Loans', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.loans.requests', 'path' => '/sacco/loan-requests', 'match' => ['sacco.loans*'], 'can' => ['sacco_view', 'sacco_audit_view'], 'sacco' => 'simple'],
+                ['label' => 'Loans', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.loans', 'path' => '/sacco/loans', 'match' => ['sacco.loans*'], 'can' => ['sacco_view', 'sacco_audit_view'], 'sacco' => 'strict'],
+                ['label' => 'SACCO account', 'icon' => 'fa-building-columns', 'route' => 'sacco.account', 'path' => '/sacco/account', 'match' => ['sacco.account'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['label' => 'Share-out', 'icon' => 'fa-chart-pie', 'route' => 'sacco.shareout', 'path' => '/sacco/share-out', 'match' => ['sacco.shareout*'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['key' => 'sacco_books', 'label' => 'Books', 'icon' => 'fa-book', 'sacco' => 'strict', 'items' => [
                     ['label' => 'Chart of accounts', 'icon' => 'fa-list-check', 'route' => 'sacco.accounts', 'path' => '/sacco/accounts', 'match' => ['sacco.accounts'], 'can' => ['sacco_view', 'sacco_audit_view']],
                     ['label' => 'Journal', 'icon' => 'fa-book', 'route' => 'sacco.journal', 'path' => '/sacco/journal', 'match' => ['sacco.journal'], 'can' => ['sacco_accounts', 'sacco_audit_view']],
                     ['label' => 'Periods', 'icon' => 'fa-calendar-days', 'route' => 'sacco.periods', 'path' => '/sacco/periods', 'match' => ['sacco.periods'], 'can' => ['sacco_accounts', 'sacco_audit_view']],
                 ]],
-                ['label' => 'SACCO reports', 'icon' => 'fa-chart-pie', 'route' => 'sacco.reports', 'path' => '/sacco/reports', 'match' => ['sacco.reports*'], 'can' => ['sacco_reports', 'sacco_audit_view']],
-                ['label' => 'Officers', 'icon' => 'fa-user-shield', 'route' => 'sacco.officers', 'path' => '/sacco/officers', 'match' => ['sacco.officers'], 'can' => ['sacco_officers', 'sacco_audit_view']],
-                ['label' => 'SACCO settings', 'icon' => 'fa-sliders', 'route' => 'sacco.settings', 'path' => '/sacco/settings', 'match' => ['sacco.settings'], 'can' => ['sacco_settings', 'sacco_audit_view']],
-                ['label' => 'Audit trail', 'icon' => 'fa-shield-halved', 'route' => 'sacco.audit', 'path' => '/sacco/audit', 'match' => ['sacco.audit'], 'can' => 'sacco_audit_view'],
+                ['label' => 'Reports', 'icon' => 'fa-chart-column', 'route' => 'sacco.reports', 'path' => '/sacco/reports', 'match' => ['sacco.reports*'], 'can' => ['sacco_reports', 'sacco_audit_view']],
+                ['label' => 'Officers', 'icon' => 'fa-user-shield', 'route' => 'sacco.officers', 'path' => '/sacco/officers', 'match' => ['sacco.officers'], 'can' => ['sacco_officers', 'sacco_audit_view'], 'sacco' => 'strict'],
+                ['label' => 'Settings', 'icon' => 'fa-sliders', 'route' => 'sacco.settings', 'path' => '/sacco/settings', 'match' => ['sacco.settings'], 'can' => ['sacco_settings', 'sacco_audit_view']],
+                ['label' => 'Audit trail', 'icon' => 'fa-shield-halved', 'route' => 'sacco.audit', 'path' => '/sacco/audit', 'match' => ['sacco.audit'], 'can' => 'sacco_audit_view', 'sacco' => 'strict'],
             ]],
             ['key' => 'catalogue', 'label' => 'Shop', 'module' => 'shop', 'entries' => [
                 ['label' => 'Products', 'icon' => 'fa-box', 'route' => 'products.index', 'path' => '/products', 'match' => ['products.*']],
@@ -96,8 +103,11 @@ final class ShopMenu
      *
      * @param  callable(string): bool  $can  @param  callable(string): bool  $moduleOn  @param  callable(string): bool  $featureOn
      */
-    public static function allowed(array $entry, callable $can, callable $moduleOn, callable $featureOn): bool
+    public static function allowed(array $entry, callable $can, callable $moduleOn, callable $featureOn, ?callable $saccoStrict = null): bool
     {
+        if (isset($entry['sacco']) && $saccoStrict !== null && ($entry['sacco'] === 'strict') !== (bool) $saccoStrict()) {
+            return false; // a licensed SACCO's page in an unlicensed one's menu, or the simple page in a licensed one's
+        }
         if (isset($entry['edition']) && $entry['edition'] !== Edition::name()) {
             return false;
         }
@@ -124,13 +134,17 @@ final class ShopMenu
         $can = fn (string $p) => Permissions::can($user, $p);
         $moduleOn = fn (string $m) => in_array($m, $company->modules(), true);
         $featureOn = fn (string $f) => StoreFeatures::enabled($company, $f);
+        $strict = null;
+        $saccoStrict = function () use (&$strict, $company) {
+            return $strict ??= \App\Support\Rules\SaccoRules::strict($company);
+        };
         $out = [];
         foreach (self::sections() as $section) {
             if (! self::allowed($section, $can, $moduleOn, $featureOn)) {
                 continue;
             }
             foreach ($section['entries'] as $entry) {
-                if (! self::allowed($entry, $can, $moduleOn, $featureOn)) {
+                if (! self::allowed($entry, $can, $moduleOn, $featureOn, $saccoStrict)) {
                     continue;
                 }
                 foreach ($entry['items'] ?? [$entry] as $page) {
