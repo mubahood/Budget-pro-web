@@ -780,3 +780,21 @@ approval.**
   (a schedule-less opening loan); until then a non-zero value is refused (`loans_later`).
 - `PostingRules::opening()` builds these drafts; `Ledger\TrialBalance` (between dates, or a closed month's
   snapshot) and `Ledger\AccountStatement` (a ledger account, or one member account) read the journal lines.
+
+**AK-66: The Akiba API (P1.15) lives in routes/api_sacco.php; members get tokens of their own now.**
+
+- `routes/api_sacco.php` is required from `routes/api.php` inside the v1 group: one staff group
+  (`auth:sanctum, api.tenant, api.module:sacco, api.subscription, api.perm, api.idempotent`), the public
+  `sacco/member-auth/*` (edition:saas, throttle 10/min) and `sacco/me/*`. Loans (P2) keep their routes apart.
+- Refusals keep the service's code: `forbidden` → 403, anything not in this SACCO → 404 (so every `{id}` route
+  answers 404 to another tenant), every other rule → 422. Writes that need a second officer answer 202 with the
+  request (`summary`, `is_mine`, `requested_by_name`, the frozen payload). `POST sacco/approvals/{id}/execute`
+  (sacco_approve) runs an approved request again after a refusal.
+- Nominations go through `POST sacco/members/{id}/relations` with `role: nominee` (the whole nomination at once);
+  savings terms through `PUT sacco/savings-products/{id}` (a `product_terms_change` request, 202).
+- Member mode, brought forward from P3 for the app: `member-auth/otp` (an email code, the answer the same for an
+  unknown address) → `verify` (the memberships and a 10-minute ticket) → `token` (one membership, 30 days; or
+  email + password). The token is a `personal_access_tokens` row on `sacco_member_logins` with the ability
+  `sacco:member`; Sanctum's staff guard never accepts it (no HasApiTokens), and `SaccoMemberAuth` accepts nothing
+  else, re-checking the membership on every request. `me`, `me/accounts`, `me/statement`, `me/receipts/{id}`,
+  `me/logout` answer the member's own records only (MemberLogin::owns).
