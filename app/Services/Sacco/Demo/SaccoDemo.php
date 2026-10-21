@@ -64,9 +64,16 @@ final class SaccoDemo
         return $role.'@'.self::domain();
     }
 
-    public static function memberEmail(): string
+    /** The members' own sign-ins (/member). @return array<string, array{email: string, member: int, label: string}> */
+    public static function memberLogins(): array
     {
-        return (string) SaccoDemoBuilder::data()['member_login']['email'];
+        return (array) SaccoDemoBuilder::data()['member_logins'];
+    }
+
+    /** A member sign-in's address: the member who asks for loans by default, or the guarantor. */
+    public static function memberEmail(string $key = 'member'): string
+    {
+        return (string) self::memberLogins()[$key]['email'];
     }
 
     public static function password(): string
@@ -132,7 +139,7 @@ final class SaccoDemo
     /**
      * What the website's /demo page shows: one sign-in per role and the member's, with the shared password.
      *
-     * @return array{ready: bool, company: ?Company, password: string, logins: list<array{key: string, label: string, name: string, email: string, user_id: ?int}>, member: array{email: string, member_id: ?int}, built_at: ?Carbon, resets_at: ?Carbon}
+     * @return array{ready: bool, company: ?Company, password: string, logins: list<array{key: string, label: string, name: string, email: string, user_id: ?int}>, member: array{email: string, member_id: ?int}, members: array<string, array{label: string, email: string, member_id: ?int}>, built_at: ?Carbon, resets_at: ?Carbon}
      */
     public static function status(): array
     {
@@ -145,10 +152,14 @@ final class SaccoDemo
             $logins[] = ['key' => $key, 'label' => $r['label'], 'name' => $r['name'], 'email' => self::email($key),
                 'user_id' => $u !== null && (int) $u->company_id === (int) $company?->id ? (int) $u->id : null];
         }
-        $memberId = $company ? SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $company->id)->where('email', self::memberEmail())->whereNull('disabled_at')->value('member_id') : null;
+        $members = [];
+        foreach (self::memberLogins() as $key => $m) {
+            $id = $company ? SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $company->id)->where('email', $m['email'])->whereNull('disabled_at')->value('member_id') : null;
+            $members[$key] = ['label' => $m['label'], 'email' => $m['email'], 'member_id' => $id === null ? null : (int) $id];
+        }
 
         return ['ready' => $company !== null, 'company' => $company, 'password' => self::password(), 'logins' => $logins,
-            'member' => ['email' => self::memberEmail(), 'member_id' => $memberId === null ? null : (int) $memberId],
+            'member' => ['email' => $members['member']['email'], 'member_id' => $members['member']['member_id']], 'members' => $members,
             'built_at' => $built, 'resets_at' => $built?->copy()->addHours((int) config('demo.sacco.rebuild_hours', 72))];
     }
 
@@ -193,7 +204,7 @@ final class SaccoDemo
             throw $e;
         }
 
-        DB::transaction(function () use ($new, $users, $old) {
+        DB::transaction(function () use ($new, $users, $old, $snapshot) {
             // The old demo's sign-ins give their addresses up first (they are unique), then the new ones take them.
             if ($old !== null) {
                 foreach (DB::table('admin_users')->where('company_id', $old->id)->get(['id']) as $u) {
@@ -205,7 +216,10 @@ final class SaccoDemo
                 $email = isset(self::roles()[$key]) ? self::email($key) : $key.'@'.self::domain();
                 DB::table('admin_users')->where('id', $u->id)->update(['email' => $email, 'username' => $email, 'password' => Hash::make(self::password()), 'status' => 'Active', 'updated_at' => now()]);
             }
-            SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $new->id)->update(['email' => self::memberEmail(), 'password' => Hash::make(self::password()), 'disabled_at' => null, 'updated_at' => now()]);
+            foreach ((array) ($snapshot['member_logins'] ?? []) as $key => $memberId) {
+                SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $new->id)->where('member_id', (int) $memberId)
+                    ->update(['email' => self::memberEmail($key), 'password' => Hash::make(self::password()), 'disabled_at' => null, 'updated_at' => now()]);
+            }
         });
         Permissions::flush();
 
@@ -251,10 +265,12 @@ final class SaccoDemo
                 $repairs[] = "team {$key}";
             }
         }
-        $login = SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $company->id)->where('member_id', (int) ($snap['member_login'] ?? 0))->first();
-        if ($login !== null && ($login->disabled_at !== null || $login->email !== self::memberEmail() || ! Hash::check(self::password(), (string) $login->password))) {
-            $login->forceFill(['email' => self::memberEmail(), 'password' => Hash::make(self::password()), 'disabled_at' => null, 'failed_attempts' => 0, 'locked_until' => null])->save();
-            $repairs[] = 'member sign-in';
+        foreach ((array) ($snap['member_logins'] ?? []) as $key => $memberId) {
+            $login = SaccoMemberLogin::withoutGlobalScopes()->where('company_id', $company->id)->where('member_id', (int) $memberId)->first();
+            if ($login !== null && ($login->disabled_at !== null || $login->email !== self::memberEmail($key) || ! Hash::check(self::password(), (string) $login->password))) {
+                $login->forceFill(['email' => self::memberEmail($key), 'password' => Hash::make(self::password()), 'disabled_at' => null, 'failed_attempts' => 0, 'locked_until' => null])->save();
+                $repairs[] = "member sign-in {$key}";
+            }
         }
         $changed = [];
         foreach ((array) ($snap['company'] ?? []) as $field => $value) {

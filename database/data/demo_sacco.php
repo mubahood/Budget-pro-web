@@ -38,8 +38,11 @@ return [
         ['name' => 'Juliet Namagembe', 'role' => 'sacco_committee', 'position' => 'loans_committee'],
     ],
 
-    // The member whose own sign-in opens /member: a teacher with savings in every product, shares and a loan.
-    'member_login' => ['email' => 'member@wakisoteachers.example', 'member' => 0],
+    // Members' own sign-ins (/member): one who asks for loans, and one who has a guarantee request waiting.
+    'member_logins' => [
+        'member' => ['email' => 'member@wakisoteachers.example', 'member' => 0, 'label' => 'A member: sees their savings and asks for a loan'],
+        'guarantor' => ['email' => 'guarantor@wakisoteachers.example', 'member' => 1, 'label' => 'A member asked to guarantee a loan'],
+    ],
 
     'schools' => [
         'Kakiri Hillside Primary School', 'Nansana Valley Primary School', 'Kira Lakeview Secondary School', 'Matugga Riverside Primary School',
@@ -73,10 +76,7 @@ return [
     'founding' => 48,
 
     // Loan purposes a teacher gives (never a word about anyone's relatives: the demo text is read by a test).
-    'purposes' => [
-        'ORD' => ['Build two rental rooms in Kakiri', 'Buy a plot of land in Matugga', 'Roof the house at home', 'Start a poultry project', 'Buy a motorcycle for transport to school',
-            'Expand a retail shop', 'Plant coffee on two acres', 'Finish the house floor and plaster'],
-        'SCH' => ['School fees for the first term', 'University tuition for the second semester', 'School fees and uniforms'],
-        'EMG' => ['Medical bills', 'Urgent repairs after a storm', 'Hospital bills after an accident'],
-    ],
+    'purposes' => ['Build two rental rooms in Kakiri', 'Buy a plot of land in Matugga', 'Roof the house at home', 'Start a poultry project',
+        'Buy a motorcycle for transport to school', 'Expand a retail shop', 'Plant coffee on two acres', 'School fees for the first term',
+        'University tuition for the second semester', 'Medical bills', 'Urgent repairs after a storm'],
 ];

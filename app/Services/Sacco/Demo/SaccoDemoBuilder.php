@@ -7,34 +7,21 @@ use App\Models\Company;
 use App\Models\CompanyMember;
 use App\Models\Plan;
 use App\Models\SaccoLoan;
-use App\Models\SaccoLoanGuarantor;
-use App\Models\SaccoLoanProduct;
 use App\Models\SaccoLoanScheduleLine;
 use App\Models\SaccoMember;
 use App\Models\SaccoPeriod;
 use App\Models\SaccoSavingsAccount;
 use App\Models\SaccoSavingsProduct;
-use App\Models\StoredFile;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Onboarding\OnboardingEvents;
 use App\Services\Onboarding\OnboardingService;
-use App\Services\Sacco\Ledger\ChartOfAccounts;
 use App\Services\Sacco\Ledger\OpeningBalances;
 use App\Services\Sacco\Ledger\PeriodService;
 use App\Services\Sacco\Loans\Committee;
-use App\Services\Sacco\Loans\Contracts;
-use App\Services\Sacco\Loans\Disbursement;
-use App\Services\Sacco\Loans\GuarantorRecovery;
-use App\Services\Sacco\Loans\Guarantors;
-use App\Services\Sacco\Loans\LoanApplications;
 use App\Services\Sacco\Loans\LoanJobs;
-use App\Services\Sacco\Loans\LoanProducts;
 use App\Services\Sacco\Loans\LoansModule;
-use App\Services\Sacco\Loans\MemberFunds;
 use App\Services\Sacco\Loans\Repayments;
-use App\Services\Sacco\Loans\Restructure;
-use App\Services\Sacco\Loans\WriteOffs;
 use App\Services\Sacco\Members\MemberLogin;
 use App\Services\Sacco\Members\MemberService;
 use App\Services\Sacco\OfficerService;
@@ -44,15 +31,16 @@ use App\Services\Sacco\SaccoTransactions;
 use App\Services\Sacco\Savings\SavingsAccounts;
 use App\Services\Sacco\Savings\SavingsProducts;
 use App\Services\Sacco\Shares\ShareService;
+use App\Services\Sacco\Simple\LoanFlow;
+use App\Services\Sacco\Simple\Money;
+use App\Services\Sacco\Simple\SaccoAccount;
+use App\Services\Sacco\Simple\ShareOut;
 use App\Services\Team\TeamService;
-use App\Support\Rules\SaccoLoanProductRules;
 use Database\Seeders\AkibaPlanSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -62,20 +50,18 @@ use Illuminate\Support\Str;
  *
  * The clock runs forward day by day from the first of the month `months` ago: the SACCO moves its books in with
  * opening balances on day one, then each day's work happens at its own time (payroll check-off, counter deposits,
- * share purchases, withdrawals a second officer approves, loan applications through appraisal, the committee and
- * payout, repayments on their due dates), the loan book's daily run catches up before each day's work (interest,
- * penalties, arrears, classification, the month's provisioning on the 1st), and each past month is closed by
- * approval on the 2nd. So today's arrears ageing and PAR are true, not typed in.
+ * shares bought by number at the SACCO's price, withdrawals, the SACCO's own money in and out), the loan book's run
+ * catches up before each day's work, and each past month is closed on the 2nd. So today's arrears are true.
  *
- * Every loan state is there: pending (submitted, in committee), approved, rejected by the committee, current, 1–30,
- * 31–90 and over 90 days in arrears, rescheduled, topped up, paid off (one settled early), written off with a
- * recovery, and one brought back by a guarantor's savings. Beside them: savings in each product, shares bought and
- * transferred, an exited member, a deceased member with a nominee, office fines charged as fees, a reversed
- * mobile-money receipt and the operating costs a SACCO pays.
+ * It is a simple SACCO (docs/akiba/flows-plan.md): loans go through LoanFlow (the member asks with one guarantor,
+ * the guarantor answers, the chairperson decides, the treasurer pays out or not), at 1 % a month on the reducing
+ * balance (one loan flat), with every simple status present: waiting for the guarantor (the guarantor's own sign-in
+ * has it), waiting for the chairperson, approved for the treasurer to pay out, running (some late), closed, declined
+ * by the guarantor, declined by the chairperson and not paid out. The SACCO account has about a dozen entries and a
+ * reversed mistake; one share-out ran at the end of the last full year. Beside them: savings in each product, a share
+ * transfer, an exited member, a deceased member with nominees, office fines charged as fees and a reversed MoMo receipt.
  *
- * What a kernel service does not do yet is added by an ensure* step that waits for it (pending(): the year-end
- * close and dividends, P4.7/P4.8; fines and the welfare fund, P5.4/P5.5; meetings, P5.2; mobile-money
- * collections, P3.1). The heal runs them too, so the demo gains each part the day its service lands.
+ * The fines list and the welfare fund wait for their kernel services (ensureFines, ensureWelfare: pending()).
  */
 final class SaccoDemoBuilder
 {
@@ -83,7 +69,7 @@ final class SaccoDemoBuilder
      * Bumped when a build changes what the demo holds. A live demo built by an older version is rebuilt on the next
      * run, not healed.
      */
-    public const BUILD = 1;
+    public const BUILD = 2;
 
     /** The manager's delegated approval limit: loans above it go to the committee. */
     public const DELEGATED_LIMIT = 5_000_000;
@@ -122,9 +108,6 @@ final class SaccoDemoBuilder
     /** @var array<int, array{cmp: int, ord: int, school: string, active_from: string, gone_on: ?string}> */
     private array $profile = [];
 
-    /** @var array<string, int> product code => loan product id */
-    private array $loanProducts = [];
-
     /** @var array<string, list<array{t: int, fn: callable}>> Y-m-d => the day's work */
     private array $calendar = [];
 
@@ -137,10 +120,8 @@ final class SaccoDemoBuilder
     /** @var list<int> loan ids repaid on time from their due dates (the heal keeps them so) */
     private array $payers = [];
 
-    /** @var array<int, true> data indexes of members whose loan is meant to fall behind (no withdrawals, no guarantees) */
-    private array $troubled = [];
-
-    private int $consentFile = 0;
+    /** The SACCO-account entry entered twice (reversed the day after). */
+    private int $accountMistake = 0;
 
     public function __construct()
     {
@@ -234,6 +215,7 @@ final class SaccoDemoBuilder
                         $paid += $this->payDue($loanId, $day) ? 1 : 0;
                     }
                     if ($day->day === 2 || ($day->day > 2 && $day->equalTo($this->today))) {
+                        $this->monthEnd();
                         $closed = $this->closeEndedMonths($day);
                         if ($closed > 0) {
                             $repairs[] = "{$closed} month(s) closed";
@@ -361,18 +343,9 @@ final class SaccoDemoBuilder
             'min_opening_minor' => 1_000_000, 'early_withdrawal_penalty_bp' => 200], $chair);
         $savings->create($this->co, ['code' => 'HOL', 'name' => 'Holiday savings', 'kind' => 'voluntary', 'interest_rate_bp' => 300, 'max_withdrawals_per_month' => 2], $chair);
 
-        // Loan products: the default, made a teachers' development loan, a school-fees loan and an emergency loan.
-        $loans = new LoanProducts();
-        $ord = SaccoLoanProduct::withoutGlobalScopes()->where('company_id', $this->cid)->where('code', 'ORD')->firstOrFail();
-        $loans->update($this->cid, (int) $ord->id, ['name' => 'Development loan', 'rate_bp' => 150, 'penalty_rate_bp' => 75, 'max_term' => 36, 'max_amount_minor' => 30_000_000,
-            'guarantee_cover_bp' => 5000, 'min_membership_days' => 180], (int) $chair->id);
-        $base = SaccoLoanProductRules::default('office', 'UGX');
-        $sch = $loans->create($this->cid, array_merge($base, ['code' => 'SCH', 'name' => 'School fees loan', 'rate_bp' => 125, 'penalty_rate_bp' => 60, 'max_term' => 12,
-            'max_amount_minor' => 8_000_000, 'min_amount_minor' => 200_000, 'guarantors_required' => 1, 'guarantee_cover_bp' => 5000, 'min_membership_days' => 90]), (int) $chair->id);
-        $emg = $loans->create($this->cid, array_merge($base, ['code' => 'EMG', 'name' => 'Emergency loan', 'rate_bp' => 200, 'penalty_rate_bp' => 100, 'max_term' => 6,
-            'max_amount_minor' => 3_000_000, 'min_amount_minor' => 100_000, 'guarantors_required' => 1, 'guarantee_cover_bp' => 5000, 'min_membership_days' => 60,
-            'savings_multiplier_bp' => 20000, 'allow_top_up' => false]), (int) $chair->id);
-        $this->loanProducts = ['ORD' => (int) $ord->id, 'SCH' => (int) $sch->id, 'EMG' => (int) $emg->id];
+        // Loans: the simple flow's member loan, at 1 % a month on the reducing balance (Settings › Loan interest).
+        (new LoanFlow())->product($this->cid);
+        (new LoanFlow())->updateSettings($this->co, $chair, ['rate_bp' => 100, 'rate_period' => 'month', 'method' => 'reducing']);
     }
 
     // ── Members and their opening balances ─────────────────────────────────
@@ -445,7 +418,7 @@ final class SaccoDemoBuilder
         $counties = $this->data['subcounties'];
 
         return ['first_name' => $first, 'last_name' => $last, 'gender' => $gender, 'date_of_birth' => sprintf('%04d-%02d-%02d', $year, 1 + ($i * 5) % 12, 1 + ($i * 7) % 27),
-            'nin' => self::nin($gender, $year, $i), 'phone' => sprintf('+2567000%05d', 10_101 + $i * 7), 'email' => $i === (int) $this->data['member_login']['member'] ? null
+            'nin' => self::nin($gender, $year, $i), 'phone' => sprintf('+2567000%05d', 10_101 + $i * 7), 'email' => in_array($i, array_map(fn ($l) => (int) $l['member'], $this->data['member_logins']), true) ? null
                 : strtolower($first.'.'.$last).'@'.$this->data['sacco']['domain'], 'district' => 'Wakiso', 'subcounty' => $counties[$i % count($counties)],
             'occupation' => 'Teacher', 'employer_name' => $this->profile[$i]['school'], 'payroll_no' => sprintf('TCH-%05d', 31_000 + $i * 13),
             'joined_on' => $joined, 'consent_data' => true, 'consent_messages' => true, 'consent_credit_bureau' => $i % 3 !== 0];
@@ -457,75 +430,74 @@ final class SaccoDemoBuilder
         return ($gender === 'male' ? 'CM' : 'CF').substr((string) $year, -2).'DEMO'.sprintf('%04d', $i + 1).chr(65 + $i % 26).chr(65 + ($i * 7) % 26);
     }
 
-    // ── The plan: who borrows what, and what happens to each loan ─────────
+    // ── The plan: who borrows what, and what happens to each request ──────
 
     private function plan(): void
     {
         $T = $this->today;
-        $ago = fn (int $months, int $days = 0) => $T->copy()->subMonthsNoOverflow($months)->subDays($days);
+        $ago = fn (int $months, int $days = 0) => $T->copy()->subMonthsNoOverflow($months)->subDays($days)->startOfDay();
 
-        // Loans: [tag, member, product, amount, term, disbursed on, how it is repaid].
+        // Loan requests through the simple flow (LoanFlow): [tag, borrower, guarantor, amount, months, asked on, what happens].
+        // The guarantor answers a day later, the chairperson two days after that, the treasurer pays out two days later.
         $plan = [
-            // Current, repaid on time.
-            ['current_1', 0, 'ORD', 6_000_000, 24, $ago(7, 3), ['pay' => 'all']],
-            ['current_2', 1, 'ORD', 15_000_000, 30, $ago(13, 9), ['pay' => 'all']],
-            ['current_3', 4, 'SCH', 2_400_000, 10, $ago(4, 12), ['pay' => 'all']],
-            ['current_4', 5, 'ORD', 9_000_000, 24, $ago(9, 18), ['pay' => 'all']],
-            ['current_5', 10, 'ORD', 6_500_000, 18, $ago(2, 6), ['pay' => 'all']],
-            ['current_6', 15, 'SCH', 1_800_000, 6, $ago(1, 20), ['pay' => 'all']],
-            ['current_7', 20, 'ORD', 14_000_000, 30, $ago(11, 2), ['pay' => 'all']],
-            ['current_8', 25, 'EMG', 1_200_000, 6, $ago(3, 25), ['pay' => 'all']],
-            ['current_9', 30, 'ORD', 10_000_000, 24, $ago(5, 14), ['pay' => 'all']],
-            ['current_10', 35, 'ORD', 7_000_000, 18, $ago(6, 8), ['pay' => 'all']],
-            // Paid off.
-            ['paid_1', 2, 'EMG', 1_500_000, 6, $ago(15, 4), ['pay' => 'all']],
-            ['paid_2', 6, 'SCH', 2_000_000, 6, $ago(11, 16), ['pay' => 'all']],
-            ['paid_3', 8, 'ORD', 3_600_000, 12, $ago(16, 22), ['pay' => 'all']],
-            ['paid_early', 12, 'ORD', 4_000_000, 12, $ago(10, 10), ['pay' => 'all', 'settle_after' => 5]],
-            // In arrears: the last instalment(s) missed, so the oldest unpaid one is about 17, 40, 70, 110 and 150 days old.
-            ['arrears_17', 3, 'ORD', 3_000_000, 12, $ago(7, 17), ['pay' => 'until', 'missed' => 1]],
-            ['arrears_40', 7, 'SCH', 2_200_000, 10, $ago(6, 10), ['pay' => 'until', 'missed' => 2]],
-            ['arrears_70', 9, 'ORD', 4_200_000, 18, $ago(8, 9), ['pay' => 'until', 'missed' => 3]],
-            ['arrears_110', 11, 'ORD', 3_500_000, 18, $ago(10, 19), ['pay' => 'until', 'missed' => 4]],
-            ['arrears_150', 13, 'ORD', 2_800_000, 12, $ago(11, 29), ['pay' => 'until', 'missed' => 5, 'part' => 400_000]],
-            // Rescheduled after two missed instalments, then repaid on the new schedule.
-            ['rescheduled', 14, 'ORD', 4_800_000, 12, $ago(12, 5), ['pay' => 'reschedule', 'paid' => 4, 'gap' => 2, 'term' => 18]],
-            // Topped up: the old loan settled by a bigger new one four months ago; the new one is current.
-            ['topped_old', 16, 'ORD', 3_000_000, 18, $ago(12, 11), ['pay' => 'all', 'top_up' => ['months_ago' => 4, 'days' => 2, 'amount' => 6_500_000, 'term' => 24]]],
-            // Written off after it went to loss, with a recovery afterwards.
-            ['written_off', 18, 'ORD', 3_200_000, 12, $ago(17, 13), ['pay' => 'until', 'paid' => 2, 'write_off' => $ago(5, 6), 'recover' => [$ago(2, 15), 350_000]]],
-            // The borrower stopped; two months late, the guarantor's savings paid the arrears; then the borrower resumed.
-            ['guarantor_paid', 19, 'ORD', 2_400_000, 12, $ago(9, 7), ['pay' => 'guarantor', 'paid' => 4, 'gap' => 2]],
-            // Decided at the committee's sitting three weeks ago: one approved (paid out since), one rejected.
-            ['committee_yes', 22, 'ORD', 12_000_000, 36, $ago(0, 12), ['pay' => 'all', 'committee' => $ago(0, 19)]],
+            // Paid out and repaid on time (one at a flat rate).
+            ['running_1', 0, 5, 4_000_000, 12, $ago(6, 5), ['pay' => 'all']],
+            ['running_2', 4, 8, 8_000_000, 24, $ago(10, 2), ['pay' => 'all']],
+            ['running_flat', 10, 12, 2_500_000, 10, $ago(3, 11), ['pay' => 'all', 'flat' => true]],
+            ['running_4', 20, 21, 6_000_000, 18, $ago(8, 4), ['pay' => 'all']],
+            ['running_5', 25, 26, 1_500_000, 6, $ago(2, 9), ['pay' => 'all']],
+            ['running_6', 30, 31, 5_000_000, 12, $ago(4, 16), ['pay' => 'all']],
+            ['running_7', 35, 36, 3_000_000, 12, $ago(1, 12), ['pay' => 'all']],
+            // Paid out and behind: the oldest unpaid instalment about 17, 42 and 100 days old.
+            ['late_17', 3, 9, 3_000_000, 12, $ago(7, 22), ['pay' => 'until', 'missed' => 1]],
+            ['late_42', 7, 13, 2_200_000, 10, $ago(6, 17), ['pay' => 'until', 'missed' => 2]],
+            ['late_100', 11, 14, 3_500_000, 18, $ago(9, 13), ['pay' => 'until', 'missed' => 4]],
+            // Fully paid (one settled early, with no fee).
+            ['closed_1', 2, 6, 1_500_000, 6, $ago(15, 3), ['pay' => 'all']],
+            ['closed_2', 1, 15, 2_000_000, 8, $ago(14, 20), ['pay' => 'all']],
+            ['closed_early', 12, 16, 3_000_000, 12, $ago(11, 7), ['pay' => 'all', 'settle_after' => 5]],
+            // Declined by the guarantor; declined by the chairperson; approved but not paid out.
+            ['declined_guarantor', 17, 18, 2_000_000, 12, $ago(2, 3), ['guarantor' => 'decline', 'note' => 'I already guarantee a colleague\'s loan this year.']],
+            ['declined_chair', 19, 22, 12_000_000, 24, $ago(1, 4), ['chair' => 'decline', 'note' => 'The instalment would take more than half of the payslip. Ask again for a smaller amount.']],
+            ['not_paid_out', 23, 24, 1_800_000, 6, $ago(0, 25), ['not_paid' => 'The member withdrew the request before it was paid out.']],
+            // Waiting today: the treasurer to pay out, the chairperson to decide, the guarantor's login to answer.
+            ['approved', 27, 28, 2_400_000, 12, $ago(0, 4), ['stop' => 'approved']],
+            ['pending_chair', 29, 32, 3_200_000, 12, $ago(0, 3), ['stop' => 'pending_chair']],
+            ['pending_guarantor', 33, 1, 1_200_000, 6, $ago(0, 1), ['stop' => 'pending_guarantor']],
         ];
-        foreach ($plan as [$tag, $who, $product, $amount, $term, $on, $how]) {
-            $this->scenarios[$tag] = ['tag' => $tag, 'member' => $who, 'product' => $product, 'amount' => $amount, 'term' => $term, 'on' => $on->copy()->startOfDay(), 'how' => $how];
-            if ($how['pay'] === 'until') {
-                $this->troubled[$who] = true;
-            }
+        foreach ($plan as [$tag, $who, $guarantor, $amount, $months, $on, $how]) {
+            $this->scenarios[$tag] = compact('tag', 'who', 'guarantor', 'amount', 'months', 'on', 'how');
             $this->scheduleLoan($tag);
         }
-        $this->troubled[19] = true; // the guarantor-paid loan's borrower
 
         $this->routine();
         $this->lifeEvents();
+        $this->accountEntries();
+        $this->shareOut();
     }
 
-    /** The application, appraisal, decision, contract and payout of a planned loan, on the days before its payout. */
+    /** The request and each person's step, on their days. */
     private function scheduleLoan(string $tag): void
     {
         $s = $this->scenarios[$tag];
-        $d = $s['on'];
-        $decide = isset($s['how']['committee']) ? $s['how']['committee'] : $d->copy()->subDays(6);
-        $this->on($decide->copy()->subDays(4), 10, fn () => $this->apply($tag, $decide->copy()->subDays(4)));
-        $this->on($decide->copy()->subDays(2), 11, fn () => $this->appraise($tag));
-        $this->on($decide, 14, fn () => $this->decide($tag));
-        $this->on($d->copy()->subDays(1), 10, fn () => $this->sign($tag));
-        $this->on($d, 11, fn () => $this->disburse($tag));
+        $on = $s['on'];
+        $how = $s['how'];
+        $this->on($on, 19, fn () => $this->askForLoan($tag)); // a teacher asks in the evening, from the member page
+        if (($how['stop'] ?? null) === 'pending_guarantor') {
+            return;
+        }
+        $this->on($on->copy()->addDay(), 18, fn () => $this->guarantorAnswers($tag));
+        if (isset($how['guarantor']) || ($how['stop'] ?? null) === 'pending_chair') {
+            return;
+        }
+        $this->on($on->copy()->addDays(3), 12, fn () => $this->chairDecides($tag));
+        if (isset($how['chair']) || ($how['stop'] ?? null) === 'approved') {
+            return;
+        }
+        $this->on($on->copy()->addDays(5), 11, fn () => isset($how['not_paid']) ? $this->notPaidOut($tag) : $this->payOut($tag));
     }
 
-    /** The SACCO's every month: payroll check-off, the counter, shares, withdrawals, costs. */
+    /** The SACCO's every month: payroll check-off, the counter, shares, withdrawals. */
     private function routine(): void
     {
         for ($m = $this->start->copy(); $m->lte($this->today); $m->addMonthNoOverflow()) {
@@ -533,7 +505,6 @@ final class SaccoDemoBuilder
             $payday = $this->workingDayOnOrBefore($month->copy()->day(min(27, $month->daysInMonth)));
             if ($payday->lte($this->today)) {
                 $this->on($payday, 9, fn () => $this->checkOff($month));
-                $this->on($payday, 15, fn () => $this->operatingCosts($month));
             }
             for ($k = 0, $n = max(0, (int) config('demo.sacco.counter_per_month', 14)); $k < $n; $k++) {
                 $day = $this->workingDayOnOrBefore($month->copy()->addDays(mt_rand(0, $month->daysInMonth - 1)));
@@ -556,28 +527,19 @@ final class SaccoDemoBuilder
     private function lifeEvents(): void
     {
         $T = $this->today;
-        // Twelve teachers join over the months (registered, entrance fee, shares, ID checked, admitted).
         foreach (range(48, 59) as $n => $i) {
             $day = $this->workingDayOnOrBefore($this->start->copy()->addMonthsNoOverflow(1 + $n)->addDays(8 + ($n * 3) % 15));
             if ($day->lt($T)) {
                 $this->on($day, 9, fn () => $this->join($i));
             }
         }
-        // Fixed deposits: six members lock money away for a year; one has matured and was paid back.
-        foreach ([[17, 3, 5_000_000], [21, 6, 3_000_000], [27, 9, 8_000_000], [33, 2, 2_000_000], [40, 12, 4_000_000], [0, 8, 1_500_000]] as [$who, $monthsIn, $amount]) {
+        foreach ([[17, 3, 5_000_000], [21, 6, 3_000_000], [27, 10, 8_000_000], [33, 2, 2_000_000], [40, 12, 4_000_000], [0, 13, 1_500_000]] as [$who, $monthsIn, $amount]) {
             $this->on($this->workingDayOnOrBefore($this->start->copy()->addMonthsNoOverflow($monthsIn)->addDays(4)), 12, fn () => $this->fixedDeposit($who, $amount));
         }
-        $this->on($this->workingDayOnOrBefore($this->start->copy()->addMonthsNoOverflow(14)->addDays(5)), 12, fn () => $this->fixedMatures(33));
-        // Money not lent out earns interest: a fixed deposit with a bank, placed by the treasurer (a manual journal).
-        $this->on($this->workingDayOnOrBefore($this->start->copy()->addMonthsNoOverflow(2)->addDays(10)), 15, fn () => $this->placeWithBank(150_000_000));
-        // Shares change hands: one member sells some to another (by approval).
-        $this->on($this->workingDayOnOrBefore($T->copy()->subMonthsNoOverflow(9)->day(14)), 11, fn () => $this->shareTransfer(26, 29, 15, 'Sold to a colleague at par'));
-        // A member leaves the SACCO: shares to another member, savings paid out, the member exited.
+        $this->on($this->workingDayOnOrBefore($T->copy()->subMonthsNoOverflow(9)->day(14)), 11, fn () => $this->shareTransfer(26, 29, 15, 'Sold to a colleague at the share price'));
         $this->on($this->workingDayOnOrBefore($T->copy()->subMonthsNoOverflow(3)->day(10)), 11, fn () => $this->memberExits(47, 46));
-        // A member dies; the nomination made earlier names who receives the savings.
         $this->on($this->workingDayOnOrBefore($this->start->copy()->addMonthsNoOverflow(2)->day(12)), 12, fn () => $this->nominate(34));
         $this->on($this->workingDayOnOrBefore($T->copy()->subMonthsNoOverflow(4)->day(18)), 12, fn () => $this->dies(34));
-        // Office fines, charged to savings as a fee: absence from the AGM, a late loan repayment.
         $agm = $this->workingDayOnOrBefore(Carbon::create($this->start->year + 1, 3, 28, 0, 0, 0, $this->tz));
         if ($agm->lt($T)) {
             foreach ([23, 31, 38, 42, 44] as $who) {
@@ -585,7 +547,6 @@ final class SaccoDemoBuilder
             }
         }
         $this->on($this->workingDayOnOrBefore($T->copy()->subMonthsNoOverflow(1)->day(5)), 13, fn () => $this->fine(3, 15_000, 'Fine: loan instalment paid late'));
-        // A mobile-money deposit the network reversed (a duplicate push): the receipt reversed by a second officer.
         $this->on($this->workingDayOnOrBefore($T->copy()->subMonthsNoOverflow(2)->day(9)), 15, fn () => $this->momoReversal(24));
     }
 
@@ -615,6 +576,7 @@ final class SaccoDemoBuilder
             }
             if ($day->day === 2) {
                 $this->at($day, 8, 0);
+                $this->monthEnd();
                 $this->closeEndedMonths($day);
             }
             usort($work, fn ($a, $b) => $a['t'] <=> $b['t']);
@@ -628,6 +590,17 @@ final class SaccoDemoBuilder
                     $this->payDue($loanId, $day);
                 }
             }
+        }
+    }
+
+    /**
+     * The month-end work the loan book's run does only when a loan is open (savings interest, P4.6): in the first
+     * months, before any loan, it is run here, so every month can close. Idempotent per month.
+     */
+    private function monthEnd(): void
+    {
+        if (class_exists(\App\Services\Sacco\YearEnd\SavingsInterest::class) && \App\Services\Sacco\YearEnd\YearEndModule::ready()) {
+            $this->quietly(fn () => (new \App\Services\Sacco\YearEnd\SavingsInterest())->catchUp($this->cid));
         }
     }
 
@@ -658,229 +631,90 @@ final class SaccoDemoBuilder
         return $n;
     }
 
-    // ── Loans ─────────────────────────────────────────────────────────────
+    // ── Loans: the simple flow ────────────────────────────────────────────
 
-    private function apply(string $tag, \Carbon\Carbon $on): void
+    private function askForLoan(string $tag): void
     {
-        $s = &$this->scenarios[$tag];
-        $member = $this->members[$s['member']] ?? null;
-        if ($member === null) {
+        $s = $this->scenarios[$tag];
+        $member = $this->members[$s['who']] ?? null;
+        $guarantor = $this->members[$s['guarantor']] ?? null;
+        if ($member === null || $guarantor === null) {
             return;
         }
-        $purposes = $this->data['purposes'][$s['product']];
-        $data = ['member_id' => (int) $member->id, 'product_id' => $this->loanProducts[$s['product']], 'applied_minor' => $s['amount'], 'term' => $s['term'],
-            'purpose' => $purposes[crc32($tag) % count($purposes)], 'disbursement_channel' => $s['member'] % 3 === 0 ? 'savings' : 'bank'];
-        $this->topUpSavings($s['member'], $s['amount'], $s['product']);
-        $loan = $this->quietly(fn () => (new LoanApplications())->create($this->co, $data, $this->users['loans'], ['submit' => true]));
+        $flow = new LoanFlow();
+        $flat = ! empty($s['how']['flat']);
+        if ($flat) {
+            $this->quietly(fn () => $flow->updateSettings($this->co, $this->users['chair'], ['method' => 'flat']));
+        }
+        $purposes = $this->data['purposes'];
+        $loan = $this->quietly(fn () => $flow->request($this->co, $member->fresh(), ['amount_minor' => $s['amount'], 'months' => $s['months'],
+            'purpose' => $purposes[crc32($tag) % count($purposes)], 'guarantor_member_id' => (int) $guarantor->id]));
+        if ($flat) {
+            $this->quietly(fn () => $flow->updateSettings($this->co, $this->users['chair'], ['method' => 'reducing']));
+        }
         if ($loan instanceof SaccoLoan) {
             $this->loans[$tag] = (int) $loan->id;
-            $this->guarantee($tag, $loan);
         }
     }
 
-    /** A borrower brings their savings up to what the product's multiple needs (a teacher saves before asking). */
-    private function topUpSavings(int $who, int $amount, string $product): void
+    private function guarantorAnswers(string $tag): void
     {
-        $mult = $product === 'EMG' ? 2 : 3;
-        $need = intdiv($amount, $mult) + 200_000;
-        $free = MemberFunds::freeSavings($this->cid, (int) $this->members[$who]->id);
-        if ($free < $need && isset($this->accounts[$who]['ORD'])) {
-            $this->tx(['kind' => 'deposit', 'savings_account_id' => $this->accounts[$who]['ORD'], 'amount_minor' => $this->round($need - $free + 100_000), 'channel' => 'bank',
-                'reference' => 'Transfer from Stanbic', 'narration' => 'Savings before a loan application'], $this->users['teller']);
-        }
-    }
-
-    /** The guarantors the product asks for, each covering an equal part, with their signed consent forms. */
-    private function guarantee(string $tag, SaccoLoan $loan): void
-    {
-        $product = SaccoLoanProduct::withoutGlobalScopes()->findOrFail($loan->product_id);
-        $count = (int) $product->guarantors_required;
-        if ($count < 1) {
-            return;
-        }
-        $total = intdiv((int) $loan->applied_minor * (int) $product->guarantee_cover_bp, 10000);
-        $each = (int) ceil($total / $count / 1000) * 1000;
-        $borrower = $this->scenarios[$tag]['member'];
-        $picked = 0;
-        foreach ($this->guarantorCandidates($borrower, $each) as $i) {
-            $g = $this->quietly(fn () => (new Guarantors())->add($this->co, (int) $loan->id, (int) $this->members[$i]->id, $each, $this->users['loans']));
-            if ($g instanceof SaccoLoanGuarantor) {
-                $this->quietly(fn () => (new Guarantors())->consentWithForm($this->co, (int) $g->id, $this->consentFile(), $this->users['loans']));
-                if (++$picked >= $count) {
-                    break;
-                }
-            }
-        }
-    }
-
-    /** Members who can stand guarantee for $each now: active, not the borrower, not in trouble, most free savings first. @return list<int> */
-    private function guarantorCandidates(int $borrower, int $each): array
-    {
-        $out = [];
-        foreach ($this->members as $i => $m) {
-            if ($i === $borrower || isset($this->troubled[$i]) || in_array($i, [34, 46, 47], true)) {
-                continue;
-            }
-            $status = SaccoMember::withoutGlobalScopes()->whereKey($m->id)->value('status');
-            if ($status !== 'active') {
-                continue;
-            }
-            $exp = Guarantors::exposure($this->cid, (int) $m->id);
-            // A lien sits whole on one savings account (MemberFunds::hold): the freest account must cover it.
-            $best = (int) DB::table('sacco_savings_accounts')->where('company_id', $this->cid)->where('member_id', $m->id)->whereIn('status', ['active', 'dormant'])
-                ->selectRaw('COALESCE(MAX(balance_minor - held_minor), 0) AS f')->value('f');
-            $free = min($best, MemberFunds::freeSavings($this->cid, (int) $m->id) - ((int) $exp['guaranteed_minor'] - (int) $exp['held_minor']));
-            if ($free >= $each && (int) $exp['count'] < 2) {
-                $out[$i] = $free;
-            }
-        }
-        arsort($out);
-        $keys = array_keys($out);
-        // Not always the richest two: spread the guarantees around.
-        $offset = $keys === [] ? 0 : crc32((string) $borrower) % max(1, min(6, count($keys)));
-
-        return array_merge(array_slice($keys, $offset), array_slice($keys, 0, $offset));
-    }
-
-    private function consentFile(): int
-    {
-        if ($this->consentFile === 0) {
-            $path = 'sacco/demo/'.$this->cid.'/guarantor-consent-form.pdf';
-            Storage::disk('public')->put($path, app('dompdf.wrapper')->loadHTML('<h2>Guarantor consent form</h2><p>Sample form for the Akiba Ledger demo. Every name in this demo is made up.</p>')->output());
-            $this->consentFile = (int) StoredFile::create(['company_id' => $this->cid, 'uuid' => (string) Str::uuid(), 'purpose' => 'sacco_guarantee', 'path' => $path,
-                'mime' => 'application/pdf', 'size_bytes' => (int) Storage::disk('public')->size($path), 'uploaded_by_id' => $this->users['loans']->id])->id;
-        }
-
-        return $this->consentFile;
-    }
-
-    private function appraise(string $tag): void
-    {
-        if (! isset($this->loans[$tag])) {
-            return;
-        }
         $s = $this->scenarios[$tag];
-        $income = 1_400_000 + ($s['member'] % 7) * 250_000;
-        $this->quietly(fn () => (new LoanApplications())->appraise($this->co, $this->loans[$tag], $this->users['loans'], [
-            'monthly_income_minor' => $income + intdiv($s['amount'], 8), 'monthly_expenses_minor' => intdiv($income, 3),
-            'notes' => 'Payslip and bank statement seen. Salary paid through the payroll check-off; deductions fit within half of the pay.']));
-    }
-
-    private function decide(string $tag): void
-    {
         if (! isset($this->loans[$tag])) {
             return;
         }
-        $id = $this->loans[$tag];
-        $loan = SaccoLoan::withoutGlobalScopes()->find($id);
-        if ($loan === null || $loan->status !== 'appraised') {
-            return;
-        }
-        if ((int) $loan->approved_minor <= self::DELEGATED_LIMIT && ! $loan->is_insider) {
-            $this->quietly(function () use ($id) {
-                (new Committee())->requestDelegated($this->co, $id, $this->users['loans']);
-                (new Committee())->decide($this->co, $id, $this->users['manager'], 'approve', 'Within the manager\'s limit; guarantors and savings in order.');
-            });
-
-            return;
-        }
-        $this->quietly(function () use ($id) {
-            (new Committee())->sendToCommittee($this->co, $id, $this->users['loans']);
-            (new Committee())->vote($this->co, $id, $this->users['committee'], 'approve', 'Minutes: the project is sound and the payslip supports the instalment.');
-            (new Committee())->vote($this->co, $id, $this->users['committee2'], 'approve', 'Minutes: approved; collateral (land title) to be kept in the safe.');
-        });
+        $decline = ($s['how']['guarantor'] ?? null) === 'decline';
+        $this->quietly(fn () => (new LoanFlow())->guarantorDecide($this->co, $this->members[$s['guarantor']]->fresh(), $this->loans[$tag], $decline ? 'decline' : 'approve',
+            $decline ? $s['how']['note'] : 'I know the borrower well; we teach at the same school.'));
     }
 
-    private function sign(string $tag): void
+    private function chairDecides(string $tag): void
     {
-        $id = $this->loans[$tag] ?? null;
-        if ($id === null || SaccoLoan::withoutGlobalScopes()->whereKey($id)->value('status') !== 'approved') {
+        $s = $this->scenarios[$tag];
+        if (! isset($this->loans[$tag])) {
             return;
         }
-        $this->quietly(function () use ($id, $tag) {
-            (new Contracts())->generate($this->co, $id, $this->users['loans']);
-            (new Contracts())->sign($this->co, $id, $this->users['loans'], ['witness_name' => $this->witness($tag), 'signed_on' => $this->day()]);
-        });
+        $decline = ($s['how']['chair'] ?? null) === 'decline';
+        $this->quietly(fn () => (new LoanFlow())->chairDecide($this->co, $this->users['chair'], $this->loans[$tag], $decline ? 'decline' : 'approve',
+            $decline ? $s['how']['note'] : 'Savings and payslip seen; approved.'));
     }
 
-    private function witness(string $tag): string
-    {
-        $names = ['Ruth Nakiwala (head teacher)', 'Samuel Mayanja (deputy head teacher)', 'Agnes Nakazzi (LC1 chairperson)', 'Charles Kiggundu (school bursar)'];
-
-        return $names[crc32($tag) % count($names)];
-    }
-
-    private function disburse(string $tag): void
+    private function payOut(string $tag): void
     {
         $id = $this->loans[$tag] ?? null;
         if ($id === null) {
             return;
         }
-        $loan = SaccoLoan::withoutGlobalScopes()->find($id);
-        if ($loan === null || $loan->status !== 'signed') {
-            return;
-        }
-        $channel = (string) ($loan->disbursement_channel ?: 'bank');
-        $ok = $this->quietly(function () use ($id, $channel, $tag) {
-            $a = (new Disbursement())->request($this->co, $id, $this->users['treasurer'], ['channel' => $channel, 'bank_reference' => $channel === 'bank' ? 'EFT '.strtoupper(substr(md5($tag), 0, 8)) : null]);
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['manager'], 'Contract signed and witnessed; pay out.');
-
-            return true;
-        });
-        if ($ok === true) {
-            $this->afterDisbursed($tag, $id);
+        $loan = $this->quietly(fn () => (new LoanFlow())->payOut($this->co, $this->users['treasurer'], $id, ['method' => 'bank', 'notes' => 'Transferred to the member\'s salary account']));
+        if ($loan instanceof SaccoLoan && $loan->status === 'active') {
+            $this->afterPaidOut($tag, $id);
         }
     }
 
-    /** What happens to each loan once it is out: on-time payers join the payers' list; the others get their own story. */
-    private function afterDisbursed(string $tag, int $id): void
+    private function notPaidOut(string $tag): void
     {
-        $s = $this->scenarios[$tag];
-        $how = $s['how'];
+        $id = $this->loans[$tag] ?? null;
+        if ($id !== null) {
+            $this->quietly(fn () => (new LoanFlow())->notPaidOut($this->co, $this->users['treasurer'], $id, (string) $this->scenarios[$tag]['how']['not_paid']));
+        }
+    }
+
+    /** On-time borrowers join the payers' list; the late ones pay until they stop; one settles early. */
+    private function afterPaidOut(string $tag, int $id): void
+    {
+        $how = $this->scenarios[$tag]['how'];
         $lines = SaccoLoanScheduleLine::withoutGlobalScopes()->where('loan_id', $id)->orderBy('installment_no')->get();
-        switch ($how['pay']) {
-            case 'all':
-                $this->payers[] = $id;
-                if (isset($how['settle_after'])) {
-                    $line = $lines[$how['settle_after'] - 1] ?? null;
-                    if ($line !== null) {
-                        $this->on($line->due_on->copy()->addDays(9), 11, fn () => $this->settle($tag));
-                    }
-                }
-                if (isset($how['top_up'])) {
-                    $this->planTopUp($tag);
-                }
-                break;
-            case 'until':
-                // Paid on time until the last $missed instalments due by today (or after $paid instalments).
-                $due = $lines->filter(fn ($l) => $l->due_on->lte($this->today))->values();
-                $keep = isset($how['paid']) ? (int) $how['paid'] : max(0, $due->count() - (int) $how['missed']);
-                foreach ($due->take($keep) as $l) {
-                    $this->on($l->due_on, 16, fn () => $this->payDue($id, $l->due_on->copy()));
-                }
-                if (isset($how['part']) && ($next = $due[$keep] ?? null) !== null) {
-                    $this->on($next->due_on->copy()->addDays(12), 12, fn () => $this->repay($id, $how['part'], 'cash', 'Part payment brought to the office'));
-                }
-                if (isset($how['write_off'])) {
-                    $this->on($how['write_off'], 10, fn () => $this->writeOff($tag));
-                    [$when, $amount] = $how['recover'];
-                    $this->on($when, 11, fn () => $this->recover($tag, $amount));
-                }
-                break;
-            case 'reschedule':
-                foreach ($lines->take((int) $how['paid']) as $l) {
-                    $this->on($l->due_on, 16, fn () => $this->payDue($id, $l->due_on->copy()));
-                }
-                $at = $lines[(int) $how['paid'] + (int) $how['gap']]->due_on->copy()->subDays(5);
-                $this->on($at, 10, fn () => $this->reschedule($tag, (int) $how['term']));
-                break;
-            case 'guarantor':
-                foreach ($lines->take((int) $how['paid']) as $l) {
-                    $this->on($l->due_on, 16, fn () => $this->payDue($id, $l->due_on->copy()));
-                }
-                $at = $lines[(int) $how['paid'] + (int) $how['gap']]->due_on->copy()->addDays(3);
-                $this->on($at, 10, fn () => $this->guarantorPays($tag));
-                break;
+        if ($how['pay'] === 'all') {
+            $this->payers[] = $id;
+            if (isset($how['settle_after']) && ($line = $lines[$how['settle_after'] - 1] ?? null) !== null) {
+                $this->on($line->due_on->copy()->addDays(9), 11, fn () => $this->settle($id));
+            }
+
+            return;
+        }
+        $due = $lines->filter(fn ($l) => $l->due_on->lte($this->today))->values();
+        foreach ($due->take(max(0, $due->count() - (int) $how['missed'])) as $l) {
+            $this->on($l->due_on, 16, fn () => $this->payDue($id, $l->due_on->copy()));
         }
     }
 
@@ -903,96 +737,16 @@ final class SaccoDemoBuilder
             return false;
         }
 
-        return $this->repay($loanId, $amount, 'bank', 'Payroll check-off', $day) !== null;
+        return $this->quietly(fn () => (new LoanFlow())->repay($this->co, $this->users['teller'], $loanId, ['amount_minor' => $amount, 'paid_on' => $day->toDateString(), 'method' => 'bank'])) !== null;
     }
 
-    private function repay(int $loanId, int $amount, string $channel, string $reference, ?\Carbon\Carbon $day = null): mixed
+    /** Everything owed today, in one payment (no early-settlement fee). */
+    private function settle(int $id): void
     {
-        return $this->quietly(fn () => (new Repayments())->record($this->co, $loanId, ['amount_minor' => $amount, 'channel' => $channel, 'reference' => $reference]
-            + ($day !== null ? ['value_date' => $day->toDateString()] : []), $this->users['teller']));
-    }
-
-    private function settle(string $tag): void
-    {
-        $id = $this->loans[$tag] ?? 0;
         $this->quietly(function () use ($id) {
             $q = (new Repayments())->quote($this->cid, $id);
-            (new Repayments())->record($this->co, $id, ['amount_minor' => (int) $q['total_minor'], 'channel' => 'bank', 'reference' => 'Early settlement (no fee)'], $this->users['teller'], ['settle' => true]);
+            (new LoanFlow())->repay($this->co, $this->users['teller'], $id, ['amount_minor' => (int) $q['total_minor'], 'method' => 'bank']);
         });
-    }
-
-    private function planTopUp(string $tag): void
-    {
-        $t = $this->scenarios[$tag]['how']['top_up'];
-        $on = $this->today->copy()->subMonthsNoOverflow($t['months_ago'])->subDays($t['days']);
-        $newTag = 'topped_new';
-        $this->scenarios[$newTag] = ['tag' => $newTag, 'member' => $this->scenarios[$tag]['member'], 'product' => 'ORD', 'amount' => $t['amount'], 'term' => $t['term'],
-            'on' => $on, 'how' => ['pay' => 'all']];
-        $this->on($on->copy()->subDays(8), 10, function () use ($tag, $newTag, $t) {
-            $old = $this->loans[$tag] ?? null;
-            if ($old === null) {
-                return;
-            }
-            $this->topUpSavings($this->scenarios[$tag]['member'], $t['amount'], 'ORD');
-            $loan = $this->quietly(fn () => (new Restructure())->applyTopUp($this->co, $old, ['applied_minor' => $t['amount'], 'term' => $t['term'], 'purpose' => 'Top-up: finish the rental rooms',
-                'disbursement_channel' => 'savings'], $this->users['loans']));
-            if ($loan instanceof SaccoLoan) {
-                $this->loans[$newTag] = (int) $loan->id;
-                $this->guarantee($newTag, $loan);
-            }
-        });
-        $this->on($on->copy()->subDays(6), 11, fn () => $this->appraise($newTag));
-        $this->on($on->copy()->subDays(4), 14, fn () => $this->decide($newTag));
-        $this->on($on->copy()->subDays(1), 10, fn () => $this->sign($newTag));
-        $this->on($on, 11, fn () => $this->disburse($newTag));
-    }
-
-    private function reschedule(string $tag, int $term): void
-    {
-        $id = $this->loans[$tag] ?? 0;
-        $this->quietly(function () use ($id, $term) {
-            $a = (new Restructure())->requestReschedule($this->co, $id, $this->users['loans'], ['term' => $term, 'reason' => 'Salary delayed for two months after a payroll transfer; the member asks for smaller instalments.',
-                'consent_signed_on' => $this->day(), 'consent_witness' => 'Charles Kiggundu (school bursar)']);
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['committee'], 'Minutes: rescheduled over 18 months with the borrower\'s written consent.');
-        });
-        $this->payers[] = $id;
-    }
-
-    private function guarantorPays(string $tag): void
-    {
-        $id = $this->loans[$tag] ?? 0;
-        $loan = SaccoLoan::withoutGlobalScopes()->find($id);
-        if ($loan === null || (int) $loan->days_past_due < 1) {
-            return;
-        }
-        $g = SaccoLoanGuarantor::withoutGlobalScopes()->where('loan_id', $id)->where('consent_status', 'consented')->orderByDesc('held_minor')->first();
-        if ($g === null) {
-            return;
-        }
-        $owed = (int) $loan->interest_due_minor + (int) $loan->penalty_due_minor + (int) $loan->fees_due_minor + (int) $loan->interest_in_suspense_minor + (int) $loan->penalty_in_suspense_minor
-            + (int) SaccoLoanScheduleLine::withoutGlobalScopes()->where('loan_id', $id)->where('schedule_version', $loan->schedule_version)->where('due_on', '<=', $this->day())
-                ->where('status', '!=', 'paid')->get()->sum(fn ($l) => (int) $l->principal_due_minor - (int) $l->principal_paid_minor);
-        $this->quietly(function () use ($g, $owed) {
-            $a = (new GuarantorRecovery())->request($this->co, (int) $g->id, min($owed, (int) $g->held_minor), $this->users['loans'], 'Borrower two instalments behind; demand notice served and not answered.');
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['manager'], 'Recover the arrears from the guarantor\'s held savings.');
-        });
-        $this->payers[] = $id; // the borrower pays again from the next instalment
-    }
-
-    private function writeOff(string $tag): void
-    {
-        $id = $this->loans[$tag] ?? 0;
-        $this->quietly(function () use ($id) {
-            $a = (new WriteOffs())->request($this->co, $id, $this->users['loans'], 'Over 180 days in arrears; the borrower left teaching and cannot be traced; demand notices returned.');
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['treasurer'], 'Fully provided for; write off.');
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['chair'], 'Approved by the board.');
-        });
-    }
-
-    private function recover(string $tag, int $amount): void
-    {
-        $id = $this->loans[$tag] ?? 0;
-        $this->quietly(fn () => (new WriteOffs())->recover($this->co, $id, ['amount_minor' => $amount, 'channel' => 'cash', 'narration' => 'Recovered after the member was traced in Mityana'], $this->users['teller']));
     }
 
     // ── Savings, shares and the counter ───────────────────────────────────
@@ -1016,7 +770,7 @@ final class SaccoDemoBuilder
             }
             $ref = 'Payroll check-off '.$month->format('M Y');
             $this->tx(['kind' => 'deposit', 'savings_account_id' => $this->accounts[$i]['CMP'], 'amount_minor' => $this->profile[$i]['cmp'], 'channel' => 'bank', 'reference' => $ref], $this->users['teller']);
-            if ($this->profile[$i]['ord'] > 0 && isset($this->accounts[$i]['ORD']) && ! isset($this->troubled[$i])) {
+            if ($this->profile[$i]['ord'] > 0 && isset($this->accounts[$i]['ORD'])) {
                 $this->tx(['kind' => 'deposit', 'savings_account_id' => $this->accounts[$i]['ORD'], 'amount_minor' => $this->profile[$i]['ord'], 'channel' => 'bank', 'reference' => $ref], $this->users['teller']);
             }
         }
@@ -1059,7 +813,7 @@ final class SaccoDemoBuilder
     /** A withdrawal at the counter; a large one waits for the treasurer's approval. */
     private function counterWithdrawal(int $i, bool $large): void
     {
-        if (! $this->isActive($i) || ! isset($this->accounts[$i]['ORD']) || isset($this->troubled[$i])) {
+        if (! $this->isActive($i) || ! isset($this->accounts[$i]['ORD'])) {
             return;
         }
         $account = SaccoSavingsAccount::withoutGlobalScopes()->find($this->accounts[$i]['ORD']);
@@ -1087,19 +841,6 @@ final class SaccoDemoBuilder
         if ($acct instanceof SaccoSavingsAccount) {
             $this->accounts[$i]['FXD'] = (int) $acct->id;
             $this->tx(['kind' => 'deposit', 'savings_account_id' => (int) $acct->id, 'amount_minor' => $amount, 'channel' => 'bank', 'reference' => 'Fixed deposit for 12 months'], $this->users['teller']);
-        }
-    }
-
-    /** A fixed deposit that has run its year: moved to the member's ordinary savings. */
-    private function fixedMatures(int $i): void
-    {
-        if (! isset($this->accounts[$i]['FXD'], $this->accounts[$i]['ORD'])) {
-            return;
-        }
-        $balance = (int) SaccoSavingsAccount::withoutGlobalScopes()->whereKey($this->accounts[$i]['FXD'])->value('balance_minor');
-        if ($balance > 0) {
-            $this->tx(['kind' => 'internal_transfer', 'savings_account_id' => $this->accounts[$i]['FXD'], 'counter_account_id' => $this->accounts[$i]['ORD'], 'amount_minor' => $balance,
-                'narration' => 'Fixed deposit matured'], $this->users['teller']);
         }
     }
 
@@ -1203,7 +944,7 @@ final class SaccoDemoBuilder
 
     private function fine(int $i, int $amount, string $why): void
     {
-        if ($this->isActive($i) && isset($this->accounts[$i]['ORD'])) {
+        if ($this->isActive($i) && isset($this->accounts[$i]['ORD']) && SavingsAccounts::available($this->cid, $this->accounts[$i]['ORD']) >= $amount) {
             $this->tx(['kind' => 'fee', 'savings_account_id' => $this->accounts[$i]['ORD'], 'amount_minor' => $amount, 'narration' => $why], $this->users['teller']);
         }
     }
@@ -1229,124 +970,99 @@ final class SaccoDemoBuilder
         }
     }
 
-    private function placeWithBank(int $amount): void
-    {
-        $placed = (int) DB::table('sacco_ledger_accounts')->where('company_id', $this->cid)->where('code', '1200')->value('id');
-        $lines = [['account_id' => $placed, 'debit_minor' => $amount, 'memo' => 'Fixed deposit with Centenary Bank, 12 months at 11 %'],
-            ['account_id' => ChartOfAccounts::id($this->cid, 'bank.main'), 'credit_minor' => $amount, 'memo' => 'Moved from the current account']];
-        $this->quietly(function () use ($lines) {
-            $a = app(SaccoApprovals::class)->request($this->co, 'manual_journal', ['lines' => $lines, 'memo' => 'Surplus liquidity placed on fixed deposit (board resolution)'], $this->users['treasurer']);
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['manager'], 'Board resolution attached.');
-        });
-    }
+    // ── The SACCO's own account and the share-out ─────────────────────────
 
-    /** Salaries, the software and the bank: what a SACCO office costs each month (a manual journal, approved). */
-    private function operatingCosts(\Carbon\Carbon $month): void
+    /** About a dozen of the SACCO's own entries over the months, and one mistake put right by a reversal. */
+    private function accountEntries(): void
     {
-        $acc = fn (string $key) => ChartOfAccounts::id($this->cid, $key);
-        $personnel = (int) DB::table('sacco_ledger_accounts')->where('company_id', $this->cid)->where('code', '5300')->value('id');
-        $lines = [['account_id' => $personnel, 'debit_minor' => 1_250_000, 'memo' => 'Allowances: manager, loans officer, teller (part-time)'],
-            ['account_id' => $acc('exp.software'), 'debit_minor' => 185_000, 'memo' => 'SMS bundle and software'],
-            ['account_id' => $acc('exp.bank'), 'debit_minor' => 42_000, 'memo' => 'Bank charges'],
-            ['account_id' => $acc('exp.governance'), 'debit_minor' => in_array($month->month, [3, 6, 9, 12], true) ? 600_000 : 0, 'memo' => 'Board meeting allowances']];
-        $lines = array_values(array_filter($lines, fn ($l) => $l['debit_minor'] > 0));
-        $lines[] = ['account_id' => $acc('bank.main'), 'credit_minor' => array_sum(array_column($lines, 'debit_minor')), 'memo' => 'Paid from the bank'];
-        $this->quietly(function () use ($lines, $month) {
-            $a = app(SaccoApprovals::class)->request($this->co, 'manual_journal', ['lines' => $lines, 'memo' => 'Office costs for '.$month->format('F Y')], $this->users['manager']);
-            app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['treasurer'], 'Payment vouchers attached.');
-        });
-        // The bank fixed deposit's interest (11 % a year), credited monthly by the bank.
-        $placed = (int) DB::table('sacco_ledger_accounts')->where('company_id', $this->cid)->where('code', '1200')->value('id');
-        $income = (int) DB::table('sacco_ledger_accounts')->where('company_id', $this->cid)->where('code', '4310')->value('id');
-        $held = (int) DB::table('sacco_account_balances')->where('ledger_account_id', $placed)->value('balance_minor');
-        if ($held > 0 && $income > 0) {
-            $interest = $this->round(intdiv($held * 11, 1200));
-            $this->quietly(function () use ($acc, $income, $interest, $month) {
-                $a = app(SaccoApprovals::class)->request($this->co, 'manual_journal', ['lines' => [['account_id' => $acc('bank.main'), 'debit_minor' => $interest, 'memo' => 'Credited by the bank'],
-                    ['account_id' => $income, 'credit_minor' => $interest, 'memo' => 'Interest on the fixed deposit']], 'memo' => 'Bank deposit interest for '.$month->format('F Y')], $this->users['treasurer']);
-                app(SaccoApprovals::class)->approve($this->co, (int) $a->id, $this->users['manager'], 'Agrees to the bank statement.');
+        $T = $this->today;
+        $at = fn (int $monthsIn, int $day) => $this->workingDayOnOrBefore($this->start->copy()->addMonthsNoOverflow($monthsIn)->day($day));
+        $entries = [
+            [$at(0, 8), 'out', 'Office expenses', 350_000, 'cash', 'Receipt books and stationery'],
+            [$at(2, 15), 'in', 'Grant', 5_000_000, 'bank', 'Grant from the district cooperative office for a safe and a laptop'],
+            [$at(2, 20), 'out', 'Office expenses', 2_900_000, 'bank', 'Laptop and a fire-proof safe'],
+            [$at(3, 28), 'out', 'Bank charges', 45_000, 'bank', 'Quarterly ledger fees'],
+            [$at(6, 28), 'out', 'Bank charges', 45_000, 'bank', 'Quarterly ledger fees'],
+            [$at(7, 12), 'in', 'Other income', 120_000, 'cash', 'Sale of old office chairs'],
+            [$at(9, 28), 'out', 'Bank charges', 45_000, 'bank', 'Quarterly ledger fees'],
+            [$at(11, 30), 'out', 'Meetings', 600_000, 'cash', 'Annual general meeting: hall and refreshments'],
+            [$at(12, 28), 'out', 'Bank charges', 45_000, 'bank', 'Quarterly ledger fees'],
+            [$at(13, 10), 'in', 'Other income', 250_000, 'bank', 'Interest on the bank account'],
+            [$at(15, 28), 'out', 'Bank charges', 45_000, 'bank', 'Quarterly ledger fees'],
+            [$at(16, 6), 'out', 'Office expenses', 180_000, 'cash', 'Printer toner'],
+        ];
+        foreach ($entries as [$day, $direction, $category, $amount, $method, $notes]) {
+            if ($day->lt($T)) {
+                $this->on($day, 14, fn () => $this->accountEntry($direction, $category, $amount, $method, $notes));
+            }
+        }
+        // The toner entered twice: the second entry reversed the next day, never edited.
+        $twice = $at(16, 6);
+        if ($twice->copy()->addDays(3)->lt($T)) {
+            $this->on($twice, 15, function () {
+                $e = $this->accountEntry('out', 'Office expenses', 180_000, 'cash', 'Printer toner');
+                if ($e !== null) {
+                    $this->accountMistake = (int) $e->id;
+                }
             });
+            $this->on($twice->copy()->addDays(3), 10, fn () => $this->accountMistake > 0
+                ? $this->quietly(fn () => (new SaccoAccount())->reverse($this->co, $this->users['treasurer'], $this->accountMistake, 'Entered twice: the toner was bought once.'))
+                : null);
         }
     }
 
-    // ── Today: the applications still on their way ────────────────────────
+    private function accountEntry(string $direction, string $category, int $amount, string $method, string $notes): ?\App\Models\SaccoAccountEntry
+    {
+        $svc = new SaccoAccount();
+        $cat = collect($svc->categories($this->cid))->first(fn ($c) => $c->direction === $direction && $c->name === $category);
+        if ($cat === null) {
+            return null;
+        }
+        $r = $this->quietly(fn () => $svc->record($this->co, $this->users['treasurer'], ['direction' => $direction, 'category_id' => (int) $cat->id, 'amount_minor' => $amount,
+            'method' => $method, 'notes' => $notes, 'value_date' => $this->day()]));
+
+        return $r['entry'] ?? null;
+    }
+
+    /** The share-out at the end of the last full year: savings back and the year's profit by shares, posted and locked. */
+    private function shareOut(): void
+    {
+        $day = $this->workingDayOnOrBefore(Carbon::create($this->today->year - 1, 12, 31, 0, 0, 0, $this->tz));
+        if ($day->lt($this->start) || $day->gte($this->today)) {
+            return;
+        }
+        $this->on($day, 16, function () {
+            $svc = new ShareOut();
+            $pool = (int) $svc->preview($this->cid)['pool_minor'];
+            $amount = min($pool, Money::available($this->cid, 'bank'));
+            if ($amount > 0) {
+                $this->quietly(fn () => $svc->run($this->co, $this->users['treasurer'], ['amount_minor' => $amount, 'method' => 'bank', 'share_on' => $this->day(),
+                    'notes' => 'Year-end share-out agreed at the general meeting: savings returned and the profit shared by shares.']));
+            }
+        });
+    }
+
+    // ── Today: the member sign-ins ─────────────────────────────────────────
 
     private function finishingTouches(): void
     {
-        $T = $this->today;
-        $tell = fn (int $days, int $hour) => $this->at($T->copy()->subDays($days), $hour, 10);
-        // Rejected at the committee's sitting (19 days ago), with the minutes.
-        $tell(23, 10);
-        $rej = $this->freshApplication('rejected', 28, 'ORD', 9_500_000, 24);
-        if ($rej !== null) {
-            $tell(21, 11);
-            $this->appraise('rejected');
-            $tell(19, 14);
-            $this->quietly(function () use ($rej) {
-                (new Committee())->sendToCommittee($this->co, $rej, $this->users['loans']);
-                (new Committee())->vote($this->co, $rej, $this->users['committee'], 'reject', 'Minutes: the instalment would take more than half of the payslip; reapply for a smaller amount.');
-                (new Committee())->vote($this->co, $rej, $this->users['committee2'], 'reject', 'Minutes: rejected; existing deductions too high.');
-            });
+        $this->at($this->today, 8, 20);
+        foreach ($this->data['member_logins'] as $key => $login) {
+            $who = $this->members[(int) $login['member']];
+            (new MemberLogin())->enable($this->co, (int) $who->id, $this->users['manager'], $this->tempEmail($key), null, Str::password(20, symbols: false));
         }
-        // Approved two days ago within the manager's limit; the member comes in to sign.
-        $tell(4, 10);
-        if ($this->freshApplication('approved', 32, 'SCH', 3_000_000, 10) !== null) {
-            $tell(3, 11);
-            $this->appraise('approved');
-            $tell(2, 15);
-            $this->decide('approved');
+        if (! isset($this->accounts[0]['HOL'])) {
+            $this->holidayDeposit(0);
         }
-        // In committee: appraised yesterday, one vote in so far; the others vote at the next sitting.
-        $tell(3, 9);
-        $ic = $this->freshApplication('in_committee', 36, 'ORD', 8_000_000, 24);
-        if ($ic !== null) {
-            $tell(2, 10);
-            $this->appraise('in_committee');
-            $tell(1, 12);
-            $this->quietly(function () use ($ic) {
-                (new Committee())->sendToCommittee($this->co, $ic, $this->users['loans']);
-                (new Committee())->vote($this->co, $ic, $this->users['committee3'], 'approve', 'Supports it: guarantors strong, land title deposited.');
-            });
-        }
-        // Submitted this morning, waiting for the loans officer's appraisal.
-        $tell(0, 8);
-        $this->freshApplication('submitted', 39, 'EMG', 1_000_000, 4);
-
-        // The member's own sign-in (/member): the first member, whose books cover every product.
-        $this->at($T, 8, 20);
-        $login = $this->data['member_login'];
-        $who = $this->members[(int) $login['member']];
-        (new MemberLogin())->enable($this->co, (int) $who->id, $this->users['manager'], $this->tempEmail('member'), null, Str::password(20, symbols: false));
-        if (! isset($this->accounts[(int) $login['member']]['HOL'])) {
-            $this->holidayDeposit((int) $login['member']);
-        }
-
         $this->ensureSteps();
-    }
-
-    private function freshApplication(string $tag, int $who, string $product, int $amount, int $term): ?int
-    {
-        $this->scenarios[$tag] = ['tag' => $tag, 'member' => $who, 'product' => $product, 'amount' => $amount, 'term' => $term, 'on' => $this->today->copy(), 'how' => ['pay' => 'none']];
-        $this->apply($tag, $this->today);
-
-        return $this->loans[$tag] ?? null;
     }
 
     // ── Steps that wait for a kernel service ──────────────────────────────
 
-    /**
-     * Each part of the brief a kernel service does not do yet, by the class it waits for. Every step is idempotent:
-     * it does nothing until its class exists, then adds its part once. @return array<string, string> step => added|done|pending
-     */
+    /** Each simple part the kernel does not do yet, by the class it waits for. @return array<string, string> step => added|pending */
     public function ensureSteps(): array
     {
-        return [
-            'ensureYearEnd' => $this->ensureYearEnd(),
-            'ensureFines' => $this->ensureFines(),
-            'ensureWelfare' => $this->ensureWelfare(),
-            'ensureMeeting' => $this->ensureMeeting(),
-            'ensureMomo' => $this->ensureMomo(),
-        ];
+        return ['ensureFines' => $this->ensureFines(), 'ensureWelfare' => $this->ensureWelfare()];
     }
 
     /** What still waits, for the report and the heal's log. @return list<string> */
@@ -1363,12 +1079,8 @@ final class SaccoDemoBuilder
 
     /** step => [the classes it needs (any one), what it adds]. */
     public const WAITING = [
-        'ensureYearEnd' => [['App\Services\Sacco\YearEnd\Closing', 'App\Services\Sacco\YearEnd\Dividends'],
-            'close the last full financial year (P4.7 appropriation: reserve, education fund) and pay its dividend on shares to savings (P4.8)'],
-        'ensureFines' => [['App\Services\Sacco\Group\Fines'], 'fines receivable from the fine catalogue (P5.4); until then office fines are charged to savings as a fee'],
+        'ensureFines' => [['App\Services\Sacco\Group\Fines'], 'fines owed from a fine list (P5.4); until then office fines are charged to savings as a fee'],
         'ensureWelfare' => [['App\Services\Sacco\Group\Funds'], 'a welfare fund with contributions and one bereavement claim paid from it (P5.5)'],
-        'ensureMeeting' => [['App\Services\Sacco\Group\Meetings'], 'the loans committee sitting as a meeting record (P5.2); until then the sitting is the committee\'s votes with their minutes'],
-        'ensureMomo' => [['App\Services\Sacco\Payments\SaccoCollections'], 'a mobile-money collection settled by the provider and one reversed (P3.1); until then the reversed MoMo deposit is a bank-channel receipt with the MoMo reference'],
     ];
 
     /** @param list<string> $classes */
@@ -1383,16 +1095,6 @@ final class SaccoDemoBuilder
         return false;
     }
 
-    /**
-     * The closed year and its dividend (P4.7, P4.8). Waits for App\Services\Sacco\YearEnd\{Closing, Dividends}; once
-     * they exist, the step that uses them goes here (the year before the current one, closed, appropriated and its
-     * dividend paid to savings, by the chair's and treasurer's approvals).
-     */
-    private function ensureYearEnd(): string
-    {
-        return $this->available(self::WAITING['ensureYearEnd'][0]) ? $this->notWired('ensureYearEnd') : 'pending';
-    }
-
     private function ensureFines(): string
     {
         return $this->available(self::WAITING['ensureFines'][0]) ? $this->notWired('ensureFines') : 'pending';
@@ -1403,24 +1105,13 @@ final class SaccoDemoBuilder
         return $this->available(self::WAITING['ensureWelfare'][0]) ? $this->notWired('ensureWelfare') : 'pending';
     }
 
-    private function ensureMeeting(): string
-    {
-        return $this->available(self::WAITING['ensureMeeting'][0]) ? $this->notWired('ensureMeeting') : 'pending';
-    }
-
-    private function ensureMomo(): string
-    {
-        return $this->available(self::WAITING['ensureMomo'][0]) ? $this->notWired('ensureMomo') : 'pending';
-    }
-
-    /** The service has landed but its demo step is not written yet: logged loudly once per run, never fatal. */
+    /** The service has landed but its demo step is not written yet: logged, never fatal. */
     private function notWired(string $step): string
     {
         Log::warning("[sacco-demo] {$step}: the kernel service it waits for now exists; write the step in SaccoDemoBuilder::{$step}().");
 
         return 'pending';
     }
-
     // ── Helpers ───────────────────────────────────────────────────────────
 
     /** The SACCO's calendar day now (the simulated clock), as Y-m-d. */
@@ -1433,7 +1124,7 @@ final class SaccoDemoBuilder
     private function snapshot(): array
     {
         return ['build' => self::BUILD, 'users' => array_map(fn (User $u) => (int) $u->id, $this->users), 'loans' => $this->loans, 'payers' => array_values(array_unique($this->payers)),
-            'members' => array_map(fn (SaccoMember $m) => (int) $m->id, $this->members), 'member_login' => (int) $this->members[(int) $this->data['member_login']['member']]->id,
+            'members' => array_map(fn (SaccoMember $m) => (int) $m->id, $this->members), 'member_logins' => array_map(fn ($l) => (int) $this->members[(int) $l['member']]->id, $this->data['member_logins']),
             'started_on' => $this->start->toDateString(), 'skipped' => count($this->skipped)];
     }
 
