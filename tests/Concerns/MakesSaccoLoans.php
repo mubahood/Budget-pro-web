@@ -28,6 +28,9 @@ trait MakesSaccoLoans
 {
     use MakesSaccoTeam;
 
+    /** @var array<int, array{officer: User, manager: User}> per company: the loans officer and a manager with a large limit */
+    protected array $loanStaff = [];
+
     /** @return array{0: Company, 1: User} the SACCO and its owner (seated as chairperson) */
     protected function loanSacco(string $mode = 'office', string $name = 'Loans SACCO'): array
     {
@@ -107,5 +110,33 @@ trait MakesSaccoLoans
         }
 
         return 'none';
+    }
+
+    /**
+     * The loans officer and a manager with a large limit, made once per SACCO; with them a depositor's 200 m in cash, so
+     * the SACCO has the liquidity and the assets (a 20 m single-borrower limit) a loan test needs.
+     *
+     * @return array{officer: User, manager: User}
+     */
+    protected function loanStaffOf(Company $company): array
+    {
+        if (! isset($this->loanStaff[(int) $company->id])) {
+            $owner = User::withoutGlobalScopes()->findOrFail($company->owner_id);
+            $this->loanSavings($company, $this->loanMember($company, $owner, 1000, ['first_name' => 'Depositor']), 200_000_000, $owner);
+            $this->loanStaff[(int) $company->id] = ['officer' => $this->saccoStaff($company, 'sacco_loans_officer'),
+                'manager' => $this->officerUser($company, 'sacco_manager', 'manager', 1_000_000_000)];
+        }
+
+        return $this->loanStaff[(int) $company->id];
+    }
+
+    /** An approved loan (appraised by the loans officer, approved by the manager within their limit). */
+    protected function approvedLoan(Company $company, SaccoMember $member, int $amount, int $term, ?SaccoLoanProduct $product = null): SaccoLoan
+    {
+        $staff = $this->loanStaffOf($company);
+        $loan = $this->application($company, $member, $amount, $term, $staff['officer'], $staff['officer'], $product);
+        (new \App\Services\Sacco\Loans\Committee())->requestDelegated($company, (int) $loan->id, $staff['officer']);
+
+        return (new \App\Services\Sacco\Loans\Committee())->decide($company, (int) $loan->id, $staff['manager'], 'approve');
     }
 }
