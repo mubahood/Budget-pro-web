@@ -165,6 +165,8 @@ class BillingLifecycleTest extends ApiTestCase
 
     public function test_daily_summary_low_stock_unsynced_device_and_cash_variance(): void
     {
+        // Start the morning before the 20:05 summary run: from the real clock, a run after 20:05 Nairobi travelled back and the device read 3 days.
+        $this->travelTo(now()->setTimezone('Africa/Nairobi')->setTime(9, 0)->utc());
         $t = $this->registerTenant();
         $h = $this->auth($t['token']);
         DB::table('companies')->where('id', $t['company_id'])->update(['timezone' => 'Africa/Nairobi']);

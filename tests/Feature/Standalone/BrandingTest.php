@@ -6,6 +6,7 @@ use App\Console\Commands\StandaloneHeartbeat;
 use App\Mail\ShopMessage;
 use App\Models\Company;
 use App\Services\Messaging\MailChannel;
+use App\Services\Onboarding\RegistrationService;
 use App\Support\BrandColour;
 use App\Support\Rules\CompanyRules;
 use App\Support\SchedulerHeartbeat;
@@ -28,7 +29,9 @@ class BrandingTest extends TestCase
 
     private function company(array $attrs = []): Company
     {
-        $company = Company::withoutGlobalScopes()->oldest('id')->first();
+        // The oldest company is the one a standalone sign-in wears (ShopBrand::forSignIn); a fresh database has none yet.
+        $company = Company::withoutGlobalScopes()->oldest('id')->first() ?? app(RegistrationService::class)->register(['first_name' => 'Brand', 'last_name' => 'Owner',
+            'email' => 'brand_'.uniqid('', true).'@example.test', 'password' => 'secret123', 'company_name' => 'Brand Shop', 'currency' => 'UGX'], 'budget', 'test')['company'];
         $company->forceFill($attrs + ['name' => 'Fresh Mart', 'slogan' => 'Fresh every morning'])->saveQuietly();
 
         return $company->fresh();

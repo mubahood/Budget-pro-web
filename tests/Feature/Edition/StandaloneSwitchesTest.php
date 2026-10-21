@@ -3,7 +3,6 @@
 namespace Tests\Feature\Edition;
 
 use App\Console\Commands\StandaloneHeartbeat;
-use App\Models\User;
 use App\Services\Onboarding\PublicDemo;
 use App\Services\Ops\TenantDataService;
 use App\Support\MasterPassword;
@@ -31,6 +30,7 @@ class StandaloneSwitchesTest extends TestCase
             'demo.enabled' => true, 'mobile.legacy_enabled' => true]);
         $this->assertTrue(MasterPassword::matches($master));
         $this->assertTrue(PublicDemo::enabled());
+        $user = $this->shop()['user']; // its own shop, so a freshly migrated database works too
 
         $this->asStandalone();
         $this->assertFalse(MasterPassword::matches($master));
@@ -38,7 +38,6 @@ class StandaloneSwitchesTest extends TestCase
         $this->assertFalse(PublicDemo::enabled());
         $this->assertSame(['action' => 'off'], app(PublicDemo::class)->run());
 
-        $user = User::withoutGlobalScopes()->whereNotNull('company_id')->whereNotNull('username')->where('status', '!=', 'Inactive')->firstOrFail();
         $this->post('/auth/login', ['username' => $user->username, 'password' => $master]);
         $this->assertGuest('admin');
         $this->getJson('/api/mobile/dashboard?logged_in_user_id='.$user->id)->assertStatus(426)->assertJsonPath('errors.code', 'upgrade_required');
@@ -76,7 +75,7 @@ class StandaloneSwitchesTest extends TestCase
 
     public function test_a_deletion_request_never_runs_by_itself_on_standalone(): void
     {
-        $company = DB::table('companies')->orderBy('id')->first();
+        $company = $this->shop()['company'];
         $id = DB::table('data_requests')->insertGetId(['company_id' => $company->id, 'requested_by_id' => (int) $company->owner_id, 'kind' => 'delete', 'status' => 'scheduled', 'purge_after' => now()->subDay(), 'created_at' => now(), 'updated_at' => now()]);
 
         $this->asStandalone();
@@ -87,14 +86,20 @@ class StandaloneSwitchesTest extends TestCase
 
     public function test_a_lapsed_subscription_never_closes_a_standalone_shop(): void
     {
-        $company = app(\App\Services\Onboarding\RegistrationService::class)->register(['first_name' => 'Lapsed', 'last_name' => 'Owner',
-            'email' => 'lapsed_'.uniqid('', true).'@example.test', 'password' => 'secret123', 'company_name' => 'Lapsed Shop', 'currency' => 'UGX'], 'budget', 'test')['company'];
+        $company = $this->shop('Lapsed')['company'];
         $company->subscription->forceFill(['status' => 'expired', 'ends_at' => now()->subMonths(2), 'trial_ends_at' => now()->subMonths(2)])->save();
         $this->assertSame('expired', $company->fresh()->accessState());
 
         $this->asStandalone();
         $this->assertSame('active', $company->fresh()->accessState()); // a licence, not a subscription (S3)
         $this->assertSame('active', \App\Services\Billing\Entitlements::for($company->fresh())['state']);
+    }
+
+    /** @return array{user: \App\Models\User, company: \App\Models\Company} a new shop and its owner, registered as on the SaaS */
+    private function shop(string $name = 'Switches'): array
+    {
+        return app(\App\Services\Onboarding\RegistrationService::class)->register(['first_name' => $name, 'last_name' => 'Owner',
+            'email' => strtolower($name).'_'.uniqid('', true).'@example.test', 'password' => 'secret123', 'company_name' => $name.' Shop', 'currency' => 'UGX'], 'budget', 'test');
     }
 
     /** @return list<string> the scheduled tasks' names, built for the current edition */
