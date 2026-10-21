@@ -36,4 +36,22 @@ return [
         'timezone' => 'Africa/Kampala',
         'address' => 'Plot 14, Ntinda Road, Kampala',
     ],
+
+    /*
+    | The Akiba Ledger demo (App\Services\Sacco\Demo\SaccoDemo, AK-35): its own company, "Wakiso Teachers' SACCO
+    | (Demo)", separate from the shop above in every way: its own sign-ins (one per role, listed in
+    | database/data/demo_sacco.php), its own schedule (`sacco:demo`: healed hourly, rebuilt every rebuild_hours) and
+    | its own switch. It never sends a message and never pays anything out. The password is shown on the Akiba Ledger
+    | site's /demo page, so it is not a secret.
+    */
+    'sacco' => [
+        'enabled' => (bool) env('DEMO_SACCO', true),
+        'password' => env('DEMO_SACCO_PASSWORD', 'demo-sacco-2026'),
+        'rebuild_hours' => (int) env('DEMO_SACCO_REBUILD_HOURS', 72),
+        // How much history a fresh build has (months closed before this one).
+        'months' => (int) env('DEMO_SACCO_MONTHS', 18),
+        // Counter visits a month (deposits, shares, withdrawals) beside the payroll check-off.
+        'counter_per_month' => (int) env('DEMO_SACCO_COUNTER', 14),
+        'timezone' => 'Africa/Kampala',
+    ],
 ];

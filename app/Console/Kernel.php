@@ -45,6 +45,8 @@ class Kernel extends ConsoleKernel
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
             $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();
             $schedule->call($task('demo:public'))->name('demo:public')->hourlyAt(5)->withoutOverlapping(90);
+            // The Akiba Ledger demo SACCO (AK-35): its own job, apart from the shop demo, at its own minute.
+            $schedule->call($task('sacco:demo'))->name('sacco:demo')->hourlyAt(35)->withoutOverlapping(90);
             $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
             $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
             $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:00')->withoutOverlapping();

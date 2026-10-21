@@ -89,6 +89,7 @@ class PublicDemo
      */
     public static function guard(Company|int|null $company, string $what): void
     {
+        \App\Services\Sacco\Demo\SaccoDemo::guard($company, $what); // the Akiba Ledger demo has its own locks (AK-35)
         if (! self::$building && self::isDemoCompany($company)) {
             throw BusinessRuleException::make('demo_locked', ucfirst($what).' is switched off in the demo shop, which everyone shares. Create your own shop to do this.');
         }
@@ -97,6 +98,7 @@ class PublicDemo
     /** Refuse changes to the shared sign-in itself. */
     public static function guardAccount(?User $user, string $what): void
     {
+        \App\Services\Sacco\Demo\SaccoDemo::guardAccount($user, $what);
         if (! self::$building && $user !== null && $user->username === self::USERNAME) {
             throw BusinessRuleException::make('demo_locked', ucfirst($what).' is switched off for the demo account, so the next visitor can still sign in. Create your own shop to do this.');
         }

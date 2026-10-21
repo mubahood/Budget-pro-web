@@ -67,6 +67,10 @@ final class PayoutService
     public function create(int $companyId, string $purpose, string $subjectType, int $subjectId, ?int $memberId, string $phoneE164, int $amountMinor, ?int $approvalId,
         string $idempotencyKey, callable $sent, ?string $entryDate = null): SaccoPayout
     {
+        if ((bool) DB::table('companies')->where('id', $companyId)->value('is_demo')) {
+            // A demo SACCO (its members are made up) never pays anything out, whatever the driver.
+            throw BusinessRuleException::make('payouts_off', 'Nothing is paid out from a demo SACCO: pay out to savings, cash or bank.');
+        }
         $company = \App\Models\Company::withoutGlobalScopes()->find($companyId);
         if ($company !== null && ! app(\App\Services\Billing\Quotas::class)->featureOn($company, 'sacco_payouts')) {
             throw BusinessRuleException::make('feature_not_in_plan', 'Mobile-money payouts are on the Compliance plan and above: pay out to savings, cash or bank.', ['feature' => 'sacco_payouts']);
