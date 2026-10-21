@@ -68,6 +68,8 @@ return [
         'agro_vet' => ['label' => 'Agro-vet / farm inputs', 'modules' => ['shop', 'finance'], 'group' => 'Farming', 'icon' => 'fa-seedling', 'hint' => 'Seeds, fertiliser, animal drugs'],
         'poultry' => ['label' => 'Poultry farm', 'modules' => ['poultry', 'finance'], 'group' => 'Farming', 'icon' => 'fa-egg', 'hint' => 'Feeds, birds, eggs, vaccines'],
         'fundraising' => ['label' => 'Church / group budget & pledges', 'modules' => ['budget', 'finance'], 'group' => 'Something else', 'icon' => 'fa-hands-praying', 'hint' => 'Budgets, pledges, contributions'],
+        // Akiba Ledger (docs/akiba): the SACCO books only, never beside another module (CompanyRules::EXCLUSIVE_MODULES, AK-04).
+        'sacco' => ['label' => 'SACCO or savings group', 'modules' => ['sacco'], 'group' => 'Something else', 'icon' => 'fa-piggy-bank', 'hint' => 'Members, savings, shares and loans'],
         'other' => ['label' => 'Something else', 'modules' => ['shop', 'finance'], 'group' => 'Something else', 'icon' => 'fa-shapes', 'hint' => 'Services and a few common items'],
     ],
 
@@ -77,6 +79,8 @@ return [
         'finance' => 'Income & expenses',
         'budget' => 'Budget & pledges',
         'poultry' => 'Poultry farm',
+        // Exclusive (AK-04): a SACCO account has this module and no other (CompanyRules::EXCLUSIVE_MODULES).
+        'sacco' => 'SACCO and savings group',
     ],
 
     // Web paths per module (first path segment, `*` = prefix) — hidden from menus and refused when the module is off.
@@ -85,6 +89,8 @@ return [
         'budget' => ['budget-*', 'contribution-records', 'handover-records', 'data-exports'],
         'poultry' => ['poultry-*'],
         'finance' => ['financial-*'],
+        // No classic screens: the SACCO books live in the web portal and the Akiba Ledger app (AK-20).
+        'sacco' => [],
         // Ping Pin (phone tracking) is a separate product: shown only to companies that use it (see AdminMenu::modulesOn).
         'pingpin' => ['tracked-devices*', 'tracking-map*', 'device-*'],
     ],

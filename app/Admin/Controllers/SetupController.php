@@ -50,7 +50,7 @@ class SetupController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:191'],
-            'business_type' => ['required', Rule::in(array_keys(config('onboarding.business_types')))],
+            'business_type' => ['required', Rule::in(array_keys(\App\Support\Rules\CompanyRules::familyBusinessTypes()))],
             'country' => ['required', Rule::in(array_keys(config('onboarding.countries')))],
             'address' => ['nullable', 'string', 'max:500'],
         ]);

@@ -37,7 +37,7 @@ final class SupportContact
     public const FALLBACK = 'site.general';
 
     /** Where a tracked click came from (support_clicks.app): the surfaces, then the phone app flavors. */
-    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget'];
+    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger'];
 
     /** An error reference: E + the error's fingerprint, or R + a request's own id (8 hex characters). */
     public const REFERENCE_PATTERN = '/^[ER][0-9A-F]{8}$/';

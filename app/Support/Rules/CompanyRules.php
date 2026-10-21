@@ -34,9 +34,19 @@ class CompanyRules
      * The modules a business is built around (budget-pro-new docs/FAMILY_PLAN.md): every account keeps at
      * least one of them, so it always has a home screen. `finance` (Income & expenses) sits beside them.
      */
-    public const CORE_MODULES = ['shop', 'poultry', 'budget'];
+    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco'];
 
     public const CORE_MODULE_MESSAGE = 'Pick at least one: Shop, Poultry farm or Budget & pledges.';
+
+    /**
+     * Modules an account keeps alone (docs/akiba AK-04): a SACCO's books are institutional, its plans are their
+     * own line (PlanLine) and its ledger must never describe the same money as Income & expenses. So a company
+     * with `sacco` has no other module, not even `finance`, and no account moves into or out of it later: a
+     * treasurer who also runs a shop uses two accounts. Refused with 422 `module_exclusive`.
+     */
+    public const EXCLUSIVE_MODULES = ['sacco'];
+
+    public const EXCLUSIVE_MESSAGE = 'A SACCO account keeps only the SACCO books. Use a separate account for a shop, farm or event.';
 
     /** Older profile fields the phone app still sends (kept writable for it; phone_number_2 and slogan are also in 'profile'). */
     public const LEGACY = [
@@ -136,14 +146,68 @@ class CompanyRules
         return array_filter(self::rules($company), fn ($key) => in_array(explode('.', $key)[0], $fields, true), ARRAY_FILTER_USE_KEY);
     }
 
-    /** A list of modules must hold at least one core module (shop, poultry or budget). */
+    /** A list of modules must hold at least one core module (shop, poultry, budget or sacco), and an exclusive one alone. */
     public static function coreModuleRule(): \Closure
     {
         return function (string $attribute, mixed $value, \Closure $fail) {
-            if (is_array($value) && $value !== [] && array_intersect($value, self::CORE_MODULES) === []) {
+            if (! is_array($value) || $value === []) {
+                return;
+            }
+            if (array_intersect($value, self::CORE_MODULES) === []) {
                 $fail(self::CORE_MODULE_MESSAGE);
+            } elseif (! self::exclusiveOk(array_map('strval', $value))) {
+                $fail(self::EXCLUSIVE_MESSAGE);
             }
         };
+    }
+
+    /**
+     * An exclusive module stands alone: a list holding one holds nothing else.
+     *
+     * @param  array<int, string>  $modules
+     */
+    public static function exclusiveOk(array $modules): bool
+    {
+        $modules = array_values(array_unique($modules));
+        $exclusive = array_values(array_intersect($modules, self::EXCLUSIVE_MODULES));
+
+        return $exclusive === [] || $modules === $exclusive && count($exclusive) === 1;
+    }
+
+    /**
+     * The exclusive module a list of modules is built around, or null (a family account).
+     *
+     * @param  array<int, string>  $modules
+     */
+    public static function exclusiveOf(array $modules): ?string
+    {
+        return array_values(array_intersect(self::EXCLUSIVE_MODULES, $modules))[0] ?? null;
+    }
+
+    /**
+     * The business types of the family's own setup screens (the classic wizard): every type but the ones built
+     * around an exclusive module, which only their own app signs up (Akiba Ledger for `sacco`).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function familyBusinessTypes(): array
+    {
+        return array_filter((array) config('onboarding.business_types'), fn (array $t) => self::exclusiveOf((array) ($t['modules'] ?? [])) === null);
+    }
+
+    /**
+     * Refuse a company's modules that break exclusivity, whoever writes them (the Company model calls this on
+     * every save, so the API, the portal, the classic admin and the setup wizard all keep the rule):
+     * an exclusive module beside another, or an existing account moving into or out of one.
+     *
+     * @param  array<int, string>  $before  the saved company's modules (empty for a new one)
+     * @param  array<int, string>  $after
+     */
+    public static function assertModuleChange(array $before, array $after, bool $exists): void
+    {
+        if (! self::exclusiveOk($after) || ($exists && self::exclusiveOf($before) !== self::exclusiveOf($after))) {
+            throw \App\Exceptions\BusinessRuleException::make('module_exclusive', self::EXCLUSIVE_MESSAGE, ['exclusive' => self::EXCLUSIVE_MODULES]);
+        }
     }
 
     /**
@@ -161,7 +225,8 @@ class CompanyRules
 
     /**
      * Modules picked at sign-up, as stored: the known core modules in their usual order, then Income &
-     * expenses, which every new account gets. Null when none was picked (the business type decides).
+     * expenses, which every new account gets. An exclusive module (sacco) is kept alone, without Income &
+     * expenses (AK-04). Null when none was picked (the business type decides).
      *
      * @param  array<int, mixed>|null  $picked
      * @return list<string>|null
@@ -169,18 +234,24 @@ class CompanyRules
     public static function signUpModules(?array $picked): ?array
     {
         $core = array_values(array_intersect(self::CORE_MODULES, array_map('strval', (array) $picked)));
+        if (($exclusive = self::exclusiveOf($core)) !== null) {
+            return [$exclusive];
+        }
 
         return $core === [] ? null : [...$core, 'finance'];
     }
 
     /**
-     * The business type that goes with modules picked at sign-up: the shop's own type when Shop is
-     * picked, otherwise `poultry` (Poultry farm picked) or `fundraising` (Budget & pledges only).
+     * The business type that goes with modules picked at sign-up: `sacco` for a SACCO account, the shop's
+     * own type when Shop is picked, otherwise `poultry` (Poultry farm picked) or `fundraising` (Budget & pledges only).
      *
      * @param  array<int, string>  $modules
      */
     public static function businessTypeFor(array $modules, ?string $shopType): ?string
     {
+        if (in_array('sacco', $modules, true)) {
+            return 'sacco';
+        }
         if (in_array('shop', $modules, true)) {
             return $shopType;
         }

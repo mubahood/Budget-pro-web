@@ -83,7 +83,8 @@ class Company extends Model
             return config("onboarding.business_types.{$this->business_type}.modules");
         }
 
-        return array_keys(config('onboarding.modules'));
+        // An account that never chose sees every family module; an exclusive one (sacco) is only ever chosen.
+        return array_values(array_diff(array_keys(config('onboarding.modules')), \App\Support\Rules\CompanyRules::EXCLUSIVE_MODULES));
     }
 
     /**
@@ -106,6 +107,20 @@ class Company extends Model
                 throw new \DomainException(self::ONE_BUSINESS);
             }
             $company->standalone_slot = 1;
+        });
+
+        // Exclusive modules (docs/akiba AK-04): a SACCO account keeps the SACCO books alone, and no account
+        // moves into or out of them, whichever screen or service writes the modules or the business type.
+        static::saving(function (Company $company) {
+            if (! $company->exists || $company->isDirty(['enabled_modules', 'business_type'])) {
+                $before = $company->exists ? (clone $company)->setRawAttributes($company->getRawOriginal())->modules() : [];
+                $after = $company->modules();
+                $typeModules = (array) config("onboarding.business_types.{$company->business_type}.modules", []);
+                if (\App\Support\Rules\CompanyRules::exclusiveOf($typeModules) !== \App\Support\Rules\CompanyRules::exclusiveOf($after) && $company->business_type !== null && $typeModules !== []) {
+                    $after = [...$after, ...$typeModules]; // a SACCO business type on a shop (or the reverse) breaks the rule too
+                }
+                \App\Support\Rules\CompanyRules::assertModuleChange($before, $after, $company->exists);
+            }
         });
 
         // Update owner's company_id when company is updated

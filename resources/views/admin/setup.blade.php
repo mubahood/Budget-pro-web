@@ -28,7 +28,7 @@
             <div class="col-sm-6 form-group"><label>Business name</label><input class="form-control" name="name" value="{{ old('name', $company->name) }}" required></div>
             <div class="col-sm-6 form-group"><label>Type of business</label>
                 <select class="form-control" name="business_type">
-                    @foreach(config('onboarding.business_types') as $k => $t)<option value="{{ $k }}" @selected(($company->business_type ?: 'retail') === $k)>{{ $t['label'] }}</option>@endforeach
+                    @foreach(\App\Support\Rules\CompanyRules::familyBusinessTypes() as $k => $t)<option value="{{ $k }}" @selected(($company->business_type ?: 'retail') === $k)>{{ $t['label'] }}</option>@endforeach
                 </select></div>
             <div class="col-sm-6 form-group"><label>Country</label>
                 <select class="form-control" name="country">
