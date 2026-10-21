@@ -60,6 +60,11 @@ final class Repayments
     public static function recorder(Company $company, array $d, ?User $by, array $opts, SaccoSetting $settings): SaccoTransaction
     {
         $cid = (int) $company->id;
+        // A twin with the same uuid may have committed while this one waited for the ledger lock: a locking read sees it.
+        $twin = SaccoTransaction::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', strtolower((string) $d['uuid']))->sharedLock()->first();
+        if ($twin !== null) {
+            return $twin;
+        }
         $loan = LoanBooks::lock($cid, (int) ($d['loan_id'] ?? 0));
         $channel = (string) ($d['channel'] ?? 'cash');
         $source = null;

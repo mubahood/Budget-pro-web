@@ -798,3 +798,30 @@ approval.**
   `sacco:member`; Sanctum's staff guard never accepts it (no HasApiTokens), and `SaccoMemberAuth` accepts nothing
   else, re-checking the membership on every request. `me`, `me/accounts`, `me/statement`, `me/receipts/{id}`,
   `me/logout` answer the member's own records only (MemberLogin::owns).
+
+**AK-85: Loan posting rules live in `Ledger\LoanPostingRules`, beside the P1 `PostingRules`.**
+
+- Disbursement, interest due, penalty, repayment (with suspense recognised on receipt and the overpayment to savings
+  or 2150), cooling-off cancellation, provision, write-off, recovery and the MoMo payout's settlement each build their
+  draft there and nowhere else. A loan repayment is a `loan_repayment` receipt through `SaccoTransactions` (its
+  recorder hook), so receipts, idempotency, the ledger lock and sync are the P1 ones.
+- *Why:* one place per family of rules, and no edit races on the P1 file while P1 and P2 are built side by side.
+
+**AK-86: MoMo payouts have drivers `off` and `simulated` only in this phase.**
+
+- `Payouts\PayoutGateway`, `SimulatedPayouts` and `PayoutService` (sent → settled or reversed, the 24-hour poll) are
+  built and tested; the Flutterwave transfers driver waits for the owner's keys (P3). With `off` a MoMo payout is
+  refused with `payouts_off` and the other channels are used.
+- *Why:* AK-17: no live mobile-money traffic from dev or tests.
+
+**AK-87: Interest is charged on the schedule's due dates only; after the last one, overdue principal carries the penalty.**
+
+- Each due date charges the principal owed at the start of its period (by value date) × the periodic rate (AK-39). A
+  loan still owing after maturity charges no more interest, only the penalty on overdue principal (≤ half the
+  monthly rate, SI 108 reg. 4(5)), and everything charged once it is non-performing stops at the NPL cap.
+- The daily run works on the days that matter (due dates, each 1st, today), all computed from repayments by value
+  date, so a catch-up gives the same figures as nightly runs; reminders go out only for today. A loan that became
+  non-performing is dated to the day its oldest unpaid instalment passed 60 days.
+- A month closes only when every open loan has been brought past its end (`loan_runs_pending`) and, in office mode,
+  its provisioning has posted (`provisioning_pending`).
+- *Why:* member-friendly and simple to explain; the penalty already compensates late money; catch-ups must not drift.
