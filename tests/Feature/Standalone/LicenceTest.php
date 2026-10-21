@@ -178,7 +178,7 @@ class LicenceTest extends TestCase
         $limits = $plan->fresh()->limits;
         ksort($limits);
         $this->assertSame(['max_devices' => 10, 'max_locations' => 3, 'max_products' => null, 'max_sales_per_month' => null, 'max_users' => 10, 'storage_mb' => null], $limits);
-        $keys = array_values(Quotas::KEYS);
+        $keys = array_values(array_diff_key(Quotas::KEYS, Quotas::LINE_KEYS));
         sort($keys);
         $this->assertSame($keys, array_keys($limits), 'every quota key is set, so no default limit applies');
 

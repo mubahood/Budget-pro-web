@@ -16,6 +16,7 @@ class SystemHealthConfigTest extends AdminTestCase
             'flutterwave.secret_key' => 'FLWSECK-live-abc-X', 'flutterwave.public_key' => 'FLWPUBK-live-abc-X', 'flutterwave.secret_hash' => 'h',
             'support.whatsapp' => '256700000001', 'support.email' => '', 'support.hours' => 'Every day',
             'saas.new_ui_url' => 'https://portal.example.test', 'saas.invite_url' => 'https://portal.example.test',
+            'sacco.nin_pepper' => 'a-long-random-pepper', 'sacco.payouts.driver' => 'off',
         ]);
         $admin = $this->makeTenant('admin');
 

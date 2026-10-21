@@ -19,11 +19,11 @@ final class StandalonePlan
 {
     public const SLUG = 'standalone';
 
-    /** @return array<string,int|null> one entry per Quotas key */
+    /** @return array<string,int|null> one entry per family Quotas key */
     public static function limitsFrom(InstalledLicence $licence): array
     {
         $limits = [];
-        foreach (Quotas::KEYS as $key) {
+        foreach (array_diff_key(Quotas::KEYS, Quotas::LINE_KEYS) as $key) { // a standalone copy is a family shop: no Akiba line limits
             $limits[$key] = in_array($key, InstalledLicence::LIMIT_KEYS, true) ? $licence->limit($key) : null;
         }
 
