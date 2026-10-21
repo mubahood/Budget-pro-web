@@ -48,6 +48,7 @@ final class LoansModule
             }
         });
         SaccoTransactions::approvalCheck('loan_arrears', [self::class, 'withdrawalBlock']);
+        LoanReports::register();
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
     }
 
