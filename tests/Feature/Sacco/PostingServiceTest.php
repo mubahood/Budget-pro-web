@@ -77,7 +77,10 @@ class PostingServiceTest extends TestCase
         $savings = ChartOfAccounts::id($cid, 'savings.voluntary');
         $this->refused('sub_ledger_required', fn () => $post(JournalDraft::make($cid, 'manual', 'k11')->debit($cash, $this->ugx(1))->credit($savings, $this->ugx(1))), $cid);
         $this->refused('sub_ledger_required', fn () => $post(JournalDraft::make($cid, 'manual', 'k12')->debit($cash, $this->ugx(1))->credit($fees, $this->ugx(1), 'savings', 1)), $cid);
-        $this->refused('sub_ledger_unavailable', fn () => $post(JournalDraft::make($cid, 'manual', 'k13')->debit($cash, $this->ugx(1))->credit($savings, $this->ugx(1), 'savings', 1)), $cid);
+        // Savings is registered (P1.12): a row it does not have is refused; a type nobody registered yet (fines, P5) is unavailable.
+        $this->refused('sub_account_not_found', fn () => $post(JournalDraft::make($cid, 'manual', 'k13')->debit($cash, $this->ugx(1))->credit($savings, $this->ugx(1), 'savings', 999999999)), $cid);
+        $finesAccount = ChartOfAccounts::id($cid, 'fines.receivable');
+        $this->refused('sub_ledger_unavailable', fn () => $post(JournalDraft::make($cid, 'manual', 'k13b')->debit($finesAccount, $this->ugx(1), 'fine', 1)->credit($cash, $this->ugx(1))), $cid);
 
         $this->usePots();
         $compulsory = ChartOfAccounts::id($cid, 'savings.compulsory');

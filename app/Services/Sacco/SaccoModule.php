@@ -13,6 +13,7 @@ use App\Models\SaccoOfficer;
  * - Officers (P1.8) and members (P1.9): an officer who is a member is one of this SACCO's current members and an
  *   adult (Coop s.13), and holding an office makes the member an insider (loan routing, guarantor rules).
  * - Approvals (P1.10): the P1 executors, and a month never closes with a request from it still waiting.
+ * - Savings (P1.12): the savings sub-ledger, the withdrawal and terms-change executors, the default products.
  */
 final class SaccoModule
 {
@@ -20,6 +21,8 @@ final class SaccoModule
     public const EXECUTORS = [
         Approvals\ReversalExecutor::class, Approvals\ManualJournalExecutor::class, Approvals\PeriodCloseExecutor::class, Approvals\PeriodReopenExecutor::class,
         Approvals\LedgerAccountCreateExecutor::class, Approvals\MemberKycExecutor::class, Approvals\HeldReceiptAllocationExecutor::class,
+        // P1.12 savings (AK-62)
+        Approvals\WithdrawalExecutor::class, Approvals\ProductTermsChangeExecutor::class,
     ];
 
     public static function boot(): void
@@ -53,5 +56,8 @@ final class SaccoModule
                     ?->fill(['is_insider' => OfficerService::memberHoldsOffice($companyId, (int) $officer->member_id)])->save();
             }
         });
+        // P1.12: the savings sub-ledger under each product's 21x0, and a new SACCO's default products.
+        Ledger\SubLedgers::register(new Savings\SavingsLedger());
+        SaccoSetupService::extend('products', fn (\App\Models\Company $company) => (new Savings\SavingsProducts())->ensureDefaults($company));
     }
 }

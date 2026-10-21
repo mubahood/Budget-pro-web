@@ -660,3 +660,30 @@ approval.**
 - Requests still open from a month block its close (`approvals_pending`, a `CloseChecks` entry); an expired request
   blocks nothing and never executes. `sacco:approvals-expire` marks them hourly.
 - The system may ask without an officer as maker only for `held_receipt_allocation` (`SaccoApprovals::SYSTEM_ACTIONS`).
+
+**AK-63: Savings (P1.12) ships before shares (P1.11); the money document is one table for every kind.**
+
+- P1.12 is committed first so the loans work (P2) can disburse to savings and size loans on savings. Shares
+  (P1.11) plug into the same `SaccoTransactions::record()` through `SaccoTransactions::recorder()`.
+- `sacco_savings_products` keeps the sync column `version`, so its terms counter is `terms_version`. Terms never
+  change in place: `product_terms_change` (maker sacco_settings, checker sacco_approve) writes a version; a rate
+  cut takes effect 30 days after approval at the earliest, and `sacco:savings-terms` (daily 00:20) puts due versions
+  in force. `notice_days` is at most 7: a withdrawal on a notice product always goes to approval and is paid once
+  the notice has run from its request, and an approval lives 7 days.
+- Every money path takes the SACCO's ledger head lock first, then account rows in ascending id, the order
+  PostingService uses: no deadlocks, and the available balance is read with locking reads under it.
+- The savings sub-ledger refuses any line that would take an account below zero (`insufficient_balance`), so not
+  even a manual journal or a reversal can overdraw a member.
+- A member's receipt is reversed as a document (`reversal` with `transaction_id`): the mirror entry plus a
+  `reversal` row (`reverses_id` unique). Reversing that receipt's journal entry directly is refused
+  (`reverse_the_receipt`), so the receipt never reads posted after its money went back.
+- A deposit by the member wakes a dormant account; withdrawing from a dormant account always needs approval.
+  Deposits still come into a frozen account; nothing goes out of it.
+- An approval whose request is rejected, cancelled or expires closes its waiting document (`ClosesSubject`).
+- Withdrawal approval reasons are open to other modules (`SaccoTransactions::approvalCheck`, P2: arrears).
+- Sync (per the app built against 04): phones name accounts and members by server id (`savings_account_id`,
+  `share_account_id`, `member_id`, or `member_uuid` for a member registered offline), send their own `receipt_no`
+  (kept as `device_receipt_no`) and `amount_minor` as an integer; products and accounts come down as pull-only
+  snapshots. The tables still carry sync columns, for the server's own uuids.
+- Explicit dates: `record(..., opts: ['entry_date' => 'Y-m-d'])` posts history (opening balances, the demo) into
+  that day's month while it is open; the value date is never after the entry date, and nothing posts in the future.

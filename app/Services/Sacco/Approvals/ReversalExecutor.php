@@ -8,7 +8,11 @@ use App\Models\SaccoJournalEntry;
 use App\Models\User;
 use App\Services\Sacco\Ledger\ReversalService;
 
-/** `reversal` (04 §7): reverse a posted journal entry, always with a second officer. Its mirror posts as rev:{entry_id}. */
+/**
+ * `reversal` (04 §7): reverse a posted journal entry, always with a second officer. Its mirror posts as rev:{entry_id}.
+ * A member's receipt (`transaction_id`) is reversed as a document (SaccoTransactions: the mirror entry and a
+ * `reversal` row beside the original); its entry cannot be reversed on its own, or the receipt would still read posted.
+ */
 final class ReversalExecutor extends BaseExecutor
 {
     public function action(): string
@@ -23,6 +27,9 @@ final class ReversalExecutor extends BaseExecutor
 
     public function prepare(int $companyId, array $payload): array
     {
+        if (isset($payload['transaction_id'])) {
+            return \App\Services\Sacco\SaccoTransactions::prepareReversal($companyId, $payload);
+        }
         $entryId = $this->int($payload, 'entry_id');
         $reason = trim((string) ($payload['reason'] ?? ''));
         if ($reason === '') {
@@ -30,6 +37,9 @@ final class ReversalExecutor extends BaseExecutor
         }
         $entry = SaccoJournalEntry::withoutGlobalScopes()->where('company_id', $companyId)->find($entryId)
             ?? throw BusinessRuleException::make('entry_not_found', 'That entry is not in this SACCO\'s books.');
+        if ($entry->source_type === 'sacco_transactions') {
+            throw BusinessRuleException::make('reverse_the_receipt', "{$entry->entry_no} belongs to a member's receipt: reverse the receipt instead.", ['transaction_id' => $entry->source_id]);
+        }
         if ($entry->kind === 'reversal') {
             throw BusinessRuleException::make('reversal_of_reversal', "{$entry->entry_no} is itself a reversal: post the right entry instead.");
         }
@@ -44,6 +54,11 @@ final class ReversalExecutor extends BaseExecutor
     public function execute(SaccoApproval $approval, User $checker): array
     {
         $p = $approval->payload;
+        if (isset($p['transaction_id'])) {
+            $reversal = (new \App\Services\Sacco\SaccoTransactions())->executeReversal($approval, $checker);
+
+            return ['entry_id' => (int) $reversal->journal_entry_id, 'transaction_id' => (int) $reversal->id, 'receipt_no' => $reversal->receipt_no];
+        }
         $entry = (new ReversalService())->reverse((int) $approval->company_id, (int) $p['entry_id'], (string) $p['reason'], (int) $approval->id,
             $approval->requested_by_id === null ? null : (int) $approval->requested_by_id);
 

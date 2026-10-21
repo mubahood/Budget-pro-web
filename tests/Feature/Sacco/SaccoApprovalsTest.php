@@ -249,6 +249,7 @@ class SaccoApprovalsTest extends ApiTestCase
         $this->assertSame('position_required', $this->code(fn () => $svc->approve($company, (int) $reopen->id, $manager)));
         $this->assertSame('executed', $svc->approve($company, (int) $reopen->id, $owner)->status, 'the founder sits as chairperson');
         $this->assertSame('open', $sept->fresh()->status);
-        $this->assertSame(['reversal', 'manual_journal', 'period_close', 'period_reopen', 'ledger_account_create', 'member_kyc', 'held_receipt_allocation'], SaccoApprovals::actions());
+        $p1 = ['reversal', 'manual_journal', 'period_close', 'period_reopen', 'ledger_account_create', 'member_kyc', 'held_receipt_allocation', 'withdrawal', 'product_terms_change'];
+        $this->assertSame([], array_values(array_diff($p1, SaccoApprovals::actions())), 'every P1 action has its executor (later phases add theirs)');
     }
 }

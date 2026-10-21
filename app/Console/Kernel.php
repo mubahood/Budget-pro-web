@@ -33,6 +33,7 @@ class Kernel extends ConsoleKernel
         // Akiba Ledger (ADR 0009 §7): every SACCO's books proved sound each night; failures reach the owner and System health.
         $schedule->call($task('sacco:approvals-expire'))->name('sacco:approvals-expire')->hourlyAt(15)->withoutOverlapping();
         $schedule->call($task('sacco:ledger-verify'))->name('sacco:ledger-verify')->dailyAt('03:10')->withoutOverlapping();
+        $schedule->call($task('sacco:savings-terms'))->name('sacco:savings-terms')->dailyAt('00:20')->withoutOverlapping();
         $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();

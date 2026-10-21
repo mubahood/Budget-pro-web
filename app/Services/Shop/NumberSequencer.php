@@ -29,10 +29,14 @@ class NumberSequencer
         // Akiba Ledger: journal entries (JE-2026-000001, ADR 0009 §4.3) and member numbers (M-000123, never per year).
         'je' => 'JE',
         'mem' => 'M',
+        // Savings and share accounts (for life: SAV-000123, SHR-000123) and member receipts (RCT-2026-000123).
+        'sav' => 'SAV',
+        'shr' => 'SHR',
+        'rct' => 'RCT',
     ];
 
     /** Kinds numbered once for the company's whole life, not per year: M-000123. */
-    public const PERPETUAL = ['mem'];
+    public const PERPETUAL = ['mem', 'sav', 'shr'];
 
     public static function next(int $companyId, string $kind, ?\DateTimeInterface $on = null): string
     {

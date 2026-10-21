@@ -30,6 +30,10 @@ parameters:
         - app/Models/SaccoPeriod.php
         - app/Models/SaccoPeriodBalance.php
         - app/Models/SaccoSetting.php
+        - app/Models/SaccoSavingsProduct.php
+        - app/Models/SaccoSavingsProductVersion.php
+        - app/Models/SaccoSavingsAccount.php
+        - app/Models/SaccoTransaction.php
         - app/Models/SaccoOfficer.php
         - app/Models/SaccoMember.php
         - app/Models/SaccoMemberRelation.php
@@ -39,6 +43,14 @@ parameters:
         - app/Models/SaccoApprovalVote.php
         - app/Models/SaccoPublicHoliday.php
         - app/Models/SaccoLoanProduct.php
+        - app/Models/SaccoLoan.php
+        - app/Models/SaccoLoanScheduleLine.php
+        - app/Models/SaccoLoanGuarantor.php
+        - app/Models/SaccoLoanCollateral.php
+        - app/Models/SaccoLoanVote.php
+        - app/Models/SaccoLoanDocument.php
+        - app/Models/SaccoLoanRepayment.php
+        - app/Models/SaccoLoanChange.php
         - app/Scopes
     excludePaths:
         - app/Services/AutoReorderService.php

@@ -66,6 +66,8 @@ final class HeldReceiptAllocationExecutor extends BaseExecutor
                 }
             });
         $entry = (new PostingService())->post($draft);
+        \App\Services\Sacco\SaccoTransactions::allocated($cid, (int) $p['held_entry_id'], new SubRef($t['type'], (int) $t['id'], (int) $t['account_id'], $t['member_id']),
+            self::unallocated($cid, (int) $p['held_entry_id']));
 
         return ['entry_id' => (int) $entry->id, 'entry_no' => $entry->entry_no];
     }

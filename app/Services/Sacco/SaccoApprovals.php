@@ -173,6 +173,7 @@ final class SaccoApprovals
             SaccoAccess::assertChecker($checker, $a->requested_by_id === null ? null : (int) $a->requested_by_id, self::executor($a->action)->checkerPermission());
             SaccoApprovalVote::create(['company_id' => $a->company_id, 'approval_id' => $a->id, 'user_id' => $checker->id, 'decision' => 'reject', 'note' => mb_substr($note, 0, 255)]);
             $a->update(['status' => 'rejected', 'decided_at' => now(), 'decided_by_id' => $checker->id, 'decision_note' => mb_substr($note, 0, 255)]);
+            self::closeSubject($a, 'rejected');
             SaccoAudit::record('sacco.approval.rejected', $a, (int) $a->company_id, ['action' => $a->action, 'note' => $note], (int) $checker->id);
 
             return $a;
@@ -188,6 +189,7 @@ final class SaccoApprovals
                 throw BusinessRuleException::make('forbidden', 'Only the officer who asked can take a request back.');
             }
             $a->update(['status' => 'cancelled', 'decided_at' => now(), 'decided_by_id' => $maker->id]);
+            self::closeSubject($a, 'cancelled');
             SaccoAudit::record('sacco.approval.cancelled', $a, (int) $a->company_id, ['action' => $a->action], (int) $maker->id);
 
             return $a;
@@ -202,11 +204,21 @@ final class SaccoApprovals
             ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))->orderBy('id')
             ->each(function (SaccoApproval $a) use (&$n) {
                 $a->update(['status' => 'expired']);
+                self::closeSubject($a, 'expired');
                 SaccoAudit::record('sacco.approval.expired', $a, (int) $a->company_id, ['action' => $a->action], null);
                 $n++;
             });
 
         return $n;
+    }
+
+    /** Tell an executor whose subject waits on the request that it will not execute (ClosesSubject). */
+    private static function closeSubject(SaccoApproval $a, string $status): void
+    {
+        $executor = self::$executors[$a->action] ?? null;
+        if ($executor instanceof Approvals\ClosesSubject) {
+            $executor->closed($a, $status);
+        }
     }
 
     /** Requests still waiting from a month (they block its close, ADR 0009 §8). */
