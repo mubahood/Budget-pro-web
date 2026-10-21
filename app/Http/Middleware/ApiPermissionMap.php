@@ -91,6 +91,16 @@ class ApiPermissionMap
         [['POST'], '#^sacco/loans/\d+/cancel$#', null], // withdrawing (sacco_loans) or a cooling-off cancellation (sacco_teller): the service
         [['POST', 'PUT', 'PATCH'], '#^sacco/loans(/\d+(/[a-z-]+(/\d+/[a-z]+)?)?)?$#', 'sacco_loans'],
         [['POST'], '#^sacco/members/\d+/exit$#', 'sacco_members'],
+        // Akiba Ledger P4: previews are reads with a body (sacco_view, controller); money moves are requests for other officers.
+        [['POST'], '#^sacco/(interest-runs|dividend-runs)/preview$#', null],
+        [['POST'], '#^sacco/year-end/\d{4}/appropriation/preview$#', null],
+        [['POST'], '#^sacco/(interest-runs|dividend-runs)$#', 'sacco_accounts'],
+        [['POST'], '#^sacco/year-end/\d{4}/(close|appropriate)$#', 'sacco_accounts'],
+        [['POST'], '#^sacco/dividend-lines/\d+/pay$#', 'sacco_disburse'],
+        [['POST'], '#^sacco/members/\d+/stf-buyback$#', 'sacco_members'],
+        [['POST'], '#^sacco/dormancy/(advertised|\d+/transfer)$#', 'sacco_accounts'],
+        [['POST'], '#^sacco/returns/\d+/generate$#', null], // sacco_reports or sacco_accounts (ReturnsCalendar)
+        [['POST'], '#^sacco/returns/\d+/mark-filed$#', 'sacco_accounts'],
         // Akiba Ledger P3: money channels (collections, payouts), check-off, tills, statement imports, messaging.
         [['POST'], '#^sacco/collections/setup$#', 'sacco_settings'],
         [['POST'], '#^sacco/collections(/\d+/check)?$#', 'sacco_teller'],

@@ -7513,6 +7513,54 @@
                     }
                 },
                 {
+                    "name": "GET sacco/auditor-export?from&to: a 30-minute link to the ZIP of the auditor's workbooks. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/auditor-export",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "auditor-export"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET /sacco/auditor-export-download",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/auditor-export-download",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "auditor-export-download"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/collections?status&member_id&purpose */",
                     "request": {
                         "method": "GET",
@@ -7702,6 +7750,253 @@
                     }
                 },
                 {
+                    "name": "POST sacco/dividend-lines/{id}/pay {to: savings|cash}: a dividend whose MoMo payout failed, paid again. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dividend-lines/:id/pay",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dividend-lines",
+                                ":id",
+                                "pay"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"to\": \"savings\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/dividend-runs */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dividend-runs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dividend-runs"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/dividend-runs {… as the preview, uuid?}: two officers approve; a licensed SACCO needs the Registrar's consent on file. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dividend-runs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dividend-runs"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"year\": 1,\n    \"pay_to\": \"savings\",\n    \"registrar_consent_file_id\": 1,\n    \"registrar_consent_on\": \"2026-10-21\",\n    \"registrar_consent_ref\": \"\",\n    \"on\": \"2026-10-21\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/dividend-runs/preview {year, pay_to, registrar_consent_file_id, registrar_consent_on, registrar_consent_ref, on} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dividend-runs/preview",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dividend-runs",
+                                "preview"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"year\": 1,\n    \"pay_to\": \"savings\",\n    \"registrar_consent_file_id\": 1,\n    \"registrar_consent_on\": \"2026-10-21\",\n    \"registrar_consent_ref\": \"\",\n    \"on\": \"2026-10-21\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/dividend-runs/{id}: the run and every member's line. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dividend-runs/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dividend-runs",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/dormancy: the dormant register with what is due. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dormancy",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dormancy"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/dormancy/advertised {account_ids[], reference, on} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dormancy/advertised",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dormancy",
+                                "advertised"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"account_ids\": [\n        1\n    ],\n    \"reference\": \"\",\n    \"on\": \"2026-10-21\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/dormancy/{accountId}/transfer {uuid?}: an unclaimed balance to the regulator, once a second officer approves. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/dormancy/:accountId/transfer",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "dormancy",
+                                ":accountId",
+                                "transfer"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/guarantees?member_id: who guarantees what. */",
                     "request": {
                         "method": "GET",
@@ -7724,6 +8019,101 @@
                                 "sacco",
                                 "guarantees"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/interest-runs?product_id&kind */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/interest-runs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "interest-runs"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/interest-runs {month, uuid?}: a month's interest, accrued and credited, once a second officer approves. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/interest-runs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "interest-runs"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"month\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/interest-runs/preview {month, product_id?}: what the month's accrual would post, per product. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/interest-runs/preview",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "interest-runs",
+                                "preview"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"month\": \"\",\n    \"product_id\": 1\n}"
                         }
                     }
                 },
@@ -9471,6 +9861,70 @@
                     }
                 },
                 {
+                    "name": "GET sacco/members/{id}/stf-buyback?channel: what the Share Transfer Fund would pay for the member's shares. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/members/:id/stf-buyback",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "members",
+                                ":id",
+                                "stf-buyback"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/members/{id}/stf-buyback {channel, reason, uuid?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/members/:id/stf-buyback",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "members",
+                                ":id",
+                                "stf-buyback"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"channel\": \"cash\",\n    \"reason\": \"\"\n}"
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/officers?all=1 */",
                     "request": {
                         "method": "GET",
@@ -9864,6 +10318,32 @@
                     }
                 },
                 {
+                    "name": "GET sacco/ratios?date&weeks: the prudential ratios, the weekly liquidity and the central bank threshold. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/ratios",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "ratios"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET /sacco/report-download",
                     "request": {
                         "method": "GET",
@@ -9935,6 +10415,152 @@
                                 "reports",
                                 ":key"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/returns?status=due|generated|filed */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/returns",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "returns"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/returns/{id}: the return and its figures as last generated. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/returns/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "returns",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/returns/{id}/files/{format}: the file kept when the return was generated. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/returns/:id/files/:format",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "returns",
+                                ":id",
+                                "files",
+                                ":format"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/returns/{id}/generate */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/returns/:id/generate",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "returns",
+                                ":id",
+                                "generate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/returns/{id}/mark-filed {filed_on, reference, authorised_by_id, countersigned_by_id} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/returns/:id/mark-filed",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "returns",
+                                ":id",
+                                "mark-filed"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"filed_on\": \"2026-10-21\",\n    \"reference\": \"\",\n    \"authorised_by_id\": 1,\n    \"countersigned_by_id\": 1\n}"
                         }
                     }
                 },
@@ -10777,6 +11403,142 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"savings_account_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/year-end/{year}: the year's figures, its close, its appropriation and its dividend. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/year-end/:year",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "year-end",
+                                ":year"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/year-end/{year}/appropriate {… as the preview, agm_date, agm_minutes_file_id, uuid?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/year-end/:year/appropriate",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "year-end",
+                                ":year",
+                                "appropriate"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"agm_date\": \"2026-10-21\",\n    \"agm_minutes_file_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/year-end/{year}/appropriation/preview {reserve_bp, ncef_bp, education_bp, stf_minor, other_reserves_minor, dividend_rate_bp, dividend_basis",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/year-end/:year/appropriation/preview",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "year-end",
+                                ":year",
+                                "appropriation",
+                                "preview"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"reserve_bp\": 1,\n    \"ncef_bp\": 1,\n    \"education_bp\": 1,\n    \"dividend_rate_bp\": 1,\n    \"dividend_basis\": \"year_end_shares\",\n    \"on\": \"2026-10-21\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/year-end/{year}/close {on?, uuid?}: two officers in the chair's, vice chair's or treasurer's office approve. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/year-end/:year/close",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "year-end",
+                                ":year",
+                                "close"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"on\": \"2026-10-21\"\n}"
                         }
                     }
                 }

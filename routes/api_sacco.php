@@ -95,6 +95,9 @@ Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sa
 // Loans (P2): their own file.
 require __DIR__.'/api_sacco_loans.php';
 
+// Reports, returns and the year-end (P4): their own file.
+require __DIR__.'/api_sacco_year_end.php';
+
 // Money channels, check-off, tills and the member's own requests (P3): their own file.
 require __DIR__.'/api_sacco_channels.php';
 

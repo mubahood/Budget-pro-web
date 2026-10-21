@@ -9,7 +9,8 @@ use Illuminate\Console\Command;
 
 /**
  * Daily at 01:30 (04 §16): every SACCO's loan book brought up to today (interest due, arrears and class, the 1st's
- * penalty and provisioning, reminders), catching up any missed nights, and the payout poll as a fallback.
+ * penalty and provisioning, reminders), catching up any missed nights, the returns-due reminders (P4.5), and the payout
+ * poll as a fallback.
  */
 class SaccoDaily extends Command
 {
@@ -24,6 +25,9 @@ class SaccoDaily extends Command
             try {
                 $r = $jobs->run((int) $cid, $this->option('date') ?: null);
                 $this->line("SACCO {$cid}: {$r['loans']} loan(s), {$r['days']} day(s), interest {$r['interest_minor']}, penalty {$r['penalty_minor']}.");
+                if (\App\Services\Sacco\YearEnd\YearEndModule::ready() && ! $this->option('date')) {
+                    (new \App\Services\Sacco\Reports\ReturnsCalendar())->remind((int) $cid); // P4.5: returns due, on the 10th and the 14th
+                }
             } catch (\Throwable $e) {
                 report($e);
                 $this->error("SACCO {$cid}: ".$e->getMessage());
