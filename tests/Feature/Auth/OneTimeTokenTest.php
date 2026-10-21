@@ -42,7 +42,7 @@ class OneTimeTokenTest extends ApiTestCase
         $this->assertTrue(DB::table(OneTimeToken::TABLE)->where('token_hash', hash('sha256', $token))->where('user_id', $t['user_id'])->where('purpose', OneTimeToken::RESET)->exists());
 
         // A refused password leaves it usable.
-        $this->postJson('/api/v1/auth/password/reset', ['reset_token' => $token, 'password' => 'abcdefgh', 'password_confirmation' => 'abcdefgh'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/password/reset', ['reset_token' => $token, 'password' => 'abc12', 'password_confirmation' => 'abc12'])->assertStatus(422);
         $this->postJson('/api/v1/auth/password/reset', ['reset_token' => $token, 'password' => 'newpass99', 'password_confirmation' => 'newpass99'])->assertOk();
         $this->postJson('/api/v1/auth/password/reset', ['reset_token' => $token, 'password' => 'again2026', 'password_confirmation' => 'again2026'])
             ->assertStatus(422)->assertJsonPath('errors.code', 'reset_expired');

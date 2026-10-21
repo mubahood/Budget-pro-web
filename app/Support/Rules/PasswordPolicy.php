@@ -11,7 +11,7 @@ use Illuminate\Validation\Rules\Password;
 /**
  * The one password rule, and the words that describe it (roadmap 02 §2, pattern from True-Doctor).
  *
- * At least 8 characters with letters and numbers, and, where the server can ask, not a password
+ * At least 6 characters, any kind (the owner: keep it simple), and, where the server can ask, not a password
  * already published in a breach (Have I Been Pwned's k-anonymity range API: only the first five
  * characters of the SHA-1 hash leave the server). The breach check fails open: a server with no
  * internet still lets a person set a password, without an error report each time (QuietNotPwnedVerifier).
@@ -24,7 +24,7 @@ use Illuminate\Validation\Rules\Password;
  */
 final class PasswordPolicy
 {
-    public const MIN = 8;
+    public const MIN = 6;
 
     /** The longest password the forms take (they always have). */
     public const MAX = 100;
@@ -36,7 +36,7 @@ final class PasswordPolicy
 
     public static function rule(bool $breachCheck = true): Password
     {
-        $rule = PasswordRule::min(self::MIN)->letters()->numbers();
+        $rule = PasswordRule::min(self::MIN);
 
         return $breachCheck && config('saas.password_breach_check', true) ? $rule->uncompromised() : $rule;
     }
@@ -69,18 +69,18 @@ final class PasswordPolicy
     /** What every new-password field says under it. */
     public static function hint(): string
     {
-        return 'At least '.self::MIN.' characters, with letters and numbers.';
+        return 'At least '.self::MIN.' characters.';
     }
 
-    /** The refusal when a password is too short or lacks letters or numbers. */
+    /** The refusal when a password is too short. */
     public static function error(): string
     {
-        return 'Use at least '.self::MIN.' characters, with letters and numbers.';
+        return 'Use at least '.self::MIN.' characters.';
     }
 
     /**
      * Why this password may not be set, or null when it may (for code that checks outside a form).
-     * $breachCheck false checks the length, letters and numbers only: for a backstop behind a form
+     * $breachCheck false checks the length only: for a backstop behind a form
      * that already ran the whole rule, so the breach API is not asked twice.
      */
     public static function refusal(string $password, bool $breachCheck = true): ?string
