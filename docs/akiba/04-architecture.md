@@ -466,6 +466,15 @@ Refused as guarantors:
 | **`sacco_return_filings`** | `form` (`F1`–`F7`, `SAV`, `REG_ANNUAL`, `S55AS`), `period_key`, `due_on`, `generated_at`, `file_ids` JSON, `authorised_by_id`, `countersigned_by_id`, `filed_on`, `filed_reference` |
 | **`sacco_dormancy_notices`** | `savings_account_id`, `stage` (`register`, `notice`, `advertised`, `transferred`), `on`, `file_id` |
 
+As built (migration 640001, AK-104–AK-109): interest runs carry `kind` (`accrual` or `credit`), `basis`,
+`accounts_count` and `released_minor`, and their lines `days`, `credited_run_id` and `released`; appropriations carry
+`surplus_minor`, the dividend's rate, basis and pool and their `warnings`; dividend runs `appropriation_id`, `pay_to`,
+the consent's date and reference and `warnings`, their lines `share_account_id`, `savings_account_id`, `payout_id`,
+`status`; **`sacco_stf_buybacks`** (`member_id`, `share_account_id`, `shares_count`, `amount_minor`, `channel`,
+`fiscal_year`, `status`, `warnings`, `approval_id`, `entry_id`) records P4.9; return filings carry `period_from`,
+`period_to`, `status`, `figures`, `filed_by_id` and `reminded`. The chart gains 2450 Unclaimed balances due to the
+regulator and 3610 Member education reserve.
+
 ### 3.7 P5: group mode
 
 | Table | Columns |

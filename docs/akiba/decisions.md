@@ -967,3 +967,75 @@ approval.**
 - Matching and review never post. The `journal` review asks for a `manual_journal` approval (Dr/Cr the statement's
   account against the account the person names, the line's reference in the memo), which posts only when a second
   officer approves; matching again then finds it.
+
+## Decisions made while building P4
+
+**AK-104: Savings interest accrues per product and month, and is credited at the end of its posting period.**
+
+- The basis comes from each account's own journal lines by value date: balance-days for `daily_balance` (actual/365),
+  the month's lowest end-of-day balance for `min_monthly_balance` (a twelfth of the annual rate). The rate and basis are
+  the version in force at the month's end (before a product's first version, its first terms).
+- The month's total for a product is the exact sum rounded half-up once (AK-09); each account gets its exact interest
+  rounded down and the units left go to the largest fractions, so every line is within one unit of its exact figure and
+  the lines add up to the total. Dr the product's interest expense (5100) / Cr 2140, key `sint:{run_id}`.
+- Posting periods (monthly, quarterly, annually) count from the financial year's first month. The credit moves the
+  uncredited accrual lines from 2140 to the accounts; an account closed before its credit gives its share back to the
+  expense in the same entry.
+- One run per product, kind and period (a unique row made under the ledger lock): the month-end hook, `sacco:month-end`'s
+  catch-up and an officer's `interest_run` approval never post twice. A month does not close before its accrual exists.
+- *Why:* 02 §5 (interest on savings is an expense, accrued at the board's rate); ADR 0009 §4.4.
+
+**AK-105: A year closes once all its months are closed; the close is dated after the year, valued on its last day.**
+
+- `close:{year}` moves every income and expense account's movement for the year to 3410, posted on the `on` day (default:
+  the execution day) with value date the year's last day. Two officers in the chair's, vice chair's or treasurer's office
+  approve. Years close in order; the ledger must verify.
+- The income statement leaves `year_end` entries out, so a closed year still shows its income. On the position the
+  current year is the financial year to date; 3410 (a closed surplus waiting for the AGM) and any year never closed sit
+  in retained earnings, so the position always balances. Form 3 counts the year to date at 50 % and the rest in full.
+- *Why:* ADR 0009 §8; requiring closed months makes the closed year's figures final, which the request freezes.
+
+**AK-106: The appropriation declares the dividend; the dividend run only pays what was declared.**
+
+- The waterfall: reserve (default the SACCO's minimum), NCEF 1 % (2440), member education 5 % (a new reserve, 3610),
+  the Share Transfer Fund (3300), other reserves (3600), the dividend pool (2420), the rest to 3400. A deficit moves to
+  3400. `approp:{year}`, two officers. The pool is the rate on the shares at the year's end, or on the average of the
+  twelve month-end holdings, rounded once.
+- The dividend run shares the pool over the members by largest remainder (Σ = pool) and pays to savings, in cash
+  (members with no open account) or by MoMo through PayoutService (a failure reverses to 2420 and can be paid again).
+  `div:{run_id}`, two officers.
+- The law's limits on both (reserve 10 %, NCEF 1 %, education 5 %, STF 5 % of shares, dividend 10 %, core capital 10 % of
+  assets after the dividend, the Registrar's consent document) refuse a licensed SACCO only; for any other SACCO each is
+  a warning kept on the appropriation or run and printed on its report (AK-69). The arithmetic (never more than the
+  surplus, never a dividend without a surplus) and the SACCO's own caps bind everyone. Office mode only.
+
+**AK-107: The Share Transfer Fund's buy-back becomes a capital-redemption reserve.**
+
+- A leaving member's shares (all of them, no open loan or guarantee) are bought by the fund: Dr 3100 (the member's
+  share account) / Cr cash or bank, and Dr 3300 / Cr 3600 for the same amount, key `stf:{id}`, one approval. Share
+  capital falls by what was paid, the spent fund moves to a permanent reserve, core capital keeps it. The exit then
+  pays the savings with no shares left to place.
+- The fund never pays more than it holds (everyone); the yearly limit of 5 % of the share capital at the year's start
+  refuses a licensed SACCO and warns any other.
+- *Why:* the shares stay non-refundable from capital (Tier 4 s.48), and the 3100 control must equal its member rows, so
+  the fund cannot hold shares of its own without a member account.
+
+**AK-108: Dormancy counts months from the member's last own movement; transfers go through 2450.**
+
+- `last_activity_on` (else the day the account opened); interest and dividends credited by the SACCO do not count.
+  After `dormancy_months` (24) an account with money goes on the register and the member gets notice; 12 months later it
+  is due to be advertised; after 60 months its balance is due to the regulator: Dr 21x0 / Cr 2450 Unclaimed balances due
+  to the regulator, key `dorm:{account}`, one approval. No fees.
+- A licensed SACCO must record the advertisement before the transfer; for any other SACCO the due transfer is a warning
+  on the dormant register and a missing advertisement a warning on the request.
+- 2450 and 3610 joined the chart in P4; a chart from before is completed by seeding again when they are first used.
+
+**AK-109: The returns calendar follows the licence and the registration; due dates move forward, reminders back.**
+
+- UMRA's forms are owed only by a licensed SACCO, the Registrar's returns only by one with a registration number; any
+  SACCO can generate any return.
+- A due date on a weekend or public holiday moves to the next working day; the reminders on the 10th and 14th move back
+  to the working day before. Signatories on a generated return are the officers holding the offices when it is
+  generated.
+- Where Schedule 4's OCR leaves a line's content open (02 §1.3), the choice is in `Reports\UmraReturns`'s doc comment;
+  Form 2 and Form 7's land-and-buildings maximum prints the form's own figure.
