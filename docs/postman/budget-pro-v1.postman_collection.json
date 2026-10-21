@@ -7513,6 +7513,79 @@
                     }
                 },
                 {
+                    "name": "GET sacco/consent/{token}: the guarantor's notice (public, by the link's opaque token) */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/consent/:token",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "consent",
+                                ":token"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/consent/{token}/{code|consent|decline} {code} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/consent/:token/:action",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "consent",
+                                ":token",
+                                ":action"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/guarantees?member_id: who guarantees what. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/guarantees",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "guarantees"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/ledger/accounts: the chart with each account's balance. */",
                     "request": {
                         "method": "GET",
@@ -7777,6 +7850,641 @@
                     }
                 },
                 {
+                    "name": "GET sacco/loan-products */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loan-products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loan-products"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loan-products (sacco_settings): fields, or a preset (pdm, emyooga, vsla) with overrides. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loan-products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loan-products"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loan-products/{id} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loan-products/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loan-products",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT sacco/loan-products/{id} (sacco_settings) */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loan-products/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loan-products",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT sacco/loan-products/{id} (sacco_settings) */",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loan-products/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loan-products",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loan-products/{id}/preview {amount_minor, term, disburse_on}: schedule and key facts */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loan-products/:id/preview",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loan-products",
+                                ":id",
+                                "preview"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans?status&member_id&classification&product_id&q */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans (sacco_loans): a draft, or with submit=true made and submitted. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans/{id} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT sacco/loans/{id} (a draft or a submitted application) */",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT sacco/loans/{id} (a draft or a submitted application) */",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans/{id}/collateral */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/collateral",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "collateral"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/collateral {type, description, value_minor, document_file_id} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/collateral",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "collateral"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/collateral/{c}/{demand|realise|release} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/collateral/:c/:action",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "collateral",
+                                ":c",
+                                ":action"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans/{id}/documents/{doc}: the stored PDF, checked against its hash. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/documents/:doc",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "documents",
+                                ":doc"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans/{id}/guarantors */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/guarantors",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "guarantors"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/guarantors {member_id, guaranteed_minor} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/guarantors",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "guarantors"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/guarantors/{g}/{consent|decline|remove|resend} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/guarantors/:g/:action",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "guarantors",
+                                ":g",
+                                ":action"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans/{id}/repayments */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/repayments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "repayments"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/repayments {uuid, amount_minor, channel: cash|bank|savings, savings_account_id, value_date, reference, settle} (sacco_teller) */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/repayments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "repayments"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/votes {vote, note} (sacco_loans_vote and a seat) */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/votes",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                "votes"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/loans/{id}/{action}: the pipeline's steps. */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/:action",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                ":action"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/loans/{id}/{schedule|statement|settlement-quote} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/loans/:id/:what",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "loans",
+                                ":id",
+                                ":what"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/me */",
                     "request": {
                         "method": "GET",
@@ -7817,6 +8525,124 @@
                                 "sacco",
                                 "me",
                                 "accounts"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/me/guarantee-requests */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/guarantee-requests",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "guarantee-requests"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/me/guarantee-requests/{id}/{code|consent|decline} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/guarantee-requests/:id/:action",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "guarantee-requests",
+                                ":id",
+                                ":action"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/me/loan-applications {product_id, applied_minor, term, purpose, uuid}: made and submitted as the member's */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/loan-applications",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "loan-applications"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/me/loans */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/loans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "loans"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/me/loans/{id}: with its schedule */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/loans/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "loans",
+                                ":id"
                             ]
                         }
                     }
@@ -8185,6 +9011,34 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n    \"type\": \"\",\n    \"file_id\": 1,\n    \"notes\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/members/{id}/exit {reason, shares_to_member_id, channel, note} (sacco_members) */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/members/:id/exit",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "members",
+                                ":id",
+                                "exit"
+                            ]
                         }
                     }
                 },

@@ -92,6 +92,9 @@ Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sa
     Route::get('reports/{key}', [ReportController::class, 'show'])->where('key', '[a-z0-9_]+')->middleware('throttle:60,1');
 });
 
+// Loans (P2): their own file.
+require __DIR__.'/api_sacco_loans.php';
+
 // Members (04 §6.4): their own sign-in (public, throttled) and their own records (a member token, never a staff one).
 Route::prefix('sacco/member-auth')->middleware(['edition:saas', 'throttle:10,1'])->group(function () {
     Route::post('otp', [MemberAuthController::class, 'otp']);

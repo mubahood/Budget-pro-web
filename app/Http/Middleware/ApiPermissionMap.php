@@ -81,6 +81,16 @@ class ApiPermissionMap
         [['POST'], '#^sacco/periods/\d+/(close|reopen)$#', 'sacco_accounts'],
         [['GET'], '#^sacco/(reports|members/\d+/statement)(/.*)?$#', null], // sacco_reports or the auditor (controller)
         [['GET'], '#^sacco/(audit|ledger/verify)$#', 'sacco_audit_view'],
+        // Akiba Ledger P2 loans (04 §13.2): the services check the same permissions again, with positions and maker ≠ checker.
+        [['POST'], '#^sacco/loan-products/\d+/preview$#', null], // a read with a body (sacco_view, controller)
+        [['POST', 'PUT', 'PATCH'], '#^sacco/loan-products(/\d+)?$#', 'sacco_settings'],
+        [['POST'], '#^sacco/loans/\d+/(votes|recuse)$#', 'sacco_loans_vote'],
+        [['POST'], '#^sacco/loans/\d+/decide$#', 'sacco_approve'],
+        [['POST'], '#^sacco/loans/\d+/disburse$#', 'sacco_disburse'],
+        [['POST'], '#^sacco/loans/\d+/(repayments|recover)$#', 'sacco_teller'],
+        [['POST'], '#^sacco/loans/\d+/cancel$#', null], // withdrawing (sacco_loans) or a cooling-off cancellation (sacco_teller): the service
+        [['POST', 'PUT', 'PATCH'], '#^sacco/loans(/\d+(/[a-z-]+(/\d+/[a-z]+)?)?)?$#', 'sacco_loans'],
+        [['POST'], '#^sacco/members/\d+/exit$#', 'sacco_members'],
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],
