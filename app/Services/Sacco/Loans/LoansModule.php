@@ -20,7 +20,7 @@ final class LoansModule
 {
     /** The loan maker-checker actions (04 §7). */
     public const EXECUTORS = [Executors\LoanDecisionExecutor::class, Executors\LoanDisbursementExecutor::class, Executors\WriteOffExecutor::class,
-        Executors\GuarantorRecoveryExecutor::class, Executors\RescheduleExecutor::class];
+        Executors\GuarantorRecoveryExecutor::class, Executors\RescheduleExecutor::class, Executors\MemberExitExecutor::class];
 
     public static function boot(): void
     {

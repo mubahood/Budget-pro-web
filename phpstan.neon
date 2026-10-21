@@ -54,6 +54,7 @@ parameters:
         - app/Models/SaccoLoanChange.php
         - app/Models/SaccoPayout.php
         - app/Models/SaccoProvisionRun.php
+        - app/Models/SaccoMemberExit.php
         - app/Scopes
     excludePaths:
         - app/Services/AutoReorderService.php
