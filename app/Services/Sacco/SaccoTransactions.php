@@ -18,6 +18,7 @@ use App\Services\Sacco\Ledger\PostingRules;
 use App\Services\Sacco\Ledger\PostingService;
 use App\Services\Sacco\Ledger\ReversalService;
 use App\Services\Sacco\Ledger\SubRef;
+use App\Services\Sacco\Payouts\PayoutService;
 use App\Services\Sacco\Savings\SavingsAccounts;
 use App\Services\Shop\NumberSequencer;
 use App\Support\LocalDate;
@@ -135,6 +136,7 @@ final class SaccoTransactions
             'value_date' => ['nullable', 'date'],
             'reference' => ['nullable', 'string', 'max:80'],
             'narration' => ['nullable', 'string', 'max:255'],
+            'momo_phone' => ['nullable', 'string', 'max:20'], // a withdrawal paid to the member's wallet (P3.3)
         ];
     }
 
@@ -154,7 +156,8 @@ final class SaccoTransactions
         }
         $d = $v->validated();
         $kind = (string) $d['kind'];
-        if (in_array($d['channel'] ?? null, PostingRules::SYSTEM_CHANNELS, true) && ($opts['via'] ?? null) !== $d['channel']) {
+        $momoPayout = $kind === 'withdrawal' && ($d['channel'] ?? null) === 'momo'; // money out by MoMo goes through PayoutService (P3.3)
+        if (! $momoPayout && in_array($d['channel'] ?? null, PostingRules::SYSTEM_CHANNELS, true) && ($opts['via'] ?? null) !== $d['channel']) {
             // MoMo money arrives through a settled collection, check-off money through a posted remittance (AK-100).
             throw BusinessRuleException::make('channel_not_available', $d['channel'] === 'momo'
                 ? 'Mobile-money receipts come from a request-to-pay once the provider confirms it: send a collection request instead.'
@@ -235,9 +238,10 @@ final class SaccoTransactions
             }
         }
         $tx->forceFill(['approval_id' => $approval->id])->save();
-        $draft = $tx->kind === 'internal_transfer'
-            ? $this->transferDraft($cid, $settings, $tx, $account, $this->account($cid, (int) $tx->counter_account_id, true))
-            : $this->withdrawalDraft($cid, $settings, $tx, $account, $product);
+        if ($tx->kind === 'withdrawal') {
+            return $this->payOut($tx, $account, $product, $settings, (int) $approval->id, $tx->received_by_id === null ? null : (int) $tx->received_by_id, ['entry_date' => null]);
+        }
+        $draft = $this->transferDraft($cid, $settings, $tx, $account, $this->account($cid, (int) $tx->counter_account_id, true));
         $this->guardAvailable($draft, $cid, $account, (int) $tx->amount_minor + (int) $tx->fee_minor, (int) $tx->id, $product);
         $draft->approval((int) $approval->id);
 
@@ -486,6 +490,9 @@ final class SaccoTransactions
             throw self::insufficient($cid, (int) $account->id);
         }
         $this->assertMonthlyLimit($cid, $account, $product, Carbon::parse($d['value_date']));
+        if (($d['channel'] ?? null) === 'momo') {
+            $opts['meta'] = ['momo_phone' => $this->payoutPhone($company, $settings, (string) ($d['momo_phone'] ?? $member->phone_e164 ?? ''))];
+        }
         $reasons = [];
         if ($amount > (int) $settings->withdrawal_approval_above_minor) {
             $reasons[] = 'above_threshold';
@@ -513,9 +520,7 @@ final class SaccoTransactions
             return $tx;
         }
         $tx = $this->document($cid, $d, $by, $opts, 'posted');
-        $draft = $this->withdrawalDraft($cid, $settings, $tx, $account, $product);
-        $this->guardAvailable($draft, $cid, $account, $amount + $fee, (int) $tx->id, $product);
-        $tx = $this->post($tx, $draft, $by->id, $opts);
+        $tx = $this->payOut($tx, $account, $product, $settings, null, (int) $by->id, $opts);
         $account->fill(['last_activity_on' => $tx->value_date->toDateString()])->save();
 
         return $tx;
@@ -669,6 +674,98 @@ final class SaccoTransactions
     private function channel(SaccoTransaction $tx): string
     {
         return $tx->channel === 'internal' ? 'cash' : (string) $tx->channel;
+    }
+
+    /**
+     * Pay a withdrawal out: in cash or by bank it posts now (Dr 21x0, Cr the till or bank); by MoMo (P3.3, 04 §11.2) the
+     * savings move to 2160 Payouts in transit now (the "sent" journal, the same guard on the available balance) and
+     * PayoutService sends it after the commit. The receipt's message waits for the provider's answer; a failed payout
+     * is undone by a `reversal` receipt beside it (payoutResult), never by changing this one.
+     *
+     * @param  array<string, mixed>  $opts
+     */
+    private function payOut(SaccoTransaction $tx, SaccoSavingsAccount $account, SaccoSavingsProduct $product, SaccoSetting $settings, ?int $approvalId, ?int $userId, array $opts): SaccoTransaction
+    {
+        $cid = (int) $tx->company_id;
+        $needed = (int) $tx->amount_minor + (int) $tx->fee_minor;
+        if ($tx->channel !== 'momo') {
+            $draft = $this->withdrawalDraft($cid, $settings, $tx, $account, $product);
+            $this->guardAvailable($draft, $cid, $account, $needed, (int) $tx->id, $product);
+            if ($approvalId !== null) {
+                $draft->approval($approvalId);
+            }
+
+            return $this->post($tx, $draft, $userId, $opts);
+        }
+        $rules = new PostingRules($cid, $settings->mode);
+        $payout = (new PayoutService())->create($cid, 'withdrawal', 'sacco_transactions', (int) $tx->id, (int) $tx->member_id, (string) ($tx->meta['momo_phone'] ?? ''),
+            (int) $tx->amount_minor, $approvalId, 'wd:'.$tx->uuid, function (string $key) use ($rules, $tx, $account, $cid, $needed, $product, $approvalId, $userId) {
+                $draft = $rules->withdrawalToPayout($key, self::ref($account), $this->amount($cid, (int) $tx->amount_minor));
+                if ((int) $tx->fee_minor > 0) {
+                    foreach ($rules->fee($key.':fee', $this->amount($cid, (int) $tx->fee_minor), self::ref($account))->lines as $line) {
+                        $draft->line($line);
+                    }
+                }
+                $this->guardAvailable($draft, $cid, $account, $needed, (int) $tx->id, $product);
+                if ($approvalId !== null) {
+                    $draft->approval($approvalId);
+                }
+
+                return $draft->by($userId)->memo('Withdrawal by mobile money '.($tx->receipt_no ?? ''));
+            }, $opts['entry_date'] ?? null);
+        $fill = ['journal_entry_id' => (int) $payout->sent_journal_id, 'payout_id' => (int) $payout->id];
+        if ($tx->receipt_no === null) {
+            $fill['receipt_no'] = NumberSequencer::next($cid, 'rct');
+        }
+        if ($tx->status !== 'posted') {
+            $fill['status'] = 'posted';
+        }
+        $tx->forceFill($fill)->save();
+
+        return $tx;
+    }
+
+    /** The wallet a MoMo withdrawal goes to: payouts on, office mode (a group's chart has no 2160), a real number. */
+    private function payoutPhone(Company $company, SaccoSetting $settings, string $phone): string
+    {
+        if ($settings->isGroup()) {
+            throw BusinessRuleException::make('channel_not_available', 'A savings group pays out in cash: mobile-money payouts are for office mode.');
+        }
+        if (! PayoutService::enabled()) {
+            PayoutService::gateway(); // throws payouts_off
+        }
+        $e164 = \App\Support\Phone::e164($phone, (string) ($company->country ?: 'UG'));
+
+        return $e164 ?? throw BusinessRuleException::make('invalid_phone', 'Give the mobile-money number the withdrawal goes to.');
+    }
+
+    /**
+     * A MoMo withdrawal's final answer (PayoutService handler, inside its transaction): on success the member's receipt
+     * goes out; on failure the provider's refusal already reversed the sent journal, and a `reversal` receipt records
+     * that the money is back in the account (and tells the member).
+     */
+    public static function payoutResult(\App\Models\SaccoPayout $payout, string $status): void
+    {
+        $tx = SaccoTransaction::withoutGlobalScopes()->where('company_id', $payout->company_id)->lockForUpdate()->find($payout->subject_id);
+        if ($tx === null || $tx->kind !== 'withdrawal') {
+            return;
+        }
+        $self = new self();
+        if ($status === 'successful') {
+            $self->posted($tx);
+
+            return;
+        }
+        if (SaccoTransaction::withoutGlobalScopes()->where('reverses_id', $tx->id)->exists() || $payout->failed_journal_id === null) {
+            return;
+        }
+        $cid = (int) $tx->company_id;
+        $reason = mb_substr('Mobile-money payout failed: '.($payout->last_error ?: 'refused by the provider'), 0, 255);
+        $reversal = SaccoTransaction::create(['company_id' => $cid, 'uuid' => SyncSequence::childUuid('rev', (string) $tx->uuid), 'receipt_no' => NumberSequencer::next($cid, 'rct'),
+            'kind' => 'reversal', 'channel' => $tx->channel, 'member_id' => $tx->member_id, 'savings_account_id' => $tx->savings_account_id, 'amount_minor' => $tx->amount_minor,
+            'fee_minor' => $tx->fee_minor, 'currency' => $tx->currency, 'value_date' => LocalDate::today($cid)->toDateString(), 'status' => 'posted', 'journal_entry_id' => (int) $payout->failed_journal_id,
+            'reverses_id' => $tx->id, 'reason' => $reason, 'payout_id' => $payout->id, 'narration' => 'Reversal of '.$tx->receipt_no]);
+        $self->posted($reversal);
     }
 
     private function withdrawalDraft(int $cid, SaccoSetting $settings, SaccoTransaction $tx, SaccoSavingsAccount $account, SaccoSavingsProduct $product): JournalDraft

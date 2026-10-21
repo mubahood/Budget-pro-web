@@ -36,6 +36,7 @@ final class SaccoModule
             SaccoApprovals::register(new $class());
         }
         Loans\LoansModule::boot(); // P2: loans register their sub-ledger, executors, jobs and checks there
+        Channels\ChannelsModule::boot(); // P3: money channels, check-off, tills and the member's own requests
         YearEnd\YearEndModule::boot(); // P4: savings interest, the year-end, dividends, dormancy, the returns and their reports
         Ledger\CloseChecks::register('approvals', function (int $companyId, \App\Models\SaccoPeriod $period) {
             $open = SaccoApprovals::openIn($companyId, $period);

@@ -943,3 +943,13 @@ approval.**
   with the same key. After 24 hours without a final answer, a second officer with sacco_approve (never the one who
   asked for the payout) settles it by hand with a note of what the provider said: `successful` posts Dr 2160 Cr 1150,
   `failed` reverses the sent journal. Payouts carry the SACCO's own name on the member's wallet.
+
+**AK-102: A MoMo withdrawal is a posted receipt from the moment it is sent; a refused payout gets a reversal receipt (P3.3).**
+
+- 04 §11.2 says a failed withdrawal payout goes "to `rejected`". A posted receipt never moves backwards
+  (`SaccoTransaction::NEXT`), so the withdrawal stays posted (its journal is the "sent" one, Dr 21x0 Cr 2160) and the
+  failure adds a `reversal` receipt beside it pointing at the payout's reversing journal. The member's statement shows
+  both, and the member is told by the reversal receipt's message.
+- The withdrawal receipt's own message waits for the provider's success; an approval above the threshold, the
+  available-balance guard, the monthly limit and the fee apply exactly as for cash. A group (no 2160 in its chart)
+  pays out in cash only; `checkoff` is never a way to pay out.

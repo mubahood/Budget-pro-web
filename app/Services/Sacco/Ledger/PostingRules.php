@@ -76,6 +76,15 @@ final class PostingRules
             ->credit($this->channelAccount($channel), $amount, memberId: $savings->memberId);
     }
 
+    /** Out of a member's savings to their mobile wallet (P3.3), the "sent" half: Dr 21x0, Cr 2160 Payouts in transit. */
+    public function withdrawalToPayout(string $key, SubRef $savings, Amount $amount): JournalDraft
+    {
+        $this->office('withdrawal by mobile money');
+
+        return $this->draft('withdrawal', $key)->debit($savings->accountId, $amount, $savings->type, $savings->id, $savings->memberId)
+            ->credit(ChartOfAccounts::id($this->companyId, 'payouts.in_transit'), $amount, memberId: $savings->memberId);
+    }
+
     /** A fee (withdrawal, statement, passbook) taken from savings, or paid at the counter: Dr 21x0 or cash, Cr 4420. */
     public function fee(string $key, Amount $amount, ?SubRef $fromSavings = null, ?string $channel = null, ?int $memberId = null): JournalDraft
     {

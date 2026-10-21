@@ -73,7 +73,7 @@ class TransactionController extends SaccoController
         return $this->record($request, $request->all());
     }
 
-    /** POST sacco/withdrawals {uuid, savings_account_id, amount_minor, channel: cash|bank} (sacco_withdraw; above the threshold → pending_approval, 202) */
+    /** POST sacco/withdrawals {uuid, savings_account_id, amount_minor, channel: cash|bank|momo, momo_phone?} (sacco_withdraw; above the threshold → pending_approval, 202; momo pays the wallet through PayoutService) */
     public function withdraw(Request $request): JsonResponse
     {
         $request->validate(['savings_account_id' => ['required', 'integer'], 'amount_minor' => SaccoRules::minor(true, 1)]);
