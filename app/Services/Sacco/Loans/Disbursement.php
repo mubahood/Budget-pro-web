@@ -110,6 +110,9 @@ final class Disbursement
         $entryId = null;
         $payoutId = null;
         $savings = null;
+        if ($channel === 'momo' && $loan->top_up_of_loan_id !== null) {
+            throw BusinessRuleException::make('channel_not_allowed', 'A top-up is paid out to savings, in cash or by bank, so the old loan is settled first.');
+        }
         if ($channel === 'momo') {
             // The loan waits in `disbursing` before the payout exists: the provider's answer may come at once.
             $loan->fill(['status' => 'disbursing', 'disbursed_on' => $on->toDateString(), 'first_due_on' => $first->toDateString(), 'maturity_on' => end($lines)->dueOn,
@@ -136,6 +139,14 @@ final class Disbursement
                 'narration' => 'Loan '.$loan->loan_no.' paid out'], $checker, ['entry_date' => $entryDate], 'posted');
             $tx = $stx->post($tx, $draft, (int) $checker->id, ['entry_date' => $entryDate]);
             $entryId = (int) $tx->journal_entry_id;
+            if ($loan->top_up_of_loan_id !== null) {
+                $company = \App\Models\Company::withoutGlobalScopes()->findOrFail($cid);
+                $settled = (new Restructure())->settleOld($company, $loan, $savings, $channel, $valueDate, $checker);
+                if ($settled >= $net) {
+                    throw BusinessRuleException::make('top_up_too_small', 'The top-up does not cover settling the old loan.');
+                }
+                $net -= $settled;
+            }
         }
         $loan->fill(['status' => $channel === 'momo' ? 'disbursing' : 'active', 'disbursed_on' => $on->toDateString(), 'first_due_on' => $first->toDateString(),
             'maturity_on' => end($lines)->dueOn, 'disbursement_approval_id' => $approval->id, 'disbursement_entry_id' => $entryId, 'payout_id' => $payoutId,
