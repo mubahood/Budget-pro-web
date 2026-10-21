@@ -72,6 +72,7 @@ class SchemaIntegrity
         ['sacco_journal_lines', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
         ['sacco_account_balances', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
         ['sacco_settings', 'company_id', 'companies', 'restrict'],
+        ['sacco_officers', 'company_id', 'companies', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -90,6 +91,7 @@ class SchemaIntegrity
         ['sacco_settings', 'mode', ['office', 'group']],
         ['sacco_settings', 'receipts_channel', ['sms', 'whatsapp', 'app', 'none']],
         ['sacco_settings', 'employee_loans_policy', ['salary_advance_only', 'committee']],
+        ['sacco_officers', 'position', ['chairperson', 'vice_chair', 'treasurer', 'secretary', 'manager', 'board_member', 'loans_committee', 'supervisory', 'key_holder', 'money_counter', 'teller', 'custom']],
     ];
 
     /**
@@ -114,6 +116,7 @@ class SchemaIntegrity
         'sacco_periods' => \App\Models\SaccoPeriod::class,
         'sacco_journal_lines' => \App\Models\SaccoJournalLine::class,
         'sacco_settings' => \App\Models\SaccoSetting::class,
+        'sacco_officers' => \App\Models\SaccoOfficer::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */

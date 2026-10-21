@@ -135,7 +135,7 @@ class EmployeesController extends TenantAdminController
             ->help(($editingId ? 'Leave blank to keep the current password. ' : '').\App\Support\Rules\PasswordPolicy::hint()
                 .($editingId ? ' A new password signs them out of the phone app.' : ' Share it with the employee; they can change it under Settings.'));
         $form->password('password_confirmation', __('Confirm password'));
-        $teamRoles = collect(config('permissions.roles'))->except('owner')->map(fn ($r) => $r['label'])->all();
+        $teamRoles = \App\Support\Rules\TeamRules::editableRoles(\App\Models\Company::withoutGlobalScopes()->find(\Encore\Admin\Facades\Admin::user()?->company_id));
         $currentRole = $editingId ? \App\Services\Team\Permissions::roleOf(User::withoutGlobalScopes()->findOrFail($editingId)) : 'cashier';
         if ($currentRole === 'owner') {
             $form->display('team_role_label', __('Role'))->default('Owner');

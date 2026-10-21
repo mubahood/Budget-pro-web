@@ -56,15 +56,32 @@ class TeamRules
     }
 
     /** @return array<string, array<int, mixed>> */
-    public static function rolePermissions(): array
+    public static function rolePermissions(?\App\Models\Company $company = null): array
     {
-        return ['permissions' => ['present', 'array'], 'permissions.*' => ['in:'.implode(',', Permissions::all())]];
+        return ['permissions' => ['present', 'array'], 'permissions.*' => ['in:'.implode(',', $company ? Permissions::availableFor((int) $company->id) : Permissions::all())]];
     }
 
-    /** Roles a company can adjust (every role but the owner). @return array<string, string> key => label */
-    public static function editableRoles(): array
+    /**
+     * Roles a company can give and adjust (every role it is offered but the owner): a shop's six, or a SACCO's
+     * sacco_* roles and the viewer. Without a company: the family's roles, as before modules had roles.
+     *
+     * @return array<string, string> key => label
+     */
+    public static function editableRoles(?\App\Models\Company $company = null): array
     {
-        return collect(config('permissions.roles'))->except('owner')->map(fn ($r) => $r['label'])->all();
+        $keys = $company ? Permissions::rolesFor((int) $company->id) : array_keys(array_filter((array) config('permissions.roles'), fn ($r) => ! isset($r['module'])));
+
+        return collect($keys)->reject(fn ($k) => $k === 'owner')->mapWithKeys(fn ($k) => [$k => (string) config("permissions.roles.{$k}.label")])->all();
+    }
+
+    /**
+     * The permissions a company's role screen lists, with their labels (a shop's 18; a SACCO's own).
+     *
+     * @return array<string, string>
+     */
+    public static function permissionLabels(\App\Models\Company $company): array
+    {
+        return array_intersect_key((array) config('permissions.permissions'), array_flip(Permissions::availableFor((int) $company->id)));
     }
 
     /**

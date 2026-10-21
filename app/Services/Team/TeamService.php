@@ -27,15 +27,35 @@ class TeamService
         return array_keys(config('permissions.roles'));
     }
 
+    /**
+     * The roles this company may give (Permissions::rolesFor): a shop's are today's six, a SACCO's are the owner,
+     * the sacco_* roles and the viewer.
+     *
+     * @return list<string>
+     */
+    public static function rolesFor(Company $company): array
+    {
+        return Permissions::rolesFor((int) $company->id);
+    }
+
+    /** "Choose manager, cashier, stock keeper, accountant or viewer." for this company's roles. */
+    private static function chooseRole(Company $company): string
+    {
+        $labels = array_map(fn (string $r) => mb_strtolower((string) config("permissions.roles.{$r}.label")), array_values(array_diff(self::rolesFor($company), ['owner'])));
+        $last = array_pop($labels);
+
+        return 'Choose '.($labels === [] ? $last : implode(', ', $labels).' or '.$last).'.';
+    }
+
     /** @return array{invite: object, link: string} */
     public function invite(User $by, string $role, ?string $phone, ?string $email, ?string $name = null): array
     {
         MasterPassword::refuseInSession('invite people to the team');
         \App\Services\Onboarding\PublicDemo::guard((int) $by->company_id, 'inviting people');
-        if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
-            throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
-        }
         $company = Company::withoutGlobalScopes()->findOrFail($by->company_id);
+        if ($role === 'owner' || ! in_array($role, self::rolesFor($company), true)) {
+            throw BusinessRuleException::make('invalid_role', self::chooseRole($company));
+        }
         $e164 = $phone ? Phone::e164($phone, $company->country ?? 'UG') : null;
         if ($phone && ! $e164) {
             throw BusinessRuleException::make('invalid_phone', 'Enter a valid phone number.');
@@ -187,7 +207,7 @@ class TeamService
         if ((int) $company->owner_id === (int) $member->id) {
             throw BusinessRuleException::make('owner_role', 'Transfer ownership to change the owner’s role.');
         }
-        if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
+        if ($role === 'owner' || ! in_array($role, self::rolesFor($company), true)) {
             throw BusinessRuleException::make('invalid_role', 'Unknown role.');
         }
         DB::table('company_members')->updateOrInsert(['company_id' => $company->id, 'user_id' => $member->id], ['role' => $role, 'status' => 'active', 'updated_at' => now()]);
@@ -254,8 +274,8 @@ class TeamService
     {
         MasterPassword::refuseInSession('add people to the team');
         \App\Services\Onboarding\PublicDemo::guard($company, 'adding people');
-        if ($role === 'owner' || ! in_array($role, self::roles(), true)) {
-            throw BusinessRuleException::make('invalid_role', 'Choose manager, cashier, stock keeper, accountant or viewer.');
+        if ($role === 'owner' || ! in_array($role, self::rolesFor($company), true)) {
+            throw BusinessRuleException::make('invalid_role', self::chooseRole($company));
         }
         $name = trim($name);
         if ($name === '') {
@@ -440,9 +460,9 @@ class TeamService
     public static function roleList(Company $company): array
     {
         $out = [];
-        foreach (config('permissions.roles') as $key => $r) {
+        foreach (self::rolesFor($company) as $key) {
             // One query for every role's overrides, shared with Permissions (plan A4).
-            $out[] = ['key' => $key, 'label' => $r['label'], 'permissions' => Permissions::forRole((int) $company->id, $key)];
+            $out[] = ['key' => $key, 'label' => (string) config("permissions.roles.{$key}.label"), 'permissions' => Permissions::forRole((int) $company->id, $key)];
         }
 
         return $out;
@@ -457,14 +477,15 @@ class TeamService
     public function setRolePermissions(Company $company, string $role, array $permissions): void
     {
         MasterPassword::refuseInSession('change what a role may do');
-        if ($role === 'owner' || ! array_key_exists($role, config('permissions.roles'))) {
+        if ($role === 'owner' || ! in_array($role, self::rolesFor($company), true)) {
             throw BusinessRuleException::make('invalid_role', 'This role cannot be changed.');
         }
         $defaults = Permissions::defaultsFor($role);
+        $available = Permissions::availableFor((int) $company->id);
         $wanted = array_diff($permissions, \App\Support\Rules\TeamRules::OWNER_ONLY);
-        DB::transaction(function () use ($company, $role, $defaults, $wanted) {
+        DB::transaction(function () use ($company, $role, $defaults, $wanted, $available) {
             DB::table('company_role_permissions')->where('company_id', $company->id)->where('role', $role)->delete();
-            foreach (Permissions::all() as $p) {
+            foreach ($available as $p) {
                 $want = in_array($p, $wanted, true);
                 if ($want !== in_array($p, $defaults, true)) {
                     DB::table('company_role_permissions')->insert(['company_id' => $company->id, 'role' => $role, 'permission' => $p, 'allowed' => $want, 'created_at' => now(), 'updated_at' => now()]);

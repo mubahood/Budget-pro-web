@@ -59,6 +59,29 @@ class ApiPermissionMap
         // An event's settings (chair; payment details also the treasurer) and applying a budget template (chair): BudgetAccess.
         [['POST', 'PUT', 'PATCH'], '#^budget-programs/\d+/(settings|apply-template)$#', null],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(budget-programs|budget-item-categories|budget-items)(/\d+)?$#', 'manage_budget'],
+        // Akiba Ledger P1 (docs/akiba/04-architecture.md §13.2). Reads of the books need sacco_view (or the auditor's
+        // sacco_audit_view, checked in the controllers: null here); finer rules (maker ≠ checker, positions) are SaccoAccess.
+        [['POST'], '#^sacco/setup$#', 'manage_settings'],
+        [['PUT', 'PATCH'], '#^sacco/settings$#', 'sacco_settings'],
+        [['POST', 'PUT', 'PATCH'], '#^sacco/officers(/\d+(/end)?)?$#', 'sacco_officers'],
+        [['POST'], '#^sacco/members/\d+/kyc$#', 'sacco_kyc'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^sacco/members(/import|/\d+(/status|/relations(/\d+)?|/documents)?)?$#', 'sacco_members'],
+        [['POST'], '#^sacco/opening-balances/import$#', 'sacco_accounts'],
+        [['POST'], '#^sacco/shares/purchase$#', 'sacco_teller'],
+        [['POST'], '#^sacco/shares/transfer$#', 'sacco_teller'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^sacco/savings-products(/\d+)?$#', 'sacco_settings'],
+        [['POST'], '#^sacco/savings-accounts/\d+/(freeze|unfreeze|close)$#', 'sacco_approve'],
+        [['POST'], '#^sacco/savings-accounts$#', 'sacco_teller'],
+        [['POST'], '#^sacco/transactions/\d+/reverse$#', 'sacco_teller'],
+        [['POST'], '#^sacco/transactions$#', 'sacco_teller'],
+        [['POST'], '#^sacco/withdrawals$#', 'sacco_withdraw'],
+        [['POST'], '#^sacco/approvals/\d+/cancel$#', null], // the maker cancels their own request (SaccoApprovals)
+        [['POST'], '#^sacco/approvals/\d+/(approve|reject)$#', 'sacco_approve'],
+        [['POST', 'PUT', 'PATCH'], '#^sacco/ledger/(accounts|journal)(/\d+(/reverse)?)?$#', 'sacco_accounts'],
+        [['POST'], '#^sacco/periods/\d+/(close|reopen)$#', 'sacco_accounts'],
+        [['GET'], '#^sacco/(reports|members/\d+/statement)(/.*)?$#', null], // sacco_reports or the auditor (controller)
+        [['GET'], '#^sacco/(audit|ledger/verify)$#', 'sacco_audit_view'],
+        [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],
         [['GET'], '#^subscription/payments/\d+$#', 'billing'],

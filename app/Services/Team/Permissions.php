@@ -21,6 +21,67 @@ class Permissions
         return array_keys(config('permissions.permissions'));
     }
 
+    /**
+     * The permissions a company is offered (and its owner holds): the family's, plus the permissions of the modules
+     * it has. An account built around an exclusive module (a SACCO) keeps that module's and the account's own
+     * (config permissions.exclusive_keeps), not the shop's. For a shop this is exactly the list it always had.
+     *
+     * @return list<string>
+     */
+    public static function availableFor(int $companyId): array
+    {
+        $modules = self::modulesOf($companyId);
+        $byModule = (array) config('permissions.module_permissions', []);
+        $exclusive = \App\Support\Rules\CompanyRules::exclusiveOf($modules);
+        if ($exclusive !== null) {
+            return array_values(array_unique([...(array) config('permissions.exclusive_keeps', []), ...(array) ($byModule[$exclusive] ?? [])]));
+        }
+        $off = [];
+        foreach ($byModule as $module => $perms) {
+            if (! in_array($module, $modules, true)) {
+                $off = [...$off, ...$perms];
+            }
+        }
+
+        return array_values(array_diff(self::all(), $off));
+    }
+
+    /**
+     * The roles a company may give (owner first): roles without a module, or of a module it has; an exclusive
+     * module's account gets that module's roles with the owner and the viewer only (04 §6.1).
+     *
+     * @return list<string>
+     */
+    public static function rolesFor(int $companyId): array
+    {
+        $modules = self::modulesOf($companyId);
+        $exclusive = \App\Support\Rules\CompanyRules::exclusiveOf($modules);
+        $out = [];
+        foreach ((array) config('permissions.roles') as $key => $r) {
+            $module = $r['module'] ?? null;
+            if ($exclusive !== null ? ($module === $exclusive || in_array($key, ['owner', 'viewer'], true)) : ($module === null || in_array($module, $modules, true))) {
+                $out[] = (string) $key;
+            }
+        }
+
+        return $out;
+    }
+
+    /** @var array<int, list<string>> company id => its modules */
+    private static array $modules = [];
+
+    /** @return list<string> */
+    private static function modulesOf(int $companyId): array
+    {
+        self::fresh();
+        if (! array_key_exists($companyId, self::$modules)) {
+            $company = Company::withoutGlobalScopes()->find($companyId);
+            self::$modules[$companyId] = $company?->modules() ?? [];
+        }
+
+        return self::$modules[$companyId];
+    }
+
     public static function defaultsFor(string $role): array
     {
         $p = config("permissions.roles.{$role}.permissions", []);
@@ -49,6 +110,7 @@ class Permissions
         self::$cache = [];
         self::$owners = [];
         self::$overrides = [];
+        self::$modules = [];
     }
 
     /**
@@ -58,15 +120,19 @@ class Permissions
      */
     public static function forRole(int $companyId, string $role): array
     {
+        $available = self::availableFor($companyId);
         if ($role === 'owner') {
-            return self::all();
+            return $available;
         }
         $perms = self::defaultsFor($role);
+        if ($role === 'viewer' && in_array('sacco', self::modulesOf($companyId), true)) {
+            $perms[] = 'sacco_view'; // a SACCO's viewer sees its books (04 §6.1)
+        }
         foreach (self::overrides($companyId)[$role] ?? [] as $permission => $allowed) {
             $perms = $allowed ? array_values(array_unique([...$perms, $permission])) : array_values(array_diff($perms, [$permission]));
         }
 
-        return $perms;
+        return array_values(array_intersect($perms, $available));
     }
 
     /** @var array<int, int|null> company id => owner user id */
@@ -139,7 +205,7 @@ class Permissions
         } else {
             $role = 'manager'; // pre-roles staff keep their access (DECISIONS E30)
         }
-        $perms = $role === 'none' ? [] : ($role === 'owner' ? self::defaultsFor('owner') : self::forRole($cid, $role));
+        $perms = $role === 'none' ? [] : self::forRole($cid, $role);
 
         return self::$cache[$key] = ['role' => $role, 'perms' => $perms];
     }

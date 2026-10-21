@@ -69,7 +69,7 @@ final class SaccoRules
     /** @return array<string, array<int, mixed>> the first-run setup (SaccoSetupService::setup) */
     public static function setup(): array
     {
-        return ['mode' => ['required', Rule::in(\App\Models\SaccoSetting::MODES)]] + array_merge(self::settings(), [
+        return ['mode' => ['required', Rule::in(\App\Models\SaccoSetting::MODES)], 'founder_position' => ['nullable', Rule::in(['chairperson', 'treasurer'])]] + array_merge(self::settings(), [
             'legal_name' => ['required', 'string', 'max:190'],
             'short_name' => ['nullable', 'string', 'max:60'],
         ]);

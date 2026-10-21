@@ -21,8 +21,8 @@ use Illuminate\Support\Facades\DB;
  * opens this month and the next two, and marks the onboarding `sacco` step done. It runs once; the mode can still
  * change until the first posting (SaccoSetting), the currency never.
  *
- * Later steps of the same first run hook in here as their tables arrive: the founder's officer position (P1.8,
- * OfficerService) and the default savings products (P1.12).
+ * The person who sets it up is seated in the founder's office (chairperson, or treasurer: OfficerService). The
+ * default savings products (P1.12) hook in through extend() as their tables arrive (AK-59).
  */
 final class SaccoSetupService
 {
@@ -40,7 +40,10 @@ final class SaccoSetupService
         return SaccoSetting::withoutGlobalScopes()->where('company_id', $companyId)->exists();
     }
 
-    /** @param  array<string, mixed>  $data  SaccoRules::setup() */
+    /** The founder's office at setup (§4): chairperson by default, or treasurer. */
+    public const FOUNDER_POSITIONS = ['chairperson', 'treasurer'];
+
+    /** @param  array<string, mixed>  $data  SaccoRules::setup(), plus `founder_position` */
     public function setup(Company $company, array $data, User $by): SaccoSetting
     {
         \App\Services\Onboarding\PublicDemo::guard((int) $company->id, 'setting up the SACCO books');
@@ -52,13 +55,15 @@ final class SaccoSetupService
             throw BusinessRuleException::make('invalid_settings', (string) $validator->errors()->first(), ['errors' => $validator->errors()->toArray()]);
         }
         $data = $validator->validated();
+        $founder = in_array($data['founder_position'] ?? null, self::FOUNDER_POSITIONS, true) ? $data['founder_position'] : 'chairperson';
+        unset($data['founder_position']);
         $mode = (string) $data['mode'];
         if ($mode === 'office' && ! app(Quotas::class)->featureOn($company, 'sacco_office_mode')) {
             throw BusinessRuleException::make('feature_not_in_plan', 'Office mode (a SACCO with tellers and an office) is on the Starter plan and above. On Akiba Free, choose group mode.',
                 ['feature' => 'sacco_office_mode']);
         }
 
-        return DB::transaction(function () use ($company, $data, $mode, $by) {
+        return DB::transaction(function () use ($company, $data, $mode, $by, $founder) {
             Company::withoutGlobalScopes()->whereKey($company->id)->lockForUpdate()->first();
             if (self::isSetUp((int) $company->id)) {
                 throw BusinessRuleException::make('already_set_up', 'This SACCO is already set up. Change its settings instead.');
@@ -76,6 +81,7 @@ final class SaccoSetupService
             ], array_diff_key($data, array_flip(['mode', 'short_name']))));
             (new ChartOfAccounts())->seed((int) $company->id, $mode);
             (new PeriodService())->ensureAhead((int) $company->id, LocalDate::today((int) $company->id), (int) config('sacco.defaults.periods_ahead', 3));
+            (new OfficerService())->appoint((int) $company->id, ['position' => $founder, 'user_id' => (int) $by->id], (int) $by->id);
             foreach (self::$extras as $extra) {
                 $extra($company, $settings, $by);
             }

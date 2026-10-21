@@ -616,3 +616,16 @@ approval.**
   company's currency once a SACCO is set up.
 - `config:doctor` gains `sacco_payouts` (never accepted), `sacco_nin_pepper` and `sacco_messaging` (one count of SACCO
   accounts, the doctor's only database read), checked in the kernel only.
+
+**AK-60: Module roles and permissions are offered by module; an exclusive account keeps only its own.**
+
+- `config/permissions.php` gains `module_permissions` (the 15 `sacco_*`) and `exclusive_keeps` (the account's own:
+  `view_reports`, `resolve_conflicts`, `manage_team`, `manage_settings`, `billing`). `Permissions::availableFor` and
+  `rolesFor` give a shop exactly its 18 permissions and six roles (its owner's `*` no longer means the SACCO's
+  permissions too), and a SACCO the owner, the viewer (with `sacco_view`) and the eight `sacco_*` roles.
+- Every SACCO role is an ordinary team login (`admin_users` + `company_members`), created by the Team screen's
+  `TeamService::createMember` or an invite, so the web portal's and the API's existing sign-ins accept it.
+  Positions (`sacco_officers`) are on top, never instead.
+- The founder is seated as chairperson (or treasurer) at setup. `SaccoAccess::refuseSyncOp` is wired into
+  `SyncApplier` now; the sacco tables join `SyncRegistry` in P1.16.
+- `TeamRules::editableRoles()` without a company still answers the family's roles; callers pass the company.

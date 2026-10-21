@@ -94,8 +94,8 @@ class AdminAccess
         $tenantPermissionId = DB::table('admin_permissions')->where('slug', self::TENANT_PERMISSION['slug'])->value('id');
         $base = DB::table('admin_permissions')->whereIn('slug', ['dashboard', 'auth.setting', 'auth.login'])->pluck('id');
         foreach (config('permissions.admin_roles') as $role => $slug) {
-            if ($slug === 'company') {
-                continue;
+            if ($slug === 'company' || config("permissions.roles.{$role}.module") !== null) {
+                continue; // a module's roles share an existing read-only role and never set its menus
             }
             if (! DB::table('admin_roles')->where('slug', $slug)->exists()) {
                 DB::table('admin_roles')->insert(['name' => config("permissions.roles.{$role}.label"), 'slug' => $slug, 'created_at' => $now, 'updated_at' => $now]);

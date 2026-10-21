@@ -44,16 +44,18 @@ class TeamController extends Controller
 
     public function roles(Request $request)
     {
-        return $this->success(['roles' => $this->roleList($this->company($request)), 'permissions' => config('permissions.permissions')], 'Roles.');
+        $company = $this->company($request);
+
+        return $this->success(['roles' => $this->roleList($company), 'permissions' => TeamRules::permissionLabels($company)], 'Roles.');
     }
 
     /** PUT team/roles/{role} { permissions: [...] } — this company's version of a role. */
     public function updateRole(Request $request, string $role)
     {
-        if ($role === 'owner' || ! array_key_exists($role, config('permissions.roles'))) {
+        if ($role === 'owner' || ! in_array($role, TeamService::rolesFor($this->company($request)), true)) {
             return $this->error('This role cannot be changed.', 422, ['code' => 'invalid_role']);
         }
-        $data = $request->validate(TeamRules::rolePermissions());
+        $data = $request->validate(TeamRules::rolePermissions($this->company($request)));
         app(TeamService::class)->setRolePermissions($this->company($request), $role, $data['permissions']);
 
         return $this->roles($request);

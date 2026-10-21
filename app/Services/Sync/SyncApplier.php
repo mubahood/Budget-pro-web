@@ -182,6 +182,13 @@ class SyncApplier
                     $failed = true;
                     break;
                 }
+                // Akiba Ledger (AK-23): what moves money out or approves it never comes from a phone.
+                $offline = \App\Services\Sacco\SaccoAccess::refuseSyncOp($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
+                if ($offline !== null) {
+                    $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'offline_not_allowed', 'message' => $offline];
+                    $failed = true;
+                    break;
+                }
                 try {
                     $r = match ($config['kind']) {
                         SyncRegistry::KIND_EVENT => $this->applyEvent($company, $deviceId, $userId, $table, $config, $op, $assigned, $touchedProducts, $stockExceptions),
@@ -788,6 +795,11 @@ class SyncApplier
             'financial_periods', 'financial_categories', 'financial_records' => 'manage_finance',
             'budget_programs', 'budget_item_categories', 'budget_items' => 'manage_budget',
             // contribution_records, contribution_payments, budget_program_members: per event (BudgetAccess::refuseSyncOp).
+            // Akiba Ledger (04 §6.3): cash receipts and member registrations; what may never come offline is
+            // SaccoAccess::refuseSyncOp's (offline_not_allowed).
+            'sacco_transactions' => 'sacco_teller',
+            'sacco_members' => 'sacco_members',
+            'sacco_loans' => 'sacco_loans',
             default => null, // poultry: farm roles live in the poultry module
         };
     }
