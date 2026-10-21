@@ -7513,6 +7513,148 @@
                     }
                 },
                 {
+                    "name": "GET sacco/collections?status&member_id&purpose */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/collections",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "collections"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/collections {uuid, purpose, savings_account_id|loan_id|member_id, amount_minor, phone?, network?} (sacco_teller) */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/collections",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "collections"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/collections/setup {phone, network}: the number the SACCO's collections settle to (sacco_settings). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/collections/setup",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "collections",
+                                "setup"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"phone\": \"\",\n    \"network\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/collections/{id} */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/collections/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "collections",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/collections/{id}/check: ask the provider now (sacco_teller). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/collections/:id/check",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "collections",
+                                ":id",
+                                "check"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/consent/{token}: the guarantor's notice (public, by the link's opaque token) */",
                     "request": {
                         "method": "GET",
@@ -8525,6 +8667,76 @@
                                 "sacco",
                                 "me",
                                 "accounts"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/me/collections: the member's own requests, newest first. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/collections",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "collections"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/me/collections {uuid, purpose: sacco_deposit|sacco_repayment|sacco_shares, savings_account_id|loan_id, amount_minor, phone?, network?} */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/collections",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "collections"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/me/collections/{id}: one of the member's requests; a pending one is checked with the provider first. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/me/collections/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "me",
+                                "collections",
+                                ":id"
                             ]
                         }
                     }

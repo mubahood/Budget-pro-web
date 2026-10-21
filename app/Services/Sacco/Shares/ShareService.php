@@ -116,7 +116,7 @@ final class ShareService
         $d = ['member_id' => $member->id, 'share_account_id' => $account->id, 'shares_count' => $shares, 'channel' => $d['channel'] ?? 'cash'] + $d;
         $doc = $tx->document($cid, $d, $by, $opts, 'posted');
         $draft = (new PostingRules($cid, $settings->mode))->sharePurchase('txn:'.$doc->uuid, self::ref($account), $tx->amount($cid, (int) $doc->amount_minor),
-            $doc->channel === 'bank' ? 'bank' : 'cash');
+            PostingRules::moneyChannel((string) $doc->channel));
         self::addShares((int) $account->id, $shares);
 
         return $tx->post($doc, $draft, $by?->id, $opts);
@@ -140,7 +140,7 @@ final class ShareService
         }
         $d = ['member_id' => $member->id, 'channel' => $d['channel'] ?? 'cash'] + $d;
         $doc = $tx->document($cid, $d, $by, $opts, 'posted');
-        $draft = (new PostingRules($cid, $settings->mode))->entranceFee('txn:'.$doc->uuid, (int) $member->id, $tx->amount($cid, $fee), $doc->channel === 'bank' ? 'bank' : 'cash');
+        $draft = (new PostingRules($cid, $settings->mode))->entranceFee('txn:'.$doc->uuid, (int) $member->id, $tx->amount($cid, $fee), PostingRules::moneyChannel((string) $doc->channel));
 
         return $tx->post($doc, $draft, $by?->id, $opts);
     }

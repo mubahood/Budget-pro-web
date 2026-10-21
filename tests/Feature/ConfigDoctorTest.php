@@ -91,6 +91,8 @@ class ConfigDoctorTest extends TestCase
             'no support whatsapp' => [['support.whatsapp' => ''], 'support_whatsapp'],
             'simulated sacco payouts' => [['sacco.payouts.driver' => 'simulated'], 'sacco_payouts'],
             'unknown sacco payouts driver' => [['sacco.payouts.driver' => 'mtn'], 'sacco_payouts'],
+            'simulated sacco collections' => [['sacco.collections.driver' => 'simulated'], 'sacco_collections'],
+            'unknown sacco collections driver' => [['sacco.collections.driver' => 'mtn'], 'sacco_collections'],
             'no nin pepper' => [['sacco.nin_pepper' => ''], 'sacco_nin_pepper'],
         ];
     }
@@ -344,6 +346,7 @@ class ConfigDoctorTest extends TestCase
             'master_proxies' => ['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7'], 'trustedproxy.proxies' => '*'],
             'master_allowlist' => ['saas.master_password_allowed_ips' => ['0.0.0.0/0']],
             'sacco_payouts' => ['sacco.payouts.driver' => 'simulated'],
+            'sacco_collections' => ['sacco.collections.driver' => 'simulated'],
         ];
         $this->assertEqualsCanonicalizing(ConfigDoctor::NEVER_ACCEPTED, array_keys($broken));
 

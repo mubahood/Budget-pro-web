@@ -57,6 +57,7 @@ use Illuminate\Support\Str;
  *   invite_url                 SaaS: SAAS_INVITE_URL is set (warns)
  *   site_facts                 web app on the SaaS: the public site's company facts are set (warns)
  *   sacco_payouts              kernel: SACCO_PAYOUTS_DRIVER is not `simulated` (fails; never accepted: members' money would look sent)
+ *   sacco_collections          kernel: SACCO_COLLECTIONS_DRIVER is not `simulated` (fails; never accepted: receipts for money that never came)
  *   sacco_nin_pepper           kernel: SACCO_NIN_PEPPER is set (members' NIN lookup hash)
  *   sacco_messaging            kernel: no SACCO account while SMS and WhatsApp are both `log` (receipts would never leave);
  *                              the one check that reads the database (one query on companies), and only warns if it cannot
@@ -85,13 +86,13 @@ final class ConfigDoctor
         'mail_mailer', 'mail_enabled', 'mail_messages', 'sms', 'whatsapp', 'connections',
         'flutterwave_keys', 'flutterwave_test_mode', 'flutterwave_webhook',
         'support_whatsapp', 'support_details', 'new_ui_url', 'invite_url', 'site_facts',
-        'sacco_payouts', 'sacco_nin_pepper', 'sacco_messaging', 'accepted',
+        'sacco_payouts', 'sacco_collections', 'sacco_nin_pepper', 'sacco_messaging', 'accepted',
     ];
 
     /** Failures CONFIG_DOCTOR_ACCEPT can never turn into warnings: each is a security hole or loses data. */
     public const NEVER_ACCEPTED = [
         'edition', 'app_debug', 'data_key', 'queue_sync', 'flutterwave_test_mode', 'master_password_plaintext',
-        'master_proxies', 'master_allowlist', 'sacco_payouts',
+        'master_proxies', 'master_allowlist', 'sacco_payouts', 'sacco_collections',
     ];
 
     /** Hosts that are never a live server, whatever APP_URL's scheme (the L4 rule in the class docblock). */
@@ -141,7 +142,7 @@ final class ConfigDoctor
             'mailer', 'mailEnabled', 'mailMessages', 'sms', 'whatsapp', 'connections',
             'flutterwaveKeys', 'flutterwaveTestMode', 'flutterwaveWebhook',
             'supportWhatsapp', 'supportDetails', 'saasLinks', 'siteFacts',
-            'saccoPayouts', 'saccoNinPepper', 'saccoMessaging', 'accepted',
+            'saccoPayouts', 'saccoCollections', 'saccoNinPepper', 'saccoMessaging', 'accepted',
         ] as $rule) {
             try {
                 $this->{$rule}();
@@ -579,6 +580,21 @@ final class ConfigDoctor
                 'Set SACCO_PAYOUTS_DRIVER=off until the payout keys are in, then flutterwave.'),
             'off', 'flutterwave' => $this->add('sacco_payouts', 'payments', self::OK, "SACCO payouts are {$driver}."),
             default => $this->add('sacco_payouts', 'payments', self::FAIL, "SACCO_PAYOUTS_DRIVER is \"{$driver}\": use off, simulated (local only) or flutterwave.", 'Set SACCO_PAYOUTS_DRIVER=off.'),
+        };
+    }
+
+    /** Members' mobile-money collections (P3.1): simulated would record receipts for money that never arrived. */
+    private function saccoCollections(): void
+    {
+        if ($this->app !== self::KERNEL) {
+            return;
+        }
+        $driver = (string) config('sacco.collections.driver', 'off');
+        match ($driver) {
+            'simulated' => $this->add('sacco_collections', 'payments', self::FAIL, 'SACCO_COLLECTIONS_DRIVER is simulated: members\' mobile-money payments would be recorded although no money arrived.',
+                'Set SACCO_COLLECTIONS_DRIVER=off until the collection keys are in, then flutterwave.'),
+            'off', 'flutterwave' => $this->add('sacco_collections', 'payments', self::OK, "SACCO collections are {$driver}."), // the keys: flutterwave_keys
+            default => $this->add('sacco_collections', 'payments', self::FAIL, "SACCO_COLLECTIONS_DRIVER is \"{$driver}\": use off, simulated (local only) or flutterwave.", 'Set SACCO_COLLECTIONS_DRIVER=off.'),
         };
     }
 

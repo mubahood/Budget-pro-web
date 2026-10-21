@@ -17,7 +17,13 @@ return [
 
     // Mobile-money payouts (AK-17): off (the production default until the owner adds keys), simulated (local and
     // tests; config:doctor fails production on it) or flutterwave.
-    'payouts' => ['driver' => env('SACCO_PAYOUTS_DRIVER', 'off')],
+    'payouts' => ['driver' => env('SACCO_PAYOUTS_DRIVER', 'off'), 'simulated_delay_seconds' => (int) env('SACCO_PAYOUTS_SIMULATED_DELAY', 0)],
+
+    // Mobile-money collections (request-to-pay, P3.1, AK-100): off (the production default: no paid service runs),
+    // simulated (local: no network, a phone ending 000 declines; config:doctor fails production on it) or
+    // flutterwave (the SACCO's own subaccount, once the owner adds keys). A demo SACCO is always simulated.
+    'collections' => ['driver' => env('SACCO_COLLECTIONS_DRIVER', 'off'), 'simulated_approve_after' => (int) env('SACCO_COLLECTIONS_SIMULATED_AFTER', 6),
+        'expire_hours' => 24],
 
     // The secret the NIN lookup hash is keyed with (AK-31). config:doctor fails production when it is empty;
     // elsewhere the app key stands in. Changing it later breaks the duplicate lookup of every stored NIN.

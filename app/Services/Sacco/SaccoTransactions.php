@@ -125,7 +125,7 @@ final class SaccoTransactions
         return [
             'uuid' => ['nullable', 'uuid'],
             'kind' => ['required', Rule::in(self::RECORD_KINDS)],
-            'channel' => ['nullable', Rule::in(['cash', 'bank', 'internal'])],
+            'channel' => ['nullable', Rule::in(['cash', 'bank', 'internal', ...PostingRules::SYSTEM_CHANNELS])],
             'member_id' => ['nullable', 'integer'],
             'savings_account_id' => ['nullable', 'integer'],
             'share_account_id' => ['nullable', 'integer'],
@@ -142,7 +142,7 @@ final class SaccoTransactions
      * Record a deposit, withdrawal, fee, internal transfer, share purchase or entrance fee.
      *
      * @param  array<string, mixed>  $data  rules()
-     * @param  array{entry_date?: ?string, offline?: bool, device_id?: ?string, device_receipt_no?: ?string, client_created_at?: ?int}  $opts
+     * @param  array{entry_date?: ?string, offline?: bool, device_id?: ?string, device_receipt_no?: ?string, client_created_at?: ?int, via?: string}  $opts  `via` momo|checkoff: the system's own channels (AK-100)
      * @return array{transaction: SaccoTransaction, replayed: bool}
      */
     public function record(Company $company, array $data, ?User $by, array $opts = []): array
@@ -154,6 +154,12 @@ final class SaccoTransactions
         }
         $d = $v->validated();
         $kind = (string) $d['kind'];
+        if (in_array($d['channel'] ?? null, PostingRules::SYSTEM_CHANNELS, true) && ($opts['via'] ?? null) !== $d['channel']) {
+            // MoMo money arrives through a settled collection, check-off money through a posted remittance (AK-100).
+            throw BusinessRuleException::make('channel_not_available', $d['channel'] === 'momo'
+                ? 'Mobile-money receipts come from a request-to-pay once the provider confirms it: send a collection request instead.'
+                : 'Check-off receipts come from a posted employer remittance.');
+        }
         if ($by !== null) {
             SaccoAccess::authorize($by, self::PERMISSION[$kind]);
         } elseif ($kind === 'withdrawal') {

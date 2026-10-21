@@ -21,6 +21,9 @@ final class PostingRules
     /** Channels per kind of movement in P1: what a teller can take in or pay out. */
     public const RECEIPT_CHANNELS = ['cash', 'bank'];
 
+    /** Channels only the system records (P3): a settled collection, an allocated check-off remittance (AK-100). */
+    public const SYSTEM_CHANNELS = ['momo', 'checkoff'];
+
     /** The P1 kinds that exist in group mode (its chart has no 4420 Other fees: a group charges fines, P5). */
     public const GROUP_KINDS = ['deposit', 'withdrawal', 'share_purchase', 'share_transfer', 'entrance_fee', 'internal_transfer', 'held_receipt', 'held_receipt_allocation', 'manual', 'reversal', 'opening_balance'];
 
@@ -37,12 +40,24 @@ final class PostingRules
         }
     }
 
+    /** The channel a document's money moved by, for its posting: `internal` (from savings) and anything unknown is cash. */
+    public static function moneyChannel(string $documentChannel): string
+    {
+        return in_array($documentChannel, ['bank', ...self::SYSTEM_CHANNELS], true) ? $documentChannel : 'cash';
+    }
+
     /** The account money comes in by or goes out by. */
     public function channelAccount(string $channel): int
     {
         return match ($channel) {
             'cash' => ChartOfAccounts::id($this->companyId, $this->mode === 'group' ? 'cash.box' : 'cash.office'),
             'bank' => ChartOfAccounts::id($this->companyId, 'bank.main'),
+            // P3.1: a collection that succeeded waits in 1160 MoMo clearing until a statement match clears it to the
+            // bank (a group's chart has no 1160: its MoMo money is the float, 1150).
+            'momo' => ChartOfAccounts::id($this->companyId, $this->mode === 'group' ? 'momo.float' : 'momo.clearing'),
+            // P3.5: what an employer deducted is owed by the employer (1410) until the remittance reaches the bank.
+            'checkoff' => $this->mode === 'office' ? ChartOfAccounts::id($this->companyId, 'checkoff.receivable')
+                : throw BusinessRuleException::make('channel_not_available', 'A savings group has no payroll check-off.'),
             default => throw BusinessRuleException::make('channel_not_available', "Money cannot move by {$channel} here yet."),
         };
     }
@@ -105,10 +120,13 @@ final class PostingRules
             ->credit($to->accountId, $amount, $to->type, $to->id, $to->memberId);
     }
 
-    /** A cash receipt that cannot reach its account yet (AK-24): Dr cash, Cr 2150 Unallocated receipts. */
-    public function heldReceipt(string $key, Amount $amount, ?int $memberId = null): JournalDraft
+    /**
+     * A receipt that cannot reach its account yet (AK-24): Dr cash (or the channel it came by: a collection whose
+     * account closed meanwhile, a remittance line nobody matches), Cr 2150 Unallocated receipts.
+     */
+    public function heldReceipt(string $key, Amount $amount, ?int $memberId = null, string $channel = 'cash'): JournalDraft
     {
-        return $this->draft('held_receipt', $key)->debit($this->channelAccount('cash'), $amount, memberId: $memberId)
+        return $this->draft('held_receipt', $key)->debit($this->channelAccount($channel), $amount, memberId: $memberId)
             ->credit(ChartOfAccounts::id($this->companyId, 'suspense.receipts'), $amount, memberId: $memberId);
     }
 

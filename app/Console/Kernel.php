@@ -37,6 +37,8 @@ class Kernel extends ConsoleKernel
         $schedule->call($task('sacco:daily'))->name('sacco:daily')->dailyAt('01:30')->withoutOverlapping(120);
         $schedule->call($task('sacco:month-end'))->name('sacco:month-end')->monthlyOn(1, '02:30')->withoutOverlapping(120);
         $schedule->call($task('sacco:payouts-poll'))->name('sacco:payouts-poll')->everyFiveMinutes()->withoutOverlapping();
+        // Akiba Ledger P3.1: members' mobile-money requests whose webhook never came (settled once, or expired after a day).
+        $schedule->call($task('sacco:collections-poll'))->name('sacco:collections-poll')->everyMinute()->withoutOverlapping();
         $schedule->call($task('sacco:savings-terms'))->name('sacco:savings-terms')->dailyAt('00:20')->withoutOverlapping();
         $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {

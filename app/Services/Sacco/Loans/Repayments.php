@@ -207,7 +207,7 @@ final class Repayments
         }
         $stx = new SaccoTransactions();
         $existing = SaccoTransaction::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', $uuid)->first();
-        $tx = $existing ?? $stx->document($cid, ['uuid' => $uuid, 'kind' => 'loan_repayment', 'channel' => in_array($channel, ['cash', 'bank'], true) ? $channel : 'internal',
+        $tx = $existing ?? $stx->document($cid, ['uuid' => $uuid, 'kind' => 'loan_repayment', 'channel' => in_array($channel, ['cash', 'bank', 'momo', 'checkoff'], true) ? $channel : 'internal',
             'member_id' => (int) $loan->member_id, 'savings_account_id' => $source?->id, 'loan_id' => (int) $loan->id, 'amount_minor' => $amount, 'value_date' => $valueDay,
             'reference' => $d['reference'] ?? null, 'narration' => $d['narration'] ?? ('Loan '.$loan->loan_no.' repayment')], $by, $opts + ['entry_date' => $entryDay], 'posted');
         $tx = $stx->post($tx, $draft, $by?->id, ['entry_date' => $entryDay]);

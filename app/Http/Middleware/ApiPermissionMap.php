@@ -91,6 +91,9 @@ class ApiPermissionMap
         [['POST'], '#^sacco/loans/\d+/cancel$#', null], // withdrawing (sacco_loans) or a cooling-off cancellation (sacco_teller): the service
         [['POST', 'PUT', 'PATCH'], '#^sacco/loans(/\d+(/[a-z-]+(/\d+/[a-z]+)?)?)?$#', 'sacco_loans'],
         [['POST'], '#^sacco/members/\d+/exit$#', 'sacco_members'],
+        // Akiba Ledger P3: money channels (collections, payouts), check-off, tills, statement imports, messaging.
+        [['POST'], '#^sacco/collections/setup$#', 'sacco_settings'],
+        [['POST'], '#^sacco/collections(/\d+/check)?$#', 'sacco_teller'],
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],

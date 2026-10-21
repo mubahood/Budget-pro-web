@@ -912,3 +912,21 @@ approval.**
   s.53), and 30 days' notice before a savings rate cut (SI 51 reg. 33). Everyone else may proceed. The SACCO's own
   settings (entrance fee, minimum shares, withdrawal threshold) and the maker-checker rule apply to all.
 - Refusals say what is needed in plain words and cite no law; the citations stay in code comments and these docs.
+
+**AK-100: Members' mobile-money collections (P3.1): their own driver, a receipt uuid from `momo:{tx_ref}`, money never refused.**
+
+- P3 decisions are numbered from AK-100, so they never collide with the P4 agent's numbers working in parallel.
+- `Payments\SaccoCollections` has its own driver, `sacco.collections.driver` (`SACCO_COLLECTIONS_DRIVER`): `off` (the
+  production default, so nothing paid runs), `simulated` (local: `SimulatedFlutterwave`, no network) or
+  `flutterwave`. The kernel binds no simulated Flutterwave for shops, so the driver, not the binding, decides; a demo
+  SACCO is always simulated. config:doctor fails production on `simulated` (never accepted). The plan needs
+  `sacco_momo`.
+- 04 §11.1 asks for the idempotency key `momo:{tx_ref}`. The receipt goes through `SaccoTransactions::record` (or
+  `Repayments::record`), whose posting key is `txn:{uuid}`; the uuid is derived from `momo:{tx_ref}`
+  (`SyncSequence::childUuid`), and `settle()` holds the `momo_requests` row lock. However many webhooks, polls and
+  status checks arrive, in however many processes, there is one receipt and one posting (ConcurrentCollectionsTest).
+- `momo` and `checkoff` are system channels: `record()` refuses them unless the caller is the collection or the
+  remittance (`opts.via`), so no teller can claim a MoMo receipt by hand. Money that arrives for an account that
+  closed meanwhile (or a loan paid off) is held in 2150 (Dr 1160) for an officer to allocate, never refused.
+- Amounts are compared in whole minor units; a provider's JSON number is fixed to the currency's decimals at that
+  boundary only. A payment for less than asked, another currency or another reference records nothing.

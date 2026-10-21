@@ -318,6 +318,17 @@ class BillingController extends Controller
             return response()->json(['status' => 'ok'], 200);
         }
 
+        // A SACCO member's request-to-pay (Akiba Ledger P3.1): verified with the provider, one receipt however often it arrives.
+        if (str_starts_with((string) $txRef, \App\Services\Sacco\Payments\SaccoCollections::PREFIX)) {
+            try {
+                app(\App\Services\Sacco\Payments\SaccoCollections::class)->settle((string) $txRef);
+            } catch (\App\Exceptions\BusinessRuleException) {
+                return response()->json(['status' => 'ignored'], 200); // collections switched off: the poll settles it later
+            }
+
+            return response()->json(['status' => 'ok'], 200);
+        }
+
         // Subscriptions are SaaS only (docs/STANDALONE_EDITION_PLAN.md §5.2): a standalone copy acknowledges and ignores the rest.
         if (\App\Support\Edition::isStandalone()) {
             return response()->json(['status' => 'ignored'], 200);
