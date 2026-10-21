@@ -22,6 +22,14 @@ final class ChartOfAccounts
     public const MODES = ['office', 'group'];
 
     /**
+     * The chart's data file, found from this class (the web portal runs this code with its own database_path()).
+     */
+    public static function path(): string
+    {
+        return dirname(__DIR__, 4).'/database/data/sacco_chart.php';
+    }
+
+    /**
      * The chart's rows for a mode, keyed by code.
      *
      * @return array<string, array{code: string, name: string, type: string, parent: ?string, control_of: ?string, system_key: ?string, umra_line: ?string, group: bool, normal_side: string, sort: int}>
@@ -32,7 +40,7 @@ final class ChartOfAccounts
             throw BusinessRuleException::make('invalid_mode', 'Choose office mode or group mode.');
         }
         $out = [];
-        foreach (require database_path('data/sacco_chart.php') as $i => [$code, $name, $type, $parent, $control, $key, $umra, $group, $normal]) {
+        foreach (require self::path() as $i => [$code, $name, $type, $parent, $control, $key, $umra, $group, $normal]) {
             if ($mode === 'group' && ! $group) {
                 continue;
             }

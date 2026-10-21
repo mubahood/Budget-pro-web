@@ -35,22 +35,23 @@ final class ShopMenu
             ]],
             // Akiba Ledger (docs/akiba/04-architecture.md §14.2): the SACCO books, for SACCO accounts only (the module is
             // exclusive). Each page is gated by its sacco_* permission; officer positions are checked by SaccoAccess.
+            // The auditor (sacco_audit_view) reads every page that shows the books, read-only (04 §6.1).
             ['key' => 'sacco', 'label' => 'SACCO', 'module' => 'sacco', 'entries' => [
-                ['label' => 'Overview', 'icon' => 'fa-vault', 'route' => 'sacco.overview', 'path' => '/sacco', 'match' => ['sacco.overview', 'sacco.setup'], 'can' => 'sacco_view'],
+                ['label' => 'Overview', 'icon' => 'fa-vault', 'route' => 'sacco.overview', 'path' => '/sacco', 'match' => ['sacco.overview', 'sacco.setup'], 'can' => ['sacco_view', 'sacco_audit_view']],
                 ['label' => 'Receive money', 'icon' => 'fa-hand-holding-dollar', 'route' => 'sacco.teller', 'path' => '/sacco/teller', 'match' => ['sacco.teller'], 'can' => 'sacco_teller'],
-                ['label' => 'Members', 'icon' => 'fa-users', 'route' => 'sacco.members', 'path' => '/sacco/members', 'match' => ['sacco.members*'], 'can' => 'sacco_view'],
+                ['label' => 'Members', 'icon' => 'fa-users', 'route' => 'sacco.members', 'path' => '/sacco/members', 'match' => ['sacco.members*'], 'can' => ['sacco_view', 'sacco_audit_view']],
                 ['label' => 'Withdrawals', 'icon' => 'fa-money-bill-transfer', 'route' => 'sacco.withdrawals', 'path' => '/sacco/withdrawals', 'match' => ['sacco.withdrawals'], 'can' => 'sacco_withdraw'],
-                ['label' => 'Approvals', 'icon' => 'fa-check-double', 'route' => 'sacco.approvals', 'path' => '/sacco/approvals', 'match' => ['sacco.approvals'], 'can' => 'sacco_approve'],
-                ['label' => 'Savings', 'icon' => 'fa-piggy-bank', 'route' => 'sacco.savings', 'path' => '/sacco/savings', 'match' => ['sacco.savings*'], 'can' => 'sacco_view'],
-                ['label' => 'Shares', 'icon' => 'fa-coins', 'route' => 'sacco.shares', 'path' => '/sacco/shares', 'match' => ['sacco.shares'], 'can' => 'sacco_view'],
+                ['label' => 'Approvals', 'icon' => 'fa-check-double', 'route' => 'sacco.approvals', 'path' => '/sacco/approvals', 'match' => ['sacco.approvals'], 'can' => ['sacco_approve', 'sacco_audit_view']],
+                ['label' => 'Savings', 'icon' => 'fa-piggy-bank', 'route' => 'sacco.savings', 'path' => '/sacco/savings', 'match' => ['sacco.savings*'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                ['label' => 'Shares', 'icon' => 'fa-coins', 'route' => 'sacco.shares', 'path' => '/sacco/shares', 'match' => ['sacco.shares'], 'can' => ['sacco_view', 'sacco_audit_view']],
                 ['key' => 'sacco_books', 'label' => 'Books', 'icon' => 'fa-book', 'items' => [
-                    ['label' => 'Chart of accounts', 'icon' => 'fa-list-check', 'route' => 'sacco.accounts', 'path' => '/sacco/accounts', 'match' => ['sacco.accounts'], 'can' => 'sacco_view'],
-                    ['label' => 'Journal', 'icon' => 'fa-book', 'route' => 'sacco.journal', 'path' => '/sacco/journal', 'match' => ['sacco.journal'], 'can' => 'sacco_accounts'],
-                    ['label' => 'Periods', 'icon' => 'fa-calendar-days', 'route' => 'sacco.periods', 'path' => '/sacco/periods', 'match' => ['sacco.periods'], 'can' => 'sacco_accounts'],
+                    ['label' => 'Chart of accounts', 'icon' => 'fa-list-check', 'route' => 'sacco.accounts', 'path' => '/sacco/accounts', 'match' => ['sacco.accounts'], 'can' => ['sacco_view', 'sacco_audit_view']],
+                    ['label' => 'Journal', 'icon' => 'fa-book', 'route' => 'sacco.journal', 'path' => '/sacco/journal', 'match' => ['sacco.journal'], 'can' => ['sacco_accounts', 'sacco_audit_view']],
+                    ['label' => 'Periods', 'icon' => 'fa-calendar-days', 'route' => 'sacco.periods', 'path' => '/sacco/periods', 'match' => ['sacco.periods'], 'can' => ['sacco_accounts', 'sacco_audit_view']],
                 ]],
-                ['label' => 'SACCO reports', 'icon' => 'fa-chart-pie', 'route' => 'sacco.reports', 'path' => '/sacco/reports', 'match' => ['sacco.reports*'], 'can' => 'sacco_reports'],
-                ['label' => 'Officers', 'icon' => 'fa-user-shield', 'route' => 'sacco.officers', 'path' => '/sacco/officers', 'match' => ['sacco.officers'], 'can' => 'sacco_officers'],
-                ['label' => 'SACCO settings', 'icon' => 'fa-sliders', 'route' => 'sacco.settings', 'path' => '/sacco/settings', 'match' => ['sacco.settings'], 'can' => 'sacco_settings'],
+                ['label' => 'SACCO reports', 'icon' => 'fa-chart-pie', 'route' => 'sacco.reports', 'path' => '/sacco/reports', 'match' => ['sacco.reports*'], 'can' => ['sacco_reports', 'sacco_audit_view']],
+                ['label' => 'Officers', 'icon' => 'fa-user-shield', 'route' => 'sacco.officers', 'path' => '/sacco/officers', 'match' => ['sacco.officers'], 'can' => ['sacco_officers', 'sacco_audit_view']],
+                ['label' => 'SACCO settings', 'icon' => 'fa-sliders', 'route' => 'sacco.settings', 'path' => '/sacco/settings', 'match' => ['sacco.settings'], 'can' => ['sacco_settings', 'sacco_audit_view']],
                 ['label' => 'Audit trail', 'icon' => 'fa-shield-halved', 'route' => 'sacco.audit', 'path' => '/sacco/audit', 'match' => ['sacco.audit'], 'can' => 'sacco_audit_view'],
             ]],
             ['key' => 'catalogue', 'label' => 'Shop', 'module' => 'shop', 'entries' => [

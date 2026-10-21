@@ -116,4 +116,31 @@ class ChartOfAccountsTest extends TestCase
         [$other] = $this->saccoBooks();
         $this->assertNull(SaccoLedgerAccount::withoutGlobalScopes()->where('company_id', $other->id)->where('code', '1201')->first());
     }
+
+    public function test_the_chart_file_is_found_from_the_kernel_whatever_the_apps_database_path(): void
+    {
+        $kernel = dirname(__DIR__, 3);
+        $this->assertSame($kernel.'/database/data/sacco_chart.php', ChartOfAccounts::path());
+        $this->assertFileExists(ChartOfAccounts::path());
+        $this->app->useDatabasePath(sys_get_temp_dir().'/another-app/database'); // the web portal's own folder
+        try {
+            $this->assertNotEmpty(ChartOfAccounts::rows('office'));
+            $this->assertStringStartsWith($kernel, ChartOfAccounts::path());
+        } finally {
+            $this->app->useDatabasePath($kernel.'/database');
+        }
+    }
+
+    public function test_the_auditor_reads_every_page_that_shows_the_books(): void
+    {
+        $section = collect(\App\Support\ShopMenu::sections())->firstWhere('key', 'sacco');
+        $pages = collect($section['entries'])->flatMap(fn ($e) => $e['items'] ?? [$e])->keyBy('route');
+        foreach (['sacco.overview', 'sacco.members', 'sacco.approvals', 'sacco.savings', 'sacco.shares', 'sacco.accounts', 'sacco.journal', 'sacco.periods',
+            'sacco.reports', 'sacco.officers', 'sacco.settings', 'sacco.audit'] as $route) {
+            $this->assertContains('sacco_audit_view', (array) $pages[$route]['can'], $route);
+        }
+        foreach (['sacco.teller', 'sacco.withdrawals'] as $route) {
+            $this->assertNotContains('sacco_audit_view', (array) $pages[$route]['can'], $route.' moves money: not an auditor\'s page');
+        }
+    }
 }
