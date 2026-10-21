@@ -563,3 +563,22 @@ approval.**
 
 - It is seeded per year and editable by the platform admin for movable feasts.
 - *Why:* cooling-off and return due dates count working days.
+
+---
+
+## Decisions made while building P1
+
+**AK-55: A control account's `control_of` names the account family; its lines carry the sub-ledger's `sub_type`.**
+
+- `control_of` keeps the chart's finer names (`loan_principal`, `loan_interest`, `loan_penalty`, `loan_fees`, `fines`,
+  `fund`), while a line names the row it belongs to (`loan`, `fine`, `fund_due`). The map is
+  `SaccoLedgerAccount::CONTROLS`; `savings` and `shares` are the same on both sides.
+- *Why:* ADR 0009 §4.2 says "sub_type = the account's control_of", but §3.2 gives the two different value lists. Four
+  loan accounts share one loan row, so the line's type is the row's.
+
+**AK-56: The rules CHECK constraints encode are also enforced by the application, on every database.**
+
+- The local MAMP server is MySQL 5.7.44, which parses but ignores CHECK, so `SchemaIntegrity` marks them `app_only`
+  there. `PostingService` validates every line before any write (one side, non-negative, the sub-ledger pair), and
+  `SchemaIntegrity::STATUS_MODELS` guards the sacco status columns on save.
+- The immutability triggers do install on 5.7. On MySQL 8.0.16+ the CHECKs are added as designed.

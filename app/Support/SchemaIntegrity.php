@@ -58,6 +58,19 @@ class SchemaIntegrity
         ['invites', 'company_id', 'companies', 'cascade'],
         ['company_role_permissions', 'company_id', 'companies', 'cascade'],
         ['locations', 'company_id', 'companies', 'restrict'],
+        // Akiba Ledger (ADR 0009 §5): the books keep their company, and nothing a journal points to is ever deleted.
+        ['sacco_ledger_accounts', 'company_id', 'companies', 'restrict'],
+        ['sacco_ledger_accounts', 'parent_id', 'sacco_ledger_accounts', 'restrict'],
+        ['sacco_ledger_heads', 'company_id', 'companies', 'restrict'],
+        ['sacco_periods', 'company_id', 'companies', 'restrict'],
+        ['sacco_period_balances', 'period_id', 'sacco_periods', 'restrict'],
+        ['sacco_period_balances', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
+        ['sacco_journal_entries', 'company_id', 'companies', 'restrict'],
+        ['sacco_journal_entries', 'period_id', 'sacco_periods', 'restrict'],
+        ['sacco_journal_entries', 'reverses_entry_id', 'sacco_journal_entries', 'restrict'],
+        ['sacco_journal_lines', 'journal_entry_id', 'sacco_journal_entries', 'restrict'],
+        ['sacco_journal_lines', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
+        ['sacco_account_balances', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -68,6 +81,22 @@ class SchemaIntegrity
         ['shifts', 'status', ['open', 'closed']],
         ['company_members', 'status', ['active', 'inactive', 'invited', 'revoked']],
         ['invites', 'status', ['pending', 'accepted', 'revoked']],
+        ['sacco_ledger_accounts', 'type', ['asset', 'liability', 'equity', 'income', 'expense']],
+        ['sacco_ledger_accounts', 'normal_side', ['debit', 'credit']],
+        ['sacco_ledger_accounts', 'control_of', ['savings', 'shares', 'loan_principal', 'loan_interest', 'loan_penalty', 'loan_fees', 'fines', 'fund']],
+        ['sacco_periods', 'status', ['open', 'closing', 'closed']],
+        ['sacco_journal_lines', 'sub_type', ['savings', 'shares', 'loan', 'fine', 'fund_due']],
+    ];
+
+    /**
+     * [table, constraint name, condition every row must meet]: rules wider than one column's values (ADR 0009 §5).
+     * Added like CHECKS: only when the data meets them, only where the database enforces CHECK.
+     */
+    public const EXPRESSIONS = [
+        ['sacco_journal_lines', 'chk_sacco_journal_lines_one_side', '((`debit_minor` = 0) <> (`credit_minor` = 0))'],
+        ['sacco_journal_lines', 'chk_sacco_journal_lines_sub_pair', '((`sub_type` IS NULL) = (`sub_id` IS NULL))'],
+        ['sacco_journal_entries', 'chk_sacco_journal_entries_total', '(`total_minor` > 0)'],
+        ['sacco_journal_entries', 'chk_sacco_journal_entries_dates', '(`value_date` <= `entry_date`)'],
     ];
 
     /** Models whose status is guarded on save on every database (CHECK needs MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -77,6 +106,9 @@ class SchemaIntegrity
         'subscriptions' => \App\Models\Subscription::class,
         'shifts' => \App\Models\Shift::class,
         'company_members' => \App\Models\CompanyMember::class,
+        'sacco_ledger_accounts' => \App\Models\SaccoLedgerAccount::class,
+        'sacco_periods' => \App\Models\SaccoPeriod::class,
+        'sacco_journal_lines' => \App\Models\SaccoJournalLine::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */
@@ -195,6 +227,32 @@ class SchemaIntegrity
                 DB::statement("ALTER TABLE `{$table}` ADD CONSTRAINT `{$name}` CHECK (`{$column}` IS NULL OR `{$column}` IN ({$list}))");
             }
             $out[] = ['kind' => 'check', 'target' => "{$table}.{$column}", 'status' => $apply ? 'added' : 'ready'];
+        }
+
+        foreach (self::EXPRESSIONS as [$table, $name, $condition]) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+            if (! $checks) {
+                $out[] = ['kind' => 'check', 'target' => $name, 'status' => 'app_only', 'detail' => 'this database version does not enforce CHECK; the application guards it'];
+
+                continue;
+            }
+            if (self::hasConstraint($table, $name)) {
+                $out[] = ['kind' => 'check', 'target' => $name, 'status' => 'ok'];
+
+                continue;
+            }
+            $bad = (int) DB::table($table)->whereRaw("NOT {$condition}")->count();
+            if ($bad > 0) {
+                $out[] = ['kind' => 'check', 'target' => $name, 'status' => 'skipped', 'detail' => "{$bad} row(s) break it"];
+
+                continue;
+            }
+            if ($apply) {
+                DB::statement("ALTER TABLE `{$table}` ADD CONSTRAINT `{$name}` CHECK {$condition}");
+            }
+            $out[] = ['kind' => 'check', 'target' => $name, 'status' => $apply ? 'added' : 'ready'];
         }
 
         return $out;

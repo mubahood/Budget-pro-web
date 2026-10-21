@@ -28,7 +28,7 @@ These claims from the reuse inventory were checked in the code on 2026-10-21. Th
 | `Messenger::send($to, $text, $channels, $meta, $now)`; the log driver is the dev default | K `app/Services/Messaging/Messenger.php:31` | Yes |
 | `MomoCollections::request(SaleRecord …)` is tied to a sale. `momo_requests` has `sale_record_id` and `amount decimal(20,2)`. No payout exists | K | Yes |
 | `XlsxWriter` is in-house; `barryvdh/laravel-dompdf ^2.1` is installed | K `app/Services/Reports/XlsxWriter.php`, `composer.json` | Yes |
-| `SchemaIntegrity` adds CHECK constraints (MySQL 8.0.16+ or MariaDB 10.2+); local MySQL is 8.0.35 | K `app/Support/SchemaIntegrity.php:34` | Yes |
+| `SchemaIntegrity` adds CHECK constraints (MySQL 8.0.16+ or MariaDB 10.2+) | K `app/Support/SchemaIntegrity.php:34` | Yes, but the local MAMP server is **MySQL 5.7.44** (the 8.0 is only the client), so locally every CHECK is `app_only`: `PostingService` and the model guards (`SchemaIntegrity::STATUS_MODELS`) enforce the same rules on every database (AK-56). Triggers do install on 5.7. |
 | `SupportContact::APPS` lists 9 surfaces; a new app needs an entry | K `app/Support/SupportContact.php:40` | Yes |
 | `OtpService` (purposes login, register, reset, verify), `DataCrypt`, `NumberSequencer`, `DuplicateService`, `StoredFile`, `IdempotentRequests` and `Shop\ApprovalService` all exist | K | Yes |
 | Models are flat in `app/Models` with a module prefix (`Poultry*`) | K | Yes. Akiba uses the `Sacco*` prefix. |
