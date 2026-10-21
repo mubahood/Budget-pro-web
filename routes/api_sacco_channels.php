@@ -10,6 +10,7 @@
 use App\Http\Controllers\Api\V1\Sacco\CollectionController;
 use App\Http\Controllers\Api\V1\Sacco\MemberMoneyController;
 use App\Http\Controllers\Api\V1\Sacco\PayoutController;
+use App\Http\Controllers\Api\V1\Sacco\StatementController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sacco', 'api.subscription', 'api.perm', 'api.idempotent'])->group(function () {
@@ -23,6 +24,13 @@ Route::prefix('sacco')->middleware(['auth:sanctum', 'api.tenant', 'api.module:sa
     Route::get('payouts/{id}', [PayoutController::class, 'show'])->whereNumber('id');
     Route::post('payouts/{id}/retry', [PayoutController::class, 'retry'])->whereNumber('id')->middleware('throttle:30,1');
     Route::post('payouts/{id}/resolve', [PayoutController::class, 'resolve'])->whereNumber('id');
+
+    Route::get('statement-imports', [StatementController::class, 'index']);
+    Route::post('statement-imports', [StatementController::class, 'store'])->middleware('throttle:10,1');
+    Route::get('statement-imports/{id}', [StatementController::class, 'show'])->whereNumber('id');
+    Route::post('statement-imports/{id}/match', [StatementController::class, 'match'])->whereNumber('id');
+    Route::post('statement-imports/{id}/lines/{line}/{action}', [StatementController::class, 'review'])->whereNumber(['id', 'line'])
+        ->whereIn('action', ['confirm', 'reject', 'link', 'ignore', 'unignore', 'journal']);
 });
 
 Route::prefix('sacco/me')->middleware([\App\Http\Middleware\SaccoMemberAuth::class, 'throttle:60,1'])->group(function () {

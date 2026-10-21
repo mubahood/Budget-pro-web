@@ -96,6 +96,7 @@ class ApiPermissionMap
         [['POST'], '#^sacco/collections(/\d+/check)?$#', 'sacco_teller'],
         [['POST'], '#^sacco/payouts/\d+/retry$#', 'sacco_disburse'],
         [['POST'], '#^sacco/payouts/\d+/resolve$#', 'sacco_approve'],
+        [['POST'], '#^sacco/statement-imports(/\d+(/match|/lines/\d+/[a-z]+))?$#', 'sacco_accounts'],
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],

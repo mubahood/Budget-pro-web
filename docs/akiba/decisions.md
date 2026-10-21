@@ -953,3 +953,17 @@ approval.**
 - The withdrawal receipt's own message waits for the provider's success; an approval above the threshold, the
   available-balance guard, the monthly limit and the fee apply exactly as for cash. A group (no 2160 in its chart)
   pays out in cash only; `checkoff` is never a way to pay out.
+
+**AK-103: Statement matching proposes; a person confirms; a missing entry is a manual journal through its approval (P3.4).**
+
+- One import per file and account (`file_hash`); 1100, 1150 and 1160 only; the source picks the default account
+  (bank → 1100, MTN and Airtel → 1150, Flutterwave → 1160). Lines are signed from the account's side (+ money in, a
+  debit in the books). Headers are found by name per source, so column order and extra columns do not matter;
+  provider lines whose status is not a success (pending, failed, reversed) are not money and are skipped.
+- A proposal needs the same account, amount and side within three days; a reference the entry is known by (its
+  number, its receipt, the receipt's reference, a collection's `tx_ref`, a payout's provider reference, or a
+  `[reference]` in a journal's memo) wins; equal candidates are left for a person. A journal line is matched by at most
+  one statement line.
+- Matching and review never post. The `journal` review asks for a `manual_journal` approval (Dr/Cr the statement's
+  account against the account the person names, the line's reference in the memo), which posts only when a second
+  officer approves; matching again then finds it.

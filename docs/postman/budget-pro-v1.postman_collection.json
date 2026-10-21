@@ -10443,6 +10443,159 @@
                     }
                 },
                 {
+                    "name": "GET sacco/statement-imports?ledger_account_id&source */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/statement-imports",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "statement-imports"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/statement-imports (multipart: file, source: bank|mtn|airtel|flutterwave, ledger_account_id?) (sacco_accounts) */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/statement-imports",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "statement-imports"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"file\": \"\",\n    \"source\": \"bank\",\n    \"ledger_account_id\": 1\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "GET sacco/statement-imports/{id}?status&page: the summary and its lines. */",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/statement-imports/:id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "statement-imports",
+                                ":id"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/statement-imports/{id}/lines/{line}/{confirm|reject|link|ignore|unignore|journal} (sacco_accounts) */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/statement-imports/:id/lines/:line/:action",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "statement-imports",
+                                ":id",
+                                "lines",
+                                ":line",
+                                ":action"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"journal_line_id\": 1,\n    \"note\": \"\",\n    \"counter_account_id\": 1,\n    \"memo\": \"\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "POST sacco/statement-imports/{id}/match: propose matches for the lines still unmatched (sacco_accounts). */",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/sacco/statement-imports/:id/match",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sacco",
+                                "statement-imports",
+                                ":id",
+                                "match"
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "GET sacco/transactions?member_id&savings_account_id&kind&status&from&to */",
                     "request": {
                         "method": "GET",
@@ -10594,7 +10747,7 @@
                     }
                 },
                 {
-                    "name": "POST sacco/withdrawals {uuid, savings_account_id, amount_minor, channel: cash|bank} (sacco_withdraw; above the threshold → pending_approval, 202) */",
+                    "name": "POST sacco/withdrawals {uuid, savings_account_id, amount_minor, channel: cash|bank|momo, momo_phone?} (sacco_withdraw; above the threshold → pending_a",
                     "request": {
                         "method": "POST",
                         "header": [
