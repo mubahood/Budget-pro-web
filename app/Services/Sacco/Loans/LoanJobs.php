@@ -5,6 +5,7 @@ namespace App\Services\Sacco\Loans;
 use App\Models\SaccoLoan;
 use App\Models\SaccoLoanScheduleLine;
 use App\Models\SaccoMember;
+use App\Models\SaccoPeriod;
 use App\Services\Sacco\SaccoTransactions;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,15 @@ final class LoanJobs
         $last = SaccoLoan::withoutGlobalScopes()->where('company_id', $companyId)->max('arrears_on');
         for ($m = Carbon::parse($last ?? $end)->startOfMonth()->addMonthNoOverflow(); $m->lte($end); $m->addMonthNoOverflow()) {
             $days[$m->toDateString()] = true; // a month end with no open loan still gets its provisioning run
+        }
+        // The month-end work (savings interest, dormancy, provisioning) is the SACCO's, not its loans': every month that
+        // has ended and is not closed gets it, so a new SACCO with savings and no loan yet earns interest and can close.
+        $unclosed = SaccoPeriod::withoutGlobalScopes()->where('company_id', $companyId)->where('status', '!=', 'closed')
+            ->where('ends_on', '<', $end->toDateString())->min('starts_on');
+        if ($unclosed !== null) {
+            for ($m = Carbon::parse($unclosed)->startOfMonth()->addMonthNoOverflow(); $m->lte($end); $m->addMonthNoOverflow()) {
+                $days[$m->toDateString()] = true;
+            }
         }
         ksort($days);
         $out = ['days' => count($days), 'loans' => $loans->count(), 'interest_minor' => 0, 'penalty_minor' => 0];
