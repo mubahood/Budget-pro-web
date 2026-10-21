@@ -901,3 +901,14 @@ approval.**
   repayment fee (Akiba never charges one), a receipt for every payment.
 - Refusal messages never cite a law, regulation or decision number; the citations stay in the code's comments and
   these docs.
+
+**AK-69: Legal checks apply to regulated SACCOs only; no age limits (the owner's instruction, 2026-10-21).**
+
+- No age rule anywhere: a member of any age joins without a guardian, and any member may hold an office. A date of
+  birth (and a guardian) stays optional information.
+- `SaccoRules::strict($company)` is true only for a SACCO with a licence number. Only then: the member's data consent
+  at registration (DPPA), two witnesses on a nomination and more than one share for more than one nominee (Regs 1992
+  reg. 10), the one-third share cap (Tier 4 s.48), a second officer for any withdrawal from a dormant account (Tier 4
+  s.53), and 30 days' notice before a savings rate cut (SI 51 reg. 33). Everyone else may proceed. The SACCO's own
+  settings (entrance fee, minimum shares, withdrawal threshold) and the maker-checker rule apply to all.
+- Refusals say what is needed in plain words and cite no law; the citations stay in code comments and these docs.

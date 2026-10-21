@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
 trait MakesSaccoBooks
 {
     /** @return array{company: Company, owner: User, treasurer: User, teller: User, token: string} */
-    protected function saccoCompany(string $mode = 'office', string $plan = 'akiba-enterprise'): array
+    protected function saccoCompany(string $mode = 'office', string $plan = 'akiba-enterprise', bool $licensed = true): array
     {
         if (! Plan::where('slug', $plan)->exists()) {
             $this->seed(AkibaPlanSeeder::class);
@@ -34,7 +34,9 @@ trait MakesSaccoBooks
         $company = Company::find($t['company_id']);
         Subscription::where('company_id', $company->id)->update(['plan_id' => Plan::where('slug', $plan)->value('id')]);
         $owner = User::withoutGlobalScopes()->find($t['user_id']);
-        app(SaccoSetupService::class)->setup($company->fresh(), ['mode' => $mode, 'legal_name' => 'Test Teachers SACCO', 'registration_no' => 'CS 1234'], $owner);
+        // Licensed by default, so the legal checks apply (AK-69); pass false for an unregistered SACCO or group.
+        app(SaccoSetupService::class)->setup($company->fresh(), ['mode' => $mode, 'legal_name' => 'Test Teachers SACCO', 'registration_no' => 'CS 1234']
+            + ($licensed ? ['licence_no' => 'UMRA/T4/TEST'] : []), $owner);
         $company = $company->fresh();
 
         return ['company' => $company, 'owner' => $owner, 'treasurer' => $this->saccoStaff($company, 'sacco_treasurer'), 'teller' => $this->saccoStaff($company, 'sacco_teller'),

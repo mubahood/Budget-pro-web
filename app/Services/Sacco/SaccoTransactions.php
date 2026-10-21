@@ -484,8 +484,8 @@ final class SaccoTransactions
         if ($amount > (int) $settings->withdrawal_approval_above_minor) {
             $reasons[] = 'above_threshold';
         }
-        if ($account->status === 'dormant') {
-            $reasons[] = 'dormant';
+        if ($account->status === 'dormant' && \App\Support\Rules\SaccoRules::strict($cid)) {
+            $reasons[] = 'dormant'; // Tier 4 s.53: two officers for a dormant account (a regulated SACCO, AK-69)
         }
         if ((int) $product->notice_days > 0) {
             $reasons[] = 'notice';

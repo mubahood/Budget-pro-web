@@ -53,7 +53,7 @@ class SaccoMember extends Model
                 return;
             }
             $company = Company::withoutGlobalScopes()->findOrFail($m->company_id);
-            if ($m->consent_data_at === null) {
+            if ($m->consent_data_at === null && \App\Support\Rules\SaccoRules::strict((int) $m->company_id)) {
                 throw BusinessRuleException::make('consent_required', 'Record the member\'s consent to keep their details first.');
             }
             app(\App\Services\Billing\Quotas::class)->assertCanAdd($company, 'members');
@@ -66,7 +66,7 @@ class SaccoMember extends Model
             $m->consent_version ??= \App\Services\Sacco\Members\MemberService::CONSENT_VERSION;
         });
         static::deleting(function () {
-            throw BusinessRuleException::make('member_history', 'A member is never deleted: their record stays for ten years (SI 51 reg. 33). Change their status instead.');
+            throw BusinessRuleException::make('member_history', 'A member is never deleted: their record stays. Change their status instead.');
         });
     }
 

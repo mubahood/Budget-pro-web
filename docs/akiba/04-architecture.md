@@ -86,6 +86,11 @@ anything missed.
 
 ### 3.0 Conventions for every table
 
+> **Legal checks apply to regulated SACCOs only (AK-69, the owner's instruction of 2026-10-21).** A rule this document
+> grounds in a law (the Cooperative Societies Act and its 1992 regulations, the Tier 4 Act, SI 51, SI 108, the DPPA)
+> blocks an action only for a SACCO with a licence number (`SaccoRules::strict()`); everyone else may proceed. There
+> are no age limits at all. Refusals use plain words; the laws stay in comments and these docs.
+
 - **Keys and tenancy:**
   - `id BIGINT UNSIGNED` primary key;
   - `company_id BIGINT UNSIGNED NOT NULL`, with a foreign key to `companies` `ON DELETE RESTRICT` (added through `SchemaIntegrity::FOREIGN_KEYS`);
@@ -151,7 +156,7 @@ anything missed.
 | kind | VARCHAR(12) | `individual`, `group` (enterprise group or association) or `institution` |
 | first_name, last_name, other_names | VARCHAR(80) | For kind `group`, the name is in `first_name` |
 | gender | VARCHAR(8) NULL | `female`, `male` or `other`, for gender-disaggregated statistics |
-| date_of_birth | DATE NULL | 12–17 may be members but not officers (Coop s.13) |
+| date_of_birth | DATE NULL | Optional information: no age limit for members or officers (AK-69) |
 | nin_encrypted | TEXT NULL | `DataCrypt` (AK-31) |
 | nin_hash | CHAR(64) NULL | HMAC-SHA256 with `config('sacco.nin_pepper')`. `INDEX(company_id, nin_hash)`. Used to find duplicates, not as a unique constraint (ADR 0007). |
 | phone_e164, phone_alt_e164 | VARCHAR(20) NULL | `Phone::e164`; `INDEX(company_id, phone_e164)` |
@@ -169,7 +174,7 @@ anything missed.
 | consent_data_at | TIMESTAMP NULL | DPPA s.7/s.9 explicit consent, including the hosting clause (AK-47) |
 | consent_messages_at, messages_opt_out_at | TIMESTAMP NULL | Read by `Messenger`'s consent check through `meta.sacco_member_id` (§10) |
 | consent_credit_bureau_at | TIMESTAMP NULL | SI 108 reg. 14. Captured; no export in v1. |
-| guardian_name, guardian_phone_e164 | NULL | Members aged 12–17 (DPPA s.8) |
+| guardian_name, guardian_phone_e164 | NULL | Optional, for a young member (AK-69) |
 | is_insider | TINYINT(1) | Derived on save: an active officer or employee. Cached for loan routing. |
 | photo_file_id, signature_file_id | BIGINT UNSIGNED NULL → files | `StoredFile`, counted by `Quotas::assertCanStore` |
 | merged_into_id | BIGINT UNSIGNED NULL | ADR 0007 tombstone target |

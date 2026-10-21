@@ -46,7 +46,7 @@ final class SaccoMemberRules
             'payroll_no' => ['sometimes', 'nullable', 'string', 'max:40'],
             'joined_on' => ['sometimes', 'nullable', 'date'],
             // DPPA s.7/s.9 (AK-47): registering needs the member's consent to keep their data, hosting clause included.
-            'consent_data' => [$creating ? 'accepted' : 'sometimes', 'boolean'],
+            'consent_data' => ['sometimes', 'boolean'], // required only of a regulated SACCO (MemberService, AK-69)
             'consent_messages' => ['sometimes', 'boolean'],
             'consent_credit_bureau' => ['sometimes', 'boolean'],
             'guardian_name' => ['sometimes', 'nullable', 'string', 'max:150'],

@@ -99,7 +99,7 @@ class ConcurrentWithdrawalsTest extends TestCase
         $company->owner_id = $owner->id;
         $company->saveQuietly();
         SaccoSetting::create(['company_id' => $cid, 'mode' => 'office', 'legal_name' => 'Race SACCO', 'short_name' => 'Race', 'currency' => 'UGX',
-            'withdrawal_approval_above_minor' => 100_000_000, 'offline_receipt_max_minor' => 5_000_000, 'share_par_minor' => 10_000, 'min_shares' => 1,
+            'withdrawal_approval_above_minor' => 100_000_000, 'offline_receipt_max_minor' => 5_000_000, 'licence_no' => 'UMRA/T4/RACE', 'share_par_minor' => 10_000, 'min_shares' => 1,
             'max_holding_bp' => 3333, 'entrance_fee_minor' => 0, 'receipts_channel' => 'none', 'dividend_cap_bp' => 1000, 'reserve_min_bp' => 1000, 'education_fund_bp' => 100, 'dormancy_months' => 24]);
         (new ChartOfAccounts())->seed($cid, 'office');
         (new PeriodService())->ensureAhead($cid, now(), 2);

@@ -158,7 +158,8 @@ final class SavingsProducts
         $new = $this->normalise(array_merge($old, $v->validated()), $settings, $product->kind);
         $new = array_intersect_key($new, array_flip(SaccoSavingsProduct::TERMS));
         $today = LocalDate::today($companyId);
-        $earliest = (int) $new['interest_rate_bp'] < (int) $old['interest_rate_bp'] ? $today->copy()->addDays(self::RATE_CUT_NOTICE_DAYS) : $today;
+        // SI 51 reg. 33: a regulated SACCO tells members of a rate cut 30 days ahead (AK-69).
+        $earliest = (int) $new['interest_rate_bp'] < (int) $old['interest_rate_bp'] && SaccoRules::strict($companyId) ? $today->copy()->addDays(self::RATE_CUT_NOTICE_DAYS) : $today;
         $from = isset($payload['effective_from']) && $payload['effective_from'] !== null ? Carbon::parse((string) $payload['effective_from'])->startOfDay() : $earliest;
         if ($from->lt($earliest)) {
             throw BusinessRuleException::make('notice_too_short', 'A lower savings rate takes effect at least '.self::RATE_CUT_NOTICE_DAYS.' days after members are told: choose '.$earliest->toDateString().' or later.',

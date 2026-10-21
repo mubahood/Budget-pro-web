@@ -10,6 +10,18 @@ use Illuminate\Validation\Rule;
  */
 final class SaccoRules
 {
+    /**
+     * Whether the SACCO is regulated: it has a licence number (P1.7, AK-14). Checks that rest on a law (the
+     * Cooperative Societies Act and its regulations, the Tier 4 Act and SI 51, the DPPA) apply only then; every
+     * other SACCO or group may proceed (AK-69, the owner's instruction of 2026-10-21).
+     */
+    public static function strict(\App\Models\Company|int|null $company): bool
+    {
+        $id = $company instanceof \App\Models\Company ? (int) $company->id : $company;
+
+        return $id !== null && filled(\App\Models\SaccoSetting::for($id)?->licence_no);
+    }
+
     /** The largest amount a form may carry (well inside BIGINT, so sums of many still fit). */
     public const MAX_MINOR = 1_000_000_000_000_000;
 

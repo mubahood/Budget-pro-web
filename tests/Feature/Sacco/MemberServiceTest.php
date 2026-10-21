@@ -41,7 +41,7 @@ class MemberServiceTest extends ApiTestCase
         $company = Company::find($t['company_id']);
         Subscription::where('company_id', $company->id)->update(['plan_id' => Plan::where('slug', $plan === 'akiba-free' ? 'akiba-enterprise' : $plan)->value('id')]);
         $owner = User::withoutGlobalScopes()->find($t['user_id']);
-        app(SaccoSetupService::class)->setup($company->fresh(), ['mode' => $mode, 'legal_name' => 'Members SACCO'], $owner);
+        app(SaccoSetupService::class)->setup($company->fresh(), ['mode' => $mode, 'legal_name' => 'Members SACCO', 'licence_no' => 'UMRA/T4/MEM'], $owner); // licensed: the legal checks apply (AK-69)
         if ($plan === 'akiba-free') {
             Subscription::where('company_id', $company->id)->update(['plan_id' => Plan::where('slug', 'akiba-free')->value('id')]);
         }
@@ -121,7 +121,7 @@ class MemberServiceTest extends ApiTestCase
         $teller = $this->saccoStaff($company, 'sacco_teller');
         $this->assertSame('forbidden', $this->code(fn () => app(MemberService::class)->revealNin($company, (int) $m->id, $teller)));
         $this->assertSame('invalid_nin', $this->code(fn () => app(MemberService::class)->register($company, $this->person(['nin' => '12']), $owner)));
-        $this->assertSame('invalid_member', $this->code(fn () => app(MemberService::class)->register($company, $this->person(['consent_data' => false]), $owner)), 'consent is required');
+        $this->assertSame('consent_required', $this->code(fn () => app(MemberService::class)->register($company, $this->person(['consent_data' => false]), $owner)), 'consent is required');
     }
 
     public function test_a_second_officer_verifies_identity_and_status_follows_the_rules(): void
@@ -150,8 +150,8 @@ class MemberServiceTest extends ApiTestCase
         // Group mode: members are active at once.
         [$group, $gOwner] = $this->sacco('group');
         $this->assertSame('active', $svc->register($group, $this->person(), $gOwner)['member']->status);
-        $this->assertSame('too_young', $this->code(fn () => $svc->register($group, $this->person(['date_of_birth' => now()->subYears(10)->toDateString()]), $gOwner)));
-        $this->assertSame('guardian_required', $this->code(fn () => $svc->register($group, $this->person(['date_of_birth' => now()->subYears(15)->toDateString()]), $gOwner)));
+        // No age limits, no required guardian (AK-69): a five-year-old joins an unregistered group.
+        $this->assertSame('active', $svc->register($group, $this->person(['date_of_birth' => now()->subYears(5)->toDateString()]), $gOwner)['member']->status);
     }
 
     public function test_nominations_add_up_and_have_two_witnesses(): void
@@ -209,11 +209,12 @@ class MemberServiceTest extends ApiTestCase
         [$company, $owner] = $this->sacco('group');
         $svc = app(MemberService::class);
         $m = $svc->register($company, $this->person(), $owner)['member'];
-        $minor = $svc->register($company, $this->person(['date_of_birth' => now()->subYears(16)->toDateString(), 'guardian_name' => 'Mother']), $owner)['member'];
+        $minor = $svc->register($company, $this->person(['date_of_birth' => now()->subYears(16)->toDateString()]), $owner)['member'];
         $this->assertFalse((bool) $m->fresh()->is_insider);
         $seat = app(OfficerService::class)->appoint((int) $company->id, ['position' => 'treasurer', 'member_id' => $m->id], (int) $owner->id);
         $this->assertTrue($m->fresh()->is_insider);
-        $this->assertSame('invalid_officer', $this->code(fn () => app(OfficerService::class)->appoint((int) $company->id, ['position' => 'secretary', 'member_id' => $minor->id], (int) $owner->id)));
+        $this->assertSame('secretary', app(OfficerService::class)->appoint((int) $company->id, ['position' => 'secretary', 'member_id' => $minor->id], (int) $owner->id)->position,
+            'a 16-year-old may hold an office (AK-69)');
         $this->assertSame(['treasurer'], \App\Models\SaccoOfficer::withoutGlobalScopes()->where('member_id', $m->id)->pluck('position')->all());
 
         [$other] = $this->sacco();

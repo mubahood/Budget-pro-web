@@ -17,6 +17,7 @@ use App\Services\Sacco\SaccoApprovals;
 use App\Services\Sacco\SaccoTransactions;
 use App\Services\Shop\NumberSequencer;
 use App\Support\LocalDate;
+use App\Support\Rules\SaccoRules;
 use App\Support\Sacco\Amount;
 use App\Support\Sync\SyncSequence;
 use Illuminate\Support\Facades\DB;
@@ -247,6 +248,9 @@ final class ShareService
         $holders = $rows->count() + ($rows->contains('id', $account->id) ? 0 : 1);
         $mine = (int) ($rows->firstWhere('id', $account->id)->shares_count ?? 0) + $adding;
         $cap = (int) $settings->max_holding_bp;
+        if (! SaccoRules::strict($companyId)) {
+            return; // Tier 4 s.48 binds a regulated SACCO only (AK-69)
+        }
         if ($holders >= self::CAP_MIN_HOLDERS && $cap > 0 && $total > 0 && intdiv($mine * 10000, $total) > $cap) { // the holding in whole basis points: exactly a third is 3333
             throw BusinessRuleException::make('share_cap_exceeded', 'No member may hold more than '.rtrim(rtrim(number_format($cap / 100, 2), '0'), '.').' % of the shares.',
                 ['max_holding_bp' => $cap, 'max_shares' => intdiv($cap * $total, 10000)]);
@@ -322,8 +326,9 @@ final class ShareService
             }
         });
         \App\Services\Sacco\Members\MemberService::nominationCheck('shares', function (Company $company, SaccoMember $member, array $nominees) {
-            if (count($nominees) > 1 && self::sharesOf((int) $company->id, (int) $member->id) <= 1) {
-                throw BusinessRuleException::make('nomination_needs_shares', 'More than one nominee needs more than one share (Regulations 1992 reg. 10).');
+            // Regs 1992 reg. 10, for a regulated SACCO only (AK-69).
+            if (SaccoRules::strict($company) && count($nominees) > 1 && self::sharesOf((int) $company->id, (int) $member->id) <= 1) {
+                throw BusinessRuleException::make('nomination_needs_shares', 'More than one nominee needs more than one share.');
             }
         });
     }

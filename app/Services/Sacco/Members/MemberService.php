@@ -17,7 +17,6 @@ use App\Services\Shop\NumberSequencer;
 use App\Support\LocalDate;
 use App\Support\Phone;
 use App\Support\Rules\SaccoMemberRules;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -181,7 +180,8 @@ final class MemberService
         if (array_sum(array_map(fn ($n) => (int) $n['share_bp'], $nominees)) !== 10000) {
             throw BusinessRuleException::make('nomination_total', 'The nominees\' portions must add up to 100 %.');
         }
-        if (blank($witness1) || blank($witness2) || mb_strtolower(trim($witness1)) === mb_strtolower(trim($witness2))) {
+        // Regs 1992 reg. 10 (a regulated SACCO): two different witnesses attest a nomination.
+        if (\App\Support\Rules\SaccoRules::strict($company) && (blank($witness1) || blank($witness2) || mb_strtolower(trim($witness1)) === mb_strtolower(trim($witness2)))) {
             throw BusinessRuleException::make('witnesses_required', 'Two different witnesses sign a nomination.');
         }
 
@@ -423,11 +423,10 @@ final class MemberService
         if (array_key_exists('consent_messages', $in)) {
             $out['messages_opt_out_at'] = $in['consent_messages'] ? null : now();
         }
-        if (! empty($out['date_of_birth']) && Carbon::parse($out['date_of_birth'])->diffInYears(now()) < 12) {
-            throw BusinessRuleException::make('too_young', 'A member is 12 or older (Cooperative Societies Act s.13).');
-        }
-        if (! empty($out['date_of_birth']) && Carbon::parse($out['date_of_birth'])->diffInYears(now()) < 18 && blank($out['guardian_name'] ?? null) && $creating) {
-            throw BusinessRuleException::make('guardian_required', 'A member under 18 needs a parent or guardian on the record (DPPA s.8).');
+        // No age limits and no required guardian (AK-69): a date of birth is optional information.
+        if ($creating && empty($out['consent_data_at']) && \App\Support\Rules\SaccoRules::strict($company)) {
+            // DPPA s.7/s.9: a regulated SACCO records the member's consent to keep their data.
+            throw BusinessRuleException::make('consent_required', 'Record the member\'s consent to keep their details first.');
         }
 
         return $out;

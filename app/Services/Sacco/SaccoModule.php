@@ -51,9 +51,6 @@ final class SaccoModule
             if (! in_array($member->status, ['active', 'dormant'], true)) {
                 throw BusinessRuleException::make('invalid_officer', 'Only an active member can hold an office.');
             }
-            if ($member->isMinor()) {
-                throw BusinessRuleException::make('invalid_officer', 'A member under 18 may not hold an office (Cooperative Societies Act s.13).');
-            }
         });
         OfficerService::after('insider', function (int $companyId, SaccoOfficer $officer) {
             if ($officer->member_id !== null) {
