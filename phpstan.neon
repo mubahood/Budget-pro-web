@@ -29,6 +29,7 @@ parameters:
         - app/Models/SaccoAccountBalance.php
         - app/Models/SaccoPeriod.php
         - app/Models/SaccoPeriodBalance.php
+        - app/Models/SaccoSetting.php
         - app/Scopes
     excludePaths:
         - app/Services/AutoReorderService.php

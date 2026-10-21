@@ -3,7 +3,6 @@
 namespace App\Services\Sacco\Ledger;
 
 use App\Exceptions\BusinessRuleException;
-use App\Models\Company;
 use App\Models\SaccoAccountBalance;
 use App\Models\SaccoJournalEntry;
 use App\Models\SaccoJournalLine;
@@ -12,7 +11,6 @@ use App\Models\SaccoLedgerHead;
 use App\Services\Shop\NumberSequencer;
 use App\Support\LocalDate;
 use App\Support\Sacco\Amount;
-use App\Support\Sacco\Currency;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -155,10 +153,10 @@ final class PostingService
         return hash('sha256', $prevHash.json_encode($canonical, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
-    /** The SACCO's currency: its company's, fixed once it has postings (CompanyRules::currencyLocked). */
+    /** The SACCO's currency: fixed in its settings at setup (the company's before that). */
     public static function currency(int $companyId): string
     {
-        return Currency::code((string) (Company::withoutGlobalScopes()->whereKey($companyId)->value('currency') ?: config('saas.default_currency', 'UGX')));
+        return \App\Services\Sacco\PostingCurrency::of($companyId);
     }
 
     /** §4.2, before any write. @return string the SACCO's currency */

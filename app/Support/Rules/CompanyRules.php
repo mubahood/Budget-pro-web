@@ -266,10 +266,11 @@ class CompanyRules
             || DB::table('stock_records')->where('company_id', $companyId)->where('type', 'Sale')->exists();
     }
 
-    /** Past figures are stored in the shop's currency, so it is fixed once there is a sale. */
+    /** Past figures are stored in the shop's currency, so it is fixed once there is a sale (or, for a SACCO, its books are set up). */
     public static function currencyLocked(Company $company): bool
     {
-        return $company->exists && $company->currency && self::hasSales((int) $company->id);
+        return $company->exists && $company->currency && (self::hasSales((int) $company->id)
+            || (in_array('sacco', $company->modules(), true) && DB::table('sacco_settings')->where('company_id', $company->id)->exists()));
     }
 
     /** The payment method keys the shop takes (payment_methods is stored as {methods, momo, opening_float}). */

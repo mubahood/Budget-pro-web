@@ -603,3 +603,16 @@ approval.**
   `savings.voluntary`, 2120 `savings.compulsory`, 2130 `savings.fixed`, 3100 `shares.capital`, 2510 `fund.social`,
   1440 `fines.receivable`, 2400 `payables`, 3600 `reserve.general`, 5400 `exp.governance`, 5740 `exp.software`), so
   code never finds an account by its code.
+
+**AK-59: The first run grows with the module; office mode needs a plan that sells it.**
+
+- `SaccoSetupService::setup` (P1.7) writes the settings, seeds the chart and its head and opens three months. The
+  founder's officer position (P1.8) and the default savings products "Ordinary savings" and "Compulsory savings"
+  (P1.12) join the same transaction through `SaccoSetupService::extend()` when their tables exist: the roadmap puts
+  both in P1.7, before their tables.
+- Setting up in office mode needs the plan feature `sacco_office_mode` (`feature_not_in_plan`): Akiba Free is group
+  mode only (03 §5.2). A SACCO that later falls to Free keeps working (ADR 0005).
+- The books' currency is `sacco_settings.currency`, fixed at setup; `CompanyRules::currencyLocked` also locks the
+  company's currency once a SACCO is set up.
+- `config:doctor` gains `sacco_payouts` (never accepted), `sacco_nin_pepper` and `sacco_messaging` (one count of SACCO
+  accounts, the doctor's only database read), checked in the kernel only.

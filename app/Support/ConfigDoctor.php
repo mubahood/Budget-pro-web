@@ -56,10 +56,14 @@ use Illuminate\Support\Str;
  *   new_ui_url                 SaaS: SAAS_NEW_UI_URL is set (warns)
  *   invite_url                 SaaS: SAAS_INVITE_URL is set (warns)
  *   site_facts                 web app on the SaaS: the public site's company facts are set (warns)
+ *   sacco_payouts              kernel: SACCO_PAYOUTS_DRIVER is not `simulated` (fails; never accepted: members' money would look sent)
+ *   sacco_nin_pepper           kernel: SACCO_NIN_PEPPER is set (members' NIN lookup hash)
+ *   sacco_messaging            kernel: no SACCO account while SMS and WhatsApp are both `log` (receipts would never leave);
+ *                              the one check that reads the database (one query on companies), and only warns if it cannot
  *   accepted                   only when CONFIG_DOCTOR_ACCEPT is set: what it accepts, and entries it ignores
  *
- * Pure and fast: it reads config only (on standalone that includes what Settings › Connections laid
- * over it at boot, see InstallSettings). No network calls, no database.
+ * Fast: it reads config only (on standalone that includes what Settings › Connections laid over it at boot,
+ * see InstallSettings), and one count of SACCO accounts for sacco_messaging. No network calls.
  */
 final class ConfigDoctor
 {
@@ -80,13 +84,14 @@ final class ConfigDoctor
         'master_proxies', 'master_allowlist', 'master_sign_in_forms',
         'mail_mailer', 'mail_enabled', 'mail_messages', 'sms', 'whatsapp', 'connections',
         'flutterwave_keys', 'flutterwave_test_mode', 'flutterwave_webhook',
-        'support_whatsapp', 'support_details', 'new_ui_url', 'invite_url', 'site_facts', 'accepted',
+        'support_whatsapp', 'support_details', 'new_ui_url', 'invite_url', 'site_facts',
+        'sacco_payouts', 'sacco_nin_pepper', 'sacco_messaging', 'accepted',
     ];
 
     /** Failures CONFIG_DOCTOR_ACCEPT can never turn into warnings: each is a security hole or loses data. */
     public const NEVER_ACCEPTED = [
         'edition', 'app_debug', 'data_key', 'queue_sync', 'flutterwave_test_mode', 'master_password_plaintext',
-        'master_proxies', 'master_allowlist',
+        'master_proxies', 'master_allowlist', 'sacco_payouts',
     ];
 
     /** Hosts that are never a live server, whatever APP_URL's scheme (the L4 rule in the class docblock). */
@@ -135,7 +140,8 @@ final class ConfigDoctor
             'masterProxies', 'masterAllowlist', 'masterSignInForms',
             'mailer', 'mailEnabled', 'mailMessages', 'sms', 'whatsapp', 'connections',
             'flutterwaveKeys', 'flutterwaveTestMode', 'flutterwaveWebhook',
-            'supportWhatsapp', 'supportDetails', 'saasLinks', 'siteFacts', 'accepted',
+            'supportWhatsapp', 'supportDetails', 'saasLinks', 'siteFacts',
+            'saccoPayouts', 'saccoNinPepper', 'saccoMessaging', 'accepted',
         ] as $rule) {
             try {
                 $this->{$rule}();
@@ -558,6 +564,58 @@ final class ConfigDoctor
         $missing === []
             ? $this->add('site_facts', 'site', self::OK, 'The public site\'s company facts are set.')
             : $this->add('site_facts', 'site', self::WARN, 'Not set: '.implode(', ', $missing).'. The public site leaves those lines out.', 'Set them in the web app\'s .env.');
+    }
+
+    // ── Akiba Ledger (docs/akiba/04-architecture.md §17), the kernel's own config only ───────────
+
+    private function saccoPayouts(): void
+    {
+        if ($this->app !== self::KERNEL) {
+            return;
+        }
+        $driver = (string) config('sacco.payouts.driver', 'off');
+        match ($driver) {
+            'simulated' => $this->add('sacco_payouts', 'payments', self::FAIL, 'SACCO_PAYOUTS_DRIVER is simulated: mobile-money payouts to SACCO members would be marked sent but no money moves.',
+                'Set SACCO_PAYOUTS_DRIVER=off until the payout keys are in, then flutterwave.'),
+            'off', 'flutterwave' => $this->add('sacco_payouts', 'payments', self::OK, "SACCO payouts are {$driver}."),
+            default => $this->add('sacco_payouts', 'payments', self::FAIL, "SACCO_PAYOUTS_DRIVER is \"{$driver}\": use off, simulated (local only) or flutterwave.", 'Set SACCO_PAYOUTS_DRIVER=off.'),
+        };
+    }
+
+    private function saccoNinPepper(): void
+    {
+        if ($this->app !== self::KERNEL) {
+            return;
+        }
+        blank(config('sacco.nin_pepper'))
+            ? $this->add('sacco_nin_pepper', 'app', self::FAIL, 'SACCO_NIN_PEPPER is empty: members\' national ID numbers would be looked up with the app key, which rotates.',
+                'Set SACCO_NIN_PEPPER to a long random secret (php -r "echo bin2hex(random_bytes(32));") and never change it.')
+            : $this->add('sacco_nin_pepper', 'app', self::OK, 'The NIN lookup secret is set.');
+    }
+
+    private function saccoMessaging(): void
+    {
+        if ($this->app !== self::KERNEL) {
+            return;
+        }
+        $sms = (string) config('messaging.sms.driver');
+        $wa = (string) config('messaging.whatsapp.driver');
+        if ($sms !== 'log' || $wa !== 'log') {
+            $this->add('sacco_messaging', 'messaging', self::OK, 'SACCO receipts can leave the server.');
+
+            return;
+        }
+        try {
+            $saccos = \App\Models\Company::withoutGlobalScopes()->where(fn ($q) => $q->where('enabled_modules', 'like', '%"sacco"%')->orWhere('business_type', 'sacco'))->count();
+        } catch (\Throwable) {
+            $this->add('sacco_messaging', 'messaging', self::WARN, 'Could not count SACCO accounts (no database yet?).');
+
+            return;
+        }
+        $saccos === 0
+            ? $this->add('sacco_messaging', 'messaging', self::OK, 'No SACCO account yet.')
+            : $this->add('sacco_messaging', 'messaging', self::FAIL, "{$saccos} SACCO account(s), but SMS_DRIVER and WHATSAPP_DRIVER are log: members' receipts are marked sent and never leave the server.",
+                'Set SMS_DRIVER=africastalking or WHATSAPP_DRIVER=meta with their keys.');
     }
 
     /** Only when CONFIG_DOCTOR_ACCEPT is set: what the owner accepts, and the entries that cannot count. */

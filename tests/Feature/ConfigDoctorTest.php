@@ -34,6 +34,7 @@ class ConfigDoctorTest extends TestCase
             'support.whatsapp' => '256700000001', 'support.email' => 'help@example.test', 'support.hours' => 'Every day',
             'saas.new_ui_url' => 'https://portal.example.test', 'saas.invite_url' => 'https://portal.example.test',
             'site.legal_name' => 'Example Ltd', 'site.address' => 'Plot 1, Kampala', 'site.support_email' => 'help@example.test', 'site.support_hours' => 'Every day',
+            'sacco.payouts.driver' => 'off', 'sacco.nin_pepper' => 'a-long-random-pepper',
         ], $over));
     }
 
@@ -88,6 +89,9 @@ class ConfigDoctorTest extends TestCase
             'flutterwave test public key' => [['flutterwave.public_key' => 'FLWPUBK_TEST-abc-X'], 'flutterwave_test_mode'],
             'no webhook hash' => [['flutterwave.secret_hash' => ''], 'flutterwave_webhook'],
             'no support whatsapp' => [['support.whatsapp' => ''], 'support_whatsapp'],
+            'simulated sacco payouts' => [['sacco.payouts.driver' => 'simulated'], 'sacco_payouts'],
+            'unknown sacco payouts driver' => [['sacco.payouts.driver' => 'mtn'], 'sacco_payouts'],
+            'no nin pepper' => [['sacco.nin_pepper' => ''], 'sacco_nin_pepper'],
         ];
     }
 
@@ -339,6 +343,7 @@ class ConfigDoctorTest extends TestCase
             'master_password_plaintext' => ['saas.master_password_plaintext_set' => true],
             'master_proxies' => ['saas.master_password_hash' => self::HASH, 'saas.master_password_allowed_ips' => ['203.0.113.7'], 'trustedproxy.proxies' => '*'],
             'master_allowlist' => ['saas.master_password_allowed_ips' => ['0.0.0.0/0']],
+            'sacco_payouts' => ['sacco.payouts.driver' => 'simulated'],
         ];
         $this->assertEqualsCanonicalizing(ConfigDoctor::NEVER_ACCEPTED, array_keys($broken));
 
@@ -402,5 +407,21 @@ class ConfigDoctorTest extends TestCase
         $this->assertSame(['key' => 'flutterwave_test_mode', 'status' => 'fail', 'message' => 'FLW_PUBLIC_KEY is a test key: payments are not real money.',
             'fix' => 'Set the live keys from the Flutterwave dashboard.', 'accepted' => false], $json['checks'][0]);
         $this->assertSame([], array_diff(array_column($json['checks'], 'key'), ConfigDoctor::KEYS), 'Every key is a documented, stable one.');
+    }
+
+    public function test_a_sacco_account_needs_real_receipts_and_only_the_kernel_checks_the_sacco_keys(): void
+    {
+        $this->production(['messaging.sms.driver' => 'log', 'messaging.whatsapp.driver' => 'log', 'messaging.otp.phone_codes' => false]);
+        $this->assertSame(ConfigDoctor::OK, $this->checks()['sacco_messaging']['status'], 'no SACCO yet');
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            \App\Models\Company::factory()->create(['name' => 'Doctor SACCO', 'business_type' => 'sacco', 'enabled_modules' => ['sacco']]);
+            $this->assertSame(ConfigDoctor::FAIL, $this->checks()['sacco_messaging']['status']);
+        } finally {
+            \Illuminate\Support\Facades\DB::rollBack();
+        }
+        $portal = $this->checks(ConfigDoctor::PORTAL);
+        $this->assertArrayNotHasKey('sacco_payouts', $portal);
+        $this->assertArrayNotHasKey('sacco_nin_pepper', $portal);
     }
 }

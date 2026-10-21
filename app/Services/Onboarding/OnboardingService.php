@@ -67,27 +67,47 @@ class OnboardingService
     /** Getting-started items (checklist v2) that only mean something for a shop. */
     public const SHOP_ITEMS = ['products', 'prices', 'first_sale', 'momo', 'receipts'];
 
+    /** Setup steps of exclusive modules, each after the business step and only for that module's accounts. */
+    public const MODULE_STEPS = ['sacco' => 'sacco'];
+
+    /**
+     * Every setup step in order: config('onboarding.steps') with each module's own step after `business`
+     * (a SACCO's books are set up there: SaccoSetupService).
+     *
+     * @return list<string>
+     */
+    public static function allSteps(): array
+    {
+        $steps = array_values((array) config('onboarding.steps'));
+        $at = array_search('business', $steps, true);
+        array_splice($steps, $at === false ? count($steps) : $at + 1, 0, array_values(self::MODULE_STEPS));
+
+        return $steps;
+    }
+
     /**
      * The setup steps that apply to this company: all of them for a shop; without Shop (a farm, an
      * event) the shop-only steps are left out, so the web and the phone never ask a farmer for products.
+     * A SACCO also sets up its books (the `sacco` step); no other account sees that step.
      *
      * @return list<string>
      */
     public function stepsFor(Company $company): array
     {
-        $steps = (array) config('onboarding.steps');
+        $modules = $company->modules();
+        $steps = array_values(array_filter(self::allSteps(), fn (string $s) => ! in_array($s, self::MODULE_STEPS, true) || in_array(array_search($s, self::MODULE_STEPS, true), $modules, true)));
 
-        return in_array('shop', $company->modules(), true) ? array_values($steps) : array_values(array_diff($steps, self::SHOP_STEPS));
+        return in_array('shop', $modules, true) ? $steps : array_values(array_diff($steps, self::SHOP_STEPS));
     }
 
     /** Record a finished or skipped step and move to the next one that applies (Appendix F metrics included). */
     public function markStep(Company $company, string $step, bool $skipped = false, ?int $seconds = null, array $extra = [], ?string $channel = null): array
     {
-        $steps = config('onboarding.steps');
-        if (! in_array($step, $steps, true) && $step !== 'done') {
+        $steps = self::allSteps();
+        $applies = $this->stepsFor($company);
+        if ((! in_array($step, $steps, true) && $step !== 'done') || (in_array($step, self::MODULE_STEPS, true) && ! in_array($step, $applies, true))) {
             throw BusinessRuleException::make('invalid_step', 'Unknown setup step.');
         }
-        $applies = $this->stepsFor($company);
         $s = $this->state($company);
         $s['started_at'] ??= now()->toIso8601String();
         $s['channel'] ??= $channel ?? OnboardingEvents::channel();
