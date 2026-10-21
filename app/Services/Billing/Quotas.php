@@ -17,12 +17,24 @@ use Illuminate\Support\Facades\DB;
  */
 class Quotas
 {
-    public const KEYS = ['users' => 'max_users', 'products' => 'max_products', 'sales' => 'max_sales_per_month', 'storage' => 'storage_mb', 'devices' => 'max_devices', 'locations' => 'max_locations'];
+    public const KEYS = ['users' => 'max_users', 'products' => 'max_products', 'sales' => 'max_sales_per_month', 'storage' => 'storage_mb', 'devices' => 'max_devices', 'locations' => 'max_locations',
+        'members' => 'max_members', 'sms' => 'max_sms_per_month'];
 
     /** Limits that only warn (never refuse). */
     public const SOFT = ['sales'];
 
-    public const LABELS = ['users' => 'team members', 'products' => 'products', 'sales' => 'sales this month', 'storage' => 'MB of files', 'devices' => 'phones', 'locations' => 'locations'];
+    /**
+     * Limits of one plan line only (PlanLine, docs/akiba/03-proposal.md §5.1): an Akiba Ledger SACCO counts its
+     * members and its SMS this month (both hard: new members are refused, receipts fall back to WhatsApp and
+     * in-app; money is never refused). The family's usage block and answers are unchanged.
+     */
+    public const LINE_KEYS = ['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA];
+
+    /** Members that count against max_members: everyone not exited, deceased or rejected. */
+    public const MEMBER_STATUSES = ['applicant', 'active', 'dormant', 'suspended'];
+
+    public const LABELS = ['users' => 'team members', 'products' => 'products', 'sales' => 'sales this month', 'storage' => 'MB of files', 'devices' => 'phones', 'locations' => 'locations',
+        'members' => 'members', 'sms' => 'SMS this month'];
 
     public function limits(Company $company): array
     {
@@ -39,6 +51,8 @@ class Quotas
             'storage' => (int) ceil($this->storageBytes($company) / 1048576),
             'devices' => (int) DB::table('devices')->where('company_id', $company->id)->where('status', 'active')->whereNull('revoked_at')->count(),
             'locations' => max(1, (int) DB::table('locations')->where('company_id', $company->id)->count()),
+            'members' => (int) DB::table('sacco_members')->where('company_id', $company->id)->whereIn('status', self::MEMBER_STATUSES)->whereNull('merged_into_id')->where('is_deleted', 0)->count(),
+            'sms' => (int) DB::table('message_log')->where('company_id', $company->id)->where('channel', 'sms')->where('created_at', '>=', now()->startOfMonth())->count(),
             default => 0,
         };
     }
@@ -113,7 +127,7 @@ class Quotas
         $currency = app(BillingService::class)->currency($company);
         $floor = $current && ! $current->isFree() ? $current->chargeIn($currency)['amount'] : 0.0;
 
-        return Plan::where('is_active', true)->where('is_public', true)->get()
+        return PlanLine::scope(Plan::where('is_active', true)->where('is_public', true), PlanLine::for($company))->get()
             ->reject(fn (Plan $p) => $p->isFree() || $p->id === $current?->id || $p->chargeIn($currency)['amount'] <= $floor)
             ->filter(function (Plan $p) use ($key, $needed) {
                 $v = array_merge(Entitlements::DEFAULT_LIMITS, $p->limits ?? [])[$key] ?? null;
@@ -132,7 +146,11 @@ class Quotas
     public function usage(Company $company): array
     {
         $out = [];
+        $line = PlanLine::for($company);
         foreach (self::KEYS as $what => $key) {
+            if (isset(self::LINE_KEYS[$what]) && self::LINE_KEYS[$what] !== $line) {
+                continue;
+            }
             $limit = $this->limit($company, $what);
             $used = $this->used($company, $what);
             $out[$what] = ['used' => $used, 'max' => $limit, 'over' => $limit !== null && $used > $limit];

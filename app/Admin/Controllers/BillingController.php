@@ -41,7 +41,7 @@ class BillingController extends Controller
     {
         $company = $this->company();
         $billing = app(BillingService::class);
-        $plans = Plan::where('is_active', true)->where('is_public', true)->where('slug', '!=', 'trial')->orderBy('sort_order')->get();
+        $plans = \App\Services\Billing\PlanLine::scope(Plan::where('is_active', true)->where('is_public', true)->where('slug', '!=', 'trial'), \App\Services\Billing\PlanLine::for($company))->orderBy('sort_order')->get();
         $quotes = [];
         foreach ($plans as $plan) {
             try {
@@ -66,7 +66,7 @@ class BillingController extends Controller
     public function checkout(Request $request)
     {
         $this->guard();
-        $plan = Plan::where('is_active', true)->where('is_public', true)->findOrFail((int) $request->input('plan_id'));
+        $plan = \App\Services\Billing\PlanLine::scope(Plan::where('is_active', true)->where('is_public', true), \App\Services\Billing\PlanLine::for($this->company()))->findOrFail((int) $request->input('plan_id'));
         try {
             $r = app(BillingService::class)->checkout($this->company(), Admin::user(), $plan, BillingService::interval($request->input('interval')));
         } catch (BusinessRuleException $e) {

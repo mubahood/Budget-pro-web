@@ -48,6 +48,7 @@ class AdminBilling
     /** Give a plan free of charge until a date (e.g. a pilot shop, a partner). */
     public function comp(Company $company, Plan $plan, Carbon $until, string $reason, User $actor): Subscription
     {
+        PlanLine::assertFor($plan, $company);
         $reason = $this->reason($reason);
         if ($until->isPast()) {
             throw BusinessRuleException::make('invalid_date', 'Choose a date in the future.');
@@ -110,6 +111,7 @@ class AdminBilling
     /** Cash or bank payment received outside Flutterwave: a paid invoice + the period, exactly like an online payment. */
     public function recordManualPayment(Company $company, Plan $plan, string $interval, float $amount, string $currency, string $method, ?string $reference, string $reason, User $actor): SubscriptionInvoice
     {
+        PlanLine::assertFor($plan, $company);
         $reason = $this->reason($reason);
         if (! in_array($method, ['cash', 'bank', 'mobile_money', 'other'], true) || $amount <= 0 || $plan->isFree()) {
             throw BusinessRuleException::make('invalid_payment', $plan->isFree() ? 'The Free plan needs no payment.' : 'Enter the amount received and how it was paid.');

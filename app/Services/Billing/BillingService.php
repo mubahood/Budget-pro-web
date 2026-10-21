@@ -65,6 +65,7 @@ class BillingService
      */
     public function quote(Company $company, Plan $plan, string $interval = 'month'): array
     {
+        PlanLine::assertFor($plan, $company);
         $this->assertCanBuy($company);
         $interval = self::interval($interval);
         if ($plan->isFree()) {
@@ -298,6 +299,7 @@ class BillingService
      */
     public function scheduleChange(Company $company, Plan $plan, string $interval = 'month'): Subscription
     {
+        PlanLine::assertFor($plan, $company);
         $this->assertCanBuy($company);
         $sub = $company->subscription;
         $interval = self::interval($interval);

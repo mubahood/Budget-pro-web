@@ -16,7 +16,7 @@ class CompPlan extends BillingRowAction
 
     public function form()
     {
-        $this->select('plan_id', 'Plan')->options(Plan::where('is_active', true)->orderBy('sort_order')->pluck('name', 'id'))->rules('required');
+        $this->select('plan_id', 'Plan')->options(Plan::where('is_active', true)->orderBy('sort_order')->get()->mapWithKeys(fn (Plan $p) => [$p->id => \App\Services\Billing\PlanLine::of($p) === \App\Services\Billing\PlanLine::FAMILY ? $p->name : $p->name.' (Akiba Ledger)']))->rules('required');
         $this->date('until', 'Free until')->rules('required|date|after:today');
         $this->reasonField();
     }

@@ -12,7 +12,10 @@ class Entitlements
 {
     public const DEFAULT_LIMITS = ['max_products' => null, 'max_users' => null, 'max_sales_per_month' => null, 'max_locations' => 1, 'storage_mb' => 500, 'max_devices' => null];
 
-    public const DEFAULT_FEATURES = ['forecasting' => false, 'auto_reorder' => false, 'multi_location' => false, 'whatsapp_receipts' => true, 'api_access' => false, 'shop_v2' => true, 'whatsapp_automation' => true];
+    public const DEFAULT_FEATURES = ['forecasting' => false, 'auto_reorder' => false, 'multi_location' => false, 'whatsapp_receipts' => true, 'api_access' => false, 'shop_v2' => true, 'whatsapp_automation' => true,
+        // Akiba Ledger (AkibaPlanSeeder): only sacco code reads them, so the four apps are unaffected.
+        'sacco_office_mode' => false, 'sacco_returns' => false, 'sacco_momo' => false, 'sacco_payouts' => false, 'sacco_checkoff' => false,
+        'sacco_member_app' => false, 'sacco_sms_receipts' => false];
 
     public static function for(Company $company): array
     {

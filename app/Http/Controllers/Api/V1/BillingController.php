@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Plan;
 use App\Models\SubscriptionInvoice;
+use App\Services\Billing\PlanLine;
 use App\Services\Billing\SubscriptionFulfillment;
 use App\Services\FlutterwaveService;
 use App\Traits\ApiResponse;
@@ -37,8 +38,13 @@ class BillingController extends Controller
      */
     public function plans(Request $request)
     {
-        $plans = Plan::where('is_active', true)
-            ->where('is_public', true)
+        // The account's plan line when signed in (PlanLine, AK-15), else the one the page names (`?line=akiba`
+        // on the Akiba Ledger site); the family's otherwise, so every existing caller sees exactly what it did.
+        $user = $request->user('sanctum');
+        $company = $user?->company_id ? Company::withoutGlobalScopes()->find($user->company_id) : null;
+        $line = $company ? PlanLine::for($company) : PlanLine::named($request->query('line'));
+        $plans = PlanLine::scope(Plan::where('is_active', true)
+            ->where('is_public', true), $line)
             ->orderBy('sort_order')
             ->get()
             ->map(fn (Plan $p) => [

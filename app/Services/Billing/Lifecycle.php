@@ -25,9 +25,18 @@ class Lifecycle
     {
     }
 
-    public function freePlan(): ?Plan
+    /**
+     * The plan a lapsed account falls back to (ADR 0005), on the account's own plan line (PlanLine, AK-15):
+     * `free` for the family's apps, `akiba-free` for a SACCO. Without a company: the family's.
+     */
+    public function freePlan(?Company $company = null): ?Plan
     {
-        return config('saas.free_tier_fallback', true) ? Plan::where('slug', config('saas.free_plan', 'free'))->where('is_active', true)->first() : null;
+        if (! config('saas.free_tier_fallback', true)) {
+            return null;
+        }
+        $slug = $company !== null && PlanLine::for($company) === PlanLine::AKIBA ? config('sacco.plans.free', 'akiba-free') : config('saas.free_plan', 'free');
+
+        return Plan::where('slug', $slug)->where('is_active', true)->first();
     }
 
     /** @return array<string, int> counts per transition */
@@ -196,7 +205,7 @@ class Lifecycle
 
     private function toFree(Company $company, Subscription $sub, string $why): bool
     {
-        $free = $this->freePlan();
+        $free = $this->freePlan($company);
         if ($free === null) {
             if ($sub->status !== 'expired') {
                 $sub->status = 'expired';
@@ -220,7 +229,8 @@ class Lifecycle
         $company->saveQuietly();
         $company->unsetRelation('subscription');
         app(SyncApplier::class)->applyHeld($company);
-        $this->notifier->notify((int) $company->id, 'billing', $why, "{$company->name} is now on the Free plan: ".$this->limitsText($free).'. Upgrade any time: '.BillingService::billingUrl(), ['url' => BillingService::billingUrl()]);
+        $on = PlanLine::of($free) === PlanLine::FAMILY ? 'the Free plan' : $free->name;
+        $this->notifier->notify((int) $company->id, 'billing', $why, "{$company->name} is now on {$on}: ".$this->limitsText($free).'. Upgrade any time: '.BillingService::billingUrl(), ['url' => BillingService::billingUrl()]);
 
         return true;
     }
@@ -230,6 +240,7 @@ class Lifecycle
         $l = $plan->limits ?? [];
 
         return implode(', ', array_filter([
+            isset($l['max_members']) ? $l['max_members'].' members' : null,
             isset($l['max_devices']) ? $l['max_devices'].' phone'.($l['max_devices'] > 1 ? 's' : '') : null,
             isset($l['max_products']) ? $l['max_products'].' products' : null,
             isset($l['max_sales_per_month']) ? $l['max_sales_per_month'].' sales a month' : null,

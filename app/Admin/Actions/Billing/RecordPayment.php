@@ -15,7 +15,7 @@ class RecordPayment extends BillingRowAction
 
     public function form()
     {
-        $this->select('plan_id', 'Plan paid for')->options(Plan::where('is_active', true)->orderBy('sort_order')->pluck('name', 'id'))->rules('required');
+        $this->select('plan_id', 'Plan paid for')->options(Plan::where('is_active', true)->orderBy('sort_order')->get()->mapWithKeys(fn (Plan $p) => [$p->id => \App\Services\Billing\PlanLine::of($p) === \App\Services\Billing\PlanLine::FAMILY ? $p->name : $p->name.' (Akiba Ledger)']))->rules('required');
         $this->select('interval', 'Period')->options(['month' => 'One month', 'year' => 'One year'])->default('month');
         $this->text('amount', 'Amount received')->rules('required|numeric|min:1');
         $this->text('currency', 'Currency')->default('UGX')->rules('required|size:3');

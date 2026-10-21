@@ -220,7 +220,14 @@ class RegistrationService
                     'starts_at' => now(), 'trial_ends_at' => now()->addDays($days), 'ends_at' => now()->addDays($days),
                 ]);
             } else {
-                $plan = Plan::where('slug', config('saas.default_plan', 'trial'))->first();
+                // The trial of the account's plan line (PlanLine, AK-15): Akiba Ledger's runs 30 days (AK-16).
+                $akiba = \App\Services\Billing\PlanLine::for($company) === \App\Services\Billing\PlanLine::AKIBA;
+                $plan = Plan::where('slug', $akiba ? config('sacco.plans.trial', 'akiba-trial') : config('saas.default_plan', 'trial'))->first();
+                if ($akiba) {
+                    $trialDays = (int) ($plan?->trial_days ?: 30);
+                    $company->license_expire = now()->addDays($trialDays);
+                    $company->saveQuietly();
+                }
                 Subscription::create([
                     'company_id' => $company->id, 'plan_id' => $plan?->id, 'status' => 'trialing', 'provider' => 'trial',
                     'starts_at' => now(), 'trial_ends_at' => now()->addDays($trialDays), 'ends_at' => now()->addDays($trialDays),
