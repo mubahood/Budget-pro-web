@@ -826,6 +826,18 @@ approval.**
   its provisioning has posted (`provisioning_pending`).
 - *Why:* member-friendly and simple to explain; the penalty already compensates late money; catch-ups must not drift.
 
+**AK-88: A write-off takes two officers in the chair's, vice chair's or treasurer's office; a guarantor recovery takes a second officer.**
+
+- 04 §7 asks for "chair and treasurer positions". The engine checks offices per action, not per approval, so the rule
+  is: two different checkers with `sacco_approve`, each holding one of those offices (the founder chairperson counts).
+- Taking a guarantor's held savings for a defaulted loan (`guarantor_recovery`) is not in the §7 list; it moves a
+  member's savings out, so it is maker-checker too (`sacco_loans` asks, `sacco_approve` checks). Only a loan in
+  arrears or written off; at most what is still held from that guarantor and what the loan owes.
+- Write-off: Cr 1300/1320/1330/1340 what is left, Dr 1390 as far as the allowance holds and 5200 for the rest; the
+  suspense memo is dropped into the loan's history. Recoveries later (borrower or guarantor) are Dr cash/bank/the
+  guarantor's savings, Cr 4500, receipted, and reversible through the receipt.
+- Provisioning runs on each 1st for the month before (`sacco_provision_runs`, key `prov:{yyyymm}`); office mode only.
+
 **AK-67: Sync for Akiba (P1.16), as the app was built against 04.**
 
 - `SyncRegistry`: `sacco_members` (master; the fields of 04 §9.3 in stored form, phones in E.164, consent as a

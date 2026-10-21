@@ -96,6 +96,7 @@ class SchemaIntegrity
         ['sacco_loan_repayments', 'journal_entry_id', 'sacco_journal_entries', 'restrict'],
         ['sacco_loan_changes', 'loan_id', 'sacco_loans', 'restrict'],
         ['sacco_payouts', 'company_id', 'companies', 'restrict'],
+        ['sacco_provision_runs', 'company_id', 'companies', 'restrict'],
         ['sacco_savings_products', 'company_id', 'companies', 'restrict'],
         ['sacco_savings_products', 'ledger_account_id', 'sacco_ledger_accounts', 'restrict'],
         ['sacco_savings_product_versions', 'product_id', 'sacco_savings_products', 'restrict'],

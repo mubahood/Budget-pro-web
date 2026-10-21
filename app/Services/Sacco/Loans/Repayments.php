@@ -237,7 +237,17 @@ final class Repayments
     public static function reversed(SaccoTransaction $original, SaccoTransaction $reversal): void
     {
         $r = SaccoLoanRepayment::withoutGlobalScopes()->where('company_id', $original->company_id)->where('transaction_id', $original->id)->lockForUpdate()->first();
-        if ($r === null || $r->status !== 'posted') {
+        if ($r === null) {
+            // A recovery on a written-off loan: its recovered total falls back.
+            $change = \App\Models\SaccoLoanChange::withoutGlobalScopes()->where('company_id', $original->company_id)->where('kind', 'recovery')
+                ->where('entry_id', $original->journal_entry_id)->first();
+            if ($change !== null) {
+                DB::table('sacco_loans')->where('id', $change->loan_id)->update(['recovered_minor' => DB::raw('IF(recovered_minor > '.(int) $change->amount_minor.', recovered_minor - '.(int) $change->amount_minor.', 0)')]);
+            }
+
+            return;
+        }
+        if ($r->status !== 'posted') {
             return;
         }
         $r->update(['status' => 'reversed', 'reversal_entry_id' => $reversal->journal_entry_id]);

@@ -19,7 +19,8 @@ use App\Services\Sacco\SaccoTransactions;
 final class LoansModule
 {
     /** The loan maker-checker actions (04 §7). */
-    public const EXECUTORS = [Executors\LoanDecisionExecutor::class, Executors\LoanDisbursementExecutor::class];
+    public const EXECUTORS = [Executors\LoanDecisionExecutor::class, Executors\LoanDisbursementExecutor::class, Executors\WriteOffExecutor::class,
+        Executors\GuarantorRecoveryExecutor::class];
 
     public static function boot(): void
     {
@@ -36,6 +37,14 @@ final class LoansModule
                 ->where(fn ($q) => $q->whereNull('arrears_on')->orWhere('arrears_on', '<=', $period->ends_on->toDateString()))->count();
             if ($behind > 0) {
                 throw BusinessRuleException::make('loan_runs_pending', "{$behind} loan(s) are not brought up to the end of ".$period->label().' yet: run sacco:daily first.');
+            }
+        });
+        LoanJobs::onMonthEnd('provisioning', fn (int $companyId, string $month) => (new Provisioning())->run($companyId, $month));
+        CloseChecks::register('provisioning', function (int $companyId, SaccoPeriod $period) {
+            $month = $period->starts_on->format('Y-m');
+            $lent = SaccoLoan::withoutGlobalScopes()->where('company_id', $companyId)->whereNotNull('disbursed_on')->where('disbursed_on', '<=', $period->ends_on->toDateString())->exists();
+            if ($lent && ! LoanBooks::settings($companyId)->isGroup() && ! \App\Models\SaccoProvisionRun::withoutGlobalScopes()->where('company_id', $companyId)->where('month', $month)->exists()) {
+                throw BusinessRuleException::make('provisioning_pending', 'The loan-loss provisioning for '.$period->label().' has not run yet: run sacco:daily on the 1st.');
             }
         });
         SaccoSetupService::extend('loan_products', fn (Company $company) => (new LoanProducts())->ensureDefaults($company));
