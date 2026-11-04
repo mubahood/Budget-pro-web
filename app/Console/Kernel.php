@@ -51,8 +51,8 @@ class Kernel extends ConsoleKernel
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
             $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();
-            // The family's four demo accounts (PublicDemo::runAll): Budget Pro's, Shelfie's, Kuku Tally's, Pledge & Budget's.
-            $schedule->call($task('demo:public'))->name('demo:public')->hourly()->withoutOverlapping(90);
+            // The family's four demo accounts (PublicDemo::runAll): Budget Pro's, Shelfie's, Kuku Tally's, Pledge & Budget's. At :40: the host allows 25 processes, and cron's :00 tick often can't start.
+            $schedule->call($task('demo:public'))->name('demo:public')->hourlyAt(40)->withoutOverlapping(90);
             // The Akiba Ledger demo SACCO (AK-35): its own job, apart from the family's, at its own minute.
             $schedule->call($task('sacco:demo'))->name('sacco:demo')->hourlyAt(20)->withoutOverlapping(90);
             // Estate Ledger's demo accounts (KR-21): the same, at their own minute.
