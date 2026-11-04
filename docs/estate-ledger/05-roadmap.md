@@ -53,4 +53,4 @@ suites once); no push or deploy without the owner's word.
 
 - [x] Full kernel and portal suites once; demo built locally; `rentals:check` clean on the demo
 - [ ] Store listing text and screenshots (`~/Desktop/github/keyroll/store`)
-- [ ] Deploy (only on the owner's word): migrations, seeders, env `APP_ESTATE_LEDGER_DOMAIN`, subdomain + AutoSSL, demo
+- [x] Deploy (done 2026-11-04): migrations, seeders, env `APP_ESTATE_LEDGER_DOMAIN`, subdomain + AutoSSL, demo
