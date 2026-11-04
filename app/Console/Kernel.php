@@ -12,6 +12,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
+        // The host's cron runs `schedule:run` at :00, :20 and :40 only (*/20), so a job set at any other minute never fires.
         // Every task runs inside this scheduler process (no child process per command): the shared host
         // allows 25 processes per account and spawning failed at busy minutes (DECISIONS E52).
         $task = fn (string $command, array $args = []) => fn () => \Illuminate\Support\Facades\Artisan::call($command, $args);
@@ -47,9 +48,10 @@ class Kernel extends ConsoleKernel
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
             $schedule->call($task('onboarding:purge-demos'))->name('onboarding:purge-demos')->hourlyAt(20)->withoutOverlapping();
-            $schedule->call($task('demo:public'))->name('demo:public')->hourlyAt(5)->withoutOverlapping(90);
-            // The Akiba Ledger demo SACCO (AK-35): its own job, apart from the shop demo, at its own minute.
-            $schedule->call($task('sacco:demo'))->name('sacco:demo')->hourlyAt(35)->withoutOverlapping(90);
+            // The family's four demo accounts (PublicDemo::runAll): Budget Pro's, Shelfie's, Kuku Tally's, Pledge & Budget's.
+            $schedule->call($task('demo:public'))->name('demo:public')->hourly()->withoutOverlapping(90);
+            // The Akiba Ledger demo SACCO (AK-35): its own job, apart from the family's, at its own minute.
+            $schedule->call($task('sacco:demo'))->name('sacco:demo')->hourlyAt(20)->withoutOverlapping(90);
             // Estate Ledger's demo accounts (KR-21): the same, at their own minute.
             $schedule->call($task('rentals:demo'))->name('rentals:demo')->hourlyAt(40)->withoutOverlapping(90);
             $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();

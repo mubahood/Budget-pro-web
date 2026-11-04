@@ -9,7 +9,7 @@ payouts, expenses, maintenance and meter readings, with a tenant and landlord po
 | Kernel module | `rentals`, in this repo (`App\Services\Rentals`, `App\Models\Rental*`, `routes/api_rentals.php`) |
 | Portal screens | `/rentals` for staff and `/my` for tenants and landlords, in `budget-pro-new` |
 | Flutter flavor | `estate-ledger`, package `com.solavia.estateledger`, in `budget-pro-mobo` (`lib/rentals/`) |
-| Site | `estate-ledger.solaviatech.com` (`config/apps.php` entry `estate-ledger` in `budget-pro-new`) |
+| Site | `rentals.solaviatech.com` (`config/apps.php` entry `estate-ledger` in `budget-pro-new`) |
 
 The phone app keeps its unfinished `keyroll` flavor until its own phase.
 

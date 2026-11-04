@@ -163,12 +163,12 @@ class FamilyDemoBuilder
      * Keep a seeded farm current: the layers' daily card for each day since the last one, up to today
      * (never a day twice), and a delivery of layers mash when fewer than three days' feed is left.
      *
-     * @param  array{now?: Carbon, tz?: string, currency?: string}  $opts
+     * @param  array{now?: Carbon, tz?: string, currency?: string, ledger?: bool}  $opts  ledger: also mirror the feed bought to Finance
      * @return int daily cards added
      */
     public function topUpFarm(Company $co, User $owner, int $batchId, array $opts = []): int
     {
-        return $this->within($co, $owner, $opts, function () use ($batchId) {
+        return $this->within($co, $owner, $opts, function () use ($batchId, $opts) {
             $cid = (int) $this->co->id;
             $batch = DB::table('poultry_batches')->where('company_id', $cid)->where('id', $batchId)->where('is_deleted', 0)->first();
             $last = $batch ? DB::table('poultry_daily_records')->where('company_id', $cid)->where('batch_id', $batchId)->where('is_deleted', 0)->max('date') : null;
@@ -209,10 +209,48 @@ class FamilyDemoBuilder
                     'date' => $this->today->toDateString(), 'note' => "10 bags {$name} ({$kgPerBag} kg)"], $by);
                 $this->make(PoultryFeedStock::class, ['feed_type_id' => (int) $feedType, 'direction' => 'in', 'source' => 'purchase', 'qty_kg' => 10 * $kgPerBag,
                     'cost' => $this->money(10 * $bagPrice), 'batch_id' => $batchId, 'ref_uuid' => $x->uuid, 'date' => $this->today->toDateString(), 'note' => ''], $by);
+                if (! empty($opts['ledger'])) {
+                    $category = FinancialCategory::withoutGlobalScopes()->firstOrCreate(['company_id' => $cid, 'name' => 'Poultry Farm', 'type' => 'Expense'],
+                        ['status' => 'Active', 'description' => 'Auto-created for Poultry module expenses.']);
+                    $this->quietly(fn () => FinancialRecord::create(['company_id' => $cid, 'financial_category_id' => $category->id, 'type' => 'Expense', 'amount' => $this->money(10 * $bagPrice),
+                        'payment_method' => 'cash', 'description' => "10 bags {$name} ({$kgPerBag} kg)", 'date' => $this->today->toDateString(), 'created_by_id' => $this->owner->id, 'user_id' => $this->owner->id]));
+                }
             }
             Carbon::setTestNow(null);
 
             return $added;
+        });
+    }
+
+    /**
+     * Today's eggs sold, once: the morning's buyer from the farm's weekly round (FARM_SCHEDULE), as many trays as the store
+     * holds over its reserve and at least one, so a farm's sales are never all in the past. Nothing when today has a sale.
+     *
+     * @param  array{now?: Carbon, tz?: string, currency?: string}  $opts
+     * @return int sales added
+     */
+    public function sellToday(Company $co, User $owner, int $batchId, array $opts = []): int
+    {
+        return $this->within($co, $owner, $opts, function () use ($batchId) {
+            $cid = (int) $this->co->id;
+            $today = $this->today->toDateString();
+            $batch = DB::table('poultry_batches')->where('company_id', $cid)->where('id', $batchId)->where('is_deleted', 0)->first();
+            if ($batch === null || DB::table('poultry_sales')->where('company_id', $cid)->where('is_deleted', 0)->where('date', $today)->exists()) {
+                return 0;
+            }
+            $d = (int) Carbon::parse($batch->acquired_date, $this->tz)->startOfDay()->diffInDays($this->today);
+            [$who, $want] = self::FARM_SCHEDULE[$d % 7][0];
+            $laid = DB::table('poultry_daily_records')->where('company_id', $cid)->where('batch_id', $batchId)->where('is_deleted', 0)->selectRaw('COALESCE(SUM(eggs_trays * 30 + eggs_loose), 0) AS n')->value('n');
+            $sold = DB::table('poultry_sales')->where('company_id', $cid)->where('batch_id', $batchId)->where('is_deleted', 0)->where('category', 'eggs')->sum('qty') * 30;
+            $trays = max(1, min((int) $want, intdiv((int) $laid - (int) $sold - self::FARM_RESERVE_EGGS, 30)));
+            $customer = $who === '' ? null : DB::table('poultry_customers')->where('company_id', $cid)->where('is_deleted', 0)->where('name', self::FARM_CUSTOMERS[$who][0])->value('id');
+            Carbon::setTestNow($this->past($this->today->copy()->setTime(9, 0)->utc()));
+            $total = round($trays * $this->money(12000), 2);
+            $this->make(PoultrySale::class, ['category' => 'eggs', 'product_label' => '', 'qty' => $trays, 'unit' => 'tray', 'unit_price' => $this->money(12000), 'total' => $total,
+                'amount_paid' => $total, 'customer_id' => $customer === null ? null : (int) $customer, 'batch_id' => $batchId, 'date' => $today, 'note' => ''], (string) $this->owner->name);
+            Carbon::setTestNow(null);
+
+            return 1;
         });
     }
 

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Master plan execution (SHOP_ONBOARDING_OFFLINE_MASTER_PLAN.md)
 
+### Each app's own public demo (2026-11-04)
+- **`PublicDemo` looks after four accounts:** Budget Pro's Fresh Corner Market as before, and its own for Shelfie (Kireka Family Mart), Kuku Tally (Nsubuga Poultry Farm) and Pledge & Budget (Brian & Grace Wedding Committee), each with only its modules (`config/demo.php` `apps`, `database/data/demo_*.php`). `PublicDemoBuilder` reads a shop's catalogue from its data file; `AppDemoBuilder` fills a farm or events account.
+- **Every lock covers them,** in their own words, and now covers each team member's sign-in, since every role opens in one click (`PublicDemo::roles`, `roleUser`).
+- **Today is never empty:** each heal adds today's sale, card and egg sale, or pledge and payments, at any hour and never twice.
+- **`POST /api/v1/demo/session` takes an optional `app`.** Without it, Budget Pro's account as before.
+- **Schedule:** `demo:public` at :00 and `sacco:demo` at :20, minutes the host's `*/20` cron reaches. `demo:public --app=` looks after one account.
+
 ### Events on the web, and the creator chairs (2026-10-18)
 - **The creator of an event chairs it:** on the API, from a phone's sync and on the web. A phone's own seat for that person replaces the creator seat instead of being refused.
 - **`EventBook` and `PledgeService`:** the web portal's events book (figures, filtered pledges, groups, notes) and its pledge writes (with an optional first payment, or many pasted with a preview).

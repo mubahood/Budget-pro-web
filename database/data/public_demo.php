@@ -11,6 +11,18 @@
 | A stock of 0 is deliberate (sold out, on order); some sit below their reorder level on purpose.
 */
 return [
+    // The shop's own details (its name, currency and address are in config/demo.php).
+    'company' => [
+        'business_type' => 'supermarket',
+        'phone' => '+256 772 555 100',
+        'email' => 'hello@freshcorner.example',
+        'domain' => 'freshcorner.example',
+        'sku' => 'FCM',
+        'slogan' => 'Fresh every morning',
+        'receipt_header' => "Fresh Corner Market\nPlot 14, Ntinda Road, Kampala · 0772 555 100",
+        'receipt_footer' => 'Thank you for shopping local. Returns within 14 days with this receipt.',
+    ],
+
     // [name, phone, email, payment terms days, lead time days] (fictional numbers)
     'suppliers' => [
         'farm' => ['Green Valley Farms, Mukono', '+256 772 555 110', 'orders@greenvalley.example', 7, 2],
@@ -80,9 +92,10 @@ return [
         ['Wireless Headphones', 'Household', 'Electronics', 'pcs', 150000, 85000, 0, 3, 'headphones', 'home', ['tax' => 'standard']],
     ],
 
-    // The account visitors sign in as, and the team around it (the manager builds the shop).
-    // The builder knows each by their first name (daniel, maria, kevin, samuel), so keep those when renaming.
+    // The account visitors open, and the team around it (the first one, the manager, builds the shop).
+    // `seats` says who does what in the builder's shop day, by first name in lower case.
     'owner' => 'Alex Kato',
+    'seats' => ['manager' => 'daniel', 'morning' => 'maria', 'evening' => 'kevin', 'keeper' => 'samuel'],
     'team' => [
         ['Daniel Ssebunya', 'manager'],
         ['Maria Nalubega', 'cashier'],
@@ -91,9 +104,18 @@ return [
         ['Hannah Achieng', 'accountant'],
     ],
 
+    // One button per role on the /demo page (PublicDemo::roles): what each is called and what they do there.
+    'roles' => [
+        'owner' => ['label' => 'Owner', 'what' => 'Sees everything: sales, profit, the farm, the events and the team.'],
+        'manager' => ['label' => 'Manager', 'what' => 'Runs the shop day to day, approves refunds and orders stock.'],
+        'cashier' => ['label' => 'Cashier', 'what' => 'Sells at the till and takes refunds. No buying prices or profit.'],
+        'stock_keeper' => ['label' => 'Stock keeper', 'what' => 'Receives deliveries and counts the shelves.'],
+        'accountant' => ['label' => 'Accountant', 'what' => 'Reads the reports and keeps the money records.'],
+    ],
+
     // [name, phone, email, credit limit, terms days, extras] (fictional numbers)
     'customers' => [
-        ['Ntinda Café', '+256 772 555 140', 'orders@ntindacafe.example', 3000000, 14, ['account' => true, 'regular' => 6]],
+        ['Ntinda Café', '+256 772 555 140', 'orders@ntindacafe.example', 3000000, 14, ['account' => true, 'regular' => 6, 'notes' => 'Café on the corner. Orders bread and dairy twice a week, pays fortnightly by bank transfer.']],
         ['Aisha Nakimuli', '+256 772 555 141', 'aisha.nakimuli@example.com', 0, 0, ['regular' => 5, 'marketing' => true]],
         ['Joel Kizza', '+256 772 555 142', 'joel.kizza@example.com', 0, 0, ['regular' => 4, 'gift_card' => 100000]],
         ['Sarah Namaganda', '+256 772 555 143', null, 600000, 30, ['regular' => 3, 'credit' => true]],
@@ -116,5 +138,54 @@ return [
         ['Transport', 'Delivery van fuel', 400000, 15],
         ['Cleaning', 'Cleaning supplies and floor service', 200000, 20],
         ['Insurance', 'Shop contents insurance', 250000, 25],
+    ],
+    'weekly_wages' => 600000,
+
+    // Deals, set up on the first morning. A target is ['product', name] or ['category', name].
+    'deals' => [
+        ['name' => 'Croissants: 3 for UGX 10,000', 'type' => 'mix_match', 'qty' => 3, 'price' => 10000, 'targets' => [['product', 'Butter Croissant']]],
+        ['name' => 'Weekend dairy 10% off', 'type' => 'percent_off', 'percent' => 10, 'days' => [6, 7], 'targets' => [['category', 'Dairy & Eggs']]],
+        ['name' => 'Lemonade: buy 2, get 1 free', 'type' => 'buy_x_get_y', 'buy' => 2, 'get' => 1, 'targets' => [['product', 'Sparkling Lemonade 330ml']]],
+        ['name' => 'Bread & butter for UGX 28,000', 'type' => 'bundle', 'price' => 28000, 'targets' => [['product', 'Country White Loaf'], ['product', 'Salted Butter 500g']]],
+        ['name' => 'Members: coffee beans UGX 30,000', 'type' => 'fixed_price', 'price' => 30000, 'member_only' => true, 'targets' => [['product', 'Whole Bean Coffee 500g']]],
+        ['name' => 'Bakery happy hour 20% off', 'type' => 'percent_off', 'percent' => 20, 'from' => '18:00', 'to' => '21:00', 'targets' => [['category', 'Bakery']]],
+        ['name' => 'Welcome coupon: UGX 5,000 off', 'type' => 'coupon', 'code' => 'WELCOME5', 'min_spend' => 50000, 'amount' => 5000],
+    ],
+
+    // What the account customer (extras `account`) takes first thing on Mondays and Thursdays: name => quantity.
+    'standing_order' => ['Country White Loaf' => 6, 'Butter Croissant' => 12, 'Whole Milk 2L' => 4, 'Free-Range Eggs 12pk' => 2, 'Navel Oranges' => 3.2],
+
+    // Near its date, found this morning and marked down by 30%.
+    'short_dated' => ['item' => 'Greek Yogurt 1kg', 'qty' => 5, 'note' => 'Found at the back of the chiller'],
+
+    // Days before today => [product, type, quantity, reason].
+    'write_offs' => [
+        12 => ['Free-Range Eggs 12pk', 'Damage', 1, 'Tray dropped while shelving'],
+        6 => ['Whole Milk 2L', 'Expired', 2, 'Past use-by date'],
+        4 => ['Bananas', 'Expired', 1.4, 'Overripe'],
+        20 => ['Iced Tea 2L', 'Internal Use', 1, 'Staff room'],
+    ],
+
+    // Last month's pantry count: name => how many short.
+    'count_differences' => ['Spaghetti 500g' => 2, 'Cane Sugar 2kg' => 1],
+
+    // The first gift card buys these two.
+    'gift_card_basket' => ['Whole Bean Coffee 500g', 'Roasted Hazelnuts 250g'],
+
+    // One order sent yesterday, one still being written: product => quantity.
+    'orders' => [
+        'sent' => ['supplier' => 'home', 'note' => 'Headphones sold out; batteries low.', 'lines' => ['Wireless Headphones' => 6, 'AA Batteries 8pk' => 24]],
+        'draft' => ['supplier' => 'drinks', 'note' => 'Weekend drinks', 'lines' => ['Spring Water 1.5L' => 48, 'Sparkling Lemonade 330ml' => 24, 'Orange Juice 1.5L' => 24]],
+    ],
+
+    'price_rise' => ['item' => 'Whole Bean Coffee 500g', 'price' => 38000],
+
+    // The team chat: [seat, days from today, hour, minute, message].
+    'chat' => [
+        ['manager', -1, 18, 40, 'Dairy order is in for Wednesday. Northbrook confirmed a 6:45 drop.'],
+        ['keeper', -1, 19, 5, 'Headphones are sold out. I put them on the Brightline order with the batteries.'],
+        ['morning', 0, 7, 2, 'Till 1 open with the UGX 100,000 float. The café order is packed for pickup.'],
+        ['keeper', 0, 7, 10, 'Five yogurts found at the back of the chiller, date is in two days. Marked down 30%.'],
+        ['manager', 0, 7, 25, 'Thanks both. Coffee goes up to UGX 38,000 on Monday, labels are in the print queue.'],
     ],
 ];

@@ -51,7 +51,11 @@ use Illuminate\Support\Str;
  * The same class keeps an existing demo trading (tradeUntilNow): the hourly heal calls it so today's
  * figures move while people are looking.
  *
- * Every module is on: beside the shop are the Mukono layers farm (FamilyDemoBuilder's) and Brian and Grace's
+ * The same builder fills Shelfie's own demo shop (PublicDemo::spec, database/data/demo_shelfie.php): another catalogue,
+ * another team, shop and finance only. What is named in the catalogue (deals, standing order, write-offs, orders, the team
+ * chat) comes from the account's data file, so nothing here knows one shop's products.
+ *
+ * Budget Pro's account has every module on: beside the shop are the Mukono layers farm (FamilyDemoBuilder's) and Brian and Grace's
  * Kukyala, Kwanjula and wedding (PublicDemoWedding), all in Uganda shillings and dated from today, so the
  * dashboard shows them together and each phone app opens its own part. keepFamily() is the heal's half: it adds
  * them to a demo built before they came, puts them back when a visitor deleted them, and keeps the farm's daily
@@ -123,9 +127,25 @@ class PublicDemoBuilder
     /** @var array{farm?: array<string, int>, wedding?: int, events?: array<string, int>} what the farm and Brian and Grace's events are (kept in the snapshot) */
     private array $family = [];
 
-    public function __construct()
+    /** @var array<string, mixed> the account's spec (PublicDemo::spec) */
+    private array $spec;
+
+    public function __construct(private string $account = PublicDemo::BUDGET_PRO)
     {
-        $this->data = require dirname(__DIR__, 3).'/database/data/public_demo.php';
+        $this->spec = PublicDemo::spec($account);
+        $this->data = PublicDemo::data($account);
+    }
+
+    /** The farm and the pledge books: only the all-in-one account has them beside its shop. */
+    private function withFamily(): bool
+    {
+        return $this->spec['kind'] === 'all';
+    }
+
+    /** Who holds a place in the builder's shop day (database/data: `seats`): manager, morning, evening, keeper. */
+    private function seat(string $seat): ?User
+    {
+        return $this->staff[$this->data['seats'][$seat] ?? ''] ?? null;
     }
 
     /**
@@ -139,7 +159,7 @@ class PublicDemoBuilder
         $clock = Carbon::getTestNow();
         $this->realNow = now()->copy();
         $days = max(2, (int) config('demo.days', 60));
-        $this->tz = (string) config('demo.shop.timezone', 'UTC');
+        $this->tz = (string) ($this->spec['shop']['timezone'] ?? 'UTC');
         $today = $this->realNow->copy()->setTimezone($this->tz)->startOfDay();
         $start = $today->copy()->subDays($days);
         mt_srand((int) $today->format('Ymd'));
@@ -156,7 +176,9 @@ class PublicDemoBuilder
                 }
                 $this->finishingTouches($today);
             });
-            $this->family = $this->seedFamily();
+            if ($this->withFamily()) {
+                $this->family = $this->seedFamily();
+            }
         } finally {
             PublicDemo::$building = false;
             Carbon::setTestNow($clock);
@@ -178,7 +200,7 @@ class PublicDemoBuilder
                 $this->staff[$key] = $u;
             }
         }
-        $this->manager = $this->staff['daniel'] ?? User::withoutGlobalScopes()->findOrFail($company->owner_id);
+        $this->manager = $this->seat('manager') ?? User::withoutGlobalScopes()->findOrFail($company->owner_id);
         foreach ((array) ($snapshot['suppliers'] ?? []) as $key => $id) {
             if ($s = Supplier::withoutGlobalScopes()->where('company_id', $this->cid)->find($id)) {
                 $this->suppliers[$key] = $s;
@@ -297,9 +319,9 @@ class PublicDemoBuilder
     {
         $owner = (int) Company::withoutGlobalScopes()->whereKey($this->cid)->value('owner_id');
         $roles = ($owner && $owner !== (int) $this->manager->id ? [$owner => 'chair'] : []) + [(int) $this->manager->id => 'treasurer'];
-        foreach (['samuel' => 'secretary', 'maria' => 'member'] as $who => $role) {
-            if (isset($this->staff[$who])) {
-                $roles += [(int) $this->staff[$who]->id => $role];
+        foreach (['keeper' => 'secretary', 'morning' => 'member'] as $seat => $role) {
+            if ($this->seat($seat) !== null) {
+                $roles += [(int) $this->seat($seat)->id => $role];
             }
         }
 
@@ -337,6 +359,7 @@ class PublicDemoBuilder
                 $this->after = $last ? Carbon::parse($last) : null;
                 $this->restockLow($today);
                 $this->trade($today, 60, true);
+                $this->ensureTodaySale($today);
             });
         } finally {
             Carbon::setTestNow($clock);
@@ -346,11 +369,46 @@ class PublicDemoBuilder
         return (int) SaleRecord::withoutGlobalScopes()->where('company_id', $this->cid)->count() - $before;
     }
 
+    /**
+     * The heal's whole job for an account: today's trading, and for the all-in-one its farm and pledge books.
+     *
+     * @return array{sales: int, repairs: list<string>, snapshot: array<string, mixed>}
+     */
+    public function bringForward(): array
+    {
+        $sales = $this->tradeUntilNow();
+        if (! $this->withFamily()) {
+            return ['sales' => $sales, 'repairs' => [], 'snapshot' => []];
+        }
+        $family = $this->keepFamily();
+
+        return ['sales' => $sales, 'repairs' => $family['repairs'], 'snapshot' => ['farm' => $family['farm'], 'wedding' => $family['wedding'], 'events' => $family['events']]];
+    }
+
+    /**
+     * Before the doors open (the tills start at seven) today would read zero: one early order, so the dashboard is never
+     * empty at any hour. Nothing when today already has a sale.
+     */
+    private function ensureTodaySale(Carbon $today): void
+    {
+        if (SaleRecord::withoutGlobalScopes()->where('company_id', $this->cid)->where('sale_date', $today->toDateString())->exists()) {
+            return;
+        }
+        Carbon::setTestNow($this->realNow->copy());
+        foreach (range(1, 5) as $try) {
+            $this->sale($today, $this->manager, null);
+            if (SaleRecord::withoutGlobalScopes()->where('company_id', $this->cid)->where('sale_date', $today->toDateString())->exists()) {
+                return;
+            }
+        }
+    }
+
     // ── The shop, its people and its catalogue ─────────────────────────
 
     private function createShop(Carbon $start, Carbon $today): void
     {
-        $s = (array) config('demo.shop');
+        $s = (array) $this->spec['shop'];
+        $details = (array) $this->data['company'];
         $token = strtolower(Str::random(6));
         [$first, $last] = explode(' ', $this->data['team'][0][0], 2);
 
@@ -368,29 +426,29 @@ class PublicDemoBuilder
 
         $co = new Company();
         $co->owner_id = $manager->id; // created hook: the manager's company_id
-        $co->name = (string) ($s['name'] ?? 'Fresh Corner Market');
+        $co->name = (string) $s['name'];
         $co->status = 'Active';
         $co->is_demo = true;
         $co->demo_parent_id = null;
         $co->currency = (string) ($s['currency'] ?? 'UGX');
         $co->country = (string) ($s['country'] ?? 'UG');
         $co->timezone = $this->tz;
-        $co->business_type = 'supermarket';
+        $co->business_type = (string) $details['business_type'];
         $co->address = (string) ($s['address'] ?? '');
-        $co->phone_number = '+256 772 555 100';
-        $co->email = 'hello@freshcorner.example';
-        $co->slogan = 'Fresh every morning';
-        $co->receipt_header = "Fresh Corner Market\nPlot 14, Ntinda Road, Kampala · 0772 555 100";
-        $co->receipt_footer = 'Thank you for shopping local. Returns within 14 days with this receipt.';
+        $co->phone_number = (string) $details['phone'];
+        $co->email = (string) $details['email'];
+        $co->slogan = (string) $details['slogan'];
+        $co->receipt_header = (string) $details['receipt_header'];
+        $co->receipt_footer = (string) $details['receipt_footer'];
         $co->license_expire = now()->addYears(5);
-        $co->enabled_modules = self::MODULES;
+        $co->enabled_modules = $this->spec['modules'];
         $co->negative_stock_policy = 'allow';
         $co->receipt_channels = [];
         $co->tax_rate = 18; // Uganda's VAT, inside the shelf price
         $co->payment_methods = ['methods' => ['cash', 'card', 'mobile_money', 'credit'], 'momo' => [], 'opening_float' => self::FLOAT];
         $co->onboarding_state = ['step' => 'done', 'completed_steps' => config('onboarding.steps'), 'skipped_steps' => [], 'completed_at' => now()->toIso8601String(),
             'dismissed_checklist' => true, 'demo' => true, 'demo_status' => 'building', 'version' => OnboardingService::STATE_VERSION,
-            'public_demo' => ['building' => true]]; // marks it as the public demo's from the start (guards apply, a dead build is cleaned up)
+            'public_demo' => ['building' => true, 'account' => $this->account]]; // marks it as the public demo's from the start (guards apply, a dead build is cleaned up)
         $co->save();
 
         CompanyMember::create(['company_id' => $co->id, 'user_id' => $manager->id, 'role' => 'owner', 'status' => 'active', 'joined_at' => now()]);
@@ -433,18 +491,19 @@ class PublicDemoBuilder
         $taxes = app(TaxClassService::class)->ensureDefaults($this->cid)->keyBy('code');
 
         // The team (the manager already exists: he is building the shop).
+        $domain = (string) $this->data['company']['domain'];
         foreach (array_slice($this->data['team'], 1) as [$name, $role]) {
             $slug = Str::slug($name, '.');
-            $u = $this->quietly(fn () => app(TeamService::class)->createMember($this->co, $this->manager, $name, "{$slug}.".$this->cid.'@freshcorner.example', null, Str::password(24, symbols: false), $role)); // letters and numbers always (PasswordPolicy)
+            $u = $this->quietly(fn () => app(TeamService::class)->createMember($this->co, $this->manager, $name, "{$slug}.".$this->cid.'@'.$domain, null, Str::password(24, symbols: false), $role)); // letters and numbers always (PasswordPolicy)
             if ($u instanceof User) {
-                DB::table('admin_users')->where('id', $u->id)->update(['email' => "{$slug}@freshcorner.example"]);
+                DB::table('admin_users')->where('id', $u->id)->update(['email' => "{$slug}@{$domain}"]);
                 $this->staff[strtolower(strtok($name, ' '))] = $u->fresh();
             }
         }
-        DB::table('admin_users')->where('id', $this->manager->id)->update(['email' => Str::slug($this->data['team'][0][0], '.').'@freshcorner.example']);
-        foreach (['daniel' => '2468', 'maria' => '1357', 'kevin' => '8642'] as $who => $pin) {
-            if (isset($this->staff[$who])) {
-                $this->quietly(fn () => app(ApprovalService::class)->setPin($this->staff[$who], $pin));
+        DB::table('admin_users')->where('id', $this->manager->id)->update(['email' => Str::slug($this->data['team'][0][0], '.').'@'.$domain]);
+        foreach (['manager' => '2468', 'morning' => '1357', 'evening' => '8642'] as $seat => $pin) {
+            if ($this->seat($seat) !== null) {
+                $this->quietly(fn () => app(ApprovalService::class)->setPin($this->seat($seat), $pin));
             }
         }
 
@@ -469,7 +528,7 @@ class PublicDemoBuilder
             $item->selling_price = $sell;
             $item->buying_price = $cost;
             $item->original_quantity = 0; // everything arrives on the first morning's deliveries
-            $item->sku = sprintf('FCM-%03d', $n + 1);
+            $item->sku = sprintf('%s-%03d', $this->data['company']['sku'], $n + 1);
             $item->barcode = $weighed ? null : self::ean13('0714'.sprintf('%08d', 31000 + ($n + 1) * 37));
             $item->image = $photo ? $this->photo($photo) : null;
             $item->min_stock = $reorder;
@@ -490,7 +549,7 @@ class PublicDemoBuilder
             Carbon::setTestNow($this->at($start->copy()->subDays(30 + $i * 9), 11));
             $c = Customer::create(['company_id' => $this->cid, 'name' => $name, 'phone' => $phone, 'email' => $email, 'credit_limit' => $limit, 'payment_terms_days' => $terms ?: null,
                 'is_active' => true, 'reminders_enabled' => false, 'created_by_id' => $this->manager->id, 'marketing_opt_in' => ! empty($x['marketing']),
-                'notes' => ! empty($x['account']) ? 'Café on the corner. Orders bread and dairy twice a week, pays fortnightly by bank transfer.' : null]);
+                'notes' => $x['notes'] ?? null]);
             if (! empty($x['opt_out'])) {
                 DB::table('customers')->where('id', $c->id)->update(['messages_opt_out' => 1, 'messages_opt_out_at' => now()]);
             }
@@ -499,17 +558,11 @@ class PublicDemoBuilder
 
         // Deals, set up on the first morning.
         Carbon::setTestNow($this->at($start, 6, 40));
-        $p = fn (string $name) => $this->item($name)['id'] ?? 0;
-        $cat = fn (string $name) => ['type' => 'category', 'id' => (int) ($cats[$name]->id ?? 0)];
-        foreach ([
-            ['name' => 'Croissants: 3 for UGX 10,000', 'type' => 'mix_match', 'qty' => 3, 'price' => 10000, 'targets' => [['type' => 'product', 'id' => $p('Butter Croissant')]]],
-            ['name' => 'Weekend dairy 10% off', 'type' => 'percent_off', 'percent' => 10, 'days' => [6, 7], 'targets' => [$cat('Dairy & Eggs')]],
-            ['name' => 'Lemonade: buy 2, get 1 free', 'type' => 'buy_x_get_y', 'buy' => 2, 'get' => 1, 'targets' => [['type' => 'product', 'id' => $p('Sparkling Lemonade 330ml')]]],
-            ['name' => 'Bread & butter for UGX 28,000', 'type' => 'bundle', 'price' => 28000, 'targets' => [['type' => 'product', 'id' => $p('Country White Loaf')], ['type' => 'product', 'id' => $p('Salted Butter 500g')]]],
-            ['name' => 'Members: coffee beans UGX 30,000', 'type' => 'fixed_price', 'price' => 30000, 'member_only' => true, 'targets' => [['type' => 'product', 'id' => $p('Whole Bean Coffee 500g')]]],
-            ['name' => 'Bakery happy hour 20% off', 'type' => 'percent_off', 'percent' => 20, 'from' => '18:00', 'to' => '21:00', 'targets' => [$cat('Bakery')]],
-            ['name' => 'Welcome coupon: UGX 5,000 off', 'type' => 'coupon', 'code' => 'WELCOME5', 'min_spend' => 50000, 'amount' => 5000],
-        ] as $promo) {
+        foreach ($this->data['deals'] as $deal) {
+            $promo = $deal;
+            if (isset($deal['targets'])) {
+                $promo['targets'] = array_map(fn (array $t) => ['type' => $t[0], 'id' => $t[0] === 'category' ? (int) ($cats[$t[1]]->id ?? 0) : (int) ($this->item($t[1])['id'] ?? 0)], $deal['targets']);
+            }
             $this->quietly(fn () => app(PromotionService::class)->save($this->cid, $this->manager->id, $promo + ['is_active' => true]));
         }
     }
@@ -526,14 +579,16 @@ class PublicDemoBuilder
         }
         $this->payBills($day);
         $this->trade($day, $d, $isToday);
-        if (! $isToday) {
+        if ($isToday) {
+            $this->ensureTodaySale($day);
+        } else {
             $this->events($day, $d, $days);
             $this->expenses($day);
         }
     }
 
     /**
-     * One day's shifts and sales. Maria opens, Kevin takes the evening; Sunday is a short day.
+     * One day's shifts and sales. The morning seat opens, the evening seat takes over; Sunday is a short day.
      * Anything after this minute (today) is left for the hourly heal.
      */
     private function trade(Carbon $day, int $d, bool $isToday): void
@@ -541,12 +596,12 @@ class PublicDemoBuilder
         $dow = (int) $day->dayOfWeekIso;
         $growth = 1 + min(0.2, $d * 0.003);
         $shifts = $dow === 7
-            ? [['maria', 9, 17, mt_rand(9, 12)]]
-            : [['maria', self::OPEN, 14, (int) round(mt_rand(6, 9) * $growth) + ($dow === 6 ? 4 : 0)],
-                ['kevin', 14, self::CLOSE, (int) round(mt_rand(7, 10) * $growth) + ($dow === 6 ? 3 : 0) + ($dow === 5 ? 3 : 0)]];
+            ? [['morning', 9, 17, mt_rand(9, 12)]]
+            : [['morning', self::OPEN, 14, (int) round(mt_rand(6, 9) * $growth) + ($dow === 6 ? 4 : 0)],
+                ['evening', 14, self::CLOSE, (int) round(mt_rand(7, 10) * $growth) + ($dow === 6 ? 3 : 0) + ($dow === 5 ? 3 : 0)]];
 
         foreach ($shifts as [$who, $from, $to, $count]) {
-            $user = $this->staff[$who] ?? $this->manager;
+            $user = $this->seat($who) ?? $this->manager;
             $openAt = $this->at($day, $from - 1, 55);
             if ($openAt->greaterThan($this->realNow)) {
                 continue;
@@ -556,7 +611,7 @@ class PublicDemoBuilder
                 continue;
             }
             // The café's standing order, first thing on Mondays and Thursdays.
-            if ($who === 'maria' && in_array($dow, [1, 4], true)) {
+            if ($who === 'morning' && in_array($dow, [1, 4], true)) {
                 $this->cafeOrder($day, $user, $shift);
             }
             $times = [];
@@ -642,7 +697,7 @@ class PublicDemoBuilder
         }
         Carbon::setTestNow($when);
         $lines = [];
-        foreach (['Country White Loaf' => 6, 'Butter Croissant' => 12, 'Whole Milk 2L' => 4, 'Free-Range Eggs 12pk' => 2, 'Navel Oranges' => 3.2] as $name => $qty) {
+        foreach ((array) $this->data['standing_order'] as $name => $qty) {
             if (($it = $this->item($name)) && $this->stockOf($it['id']) >= $qty) {
                 $lines[] = ['stock_item_id' => $it['id'], 'quantity' => $qty];
             }
@@ -804,7 +859,7 @@ class PublicDemoBuilder
         if ($lines === [] || $supplier === null) {
             return;
         }
-        $keeper = $this->staff['samuel'] ?? $this->manager;
+        $keeper = $this->seat('keeper') ?? $this->manager;
         $value = round(array_sum(array_map(fn ($l) => $l['quantity'] * $l['unit_cost'], $lines)), 2);
         $cashOnDelivery = in_array($key, ['farm', 'bakery'], true);
         $ref = strtoupper(substr($key, 0, 2)).'-'.$day->format('md').mt_rand(10, 99);
@@ -867,7 +922,7 @@ class PublicDemoBuilder
             $supplier = $this->suppliers[$key] ?? null;
             if ($supplier) {
                 Carbon::setTestNow(now()->greaterThan($this->realNow) ? $this->realNow : now());
-                $this->quietly(fn () => app(GoodsReceiptService::class)->receive($this->cid, ($this->staff['samuel'] ?? $this->manager)->id, $lines, (int) $supplier->id,
+                $this->quietly(fn () => app(GoodsReceiptService::class)->receive($this->cid, ($this->seat('keeper') ?? $this->manager)->id, $lines, (int) $supplier->id,
                     'TOP-'.$today->format('md').mt_rand(10, 99), 0, 'cash', $today->toDateString(), (string) Str::uuid()));
             }
         }
@@ -882,7 +937,7 @@ class PublicDemoBuilder
         $yesterday = $today->copy()->subDay();
         $in = [];
         foreach ($this->items as $it) {
-            $target = $it['target'] - ($it['name'] === 'Greek Yogurt 1kg' ? 5 : 0); // five more arrive as the short-dated batch
+            $target = $it['target'] - ($it['name'] === ($this->data['short_dated']['item'] ?? null) ? (float) $this->data['short_dated']['qty'] : 0); // these arrive as the short-dated batch
             $delta = round($target - $this->stockOf($it['id']), 3);
             if ($delta > 0) {
                 $in[$it['supplier']][] = $this->receiptLine($it, $it['weighed'] ? $delta : ceil($delta), $today);
@@ -892,7 +947,7 @@ class PublicDemoBuilder
             while ($delta < -0.0005 && $guard++ < 8) {
                 $qty = $guard === 8 || -$delta <= $chunk ? round(-$delta, 3) : (float) $chunk;
                 Carbon::setTestNow($this->at($yesterday, mt_rand(15, 20), mt_rand(0, 59)));
-                $this->checkout($this->staff['kevin'] ?? $this->manager, ['items' => [['stock_item_id' => $it['id'], 'quantity' => $qty]], 'payments_explicit' => true,
+                $this->checkout($this->seat('evening') ?? $this->manager, ['items' => [['stock_item_id' => $it['id'], 'quantity' => $qty]], 'payments_explicit' => true,
                     'payments' => [['method' => 'cash', 'amount' => round($qty * $it['sell'], 2)]], 'sale_date' => $yesterday->toDateString(),
                     'client_uuid' => (string) Str::uuid(), 'age_checked' => true, 'allow_negative_stock' => true]);
                 $delta = round($target - $this->stockOf($it['id']), 3);
@@ -900,7 +955,7 @@ class PublicDemoBuilder
         }
         foreach ($in as $key => $lines) {
             Carbon::setTestNow($this->at($today, 6, 30));
-            $this->quietly(fn () => app(GoodsReceiptService::class)->receive($this->cid, ($this->staff['samuel'] ?? $this->manager)->id, $lines, (int) $this->suppliers[$key]->id,
+            $this->quietly(fn () => app(GoodsReceiptService::class)->receive($this->cid, ($this->seat('keeper') ?? $this->manager)->id, $lines, (int) $this->suppliers[$key]->id,
                 'AM-'.$today->format('md').strtoupper(substr($key, 0, 2)), in_array($key, ['farm', 'bakery'], true) ? round(array_sum(array_map(fn ($l) => $l['quantity'] * $l['unit_cost'], $lines)), 2) : 0,
                 'cash', $today->toDateString(), (string) Str::uuid()));
         }
@@ -911,7 +966,7 @@ class PublicDemoBuilder
     private function events(Carbon $day, int $d, int $days): void
     {
         $manager = $this->manager;
-        $keeper = $this->staff['samuel'] ?? $manager;
+        $keeper = $this->seat('keeper') ?? $manager;
         $back = $days - $d;
 
         // Credit customers pay part of what they owe; the café settles its account every fortnight.
@@ -930,12 +985,12 @@ class PublicDemoBuilder
 
         // Gift cards: one bought for a customer, one over the counter; later spent in part.
         if ($d === 10 || $d === 26) {
-            $kenji = collect($this->customers)->first(fn ($c) => ! empty($c['x']['gift_card']))['customer'] ?? null;
+            $holder = collect($this->customers)->first(fn ($c) => ! empty($c['x']['gift_card']))['customer'] ?? null;
             Carbon::setTestNow($this->at($day, 12, 20));
-            $sold = $this->quietly(fn () => app(GiftCardService::class)->sell($this->cid, ($this->staff['maria'] ?? $manager)->id, $d === 10 ? 100000 : 50000, 'card',
-                $d === 10 && $kenji ? ['customer_id' => (int) $kenji->id, 'client_uuid' => (string) Str::uuid()] : ['client_uuid' => (string) Str::uuid()]));
+            $sold = $this->quietly(fn () => app(GiftCardService::class)->sell($this->cid, ($this->seat('morning') ?? $manager)->id, $d === 10 ? 100000 : 50000, 'card',
+                $d === 10 && $holder ? ['customer_id' => (int) $holder->id, 'client_uuid' => (string) Str::uuid()] : ['client_uuid' => (string) Str::uuid()]));
             if (is_array($sold) && ! empty($sold['code'])) {
-                $this->giftCards[] = ['code' => (string) $sold['code'], 'customer_id' => $d === 10 ? $kenji?->id : null];
+                $this->giftCards[] = ['code' => (string) $sold['code'], 'customer_id' => $d === 10 ? $holder?->id : null];
             }
         }
         if ($d === 31 || $d === 47) {
@@ -958,8 +1013,7 @@ class PublicDemoBuilder
         }
 
         // Write-offs.
-        $writeOffs = [12 => ['Free-Range Eggs 12pk', 'Damage', 1, 'Tray dropped while shelving'], 6 => ['Whole Milk 2L', 'Expired', 2, 'Past use-by date'],
-            4 => ['Bananas', 'Expired', 1.4, 'Overripe'], 20 => ['Iced Tea 2L', 'Internal Use', 1, 'Staff room']];
+        $writeOffs = (array) $this->data['write_offs'];
         if (isset($writeOffs[$back]) && ($it = $this->item($writeOffs[$back][0]))) {
             Carbon::setTestNow($this->at($day, 8, 10));
             $this->quietly(fn () => app(ShrinkService::class)->record($this->cid, $keeper->id, ['stock_item_id' => $it['id'], 'type' => $writeOffs[$back][1],
@@ -973,7 +1027,7 @@ class PublicDemoBuilder
             $take = $this->quietly(fn () => app(StockTakeService::class)->create($this->cid, $keeper->id, 'Pantry count', $pantry[0]['category_id'] ?? null, (string) Str::uuid()));
             if ($take) {
                 $counts = array_map(fn ($it) => ['stock_item_id' => $it['id'], 'counted_quantity' => max(0, $this->stockOf($it['id'])
-                    - ($it['name'] === 'Spaghetti 500g' ? 2 : ($it['name'] === 'Cane Sugar 2kg' ? 1 : 0)))], $pantry);
+                    - (float) ($this->data['count_differences'][$it['name']] ?? 0))], $pantry);
                 $this->quietly(fn () => app(StockTakeService::class)->count($take, $counts));
                 $this->quietly(fn () => app(StockTakeService::class)->post($take->fresh(), $manager->id));
             }
@@ -983,15 +1037,14 @@ class PublicDemoBuilder
     private function spendGiftCard(Carbon $day): void
     {
         $card = $this->giftCards[0] ?? null;
-        $coffee = $this->item('Whole Bean Coffee 500g');
-        $nuts = $this->item('Roasted Hazelnuts 250g');
+        [$coffee, $nuts] = array_map(fn (string $name) => $this->item($name), $this->data['gift_card_basket']);
         if ($card === null || ! $coffee || ! $nuts) {
             return;
         }
         Carbon::setTestNow($this->at($day, 15, 25));
-        $maria = $this->staff['kevin'] ?? $this->manager;
+        $cashier = $this->seat('evening') ?? $this->manager;
         $est = $coffee['sell'] + $nuts['sell'];
-        $sale = $this->checkout($maria, ['items' => [['stock_item_id' => $coffee['id'], 'quantity' => 1], ['stock_item_id' => $nuts['id'], 'quantity' => 1]],
+        $sale = $this->checkout($cashier, ['items' => [['stock_item_id' => $coffee['id'], 'quantity' => 1], ['stock_item_id' => $nuts['id'], 'quantity' => 1]],
             'customer_id' => $card['customer_id'], 'payments_explicit' => true, 'sale_date' => $day->toDateString(), 'client_uuid' => (string) Str::uuid(),
             'payments' => [['tender' => 'gift_card', 'code' => $card['code'], 'amount' => 40000.0], ['method' => 'card', 'amount' => ceil($est), 'reference' => 'VISA •••• 4417']]]);
         if ($sale) {
@@ -1003,7 +1056,7 @@ class PublicDemoBuilder
     {
         $rows = array_values(array_filter($this->data['expenses'], fn ($e) => (int) $e[3] === $day->day));
         if ((int) $day->dayOfWeekIso === 5) {
-            $rows[] = ['Wages', 'Weekly wages (part-time staff)', 600000, 0];
+            $rows[] = ['Wages', 'Weekly wages (part-time staff)', (int) $this->data['weekly_wages'], 0];
         }
         foreach ($rows as [$category, $description, $amount]) {
             Carbon::setTestNow($this->at($day, 17, 30));
@@ -1019,15 +1072,16 @@ class PublicDemoBuilder
     private function finishingTouches(Carbon $today): void
     {
         $manager = $this->manager;
-        $keeper = $this->staff['samuel'] ?? $manager;
+        $keeper = $this->seat('keeper') ?? $manager;
         $at = fn (int $h, int $m) => $this->at($today, $h, $m)->greaterThan($this->realNow) ? $this->at($today->copy()->subDay(), $h, $m) : $this->at($today, $h, $m);
 
         // Yogurt near its date, marked down by the chiller.
-        if ($yogurt = $this->item('Greek Yogurt 1kg')) {
+        $dated = (array) ($this->data['short_dated'] ?? []);
+        if ($yogurt = $this->item((string) ($dated['item'] ?? ''))) {
             Carbon::setTestNow($at(6, 35));
-            $this->quietly(fn () => app(GoodsReceiptService::class)->receive($this->cid, $keeper->id, [['stock_item_id' => $yogurt['id'], 'quantity' => 5, 'unit_cost' => $yogurt['cost'],
+            $this->quietly(fn () => app(GoodsReceiptService::class)->receive($this->cid, $keeper->id, [['stock_item_id' => $yogurt['id'], 'quantity' => (float) $dated['qty'], 'unit_cost' => $yogurt['cost'],
                 'batch_number' => 'L'.$today->copy()->subDays(16)->format('ymd').'-Y', 'expiry_date' => $today->copy()->addDays(2)->toDateString()]],
-                (int) $this->suppliers['dairy']->id, 'RET-SHELF', 0, 'cash', $today->copy()->subDays(16)->toDateString(), (string) Str::uuid(), 'Found at the back of the chiller'));
+                (int) $this->suppliers['dairy']->id, 'RET-SHELF', 0, 'cash', $today->copy()->subDays(16)->toDateString(), (string) Str::uuid(), (string) $dated['note']));
             $batch = DB::table('stock_batches')->where('company_id', $this->cid)->where('stock_item_id', $yogurt['id'])->where('quantity', '>', 0)->orderBy('expiry_date')->first();
             if ($batch) {
                 Carbon::setTestNow($at(7, 5));
@@ -1037,21 +1091,21 @@ class PublicDemoBuilder
 
         // Orders: one sent yesterday for what is running out, one still being put together.
         Carbon::setTestNow($this->at($today->copy()->subDay(), 17, 45));
-        $home = array_filter([$this->item('Wireless Headphones') ? ['stock_item_id' => $this->item('Wireless Headphones')['id'], 'quantity' => 6, 'unit_cost' => $this->item('Wireless Headphones')['cost']] : null,
-            $this->item('AA Batteries 8pk') ? ['stock_item_id' => $this->item('AA Batteries 8pk')['id'], 'quantity' => 24, 'unit_cost' => $this->item('AA Batteries 8pk')['cost']] : null]);
-        $po = $this->quietly(fn () => app(PurchaseOrderService::class)->create($this->cid, $manager->id, array_values($home), (int) $this->suppliers['home']->id,
-            $today->copy()->addDays(2)->toDateString(), 'Headphones sold out; batteries low.'));
+        $orderLines = fn (array $wanted) => array_values(array_filter(array_map(fn ($name, $qty) => ($it = $this->item($name)) ? ['stock_item_id' => $it['id'], 'quantity' => $qty, 'unit_cost' => $it['cost']] : null, array_keys($wanted), $wanted)));
+        $sent = (array) $this->data['orders']['sent'];
+        $po = $this->quietly(fn () => app(PurchaseOrderService::class)->create($this->cid, $manager->id, $orderLines((array) $sent['lines']), (int) $this->suppliers[$sent['supplier']]->id,
+            $today->copy()->addDays(2)->toDateString(), (string) $sent['note']));
         if ($po) {
             $this->quietly(fn () => app(PurchaseOrderService::class)->send($po, false));
         }
         Carbon::setTestNow($at(9, 40));
-        $drinks = array_values(array_filter(array_map(fn ($n) => ($it = $this->item($n)) ? ['stock_item_id' => $it['id'], 'quantity' => $n === 'Spring Water 1.5L' ? 48 : 24, 'unit_cost' => $it['cost']] : null,
-            ['Spring Water 1.5L', 'Sparkling Lemonade 330ml', 'Orange Juice 1.5L'])));
-        $this->quietly(fn () => app(PurchaseOrderService::class)->create($this->cid, $manager->id, $drinks, (int) $this->suppliers['drinks']->id, $today->copy()->addDays(4)->toDateString(), 'Weekend drinks'));
+        $draft = (array) $this->data['orders']['draft'];
+        $this->quietly(fn () => app(PurchaseOrderService::class)->create($this->cid, $manager->id, $orderLines((array) $draft['lines']), (int) $this->suppliers[$draft['supplier']]->id, $today->copy()->addDays(4)->toDateString(), (string) $draft['note']));
 
         // A price rise coming on Monday, and today's drinks count half done.
-        if ($coffee = $this->item('Whole Bean Coffee 500g')) {
-            $this->quietly(fn () => app(PriceBookService::class)->schedule($this->cid, $coffee['id'], 'selling', 38000, $today->copy()->next(Carbon::MONDAY)->setTime(6, 0), 'Supplier price rise', $manager->id));
+        $rise = (array) $this->data['price_rise'];
+        if ($risen = $this->item((string) $rise['item'])) {
+            $this->quietly(fn () => app(PriceBookService::class)->schedule($this->cid, $risen['id'], 'selling', (int) $rise['price'], $today->copy()->next(Carbon::MONDAY)->setTime(6, 0), 'Supplier price rise', $manager->id));
         }
         Carbon::setTestNow($at(8, 20));
         $drinksCount = array_values(array_filter($this->items, fn ($it) => $it['category'] === 'Beverages'));
@@ -1065,19 +1119,13 @@ class PublicDemoBuilder
         $chat = app(ChatService::class);
         $room = $this->quietly(fn () => $chat->teamConversation($this->co->fresh()));
         if ($room) {
-            foreach ([
-                ['daniel', -1, 18, 40, 'Dairy order is in for Wednesday. Northbrook confirmed a 6:45 drop.'],
-                ['samuel', -1, 19, 5, 'Headphones are sold out. I put them on the Brightline order with the batteries.'],
-                ['maria', 0, 7, 2, 'Till 1 open with the UGX 100,000 float. The café order is packed for pickup.'],
-                ['samuel', 0, 7, 10, 'Five yogurts found at the back of the chiller, date is in two days. Marked down 30%.'],
-                ['daniel', 0, 7, 25, 'Thanks both. Coffee goes up to UGX 38,000 on Monday, labels are in the print queue.'],
-            ] as [$who, $offset, $h, $m, $text]) {
+            foreach ((array) $this->data['chat'] as [$who, $offset, $h, $m, $text]) {
                 $when = $this->at($today->copy()->addDays($offset), $h, $m);
-                if ($when->greaterThan($this->realNow) || ! isset($this->staff[$who])) {
+                if ($when->greaterThan($this->realNow) || $this->seat($who) === null) {
                     continue;
                 }
                 Carbon::setTestNow($when);
-                $this->quietly(fn () => $chat->send($room, $this->staff[$who], $text));
+                $this->quietly(fn () => $chat->send($room, $this->seat($who), $text));
             }
         }
     }

@@ -1,21 +1,23 @@
 <?php
 
 /*
-| The public demo shop (App\Services\Onboarding\PublicDemo).
+| The family's public demos (App\Services\Onboarding\PublicDemo): Budget Pro's account below, and one each for Shelfie,
+| Kuku Tally and Pledge & Budget under `apps`.
 |
-| One shared account anybody can open from the website with a single click. Everything in it is
+| Each is an account anybody can open from its app's website with a single click, in any of its roles. Everything in it is
 | sample data made through the app's own services, and it looks after itself:
-|   - every hour it is checked and repaired (the account, the shop's settings, today's trading),
-|   - every `rebuild_hours` it is built again from scratch. The new shop is filled completely
-|     before anyone is moved into it, so a visitor never lands in a half-built shop.
+|   - every hour it is checked and repaired (the account, its settings, today's figures),
+|   - every `rebuild_hours` it is built again from scratch. The new account is filled completely
+|     before anyone is moved into it, so a visitor never lands in a half-built one.
 |
-| Demo shops never send messages (Messenger) and are left out of plan limits (Quotas). A visitor
-| cannot change the password or email, change the currency, pay for a plan or delete the shop.
+| Demos never send messages (Messenger) and are left out of plan limits (Quotas). A visitor cannot change a password or
+| email, change the currency, pay for a plan or delete the account. The sign-ins here are for the phones' API and for a
+| person signing in by hand: no public page prints them.
 */
 return [
     'enabled' => (bool) env('DEMO_PUBLIC', true),
 
-    // The sign-in shown on the website. The address is on our own domain, and nothing is ever sent to it.
+    // Budget Pro's sign-in. The address is on our own domain, and nothing is ever sent to it.
     'email' => env('DEMO_EMAIL', 'demo@schooldynamics.ug'),
     'password' => env('DEMO_PASSWORD', 'demo2026'),
 
@@ -35,6 +37,44 @@ return [
         'country' => 'UG',
         'timezone' => 'Africa/Kampala',
         'address' => 'Plot 14, Ntinda Road, Kampala',
+    ],
+
+    /*
+    | Each app's own account, by its key in the portal's config/apps.php. `kind` says who fills it: shop (PublicDemoBuilder),
+    | farm or events (AppDemoBuilder); `data` is its file in database/data; `modules` are all it ever has. `words` are what
+    | its refusals call it (PublicDemo::guard); the portal's own words are in config/apps.php.
+    */
+    'apps' => [
+        'shelfie' => [
+            'username' => 'shelfie-demo',
+            'email' => env('DEMO_SHELFIE_EMAIL', 'demo-shelfie@schooldynamics.ug'),
+            'password' => env('DEMO_SHELFIE_PASSWORD', 'shelfie-demo-2026'),
+            'kind' => 'shop',
+            'data' => 'demo_shelfie',
+            'modules' => ['shop', 'finance'],
+            'shop' => ['name' => 'Kireka Family Mart', 'currency' => 'UGX', 'country' => 'UG', 'timezone' => 'Africa/Kampala', 'address' => 'Kira Road, Kireka'],
+            'words' => ['place' => 'shop', 'name' => 'demo shop', 'own' => 'Create your own shop'],
+        ],
+        'kuku-tally' => [
+            'username' => 'kuku-tally-demo',
+            'email' => env('DEMO_KUKU_TALLY_EMAIL', 'demo-kuku-tally@schooldynamics.ug'),
+            'password' => env('DEMO_KUKU_TALLY_PASSWORD', 'kuku-tally-demo-2026'),
+            'kind' => 'farm',
+            'data' => 'demo_kuku_tally',
+            'modules' => ['poultry', 'finance'],
+            'shop' => ['name' => 'Nsubuga Poultry Farm', 'currency' => 'UGX', 'country' => 'UG', 'timezone' => 'Africa/Kampala', 'address' => 'Kyetume, Mukono'],
+            'words' => ['place' => 'farm', 'name' => 'demo farm', 'own' => 'Start your own farm book'],
+        ],
+        'pledge-and-budget' => [
+            'username' => 'pledge-budget-demo',
+            'email' => env('DEMO_PLEDGE_BUDGET_EMAIL', 'demo-pledge-budget@schooldynamics.ug'),
+            'password' => env('DEMO_PLEDGE_BUDGET_PASSWORD', 'pledge-budget-demo-2026'),
+            'kind' => 'events',
+            'data' => 'demo_pledge_budget',
+            'modules' => ['budget', 'finance'],
+            'shop' => ['name' => 'Brian & Grace Wedding Committee', 'currency' => 'UGX', 'country' => 'UG', 'timezone' => 'Africa/Kampala', 'address' => 'Ntinda, Kampala'],
+            'words' => ['place' => 'event', 'name' => 'demo event', 'own' => 'Plan your own event'],
+        ],
     ],
 
     /*

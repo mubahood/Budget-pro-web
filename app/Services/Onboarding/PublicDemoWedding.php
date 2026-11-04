@@ -104,6 +104,98 @@ class PublicDemoWedding
         return ['events' => $events, 'wedding' => (int) ($events[self::WEDDING] ?? 0)];
     }
 
+    /**
+     * Today on the pledge books, for an account that is only about them: one new pledge a day, and a payment for each of the
+     * day's rounds so far (at least one, whatever the hour). Counted from the books, so a heal never adds a row twice.
+     *
+     * @param  array<string, int>  $events  event key => id
+     * @return array{pledges: int, payments: int} what it added
+     */
+    public function keepToday(Company $co, User $by, array $events, ?Carbon $now = null, ?string $tz = null): array
+    {
+        $this->co = $co;
+        $this->by = $by;
+        $this->tz = (string) ($tz ?: $co->timezone ?: 'Africa/Kampala');
+        $this->now = ($now ?? now())->copy();
+        $this->today = $this->now->copy()->setTimezone($this->tz)->startOfDay();
+        $open = array_values(array_filter(array_map(fn ($key) => isset($events[$key]) && ! empty($this->data['events'][$key]['open']) ? (int) $events[$key] : 0, array_keys($this->data['events']))));
+        if ($open === []) {
+            return ['pledges' => 0, 'payments' => 0];
+        }
+        $clock = Carbon::getTestNow();
+        $guards = $this->actAs($by);
+        $notify = BudgetItem::$notify;
+        BudgetItem::$notify = false;
+        $added = ['pledges' => 0, 'payments' => 0];
+        try {
+            OnboardingEvents::muted(function () use (&$added, $open) {
+                $added['pledges'] = $this->pledgeToday($open[count($open) - 1]);
+                $added['payments'] = $this->paymentsToday($open);
+            });
+        } finally {
+            BudgetItem::$notify = $notify;
+            Carbon::setTestNow($clock);
+            $this->restore($guards);
+        }
+
+        return $added;
+    }
+
+    /** The day's new pledge, in the Friends group of the wedding. Nothing when today already has one. */
+    private function pledgeToday(int $pid): int
+    {
+        $from = $this->today->copy()->utc();
+        if (DB::table('contribution_records')->where('budget_program_id', $pid)->where('created_at', '>=', $from)->exists()) {
+            return 0;
+        }
+        mt_srand(crc32('demo-pledge-today-'.$this->today->toDateString()));
+        $taken = DB::table('contribution_records')->where('budget_program_id', $pid)->pluck('name')->mapWithKeys(fn ($n) => [mb_strtolower((string) $n) => true])->all();
+        $name = $this->name($taken);
+        $amounts = [100000, 150000, 200000, 300000];
+        Carbon::setTestNow($this->now->copy());
+        $p = new ContributionRecord();
+        $p->budget_program_id = $pid;
+        $p->company_id = (int) $this->co->id;
+        $p->treasurer_id = $this->by->id;
+        $p->name = $name;
+        $p->category_id = \App\Services\Budget\EventBook::groupKey('Friends');
+        $p->amount = $amounts[mt_rand(0, count($amounts) - 1)];
+        $p->paid_amount = 0;
+        $p->fully_paid = 'No';
+        $p->phone = DemoPledgeExtras::phoneFor($name);
+
+        return $this->quietly(fn () => $p->save()) === null ? 0 : 1;
+    }
+
+    /** @param list<int> $open */
+    private function paymentsToday(array $open): int
+    {
+        $cid = (int) $this->co->id;
+        $hour = (int) $this->now->copy()->setTimezone($this->tz)->format('G');
+        $due = max(1, count(array_filter([8, 11, 14, 17, 20], fn ($h) => $h <= $hour)));
+        $date = $this->today->toDateString();
+        $have = DB::table('contribution_payments')->whereIn('budget_program_id', $open)->where('paid_on', $date)->where('is_deleted', 0)->where('source', '!=', 'reversal')->count();
+        $payments = new ContributionPayments();
+        $added = 0;
+        for ($n = $have; $n < $due; $n++) {
+            $pid = $open[$n % count($open)];
+            $owing = DB::table('contribution_records')->where('budget_program_id', $pid)->where('is_deleted', 0)->where('not_paid_amount', '>', 0)->orderBy('id')->get(['id', 'not_paid_amount']);
+            if ($owing->isEmpty()) {
+                continue;
+            }
+            mt_srand(crc32("demo-payment-{$date}-{$n}"));
+            $row = $owing[mt_rand(0, $owing->count() - 1)];
+            $amount = min((float) $row->not_paid_amount, [50000, 100000, 100000, 200000][mt_rand(0, 3)]);
+            [$method, $reference] = $n % 2 === 0 ? ['mobile_money', 'MTN MoMo '.mt_rand(10000000, 99999999).mt_rand(10, 99)] : ['cash', null];
+            Carbon::setTestNow($this->now->copy());
+            if ($this->quietly(fn () => $payments->record($cid, (int) $row->id, ['amount' => $amount, 'paid_on' => $date, 'method' => $method, 'reference' => $reference, 'notes' => null], (int) $this->by->id)) !== null) {
+                $added++;
+            }
+        }
+
+        return $added;
+    }
+
     /** @return int the event's id (0 when it could not be made) */
     private function event(string $key, array $e): int
     {
