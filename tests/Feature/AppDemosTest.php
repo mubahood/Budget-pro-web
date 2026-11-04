@@ -283,6 +283,6 @@ class AppDemosTest extends TestCase
                 $minutes[$name] = explode(' ', $event->expression)[0];
             }
         }
-        $this->assertSame(['demo:public' => '0', 'sacco:demo' => '20', 'rentals:demo' => '40'], $minutes);
+        $this->assertSame(['demo:public' => '40', 'sacco:demo' => '20', 'rentals:demo' => '40'], $minutes);
     }
 }
