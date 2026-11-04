@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * `api.module:shop`, `api.module:finance`, `api.module:budget`, `api.module:poultry`, `api.module:pingpin`, `api.module:sacco`,
- * or `api.module:core` (roadmap 02 §3, phase-0 plan P0-3). Every authenticated /api/v1 route carries one
+ * `api.module:rentals`, or `api.module:core` (roadmap 02 §3, phase-0 plan P0-3). Every authenticated /api/v1 route carries one
  * (tests/Feature/Api/ModuleGatingTest walks the routes), so an endpoint answers only when the account has its
  * module, the same idea as the portal's `module:` middleware and the classic `module_paths`.
  *
@@ -33,7 +33,7 @@ class EnsureApiModule
     public const CORE = 'core';
 
     /** Modules a route can belong to (config/onboarding.php `modules`, plus Ping Pin). */
-    public const MODULES = ['shop', 'finance', 'budget', 'poultry', 'pingpin', 'sacco'];
+    public const MODULES = ['shop', 'finance', 'budget', 'poultry', 'pingpin', 'sacco', 'rentals'];
 
     /** Where the owner adds a module back (OnboardingController::modules; manage_settings). */
     public const ADD = 'PUT /api/v1/company/modules';

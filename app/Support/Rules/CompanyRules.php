@@ -34,20 +34,30 @@ class CompanyRules
      * The modules a business is built around (budget-pro-new docs/FAMILY_PLAN.md): every account keeps at
      * least one of them, so it always has a home screen. `finance` (Income & expenses) sits beside them.
      */
-    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco'];
+    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco', 'rentals'];
 
     public const CORE_MODULE_MESSAGE = 'Pick at least one: Shop, Poultry farm or Budget & pledges.';
 
     /**
-     * Modules an account keeps alone (docs/akiba AK-04): a SACCO's books are institutional, its plans are their
-     * own line (PlanLine) and its ledger must never describe the same money as Income & expenses. So a company
-     * with `sacco` has no other module, not even `finance`, and no account moves into or out of it later: a
-     * treasurer who also runs a shop uses two accounts. Refused with 422 `module_exclusive`.
+     * Modules an account keeps alone (docs/akiba AK-04, docs/estate-ledger KR-04): a SACCO's books are institutional and a
+     * letting agency's rent books hold landlords' and tenants' money; each has its own plan line (PlanLine) and must
+     * never describe the same money as Income & expenses. So a company with one has no other module, not even
+     * `finance`, and no account moves into or out of one later: a treasurer who also runs a shop uses two accounts.
+     * Refused with 422 `module_exclusive`.
      */
-    public const EXCLUSIVE_MODULES = ['sacco'];
+    public const EXCLUSIVE_MODULES = ['sacco', 'rentals'];
 
     // Names no other product (AK-68): a SACCO's staff only ever hear about their SACCO.
     public const EXCLUSIVE_MESSAGE = 'A SACCO keeps its books in an account of its own, and other books stay in theirs.';
+
+    /** Each exclusive module's refusal, in its own app's words: none names another app (AK-68, KR-05). */
+    public const EXCLUSIVE_MESSAGES = [
+        'sacco' => self::EXCLUSIVE_MESSAGE,
+        'rentals' => 'Estate Ledger keeps the rental books in an account of their own, and other books stay in theirs.',
+    ];
+
+    /** Each exclusive module's settings table: its books are set up once the account has a row there. */
+    private const SETUP_TABLES = ['sacco' => 'sacco_settings', 'rentals' => 'rental_settings'];
 
     /** Older profile fields the phone app still sends (kept writable for it; phone_number_2 and slogan are also in 'profile'). */
     public const LEGACY = [
@@ -126,7 +136,7 @@ class CompanyRules
             'require_shift' => ['sometimes', 'boolean'],
             'credit_terms_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
             'debt_reminders_enabled' => ['sometimes', 'boolean'],
-            'enabled_modules' => ['sometimes', 'array', 'min:1', self::coreModuleRule()],
+            'enabled_modules' => ['sometimes', 'array', 'min:1', self::coreModuleRule($company)],
             'enabled_modules.*' => [Rule::in(array_keys(config('onboarding.modules')))],
             'settings_worker_can_create_stock_item' => ['sometimes', 'nullable', Rule::in(['Yes', 'No'])],
             'settings_worker_can_create_stock_record' => ['sometimes', 'nullable', Rule::in(['Yes', 'No'])],
@@ -147,19 +157,37 @@ class CompanyRules
         return array_filter(self::rules($company), fn ($key) => in_array(explode('.', $key)[0], $fields, true), ARRAY_FILTER_USE_KEY);
     }
 
-    /** A list of modules must hold at least one core module (shop, poultry, budget or sacco), and an exclusive one alone. */
-    public static function coreModuleRule(): \Closure
+    /**
+     * A list of modules must hold at least one core module (shop, poultry, budget, sacco or rentals), and an exclusive
+     * one alone. With the company, its own app's words come first (exclusiveMessage).
+     */
+    public static function coreModuleRule(?Company $company = null): \Closure
     {
-        return function (string $attribute, mixed $value, \Closure $fail) {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($company) {
             if (! is_array($value) || $value === []) {
                 return;
             }
             if (array_intersect($value, self::CORE_MODULES) === []) {
                 $fail(self::CORE_MODULE_MESSAGE);
             } elseif (! self::exclusiveOk(array_map('strval', $value))) {
-                $fail(self::EXCLUSIVE_MESSAGE);
+                $fail(self::exclusiveMessage(array_map('strval', $value), $company?->exists ? $company->modules() : []));
             }
         };
+    }
+
+    /**
+     * The refusal for modules that break exclusivity, in the words of the app it concerns: the account's own exclusive
+     * module first (a SACCO asking for rentals hears about its SACCO), else the one the list asks for. Never another
+     * app's name to an app's own account (AK-68, KR-05).
+     *
+     * @param  array<int, string>  $modules  the modules asked for
+     * @param  array<int, string>  $before  the account's modules now (empty for a new one)
+     */
+    public static function exclusiveMessage(array $modules, array $before = []): string
+    {
+        $module = self::exclusiveOf($before) ?? self::exclusiveOf($modules);
+
+        return $module === null ? self::EXCLUSIVE_MESSAGE : (self::EXCLUSIVE_MESSAGES[$module] ?? self::EXCLUSIVE_MESSAGE);
     }
 
     /**
@@ -187,7 +215,7 @@ class CompanyRules
 
     /**
      * The business types of the family's own setup screens (the classic wizard): every type but the ones built
-     * around an exclusive module, which only their own app signs up (Akiba Ledger for `sacco`).
+     * around an exclusive module, which only their own app signs up (Akiba Ledger for `sacco`, Estate Ledger for `rentals`).
      *
      * @return array<string, array<string, mixed>>
      */
@@ -207,7 +235,10 @@ class CompanyRules
     public static function assertModuleChange(array $before, array $after, bool $exists): void
     {
         if (! self::exclusiveOk($after) || ($exists && self::exclusiveOf($before) !== self::exclusiveOf($after))) {
-            throw \App\Exceptions\BusinessRuleException::make('module_exclusive', self::EXCLUSIVE_MESSAGE, ['exclusive' => self::EXCLUSIVE_MODULES]);
+            $before = $exists ? $before : [];
+            // The module the refusal is about (the account's own first), so an app's account never hears of another (KR-05).
+            $module = self::exclusiveOf($before) ?? self::exclusiveOf($after);
+            throw \App\Exceptions\BusinessRuleException::make('module_exclusive', self::exclusiveMessage($after, $before), ['exclusive' => $module === null ? self::EXCLUSIVE_MODULES : [$module]]);
         }
     }
 
@@ -216,18 +247,18 @@ class CompanyRules
      *
      * @return array<string, array<int, mixed>>
      */
-    public static function modulesRules(string $key = 'modules', bool $required = true): array
+    public static function modulesRules(string $key = 'modules', bool $required = true, ?Company $company = null): array
     {
         return [
-            $key => $required ? ['required', 'array', 'min:1', self::coreModuleRule()] : ['nullable', 'array', self::coreModuleRule()],
+            $key => $required ? ['required', 'array', 'min:1', self::coreModuleRule($company)] : ['nullable', 'array', self::coreModuleRule($company)],
             $key.'.*' => ['string', Rule::in(array_keys(config('onboarding.modules')))],
         ];
     }
 
     /**
      * Modules picked at sign-up, as stored: the known core modules in their usual order, then Income &
-     * expenses, which every new account gets. An exclusive module (sacco) is kept alone, without Income &
-     * expenses (AK-04). Null when none was picked (the business type decides).
+     * expenses, which every new account gets. An exclusive module (sacco, rentals) is kept alone, without Income &
+     * expenses (AK-04, KR-04). Null when none was picked (the business type decides).
      *
      * @param  array<int, mixed>|null  $picked
      * @return list<string>|null
@@ -243,15 +274,16 @@ class CompanyRules
     }
 
     /**
-     * The business type that goes with modules picked at sign-up: `sacco` for a SACCO account, the shop's
-     * own type when Shop is picked, otherwise `poultry` (Poultry farm picked) or `fundraising` (Budget & pledges only).
+     * The business type that goes with modules picked at sign-up: the exclusive module's own (`sacco` for a SACCO
+     * account, `rentals` for an Estate Ledger one), the shop's own type when Shop is picked, otherwise `poultry` (Poultry
+     * farm picked) or `fundraising` (Budget & pledges only).
      *
      * @param  array<int, string>  $modules
      */
     public static function businessTypeFor(array $modules, ?string $shopType): ?string
     {
-        if (in_array('sacco', $modules, true)) {
-            return 'sacco';
+        if (($exclusive = self::exclusiveOf($modules)) !== null) {
+            return $exclusive; // each exclusive module's business type has its name (config onboarding.business_types)
         }
         if (in_array('shop', $modules, true)) {
             return $shopType;
@@ -267,11 +299,21 @@ class CompanyRules
             || DB::table('stock_records')->where('company_id', $companyId)->where('type', 'Sale')->exists();
     }
 
-    /** Past figures are stored in the shop's currency, so it is fixed once there is a sale (or, for a SACCO, its books are set up). */
+    /**
+     * Past figures are stored in the shop's currency, so it is fixed once there is a sale (or, for a SACCO or an Estate Ledger
+     * account, once its books are set up: a row in its settings table).
+     */
     public static function currencyLocked(Company $company): bool
     {
-        return $company->exists && $company->currency && (self::hasSales((int) $company->id)
-            || (in_array('sacco', $company->modules(), true) && DB::table('sacco_settings')->where('company_id', $company->id)->exists()));
+        if (! $company->exists || ! $company->currency) {
+            return false;
+        }
+        if (self::hasSales((int) $company->id)) {
+            return true;
+        }
+        $exclusive = self::exclusiveOf($company->modules());
+
+        return $exclusive !== null && isset(self::SETUP_TABLES[$exclusive]) && DB::table(self::SETUP_TABLES[$exclusive])->where('company_id', $company->id)->exists();
     }
 
     /** The payment method keys the shop takes (payment_methods is stored as {methods, momo, opening_float}). */

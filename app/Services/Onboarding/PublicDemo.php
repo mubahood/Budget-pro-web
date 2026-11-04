@@ -90,6 +90,9 @@ class PublicDemo
     public static function guard(Company|int|null $company, string $what): void
     {
         \App\Services\Sacco\Demo\SaccoDemo::guard($company, $what); // the Akiba Ledger demo has its own locks (AK-35)
+        if (class_exists(\App\Services\Rentals\Demo\RentalsDemo::class)) {
+            \App\Services\Rentals\Demo\RentalsDemo::guard($company, $what); // and so has the Estate Ledger demo agency (KR-21)
+        }
         if (! self::$building && self::isDemoCompany($company)) {
             throw BusinessRuleException::make('demo_locked', ucfirst($what).' is switched off in the demo shop, which everyone shares. Create your own shop to do this.');
         }
@@ -99,6 +102,9 @@ class PublicDemo
     public static function guardAccount(?User $user, string $what): void
     {
         \App\Services\Sacco\Demo\SaccoDemo::guardAccount($user, $what);
+        if (class_exists(\App\Services\Rentals\Demo\RentalsDemo::class)) {
+            \App\Services\Rentals\Demo\RentalsDemo::guardAccount($user, $what);
+        }
         if (! self::$building && $user !== null && $user->username === self::USERNAME) {
             throw BusinessRuleException::make('demo_locked', ucfirst($what).' is switched off for the demo account, so the next visitor can still sign in. Create your own shop to do this.');
         }

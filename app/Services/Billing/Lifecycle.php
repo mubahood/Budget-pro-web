@@ -27,14 +27,15 @@ class Lifecycle
 
     /**
      * The plan a lapsed account falls back to (ADR 0005), on the account's own plan line (PlanLine, AK-15):
-     * `free` for the family's apps, `akiba-free` for a SACCO. Without a company: the family's.
+     * `free` for the family's apps, `akiba-free` for a SACCO, `estate-ledger-free` for an Estate Ledger account. Without a
+     * company: the family's.
      */
     public function freePlan(?Company $company = null): ?Plan
     {
         if (! config('saas.free_tier_fallback', true)) {
             return null;
         }
-        $slug = $company !== null && PlanLine::for($company) === PlanLine::AKIBA ? config('sacco.plans.free', 'akiba-free') : config('saas.free_plan', 'free');
+        $slug = PlanLine::freeSlug($company !== null ? PlanLine::for($company) : PlanLine::FAMILY);
 
         return Plan::where('slug', $slug)->where('is_active', true)->first();
     }
@@ -241,6 +242,7 @@ class Lifecycle
 
         return implode(', ', array_filter([
             isset($l['max_members']) ? $l['max_members'].' members' : null,
+            isset($l['max_units']) ? $l['max_units'].' units' : null,
             isset($l['max_devices']) ? $l['max_devices'].' phone'.($l['max_devices'] > 1 ? 's' : '') : null,
             isset($l['max_products']) ? $l['max_products'].' products' : null,
             isset($l['max_sales_per_month']) ? $l['max_sales_per_month'].' sales a month' : null,

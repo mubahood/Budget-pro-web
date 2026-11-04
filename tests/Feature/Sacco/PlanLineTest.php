@@ -79,7 +79,7 @@ class PlanLineTest extends ApiTestCase
 
         // Members and SMS are limits of the Akiba line (counted in MemberTest once members exist); the sacco_* flags
         // are off unless a plan sells them.
-        $this->assertSame(['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA], Quotas::LINE_KEYS);
+        $this->assertSame(['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA], array_intersect(Quotas::LINE_KEYS, [PlanLine::AKIBA]));
         $this->assertSame(300, app(Quotas::class)->limit($company, 'members'));
         $this->assertSame(100, app(Quotas::class)->limit($company, 'sms'));
         foreach (['sacco_office_mode', 'sacco_returns', 'sacco_momo', 'sacco_payouts', 'sacco_checkoff', 'sacco_member_app', 'sacco_sms_receipts'] as $flag) {

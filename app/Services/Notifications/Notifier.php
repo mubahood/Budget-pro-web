@@ -101,6 +101,19 @@ class Notifier
 
             return;
         }
+        if (in_array('rentals', $company->modules(), true)) {
+            // Estate Ledger stands alone (KR-05): its own name and first steps, its own footer.
+            $to = $user->phone_e164 ?: $user->email;
+            if ($to) {
+                $this->messenger->send($to, "Welcome to Estate Ledger, {$user->first_name}! {$company->name} is ready: add your properties and units, then move your tenants in.",
+                    Messenger::channelsFor($user->phone_e164, $user->email), ['company_id' => $company->id, 'user_id' => $user->id, 'purpose' => 'welcome',
+                        'options' => ['mail' => ['subject' => 'Welcome to Estate Ledger', 'estate-ledger' => true]]]);
+            }
+            DB::table('app_notifications')->insert(['company_id' => $company->id, 'user_id' => $user->id, 'type' => 'welcome', 'title' => 'Welcome!',
+                'body' => 'Start by adding your first property and its units.', 'created_at' => now(), 'updated_at' => now()]);
+
+            return;
+        }
         $text = 'Welcome to '.config('app.name').", {$user->first_name}! {$company->name} is ready. Add your products and make your first sale — everything works offline.";
         $to = $user->phone_e164 ?: $user->email;
         if ($to) {

@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 class Quotas
 {
     public const KEYS = ['users' => 'max_users', 'products' => 'max_products', 'sales' => 'max_sales_per_month', 'storage' => 'storage_mb', 'devices' => 'max_devices', 'locations' => 'max_locations',
-        'members' => 'max_members', 'sms' => 'max_sms_per_month'];
+        'members' => 'max_members', 'sms' => 'max_sms_per_month', 'units' => 'max_units'];
 
     /** Limits that only warn (never refuse). */
     public const SOFT = ['sales'];
@@ -26,15 +26,19 @@ class Quotas
     /**
      * Limits of one plan line only (PlanLine, docs/akiba/03-proposal.md §5.1): an Akiba Ledger SACCO counts its
      * members and its SMS this month (both hard: new members are refused, receipts fall back to WhatsApp and
-     * in-app; money is never refused). The family's usage block and answers are unchanged.
+     * in-app; money is never refused); an Estate Ledger account counts its rental units (hard: a new unit is refused,
+     * rent is never refused; docs/estate-ledger/04-architecture.md §15). The family's usage block and answers are unchanged.
      */
-    public const LINE_KEYS = ['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA];
+    public const LINE_KEYS = ['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA, 'units' => PlanLine::ESTATE_LEDGER];
 
     /** Members that count against max_members: everyone not exited, deceased or rejected. */
     public const MEMBER_STATUSES = ['applicant', 'active', 'dormant', 'suspended'];
 
+    /** Rental units that count against max_units: every one but those switched off (available, reserved, in maintenance). */
+    public const UNIT_NOT_COUNTED = 'inactive';
+
     public const LABELS = ['users' => 'team members', 'products' => 'products', 'sales' => 'sales this month', 'storage' => 'MB of files', 'devices' => 'phones', 'locations' => 'locations',
-        'members' => 'members', 'sms' => 'SMS this month'];
+        'members' => 'members', 'sms' => 'SMS this month', 'units' => 'units'];
 
     public function limits(Company $company): array
     {
@@ -53,6 +57,7 @@ class Quotas
             'locations' => max(1, (int) DB::table('locations')->where('company_id', $company->id)->count()),
             'members' => (int) DB::table('sacco_members')->where('company_id', $company->id)->whereIn('status', self::MEMBER_STATUSES)->whereNull('merged_into_id')->where('is_deleted', 0)->count(),
             'sms' => (int) DB::table('message_log')->where('company_id', $company->id)->where('channel', 'sms')->where('created_at', '>=', now()->startOfMonth())->count(),
+            'units' => (int) DB::table('rental_units')->where('company_id', $company->id)->where('status', '!=', self::UNIT_NOT_COUNTED)->count(),
             default => 0,
         };
     }

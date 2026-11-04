@@ -38,6 +38,8 @@ class HealthService
             'legacy' => \App\Console\Commands\LegacyStatus::status(),
             // The nightly SACCO ledger check (sacco:ledger-verify): failures, and whether the journal triggers are installed.
             'sacco_ledger' => Cache::get(\App\Console\Commands\SaccoLedgerVerify::CACHE_KEY),
+            // The nightly Estate Ledger books check (rentals:check): each account whose journal or caches disagree, with the ids.
+            'rentals_books' => Cache::get(\App\Console\Commands\RentalsCheck::CACHE_KEY),
             'tenants' => ['companies' => DB::table('companies')->count(), 'deletions_scheduled' => DB::table('data_requests')->where('kind', 'delete')->where('status', 'scheduled')->count()],
             'config' => [
                 'checks' => $config,

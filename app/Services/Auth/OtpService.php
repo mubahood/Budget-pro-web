@@ -17,11 +17,37 @@ class OtpService
 {
     public const PURPOSES = ['login', 'register', 'reset', 'verify'];
 
+    /**
+     * Codes of people who are not staff are keyed apart from staff codes for the same address, `{scope}:{email}`, and
+     * sent to that email ($deliverTo): a SACCO member's (`sacco:`, AK-61) and an Estate Ledger tenant's or landlord's
+     * (`rentals:`, docs/estate-ledger/04-architecture.md §8; never a staff login, KR-16).
+     */
+    public const SCOPES = ['sacco', 'rentals'];
+
+    /** The identifier a scoped person's codes are keyed by: `rentals:jane@example.com`. */
+    public static function scoped(string $scope, string $identifier): string
+    {
+        if (! in_array($scope, self::SCOPES, true)) {
+            throw new \InvalidArgumentException("Unknown code scope '{$scope}'.");
+        }
+
+        return $scope.':'.strtolower(trim($identifier));
+    }
+
+    /** The scope an identifier's codes are keyed in (sacco, rentals), or null for a staff login or any other key. */
+    public static function scopeOf(string $identifier): ?string
+    {
+        $scope = strstr($identifier, ':', true);
+
+        return $scope !== false && in_array($scope, self::SCOPES, true) ? $scope : null;
+    }
+
     /** @return array{sent: bool, channel: string|null, sent_to: string, expires_in: int} */
     /**
      * @param  string|null  $deliverTo  where the code goes when the identifier is not an address itself (a SACCO
-     *                                  member's codes are keyed `sacco:{email}` and sent to that email, AK-61)
-     * @param  string|null  $sender  the name the code is sent in (a SACCO's own name); null = the product's
+     *                                  member's codes are keyed `sacco:{email}`, an Estate Ledger tenant's or landlord's
+     *                                  `rentals:{email}` (scoped()), and sent to that email, AK-61)
+     * @param  string|null  $sender  the name the code is sent in (a SACCO's or a letting agency's own name); null = the product's
      */
     public function request(string $identifier, string $purpose, ?string $ip = null, ?string $deliverTo = null, ?string $sender = null): array
     {
@@ -42,7 +68,9 @@ class OtpService
         ]);
         $isEmail = str_contains($to, '@');
         // Staff of a SACCO account (a reset or sign-in code) hear from their SACCO, never another product (AK-68).
-        $sender ??= self::saccoSender($identifier);
+        // An Estate Ledger tenant or landlord hears from their agency (the caller's $sender), else from Estate Ledger (KR-05).
+        $app = match (self::scopeOf($identifier)) { 'rentals' => 'estate-ledger', 'sacco' => 'akiba', default => self::staffApp($identifier) };
+        $sender ??= self::scopeOf($identifier) === 'rentals' ? 'Estate Ledger' : ($app === 'estate-ledger' ? 'Estate Ledger' : self::saccoSender($identifier));
         // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
         // An Akiba Ledger SACCO speaks only in its own name ($sender), never the family's.
         $product = $sender ?? (\App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name'));
@@ -51,7 +79,8 @@ class OtpService
         $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];
         if ($sender !== null) {
             // A SACCO (a member, or staff of a SACCO account): the email names the SACCO, and its footer Akiba Ledger only.
-            $meta['options']['mail'] = ['subject' => $sender.': your code', 'akiba' => true];
+            // An Estate Ledger tenant's or landlord's code names their agency and is marked Estate Ledger's, never Akiba Ledger's (KR-05).
+            $meta['options']['mail'] = ['subject' => $sender.': your code', ($app === 'estate-ledger' ? 'estate-ledger' : 'akiba') => true];
         }
         $logId = app(Messenger::class)->send($to, $text, $channels, $meta, now: true);
         /** @var object{status: string, channel: string|null}|null $row */
@@ -61,6 +90,17 @@ class OtpService
         }
 
         return ['sent' => $row?->status === 'sent', 'channel' => $row?->channel, 'sent_to' => $isEmail ? self::mask($to) : $to, 'expires_in' => $cfg['ttl_minutes'] * 60];
+    }
+
+    /** The app a staff login's account speaks as ('akiba', 'estate-ledger'), else null. */
+    private static function staffApp(string $identifier): ?string
+    {
+        $id = trim($identifier);
+        $user = str_contains($id, '@')
+            ? \App\Models\User::withoutGlobalScopes()->where('email', $id)->first()
+            : \App\Models\User::withoutGlobalScopes()->where('phone_e164', $id)->first();
+
+        return $user?->company_id !== null ? \App\Support\SupportContact::standaloneApp((int) $user->company_id) : null;
     }
 
     /** The SACCO's name when the identifier is a staff login of a SACCO account, else null. */

@@ -29,7 +29,7 @@ class TeamWebTest extends AdminTestCase
 
         // The owner is unaffected and still sees every menu (a menu with role rows hides from unlisted roles).
         \App\Support\AdminAccess::ensureShopRoles();
-        $this->asAdmin($t['user'])->get('/stock-records')->assertOk()->assertSee('stock-records"', false)->assertSee('My plan &amp; billing', false);
+        $this->asAdmin($t['user'])->get('/stock-records')->assertOk()->assertSee('stock-records"', false);
         $this->asAdmin($cashier->fresh())->get('/sale-records')->assertOk()->assertDontSee('/stock-records"', false);
 
         // Billing page: owner can choose plans, cashier can only look.

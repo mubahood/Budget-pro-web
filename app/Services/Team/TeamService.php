@@ -66,7 +66,7 @@ class TeamService
         }
         $existing = User::withoutGlobalScopes()->where(fn ($q) => $q->when($e164, fn ($w) => $w->orWhere('phone_e164', $e164))->when($email, fn ($w) => $w->orWhereRaw('LOWER(email) = ?', [$email])))->first();
         if ($existing) {
-            throw BusinessRuleException::make('already_member', (int) $existing->company_id === (int) $company->id ? 'This person is already on your team.' : 'This person already has a '.config('app.name').' account for another business.');
+            throw BusinessRuleException::make('already_member', (int) $existing->company_id === (int) $company->id ? 'This person is already on your team.' : 'This person already has a '.\App\Support\SupportContact::productName($company).' account for another business.');
         }
         (new \App\Services\Billing\Quotas())->assertCanAdd($company, 'users');
 
@@ -97,10 +97,10 @@ class TeamService
     {
         $link = self::inviteBase().'/invite/'.$token;
         $label = config("permissions.roles.{$invite->role}.label");
-        $text = "{$by->name} invited you to join {$company->name} on ".config('app.name')." as {$label}. Accept here: {$link} (valid ".self::INVITE_DAYS.' days)';
+        $text = "{$by->name} invited you to join {$company->name} on ".\App\Support\SupportContact::productName($company)." as {$label}. Accept here: {$link} (valid ".self::INVITE_DAYS.' days)';
         $to = $invite->phone_e164 ?: $invite->email;
         app(Messenger::class)->send($to, $text, Messenger::channelsFor($invite->phone_e164, $invite->email), ['company_id' => $company->id, 'user_id' => $by->id, 'purpose' => 'invite',
-            'options' => ['mail' => ['subject' => "Join {$company->name} on ".config('app.name')]]]);
+            'options' => ['mail' => ['subject' => "Join {$company->name} on ".\App\Support\SupportContact::productName($company), 'company_id' => $company->id]]]);
         DB::table('invites')->where('id', $invite->id)->increment('sent_count');
 
         return $link;
@@ -419,7 +419,7 @@ class TeamService
         if ($taken) {
             throw BusinessRuleException::make('already_member', (int) $taken->company_id === (int) $company->id
                 ? 'Someone on your team already signs in with this '.($email && strtolower((string) $taken->email) === $email ? 'email' : 'phone number').'.'
-                : 'This '.($email && strtolower((string) $taken->email) === $email ? 'email' : 'phone number').' already has a '.config('app.name').' account for another business.');
+                : 'This '.($email && strtolower((string) $taken->email) === $email ? 'email' : 'phone number').' already has a '.\App\Support\SupportContact::productName($company).' account for another business.');
         }
     }
 

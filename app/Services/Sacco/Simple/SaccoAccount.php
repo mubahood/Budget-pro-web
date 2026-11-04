@@ -76,7 +76,7 @@ final class SaccoAccount
      * Add or change a category (sacco_settings or sacco_accounts): its name and whether it is offered. The account it posts
      * to is fixed when it is made.
      *
-     * @param  array{name: string, direction?: string, is_active?: bool}  $data
+     * @param  array{name?: string, direction?: string, is_active?: bool}  $data
      */
     public function saveCategory(Company $company, User $by, array $data, ?int $id = null): SaccoAccountCategory
     {

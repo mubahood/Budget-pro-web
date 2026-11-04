@@ -116,6 +116,26 @@ class ApiPermissionMap
         [['POST'], '#^sacco/loan-requests/\d+/(pay-out|not-paid-out)$#', 'sacco_disburse'],
         [['POST'], '#^sacco/loan-requests/\d+/repayments$#', 'sacco_teller'],
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
+        // Estate Ledger (docs/estate-ledger/04-architecture.md §9, §7): one line per group of the §9 table. The services check the
+        // permission again and a caretaker's properties (RentalAccess).
+        [['POST'], '#^rentals/setup$#', 'manage_settings'],
+        [['POST'], '#^rentals/cash/opening$#', 'rentals_settings'],
+        [['POST', 'DELETE'], '#^rentals/documents(/\d+)?$#', 'rentals_manage'],
+        [['PUT', 'PATCH'], '#^rentals/settings$#', 'rentals_settings'],
+        [['GET'], '#^rentals/activity$#', 'rentals_settings'],
+        [['PUT', 'PATCH'], '#^rentals/properties/\d+/staff$#', 'rentals_settings'],
+        [['POST'], '#^rentals/(tenants|landlords)/\d+/login$#', 'rentals_settings'],
+        [['GET'], '#^rentals/landlords/\d+/statement$#', 'rentals_landlords'],
+        [['POST'], '#^rentals/(payments|payouts|expenses)/\d+/reverse$#', 'rentals_reverse'],
+        [['GET', 'POST'], '#^rentals/payouts$#', 'rentals_landlords'],
+        [['POST'], '#^rentals/(payments|follow-ups)$#', 'rentals_collect'],
+        [['GET', 'POST'], '#^rentals/(expenses|cash|cash/transfers)$#', 'rentals_expenses'],
+        [['GET', 'POST', 'PUT', 'PATCH'], '#^rentals/(maintenance(/\d+)?|meter-readings)$#', 'rentals_maintenance'],
+        [['GET'], '#^rentals/reports(/[a-z0-9_]+)?$#', 'rentals_reports'],
+        [['POST'], '#^rentals/leases/\d+/(rent-change|items(/\d+/end)?)$#', 'rentals_bill'],
+        [['POST'], '#^rentals/(charges(/\d+/(void|waive))?|billing/run)$#', 'rentals_bill'],
+        [['POST', 'PUT', 'PATCH'], '#^rentals/(landlords|properties|units|tenants|leases)(/\d+(/(notice|withdraw-notice|renew|move-out|cancel|refund-deposit|refund-credit))?)?$#', 'rentals_manage'],
+        [['GET'], '#^rentals(/.*)?$#', 'rentals_view'], // every other read
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],
         [['GET'], '#^subscription/payments/\d+$#', 'billing'],
@@ -133,7 +153,10 @@ class ApiPermissionMap
         foreach (self::RULES as [$methods, $pattern, $permission]) {
             if (in_array($request->method(), $methods, true) && preg_match($pattern, $uri)) {
                 if ($permission !== null && ! Permissions::can($request->user(), $permission)) {
-                    return response()->json(['code' => 0, 'message' => 'Your role does not allow this. Ask the shop owner.', 'data' => null,
+                    // An Estate Ledger team hears about its property manager, not a shop (KR-05).
+                    $ask = str_starts_with($uri, 'rentals/') ? 'Ask your property manager.' : 'Ask the shop owner.';
+
+                    return response()->json(['code' => 0, 'message' => 'Your role does not allow this. '.$ask, 'data' => null,
                         'errors' => ['code' => 'forbidden', 'permission' => $permission]], 403);
                 }
                 break;

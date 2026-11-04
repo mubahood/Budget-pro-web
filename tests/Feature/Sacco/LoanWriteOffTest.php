@@ -43,7 +43,8 @@ class LoanWriteOffTest extends ApiTestCase
         $bad = $this->activeLoan($company, $m1, 1_000_000, 12, ['channel' => 'savings'], now()->subDays(250)->toDateString());
         $m2 = $this->loanMember($company, $owner, 900);
         $this->loanSavings($company, $m2, 500_000, $owner, 'ORD', now()->subDays(300)->toDateString());
-        $good = $this->activeLoan($company, $m2, 500_000, 12, ['channel' => 'savings'], now()->subDays(20)->toDateString());
+        // Paid out in the month running now, so it is after the provisioning month on any day of the month.
+        $good = $this->activeLoan($company, $m2, 500_000, 12, ['channel' => 'savings'], now()->startOfMonth()->toDateString());
         (new LoanJobs())->run($cid);
         $bad->refresh();
         $this->assertSame('loss', $bad->classification, 'over 180 days');

@@ -189,7 +189,8 @@ class RegistrationService
             $company->country = $country;
             $company->business_type = $data['business_type'] ?? null;
             // Modules picked at sign-up (a specialist app, or the web's choice): kept with Income & expenses,
-            // and the type follows them (a farm or an event has no shop type).
+            // and the type follows them (a farm or an event has no shop type). An exclusive module (Akiba Ledger's
+            // `sacco`, Estate Ledger's `rentals`) is kept alone, without Income & expenses (CompanyRules::signUpModules).
             if ($modules = \App\Support\Rules\CompanyRules::signUpModules($data['modules'] ?? null)) {
                 $company->enabled_modules = $modules;
                 $company->business_type = \App\Support\Rules\CompanyRules::businessTypeFor($modules, $company->business_type);
@@ -220,10 +221,10 @@ class RegistrationService
                     'starts_at' => now(), 'trial_ends_at' => now()->addDays($days), 'ends_at' => now()->addDays($days),
                 ]);
             } else {
-                // The trial of the account's plan line (PlanLine, AK-15): Akiba Ledger's runs 30 days (AK-16).
-                $akiba = \App\Services\Billing\PlanLine::for($company) === \App\Services\Billing\PlanLine::AKIBA;
-                $plan = Plan::where('slug', $akiba ? config('sacco.plans.trial', 'akiba-trial') : config('saas.default_plan', 'trial'))->first();
-                if ($akiba) {
+                // The trial of the account's plan line (PlanLine, AK-15): Akiba Ledger's and Estate Ledger's run 30 days (AK-16, KR-20).
+                $line = \App\Services\Billing\PlanLine::for($company);
+                $plan = Plan::where('slug', \App\Services\Billing\PlanLine::trialSlug($line))->first();
+                if ($line !== \App\Services\Billing\PlanLine::FAMILY) {
                     $trialDays = (int) ($plan?->trial_days ?: 30);
                     $company->license_expire = now()->addDays($trialDays);
                     $company->saveQuietly();

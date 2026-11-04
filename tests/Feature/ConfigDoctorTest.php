@@ -20,6 +20,9 @@ class ConfigDoctorTest extends TestCase
     /** A production SaaS server with everything right, plus $over. */
     private function production(array $over = []): void
     {
+        // Tests that build real demo accounts commit them, so "no SACCO yet" has to be made true here, not assumed.
+        \App\Models\Company::withoutGlobalScopes()->where(fn ($q) => $q->where('enabled_modules', 'like', '%"sacco"%')->orWhere('business_type', 'sacco'))
+            ->update(['enabled_modules' => null, 'business_type' => 'retail']);
         config(array_merge([
             'app.env' => 'production', 'edition.name' => 'saas', 'app.debug' => false, 'app.url' => 'https://bp.example.test',
             'queue.default' => 'database', 'saas.data_key' => 'base64:'.base64_encode(str_repeat('k', 32)),

@@ -47,6 +47,10 @@ class AuthServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // An Estate Ledger tenant's or landlord's own token (RentalLogin, KR-16) is never a staff token: Sanctum's guard refuses
+        // it, so every auth:sanctum route answers 401 to it. Only RentalPortalAuth (rentals/me/*) reads those tokens.
+        \Laravel\Sanctum\Sanctum::authenticateAccessTokensUsing(
+            fn ($token, bool $isValid): bool => $isValid && $token->tokenable_type !== \App\Models\RentalLogin::class
+        );
     }
 }

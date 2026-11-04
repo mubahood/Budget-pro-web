@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             AdminRolesSeeder::class,       // roles, permissions, platform + tenant menus
             PlanSeeder::class,             // paid plans (the Free plan comes with its migration)
             AkibaPlanSeeder::class,        // Akiba Ledger's own plan line (akiba-*, AK-15)
+            EstateLedgerPlanSeeder::class,      // Estate Ledger's own plan line (estate-ledger-*, KR-20)
             PingPinPlanSeeder::class,
             ProductTemplateSeeder::class,  // template packs for the setup wizard
             PlatformAdminSeeder::class,    // first platform admin from ADMIN_EMAIL / ADMIN_PASSWORD

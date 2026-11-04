@@ -37,7 +37,7 @@ final class SupportContact
     public const FALLBACK = 'site.general';
 
     /** Where a tracked click came from (support_clicks.app): the surfaces, then the phone app flavors. */
-    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger'];
+    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger', 'estate-ledger'];
 
     /** An error reference: E + the error's fingerprint, or R + a request's own id (8 hex characters). */
     public const REFERENCE_PATTERN = '/^[ER][0-9A-F]{8}$/';
@@ -116,6 +116,46 @@ final class SupportContact
         $c->product = 'Akiba Ledger';
 
         return $c;
+    }
+
+    /** Our contact as Estate Ledger: every prefilled message greets "Estate Ledger" and names no other product (KR-05). */
+    public static function forRentals(): self
+    {
+        $c = self::platform();
+        $c->product = 'Estate Ledger';
+
+        return $c;
+    }
+
+    /** Whether a company keeps the rental books (its mail, footers and receipts speak as Estate Ledger). */
+    public static function isRentals(Company|int|null $company): bool
+    {
+        try {
+            $company = is_int($company) ? Company::withoutGlobalScopes()->find($company) : $company;
+
+            return $company !== null && in_array('rentals', $company->modules(), true);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * The app an account built around an exclusive module speaks as ('akiba', 'estate-ledger'), or null for the family's apps.
+     * Its mail, codes, invites and footers carry that app's name only.
+     */
+    public static function standaloneApp(Company|int|null $company): ?string
+    {
+        return self::isSacco($company) ? 'akiba' : (self::isRentals($company) ? 'estate-ledger' : null);
+    }
+
+    /** The product name an account's messages use: Akiba Ledger, Estate Ledger, or the platform's. */
+    public static function productName(Company|int|null $company): string
+    {
+        return match (self::standaloneApp($company)) {
+            'akiba' => 'Akiba Ledger',
+            'estate-ledger' => 'Estate Ledger',
+            default => (string) config('app.name'),
+        };
     }
 
     /** Whether a company keeps SACCO books (its mail, footers and receipts speak as Akiba Ledger). */
@@ -474,8 +514,8 @@ final class SupportContact
             if (! ShopBrand::poweredBy()) {
                 return false; // a white-label licence never names us
             }
-            if (self::isSacco($company)) {
-                return false; // Akiba Ledger names no other product (AK-68)
+            if (self::standaloneApp($company) !== null) {
+                return false; // Akiba Ledger and Estate Ledger name no other product (AK-68, KR-05)
             }
             $chosen = $company->getAttribute('receipt_support_line');
             if ($chosen === null) {

@@ -87,6 +87,19 @@
                 <p>Journal triggers: <strong>{{ $sl['triggers'] }}</strong>@if($sl['triggers'] === 'absent') <small class="text-muted">(the model guards and the hash chain still hold)</small>@endif</p>
             @endif
         </div></div>
+        <div class="box"><div class="box-header"><h3 class="box-title">Rental books</h3></div><div class="box-body">
+            @php($rb = $h['rentals_books'] ?? null)
+            @if($rb === null)
+                <p class="text-muted">The nightly books check (rentals:check, 03:20) has not run yet.</p>
+            @else
+                <p>Last check: <small>{{ $rb['at'] }}</small> · {{ $rb['accounts'] }} account(s) {!! $ok(($rb['failed'] ?? []) === []) !!}</p>
+                @foreach(($rb['failed'] ?? []) as $companyId => $problems)
+                    @foreach($problems as $pr)
+                        <p class="text-danger">Account #{{ $companyId }}: {{ $pr['detail'] }} <small>(ids {{ implode(', ', $pr['ids']) }})</small></p>
+                    @endforeach
+                @endforeach
+            @endif
+        </div></div>
         <div class="box"><div class="box-header"><h3 class="box-title">Backups & drills</h3></div><div class="box-body no-padding"><table class="table table-condensed">
             @forelse($h['backups'] as $b)
                 <tr><td>{{ $b->kind }}</td><td>{!! $ok($b->status === 'ok') !!}</td><td><small>{{ $b->created_at }}</small></td><td class="text-right"><small>{{ $b->bytes ? number_format($b->bytes / 1048576, 1).' MB' : '' }}</small></td></tr>

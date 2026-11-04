@@ -144,7 +144,12 @@ final class InstallationBackups
 
     private function addMedia(ZipArchive $zip): void
     {
-        $root = $this->mediaRoot();
+        $this->addFolder($zip, $this->mediaRoot(), 'files/');
+        $this->addFolder($zip, (string) config('rentals.private_root'), 'rental-private/');
+    }
+
+    private function addFolder(ZipArchive $zip, string $root, string $prefix): void
+    {
         if ($root === '' || ! is_dir($root)) {
             return;
         }
@@ -154,7 +159,7 @@ final class InstallationBackups
             if (str_starts_with($real, $backups.DIRECTORY_SEPARATOR)) {
                 continue; // never a backup inside a backup
             }
-            $zip->addFile($file->getPathname(), 'files/'.str_replace('\\', '/', $file->getRelativePathname()));
+            $zip->addFile($file->getPathname(), $prefix.str_replace('\\', '/', $file->getRelativePathname()));
         }
     }
 
@@ -181,6 +186,8 @@ Budget Pro backup
                           copy into budget_pro/storage/app/private/
   files/                  product photos, logos, receipt and chat pictures; copy into the
                           web folder's storage/ (beside index.php)
+  rental-private/         tenants' photos and documents; copy into
+                          budget_pro/storage/app/rental-private/
 
 Keep this file somewhere other than the server it came from.
 TXT;

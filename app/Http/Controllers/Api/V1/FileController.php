@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\StoredFile;
+use App\Services\Rentals\PrivateFiles;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 
@@ -15,7 +16,8 @@ class FileController extends Controller
 {
     use ApiResponse;
 
-    public const PURPOSES = ['product_image', 'receipt', 'avatar', 'logo', 'adjustment_photo', 'document', 'other'];
+    // rental_photo, rental_document: Estate Ledger's maintenance and meter photos, and tenants' and leases' papers (04 §9, §18).
+    public const PURPOSES = ['product_image', 'receipt', 'avatar', 'logo', 'adjustment_photo', 'document', 'other', 'rental_photo', 'rental_document'];
 
     public function store(Request $request)
     {
@@ -28,17 +30,21 @@ class FileController extends Controller
 
         $existing = StoredFile::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['uuid'])->first();
         if ($existing) {
-            return $this->success($existing->payload(), 'File already uploaded.');
+            return $this->success($existing->payload('staff', (int) $request->user()->id), 'File already uploaded.');
         }
 
         $file = $request->file('file');
         try { // Plan storage allowance (POWER_PLAN §4.1): refused before anything is written.
             (new \App\Services\Billing\Quotas())->assertCanStore(\App\Models\Company::withoutGlobalScopes()->findOrFail($companyId), (int) $file->getSize());
+            // Tenants' photos and papers: private, named from what the content is. Everything else as below.
+            $path = PrivateFiles::isPrivate($data['purpose']) ? PrivateFiles::store($file, $companyId, $data['uuid']) : null;
         } catch (\App\Exceptions\BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
-        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
-        $path = $file->storeAs("files/{$companyId}/".now()->format('Y/m'), $data['uuid'].'.'.$ext, 'public');
+        if ($path === null) {
+            $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+            $path = $file->storeAs("files/{$companyId}/".now()->format('Y/m'), $data['uuid'].'.'.$ext, 'public');
+        }
 
         $stored = StoredFile::withoutGlobalScopes()->create([
             'company_id' => $companyId, 'uuid' => $data['uuid'], 'purpose' => $data['purpose'], 'path' => $path,
@@ -46,6 +52,6 @@ class FileController extends Controller
             'device_id' => $request->header('X-Device-Id'),
         ]);
 
-        return $this->created($stored->payload(), 'File uploaded.');
+        return $this->created($stored->payload('staff', (int) $request->user()->id), 'File uploaded.');
     }
 }

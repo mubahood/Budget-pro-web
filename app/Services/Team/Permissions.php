@@ -13,6 +13,12 @@ use Illuminate\Support\Facades\DB;
  */
 class Permissions
 {
+    /**
+     * What the viewer also sees on an account with each module: a SACCO's viewer its books (docs/akiba 04 §6.1),
+     * an Estate Ledger account's viewer its rental books and reports (docs/estate-ledger 04 §7.1).
+     */
+    private const VIEWER_SEES = ['sacco' => ['sacco_view'], 'rentals' => ['rentals_view', 'rentals_reports']];
+
     /** @var array<string, array{role: string, perms: array<int, string>}> */
     private static array $cache = [];
 
@@ -23,7 +29,7 @@ class Permissions
 
     /**
      * The permissions a company is offered (and its owner holds): the family's, plus the permissions of the modules
-     * it has. An account built around an exclusive module (a SACCO) keeps that module's and the account's own
+     * it has. An account built around an exclusive module (a SACCO, an Estate Ledger account) keeps that module's and the account's own
      * (config permissions.exclusive_keeps), not the shop's. For a shop this is exactly the list it always had.
      *
      * @return list<string>
@@ -135,8 +141,10 @@ class Permissions
             return $available;
         }
         $perms = self::defaultsFor($role);
-        if ($role === 'viewer' && in_array('sacco', self::modulesOf($companyId), true)) {
-            $perms[] = 'sacco_view'; // a SACCO's viewer sees its books (04 §6.1)
+        if ($role === 'viewer') {
+            foreach (array_intersect_key(self::VIEWER_SEES, array_flip(self::modulesOf($companyId))) as $sees) {
+                $perms = [...$perms, ...$sees];
+            }
         }
         foreach (self::overrides($companyId)[$role] ?? [] as $permission => $allowed) {
             $perms = $allowed ? array_values(array_unique([...$perms, $permission])) : array_values(array_diff($perms, [$permission]));

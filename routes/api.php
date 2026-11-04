@@ -503,4 +503,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
     // Akiba Ledger (the sacco module): routes/api_sacco.php.
     require __DIR__.'/api_sacco.php';
+
+    // Estate Ledger – Rent & Tenants (the rentals module): routes/api_rentals.php.
+    require __DIR__.'/api_rentals.php';
 });

@@ -1,0 +1,2 @@
+# Tenants' photos and documents open only through signed links. Never directly, even if this folder is ever under a web root.
+Require all denied

@@ -28,7 +28,7 @@ class CompanyRulesSaccoTest extends ApiTestCase
         $this->assertSame(['sacco'], config('onboarding.business_types.sacco.modules'));
         $this->assertContains('sacco', EnsureApiModule::MODULES);
         $this->assertContains('sacco', CompanyRules::CORE_MODULES);
-        $this->assertSame(['sacco'], CompanyRules::EXCLUSIVE_MODULES);
+        $this->assertContains('sacco', CompanyRules::EXCLUSIVE_MODULES); // beside Estate Ledger's rentals (tests/Feature/Rentals)
         $this->assertContains('akiba_ledger', SupportContact::APPS);
         $this->assertSame('SACCO and savings group', EnsureApiModule::label('sacco'));
     }

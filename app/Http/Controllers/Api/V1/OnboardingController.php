@@ -169,8 +169,8 @@ class OnboardingController extends Controller
     /** PUT company/modules { modules: [...] }: at least one of shop, poultry or budget. Hidden modules keep their data. */
     public function modules(Request $request)
     {
-        $data = $request->validate(CompanyRules::modulesRules());
         $company = $this->company($request);
+        $data = $request->validate(CompanyRules::modulesRules(company: $company)); // a refusal in the account's own app's words
         $company->enabled_modules = array_values(array_unique($data['modules']));
         $company->save();
 

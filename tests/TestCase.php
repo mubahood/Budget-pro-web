@@ -13,6 +13,11 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         self::fakeBreachCheck($this->app);
+
+        // A test's tenants' files never land in the real private folder; each test has its own, gone with it.
+        $privateRoot = sys_get_temp_dir().'/rental-private-'.uniqid('', true);
+        config(['rentals.private_root' => $privateRoot]);
+        $this->beforeApplicationDestroyed(fn () => \Illuminate\Support\Facades\File::deleteDirectory($privateRoot));
     }
 
     /**

@@ -61,6 +61,30 @@ final class ShopMenu
                 ['label' => 'Settings', 'icon' => 'fa-sliders', 'route' => 'sacco.settings', 'path' => '/sacco/settings', 'match' => ['sacco.settings'], 'can' => ['sacco_settings', 'sacco_audit_view']],
                 ['label' => 'Audit trail', 'icon' => 'fa-shield-halved', 'route' => 'sacco.audit', 'path' => '/sacco/audit', 'match' => ['sacco.audit'], 'can' => 'sacco_audit_view', 'sacco' => 'strict'],
             ]],
+            // Estate Ledger (docs/estate-ledger/04-architecture.md §10.1): the rental books, for rentals accounts only (the module is
+            // exclusive). Each page is gated by its rentals_* permission; a caretaker's properties are RentalAccess's.
+            // Entries marked 'owner_mode' => 'hide' are agency pages: an owner-run account (KR-06) has no landlords to pay.
+            ['key' => 'rentals', 'label' => 'Rentals', 'module' => 'rentals', 'entries' => [
+                ['label' => 'Home', 'icon' => 'fa-house', 'route' => 'rentals.overview', 'path' => '/rentals', 'match' => ['rentals.overview', 'rentals.setup'], 'can' => 'rentals_view'],
+                ['label' => 'Receive payment', 'icon' => 'fa-hand-holding-dollar', 'route' => 'rentals.collect', 'path' => '/rentals/collect', 'match' => ['rentals.collect'], 'can' => 'rentals_collect'],
+                ['label' => 'Properties', 'icon' => 'fa-building', 'route' => 'rentals.properties', 'path' => '/rentals/properties', 'match' => ['rentals.properties*'], 'can' => 'rentals_view'],
+                ['label' => 'Units', 'icon' => 'fa-door-open', 'route' => 'rentals.units', 'path' => '/rentals/units', 'match' => ['rentals.units*'], 'can' => 'rentals_view'],
+                ['label' => 'Tenants', 'icon' => 'fa-users', 'route' => 'rentals.tenants', 'path' => '/rentals/tenants', 'match' => ['rentals.tenants*'], 'can' => 'rentals_view'],
+                ['label' => 'Leases', 'icon' => 'fa-file-signature', 'route' => 'rentals.leases', 'path' => '/rentals/leases', 'match' => ['rentals.leases*', 'rentals.move-in'], 'can' => 'rentals_view'],
+                ['label' => 'Arrears', 'icon' => 'fa-triangle-exclamation', 'route' => 'rentals.arrears', 'path' => '/rentals/arrears', 'match' => ['rentals.arrears'], 'can' => 'rentals_view'],
+                ['label' => 'Billing', 'icon' => 'fa-file-invoice', 'route' => 'rentals.billing', 'path' => '/rentals/billing', 'match' => ['rentals.billing'], 'can' => 'rentals_bill'],
+                ['label' => 'Payments', 'icon' => 'fa-receipt', 'route' => 'rentals.payments', 'path' => '/rentals/payments', 'match' => ['rentals.payments'], 'can' => 'rentals_view'],
+                ['label' => 'Landlords', 'icon' => 'fa-user-tie', 'route' => 'rentals.landlords', 'path' => '/rentals/landlords', 'match' => ['rentals.landlords*'], 'can' => 'rentals_landlords', 'owner_mode' => 'hide'],
+                ['label' => 'Payouts', 'icon' => 'fa-money-bill-transfer', 'route' => 'rentals.payouts', 'path' => '/rentals/payouts', 'match' => ['rentals.payouts'], 'can' => 'rentals_landlords', 'owner_mode' => 'hide'],
+                ['label' => 'Expenses', 'icon' => 'fa-wallet', 'route' => 'rentals.expenses', 'path' => '/rentals/expenses', 'match' => ['rentals.expenses'], 'can' => 'rentals_expenses'],
+                ['label' => 'Cash book', 'icon' => 'fa-book', 'route' => 'rentals.cash', 'path' => '/rentals/cash', 'match' => ['rentals.cash'], 'can' => 'rentals_expenses'],
+                ['label' => 'Maintenance', 'icon' => 'fa-screwdriver-wrench', 'route' => 'rentals.maintenance', 'path' => '/rentals/maintenance', 'match' => ['rentals.maintenance'], 'can' => 'rentals_maintenance'],
+                ['label' => 'Meter readings', 'icon' => 'fa-gauge', 'route' => 'rentals.meters', 'path' => '/rentals/meters', 'match' => ['rentals.meters'], 'can' => 'rentals_maintenance'],
+                ['label' => 'Reports', 'icon' => 'fa-chart-column', 'route' => 'rentals.reports', 'path' => '/rentals/reports', 'match' => ['rentals.reports'], 'can' => 'rentals_reports'],
+                ['label' => 'Settings', 'icon' => 'fa-sliders', 'route' => 'rentals.settings', 'path' => '/rentals/settings', 'match' => ['rentals.settings'], 'can' => 'rentals_settings'],
+                ['label' => 'Activity', 'icon' => 'fa-clock-rotate-left', 'route' => 'rentals.activity', 'path' => '/rentals/activity', 'match' => ['rentals.activity'], 'can' => 'rentals_settings'],
+                ['label' => 'Import', 'icon' => 'fa-file-import', 'route' => 'rentals.import', 'path' => '/rentals/import', 'match' => ['rentals.import'], 'can' => 'rentals_settings'],
+            ]],
             ['key' => 'catalogue', 'label' => 'Shop', 'module' => 'shop', 'entries' => [
                 ['label' => 'Products', 'icon' => 'fa-box', 'route' => 'products.index', 'path' => '/products', 'match' => ['products.*']],
                 ['key' => 'stock', 'label' => 'Stock', 'icon' => 'fa-warehouse', 'items' => [
@@ -100,13 +124,18 @@ final class ShopMenu
 
     /**
      * Whether this person sees an entry (or section): edition, module, feature (any of), permission (any of).
+     * `$saccoStrict` and `$ownerMode` are asked only for entries that carry their marker; without them those entries show.
      *
      * @param  callable(string): bool  $can  @param  callable(string): bool  $moduleOn  @param  callable(string): bool  $featureOn
+     * @param  (callable(): bool)|null  $ownerMode  whether an Estate Ledger account runs its own property (rentalsOwnerMode)
      */
-    public static function allowed(array $entry, callable $can, callable $moduleOn, callable $featureOn, ?callable $saccoStrict = null): bool
+    public static function allowed(array $entry, callable $can, callable $moduleOn, callable $featureOn, ?callable $saccoStrict = null, ?callable $ownerMode = null): bool
     {
         if (isset($entry['sacco']) && $saccoStrict !== null && ($entry['sacco'] === 'strict') !== (bool) $saccoStrict()) {
             return false; // a licensed SACCO's page in an unlicensed one's menu, or the simple page in a licensed one's
+        }
+        if (($entry['owner_mode'] ?? null) === 'hide' && $ownerMode !== null && (bool) $ownerMode()) {
+            return false; // an agency page (landlords, payouts) in an owner-run Estate Ledger account's menu (KR-06)
         }
         if (isset($entry['edition']) && $entry['edition'] !== Edition::name()) {
             return false;
@@ -138,13 +167,17 @@ final class ShopMenu
         $saccoStrict = function () use (&$strict, $company) {
             return $strict ??= \App\Support\Rules\SaccoRules::strict($company);
         };
+        $owner = null;
+        $ownerMode = function () use (&$owner, $company) {
+            return $owner ??= self::rentalsOwnerMode($company);
+        };
         $out = [];
         foreach (self::sections() as $section) {
             if (! self::allowed($section, $can, $moduleOn, $featureOn)) {
                 continue;
             }
             foreach ($section['entries'] as $entry) {
-                if (! self::allowed($entry, $can, $moduleOn, $featureOn, $saccoStrict)) {
+                if (! self::allowed($entry, $can, $moduleOn, $featureOn, $saccoStrict, $ownerMode)) {
                     continue;
                 }
                 foreach ($entry['items'] ?? [$entry] as $page) {
@@ -157,5 +190,16 @@ final class ShopMenu
         }
 
         return $out;
+    }
+
+    /**
+     * Whether an Estate Ledger account runs its own property (rental_settings.mode = owner, KR-06): its menu has no landlords
+     * or payouts. False before the account's rentals are set up. One query; public so the portal's menu can ask it too.
+     */
+    public static function rentalsOwnerMode(Company|int|null $company): bool
+    {
+        $id = $company instanceof Company ? (int) $company->id : (int) $company;
+
+        return $id > 0 && \App\Models\RentalSetting::withoutGlobalScopes()->where('company_id', $id)->value('mode') === 'owner';
     }
 }

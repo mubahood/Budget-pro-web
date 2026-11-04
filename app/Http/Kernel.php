@@ -86,6 +86,7 @@ class Kernel extends HttpKernel
         'edition' => \App\Http\Middleware\RequireEdition::class, // saas | standalone (docs/STANDALONE_EDITION_PLAN.md)
         'admin.platform' => \App\Http\Middleware\PlatformAdminOnly::class, // Admin panel: platform-only screens (P0-1)
         'pingpin.member' => \App\PingPin\Http\Middleware\EnsurePingPinMembership::class, // Ping Pin: fail-closed org membership (see class docblock)
+        'rentals.portal' => \App\Http\Middleware\RentalPortalAuth::class, // Estate Ledger: a tenant's or landlord's own token (rentals/me/*, KR-16)
     ];
 
     /**

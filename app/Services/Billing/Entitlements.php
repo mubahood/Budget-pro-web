@@ -15,7 +15,9 @@ class Entitlements
     public const DEFAULT_FEATURES = ['forecasting' => false, 'auto_reorder' => false, 'multi_location' => false, 'whatsapp_receipts' => true, 'api_access' => false, 'shop_v2' => true, 'whatsapp_automation' => true,
         // Akiba Ledger (AkibaPlanSeeder): only sacco code reads them, so the four apps are unaffected.
         'sacco_office_mode' => false, 'sacco_returns' => false, 'sacco_momo' => false, 'sacco_payouts' => false, 'sacco_checkoff' => false,
-        'sacco_member_app' => false, 'sacco_sms_receipts' => false];
+        'sacco_member_app' => false, 'sacco_sms_receipts' => false,
+        // Estate Ledger (EstateLedgerPlanSeeder): tenants' and landlords' own sign-in, and texts the server sends (KR-18); only rentals code reads them.
+        'rentals_portal' => false, 'rentals_sms' => false];
 
     public static function for(Company $company): array
     {

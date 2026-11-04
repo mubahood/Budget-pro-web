@@ -39,14 +39,17 @@ class MailChannel implements MessagingChannel
 
                 return ['ok' => true];
             }
-            // Akiba Ledger stands alone: a SACCO's mail carries neither the family's footer nor its name.
-            // (its own footer greets "Akiba Ledger", AK-68).
-            $sacco = ! empty($options['akiba']) || (isset($options['company_id']) && SupportContact::isSacco((int) $options['company_id']));
-            $line = $footer ? ($sacco ? SupportContact::forSacco() : SupportContact::platform())->mailLine($context, $vars) : '';
-            Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options, $sacco) {
-                $m->to($to)->subject($options['subject'] ?? ($sacco ? 'Akiba Ledger' : config('app.name')));
-                if ($sacco) {
-                    $m->from((string) config('mail.from.address'), 'Akiba Ledger');
+            // Akiba Ledger and Estate Ledger stand alone: their mail carries neither the family's footer nor its name
+            // (their own footer greets "Akiba Ledger" or "Estate Ledger", AK-68, KR-05).
+            $app = ! empty($options['akiba']) ? 'akiba' : (! empty($options['estate-ledger']) ? 'estate-ledger'
+                : (isset($options['company_id']) ? SupportContact::standaloneApp((int) $options['company_id']) : null));
+            $own = ['akiba' => 'Akiba Ledger', 'estate-ledger' => 'Estate Ledger'][$app] ?? null;
+            $contact = match ($app) { 'akiba' => SupportContact::forSacco(), 'estate-ledger' => SupportContact::forRentals(), default => SupportContact::platform() };
+            $line = $footer ? $contact->mailLine($context, $vars) : '';
+            Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options, $own) {
+                $m->to($to)->subject($options['subject'] ?? ($own ?? config('app.name')));
+                if ($own !== null) {
+                    $m->from((string) config('mail.from.address'), $own);
                 }
             });
 

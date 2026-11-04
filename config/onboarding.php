@@ -70,6 +70,8 @@ return [
         'fundraising' => ['label' => 'Church / group budget & pledges', 'modules' => ['budget', 'finance'], 'group' => 'Something else', 'icon' => 'fa-hands-praying', 'hint' => 'Budgets, pledges, contributions'],
         // Akiba Ledger (docs/akiba): the SACCO books only, never beside another module (CompanyRules::EXCLUSIVE_MODULES, AK-04).
         'sacco' => ['label' => 'SACCO or savings group', 'modules' => ['sacco'], 'group' => 'Something else', 'icon' => 'fa-piggy-bank', 'hint' => 'Members, savings, shares and loans'],
+        // Estate Ledger (docs/estate-ledger): the rental books only, never beside another module (CompanyRules::EXCLUSIVE_MODULES, KR-04).
+        'rentals' => ['label' => 'Letting agency or landlord', 'modules' => ['rentals'], 'group' => 'Something else', 'icon' => 'fa-key', 'hint' => 'Properties, tenants, rent and landlords'],
         'other' => ['label' => 'Something else', 'modules' => ['shop', 'finance'], 'group' => 'Something else', 'icon' => 'fa-shapes', 'hint' => 'Services and a few common items'],
     ],
 
@@ -81,6 +83,8 @@ return [
         'poultry' => 'Poultry farm',
         // Exclusive (AK-04): a SACCO account has this module and no other (CompanyRules::EXCLUSIVE_MODULES).
         'sacco' => 'SACCO and savings group',
+        // Exclusive (KR-04): an Estate Ledger account has this module and no other (CompanyRules::EXCLUSIVE_MODULES).
+        'rentals' => 'Rentals and tenants',
     ],
 
     // Web paths per module (first path segment, `*` = prefix) — hidden from menus and refused when the module is off.
@@ -91,6 +95,8 @@ return [
         'finance' => ['financial-*'],
         // No classic screens: the SACCO books live in the web portal and the Akiba Ledger app (AK-20).
         'sacco' => [],
+        // No classic screens either: the rental books live in the web portal and the Estate Ledger app.
+        'rentals' => [],
         // Ping Pin (phone tracking) is a separate product: shown only to companies that use it (see AdminMenu::modulesOn).
         'pingpin' => ['tracked-devices*', 'tracking-map*', 'device-*'],
     ],
