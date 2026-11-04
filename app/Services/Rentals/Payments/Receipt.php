@@ -12,6 +12,7 @@ use App\Models\RentalTenant;
 use App\Models\RentalUnit;
 use App\Services\Rentals\Leases\Leases;
 use App\Services\Rentals\RentalsModule;
+use App\Services\Rentals\Reports\RentalDocument;
 use App\Support\Rentals\AmountWords;
 use App\Support\Rentals\Minor;
 use Illuminate\Support\Carbon;
@@ -28,6 +29,9 @@ final class Receipt
 {
     public const WIDTH = 32;
 
+    /** A till's paper, in points: 80 mm. */
+    private const TILL_WIDTH = 226.77;
+
     private static ?bool $snapshots = null;
 
     /** How each method reads on a receipt. */
@@ -36,7 +40,7 @@ final class Receipt
 
     /**
      * @return array{header: list<string>, lines: list<array{0: string, 1: string}>, settled: list<array{0: string, 1: string}>,
-     *               after: list<array{0: string, 1: string}>, footer: list<string>, reversed: ?string, words: string}
+     *               after: list<array{0: string, 1: string}>, footer: list<string>, reversed: ?string, words: string, logo?: string}
      */
     public static function parts(RentalPayment $p): array
     {
@@ -108,7 +112,7 @@ final class Receipt
         }
         $footer = array_values(array_filter([trim((string) ($settings->receipt_footer ?? '')), 'Thank you.']));
 
-        return ['header' => $header, 'lines' => $lines, 'words' => AmountWords::of((int) $p->amount_minor, $cid), 'settled' => $settled, 'after' => $after, 'footer' => $footer,
+        return ['header' => $header, 'logo' => RentalDocument::logoPath($company), 'lines' => $lines, 'words' => AmountWords::of((int) $p->amount_minor, $cid), 'settled' => $settled, 'after' => $after, 'footer' => $footer,
             'figures' => ['credit_minor' => (int) ($pos['credit_minor'] ?? 0), 'owed_minor' => (int) ($pos['owed_minor'] ?? 0), 'paid_up_to' => $pos['paid_up_to'] ?? null],
             'names' => ['tenant' => $tenant, 'unit' => $unit, 'property' => $property]];
     }
@@ -151,10 +155,42 @@ final class Receipt
         return rtrim(implode("\n", array_map('rtrim', $out)))."\n";
     }
 
-    public static function pdf(RentalPayment $p): string
+    /**
+     * The receipt as a PDF, as issued: on a till's 80 mm paper cut to its content, or 'a5' for an office printer. The
+     * amount stays on one line on both. It prints the same each time: nothing live but a logo on a receipt issued before
+     * logos were written down.
+     */
+    public static function pdf(RentalPayment $p, string $size = 'till'): string
     {
-        return app('dompdf.wrapper')->loadHTML(view('rentals.receipt', ['p' => self::parts($p)])->render())
-            ->setPaper([0, 0, 226.77, 623.62])->output(); // 80 mm wide, 220 mm long
+        $parts = self::parts($p);
+        $cid = (int) $p->company_id;
+        $narrow = $size !== 'a5';
+        $header = array_values($parts['header']);
+        $title = (string) ($header[count($header) - 1] ?? 'Receipt');
+        $head = RentalDocument::issued($cid, (string) ($header[0] ?? ''), count($header) > 2 ? (string) $header[1] : null, isset($parts['logo']) ? (string) $parts['logo'] : null, array_key_exists('logo', $parts));
+        $mono = fn (string $value) => preg_match('/^(?:[A-Z]{3}\s)?-?[\d,]+(?:\.\d+)?$/', $value) === 1;
+        $rows = fn (array $list) => array_map(fn ($l) => [(string) $l[0], (string) $l[1], $mono((string) $l[1])], $list);
+        $amount = '';
+        $amountLabel = 'Amount';
+        $number = '';
+        $lines = [];
+        foreach ($parts['lines'] as $line) {
+            if ($line[0] === 'Amount' && $amount === '') {
+                $amount = (string) $line[1];
+            } else {
+                $number = $line[0] === 'Receipt no' ? (string) $line[1] : $number;
+                $lines[] = $line;
+            }
+        }
+        $html = view('rentals.receipt', ['p' => $parts, 'amount' => $amount, 'amountLabel' => $amountLabel, 'lines' => $rows($lines), 'settled' => $rows($parts['settled']), 'after' => $rows($parts['after']),
+            'doc' => ['title' => $title, 'sub' => [$number], 'head' => $head, 'narrow' => $narrow, 'small' => ! $narrow]])->render();
+        if (! $narrow) {
+            return RentalDocument::output($html, 'a5', 'portrait', ['left' => $head['name'].' · '.$title.' '.$number, 'generated' => '']);
+        }
+        $tallest = 1400.0; // far past any receipt
+        $height = RentalDocument::heightOf($html, self::TILL_WIDTH, $tallest);
+
+        return RentalDocument::output($html, [0, 0, self::TILL_WIDTH, $height > 0 ? min($tallest, max(200.0, $height + 24)) : 623.62]);
     }
 
     /** "Label        value" on one line, or the label then the value right-aligned below it. @return list<string> */

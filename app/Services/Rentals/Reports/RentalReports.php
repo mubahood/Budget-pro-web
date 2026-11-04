@@ -77,7 +77,7 @@ final class RentalReports
         'income_statement' => ['Income statement', 'The agency\'s income (commission and the fees it keeps) less its own expenses.', ['period'], 'account', false],
         'tenant_list' => ['Tenants', 'Everyone who rents or rented: their phone, the units they hold and what they owe.', ['property', 'landlord'], 'property', false],
         'lease_list' => ['Leases', 'Who rents which unit, from when, at what rent, with what is owed and the paid-up-to date.', ['property', 'landlord'], 'property', false],
-        'receipts' => ['Receipts', 'Every receipt in the period: who paid, for which unit, how, and any credit it left.', ['period', 'property', 'landlord'], 'property', false],
+        'receipts' => ['Receipts', 'Every receipt in the period: who paid, for which unit, how, and anything paid ahead.', ['period', 'property', 'landlord'], 'property', false],
     ];
 
     /** Journal row types as people read them. */
@@ -191,11 +191,12 @@ final class RentalReports
         $leases = RentalLease::withoutGlobalScopes()->where('company_id', $x->cid)->whereIn('status', RentalLease::LIVE)
             ->whereIn('unit_id', $units->pluck('id')->all() ?: [0])->get()->keyBy('unit_id');
         $tenants = DB::table('rental_tenants')->where('company_id', $x->cid)->whereIn('id', $leases->pluck('tenant_id')->all() ?: [0])->get(['id', 'name', 'phone'])->keyBy('id');
+        $positions = Leases::positions($leases->all(), $x->today);
         $kinds = (array) config('rentals.unit_kinds');
         $rows = [];
         foreach ($units as $u) {
             $lease = $leases->get($u->id);
-            $pos = $lease !== null ? Leases::position($lease, $x->today) : null;
+            $pos = $lease !== null ? $positions[(int) $lease->id] : null;
             $t = $lease !== null ? $tenants->get($lease->tenant_id) : null;
             $keep = match ($state) {
                 'vacant' => $lease === null && $u->status === 'available',
@@ -213,7 +214,8 @@ final class RentalReports
                 'since' => $lease?->start_date?->toDateString(), 'cycle_months' => $lease !== null ? (int) $lease->cycle_months : null,
                 'asking_minor' => (int) $u->rent_minor, 'rent_minor' => $lease !== null ? (int) $lease->rent_minor : null,
                 'deposit_held_minor' => $pos['deposit_held_minor'] ?? null, 'paid_up_to' => $pos['paid_up_to'] ?? null,
-                'owed_minor' => $pos['owed_minor'] ?? null, 'overdue_minor' => $pos['overdue_minor'] ?? null];
+                'owed_minor' => $pos['owed_minor'] ?? null, 'overdue_minor' => $pos['overdue_minor'] ?? null,
+                '_peek' => $lease !== null ? 'lease:'.$lease->id : 'unit:'.$u->id];
         }
         usort($rows, fn ($a, $b) => [$a['property'], 0] <=> [$b['property'], 0] ?: strnatcasecmp($a['unit'], $b['unit']));
         $let = array_filter($rows, fn ($r) => $r['lease'] !== null);
@@ -322,10 +324,10 @@ final class RentalReports
                 continue;
             }
             $rows[] = ['tenant' => $m->tenant, 'phone' => $m->phone, 'unit' => $m->unit, 'property' => $m->property, 'lease' => $m->number,
-                'status' => $m->status === 'ended' ? 'Moved out' : ($m->status === 'notice' ? 'Under notice' : 'Living there'), 'days' => $b['days'],
+                'status' => $m->status === 'ended' ? 'Moved out' : ($m->status === 'notice' ? 'Under notice' : 'Staying'), 'days' => $b['days'],
                 'd0_30_minor' => $b['d0_30'], 'd31_60_minor' => $b['d31_60'], 'd61_90_minor' => $b['d61_90'], 'd90_plus_minor' => $b['d90_plus'], 'total_minor' => $b['total_minor'],
-                'last_follow_up' => $f ? trim((FollowUps::CHANNELS[$f['channel']] ?? ucfirst((string) $f['channel'])).' '.Carbon::parse((string) $f['at'], 'UTC')->setTimezone(LocalDate::timezone($x->cid))->format('j M').($f['note'] ? ': '.$f['note'] : '')) : null,
-                'promise_on' => $f['promise_on'] ?? null];
+                'last_follow_up' => $f ? trim((FollowUps::CHANNELS[$f['channel']] ?? ucfirst((string) $f['channel'])).' '.Carbon::parse((string) $f['at'], 'UTC')->setTimezone(LocalDate::timezone($x->cid))->format('j M Y').($f['note'] ? ': '.$f['note'] : '')) : null,
+                'promise_on' => $f['promise_on'] ?? null, '_peek' => 'lease:'.$leaseId];
         }
         usort($rows, fn ($a, $b) => [$b['total_minor'], $b['days']] <=> [$a['total_minor'], $a['days']]);
         $sum = fn (string $k) => array_sum(array_column($rows, $k));
@@ -357,7 +359,7 @@ final class RentalReports
         $tz = LocalDate::timezone($x->cid);
         $rows = [];
         foreach ($props as $p) {
-            $r = ['property' => (string) $p->name, 'units' => 0, 'occupied' => 0, 'vacant' => 0, 'occupancy_bp' => 0, 'vacancy_days' => 0, 'rent_lost_minor' => 0];
+            $r = ['property' => (string) $p->name, 'units' => 0, 'occupied' => 0, 'vacant' => 0, 'occupancy_bp' => 0, 'vacancy_days' => 0, 'rent_lost_minor' => 0, '_peek' => 'property:'.$p->id];
             foreach ($units->where('property_id', $p->id) as $u) {
                 $r['units']++;
                 $covered = [];
@@ -384,7 +386,7 @@ final class RentalReports
         return [
             'subtitle' => $this->period($x).' · occupied and vacant on '.Carbon::parse($end)->format('j M Y'),
             'columns' => [self::c('property', 'Property'), self::c('units', 'Units', 'int'), self::c('occupied', 'Occupied', 'int'), self::c('vacant', 'Vacant', 'int'),
-                self::c('occupancy_bp', 'Occupancy %', 'pct'), self::c('vacancy_days', 'Days vacant', 'int'), self::c('rent_lost_minor', 'Rent lost', 'money')],
+                self::c('occupancy_bp', 'Occupancy %', 'pct') + ['places' => 1], self::c('vacancy_days', 'Days vacant', 'int'), self::c('rent_lost_minor', 'Rent lost', 'money')],
             'rows' => $rows,
             'totals' => ['units' => $units, 'occupied' => $sum('occupied'), 'vacant' => $sum('vacant'),
                 'occupancy_bp' => $units > 0 ? intdiv($sum('occupied') * 10000 + intdiv($units, 2), $units) : 0,
@@ -413,7 +415,7 @@ final class RentalReports
             'subtitle' => $landlord->name.' · '.$this->period($x),
             'columns' => [self::c('date', 'Date', 'date'), self::c('type', 'Kind'), self::c('description', 'Description'), self::c('property', 'Property'),
                 self::c('unit', 'Unit'), self::c('tenant', 'Tenant'), self::c('gross_minor', 'Collected', 'money'), self::c('commission_minor', 'Commission', 'money'),
-                self::c('amount_minor', 'To you', 'money'), self::c('balance_minor', 'Balance', 'money')],
+                self::c('amount_minor', $x->owner ? 'Net' : 'To landlord', 'money'), self::c('balance_minor', 'Balance', 'money')],
             'rows' => $rows,
             'totals' => ['gross_minor' => array_sum(array_column($st['lines'], 'gross_minor')), 'commission_minor' => (int) $st['totals']['commission_minor'],
                 'amount_minor' => array_sum(array_column($st['lines'], 'amount_minor')), 'balance_minor' => (int) $st['closing_minor'],
@@ -490,7 +492,7 @@ final class RentalReports
             $rows[] = ['date' => substr((string) $e->occurred_on, 0, 10), 'number' => $ex->number ?? null, 'category' => $category,
                 'description' => ($e->type === 'reversal' ? 'Reversed: ' : '').($ex->description ?? ''), 'vendor' => $ex->vendor ?? null,
                 'property' => $props[$e->property_id] ?? null, 'charged_to' => $toLandlord ? ($landlords[$e->landlord_id] ?? 'Landlord') : 'Agency',
-                'method' => self::METHOD_LABELS[$e->method] ?? (string) $e->method, 'amount_minor' => $amount, '_landlord' => $toLandlord];
+                'method' => self::METHOD_LABELS[$e->method] ?? (string) $e->method, 'amount_minor' => $amount, '_landlord' => $toLandlord, '_peek' => $e->expense_id ? 'expense:'.$e->expense_id : null];
             $g = $byCategory[$category] ?? ['category' => $category, 'count' => 0, 'amount_minor' => 0];
             $g['count'] += $e->type === 'reversal' ? 0 : 1;
             $g['amount_minor'] += $amount;
@@ -523,16 +525,17 @@ final class RentalReports
         $units = $this->names('rental_units', 'code', $leases->pluck('unit_id')->all(), $x->cid);
         $props = $this->names('rental_properties', 'name', $leases->pluck('property_id')->all(), $x->cid);
         $landlords = $this->names('rental_landlords', 'name', $leases->pluck('landlord_id')->all(), $x->cid);
+        $heldBy = Leases::depositsHeld($leases->all());
         $rows = [];
         foreach ($leases as $l) {
-            $held = Deposits::held($l);
+            $held = (int) $heldBy[(int) $l->id];
             if ($held <= 0) {
                 continue;
             }
-            $rows[] = ['lease' => $l->number, 'status' => $l->isLive() ? ($l->status === 'notice' ? 'Under notice' : 'Living there') : 'Moved out',
+            $rows[] = ['lease' => $l->number, 'status' => $l->isLive() ? ($l->status === 'notice' ? 'Under notice' : 'Staying') : 'Moved out',
                 'tenant' => $tenants[$l->tenant_id] ?? '', 'unit' => $units[$l->unit_id] ?? '', 'property' => $props[$l->property_id] ?? '',
                 'landlord' => $landlords[$l->landlord_id] ?? '', 'held_by' => $l->deposit_held_by === 'landlord' ? 'Landlord' : ($x->owner ? 'You' : 'Agency'),
-                'deposit_minor' => (int) $l->deposit_minor, 'held_minor' => $held];
+                'deposit_minor' => (int) $l->deposit_minor, 'held_minor' => $held, '_peek' => 'lease:'.$l->id];
         }
         usort($rows, fn ($a, $b) => [$a['property'], 0] <=> [$b['property'], 0] ?: strnatcasecmp($a['unit'], $b['unit']));
         $agency = array_sum(array_map(fn ($r) => $r['held_by'] === 'Landlord' ? 0 : $r['held_minor'], $rows));
@@ -558,7 +561,10 @@ final class RentalReports
         foreach ($st['rows'] as $r) {
             $rows[] = ['date' => $r['date'], 'kind' => ($x->owner ? (self::OWNER_ENTRY_LABELS[$r['type']] ?? null) : null) ?? self::ENTRY_LABELS[$r['type']] ?? (string) $r['type'], 'description' => $r['description'],
                 'method' => CashGuard::LABELS[$r['method']] ?? (string) $r['method'], 'in_minor' => (int) $r['in_minor'], 'out_minor' => (int) $r['out_minor'],
-                'balance_minor' => (int) $r['balance_minor']];
+                'balance_minor' => (int) $r['balance_minor'], '_peek' => match (true) {
+                    ! empty($r['payment_id']) => 'payment:'.$r['payment_id'], ! empty($r['expense_id']) => 'expense:'.$r['expense_id'], ! empty($r['payout_id']) => 'payout:'.$r['payout_id'],
+                    $r['type'] === 'transfer' => 'transfer:'.$r['id'], ! empty($r['lease_id']) => 'lease:'.$r['lease_id'], default => null,
+                }];
         }
         $by = DB::table('rental_entries')->where('company_id', $x->cid)->where('cash_minor', '!=', 0)->where('occurred_on', '<=', $x->to)->whereNotNull('method')
             ->when($method !== null, fn ($q) => $q->where('method', $method))->groupBy('method')
@@ -596,7 +602,7 @@ final class RentalReports
         $lines = [];
         foreach (RentalCharge::withoutGlobalScopes()->where('company_id', $x->cid)->where('lease_id', $lease->id)->where('status', '!=', 'void')->get() as $c) {
             $lines[] = ['date' => $c->due_date->toDateString(), 'o' => 0, 'id' => (int) $c->id, 'description' => (string) $c->description, 'reference' => null,
-                'charged_minor' => (int) $c->amount_minor, 'paid_minor' => 0];
+                'charged_minor' => (int) $c->amount_minor, 'paid_minor' => 0, 'peek' => 'bill:'.$c->id];
         }
         $tz = LocalDate::timezone($x->cid);
         foreach (RentalPayment::withoutGlobalScopes()->where('company_id', $x->cid)->where('lease_id', $lease->id)->get() as $p) {
@@ -607,11 +613,11 @@ final class RentalReports
                 default => 'Payment, '.mb_strtolower(self::METHOD_LABELS[$p->method] ?? (string) $p->method).($p->reference ? ' '.$p->reference : ''),
             };
             $lines[] = ['date' => $p->paid_on->toDateString(), 'o' => 1, 'id' => (int) $p->id, 'description' => $what, 'reference' => $p->number,
-                'charged_minor' => 0, 'paid_minor' => (int) $p->amount_minor];
+                'charged_minor' => 0, 'paid_minor' => (int) $p->amount_minor, 'peek' => 'payment:'.$p->id];
             if ($p->reversed_at !== null) {
                 $lines[] = ['date' => Carbon::parse($p->reversed_at)->setTimezone($tz)->toDateString(), 'o' => 2, 'id' => (int) $p->id,
                     'description' => 'Payment reversed'.($p->reverse_reason ? ': '.$p->reverse_reason : ''), 'reference' => $p->number,
-                    'charged_minor' => (int) $p->amount_minor, 'paid_minor' => 0];
+                    'charged_minor' => (int) $p->amount_minor, 'paid_minor' => 0, 'peek' => 'payment:'.$p->id];
             }
         }
         usort($lines, fn ($a, $b) => [$a['date'], $a['o'], $a['id']] <=> [$b['date'], $b['o'], $b['id']]);
@@ -630,7 +636,7 @@ final class RentalReports
             }
             $run += $l['charged_minor'] - $l['paid_minor'];
             $rows[] = ['date' => $l['date'], 'description' => $l['description'], 'reference' => $l['reference'],
-                'charged_minor' => $l['charged_minor'] ?: null, 'paid_minor' => $l['paid_minor'] ?: null, 'balance_minor' => $run];
+                'charged_minor' => $l['charged_minor'] ?: null, 'paid_minor' => $l['paid_minor'] ?: null, 'balance_minor' => $run, '_peek' => $l['peek']];
         }
         array_unshift($rows, ['date' => $x->from, 'description' => 'Opening balance', 'reference' => null, 'charged_minor' => null, 'paid_minor' => null, 'balance_minor' => $opening]);
         $tenant = DB::table('rental_tenants')->where('company_id', $x->cid)->where('id', $lease->tenant_id)->first(['name', 'phone']);
@@ -664,6 +670,7 @@ final class RentalReports
         $tenants = DB::table('rental_tenants')->where('company_id', $x->cid)->whereIn('id', $leases->pluck('tenant_id')->all() ?: [0])->get(['id', 'name', 'phone'])->keyBy('id');
         $units = $this->names('rental_units', 'code', $leases->pluck('unit_id')->all(), $x->cid);
         $props = $this->names('rental_properties', 'name', $leases->pluck('property_id')->all(), $x->cid);
+        $positions = Leases::positions($leases->all(), $x->today);
         $rows = [];
         foreach ($leases as $l) {
             $moving = $l->status === 'notice' && $l->move_out_on !== null && $l->move_out_on->toDateString() >= $from && $l->move_out_on->toDateString() <= $to;
@@ -672,11 +679,11 @@ final class RentalReports
                 $ends = $l->end_date;
                 $moving = false;
             }
-            $pos = Leases::position($l, $x->today);
+            $pos = $positions[(int) $l->id];
             $t = $tenants->get($l->tenant_id);
-            $rows[] = ['ends_on' => $ends->toDateString(), 'why' => $moving ? 'Moving out (notice given'.($l->notice_on ? ' '.$l->notice_on->format('j M') : '').')' : 'Fixed term ends',
+            $rows[] = ['ends_on' => $ends->toDateString(), 'why' => $moving ? 'Moving out (notice given'.($l->notice_on ? ' '.$l->notice_on->format('j M Y') : '').')' : 'Fixed term ends',
                 'days_left' => max(0, Periods::days($x->asOf, $ends)), 'lease' => $l->number, 'tenant' => $t?->name, 'phone' => $t?->phone, 'unit' => $units[$l->unit_id] ?? '',
-                'property' => $props[$l->property_id] ?? '', 'rent_minor' => (int) $l->rent_minor, 'owed_minor' => $pos['owed_minor'], 'deposit_held_minor' => $pos['deposit_held_minor']];
+                'property' => $props[$l->property_id] ?? '', 'rent_minor' => (int) $l->rent_minor, 'owed_minor' => $pos['owed_minor'], 'deposit_held_minor' => $pos['deposit_held_minor'], '_peek' => 'lease:'.$l->id];
         }
         usort($rows, fn ($a, $b) => [$a['ends_on'], $a['property'], $a['unit']] <=> [$b['ends_on'], $b['property'], $b['unit']]);
 
@@ -714,7 +721,7 @@ final class RentalReports
             $rows[] = ['number' => $m->number, 'opened' => Carbon::parse($m->created_at)->setTimezone($tz)->toDateString(), 'property' => $props[$m->property_id] ?? '',
                 'unit' => $units[$m->unit_id] ?? null, 'title' => $m->title, 'priority' => Maintenance::PRIORITIES[$m->priority] ?? ucfirst((string) $m->priority),
                 'status' => $status, 'reported_by' => ucfirst((string) $m->reported_by), 'assignee' => $m->assignee_name, 'resolved_on' => $m->resolved_on?->toDateString(),
-                'cost_minor' => $cost];
+                'cost_minor' => $cost, '_peek' => 'ticket:'.$m->id];
             $g = $byStatus[$m->status] ?? ['status' => $status, 'requests' => 0, 'cost_minor' => 0];
             $g['requests']++;
             $g['cost_minor'] += $cost;
@@ -897,11 +904,36 @@ final class RentalReports
         }
         $balance[] = $money('Less expenses', -$expenseTotal);
         $final = $incomeTotal - ($x->owner ? 0 : $commission + $kept) - $expenseTotal;
-        $line = self::c('line', 'Line');
         $amount = self::c('amount_minor', 'Amount', 'money');
 
+        // Beside the books: what went out to landlords or the owner, how full the buildings are, and who is overdue today.
+        // Whole-account figures a caretaker does not see (a caretaker's report keeps to their buildings).
+        $paidOut = null;
+        if (RentalAccess::propertyIds($x->by) === null) {
+            $landlords = $x->ids === null ? null : DB::table('rental_properties')->where('company_id', $x->cid)->whereIn('id', $x->ids ?: [0])->pluck('landlord_id')->filter()->all();
+            $paidOut = (int) -DB::table('rental_entries as e')->leftJoin('rental_entries as o', 'o.id', '=', 'e.reverses_id')->where('e.company_id', $x->cid)
+                ->whereBetween('e.occurred_on', [$x->from, $x->to])->where(fn ($q) => $q->where('e.type', 'payout')->orWhere(fn ($q) => $q->where('e.type', 'reversal')->where('o.type', 'payout')))
+                ->when($landlords !== null, fn ($q) => $q->whereIn('e.landlord_id', $landlords ?: [0]))->sum('e.landlord_minor');
+        }
+        $occupancy = $this->occupancy($x);
+        $occupiedOn = min($x->to, $x->today->toDateString());
+        $overdue = Arrears::byLease($x->cid, $x->by, null, $x->today);
+        $overdueLeases = DB::table('rental_leases')->where('company_id', $x->cid)->whereIn('id', array_keys($overdue) ?: [0])
+            ->when($x->ids !== null, fn ($q) => $q->whereIn('property_id', $x->ids ?: [0]))->get(['id', 'tenant_id']);
+        $overdueMinor = array_sum(array_map(fn ($l) => (int) $overdue[$l->id]['total_minor'], $overdueLeases->all()));
+        $overdueTenants = $overdueLeases->pluck('tenant_id')->unique()->count();
+        $paidOutLabel = $x->owner ? 'Owner drawings' : ($x->ids === null ? 'Paid to landlords' : 'Paid to the landlord (all their buildings)');
+        $also = [];
+        if ($paidOut !== null) {
+            $also[] = ['line' => $paidOutLabel, 'count' => null, 'amount_minor' => $paidOut];
+        }
+        array_push($also, ['line' => 'Units occupied on '.Carbon::parse($occupiedOn)->format('j M Y'), 'count' => (int) $occupancy['totals']['occupied'], 'amount_minor' => null],
+            ['line' => 'Units in all', 'count' => (int) $occupancy['totals']['units'], 'amount_minor' => null],
+            ['line' => 'Tenants overdue on '.$x->today->format('j M Y'), 'count' => $overdueTenants, 'amount_minor' => $overdueMinor]);
+        $balanceFor = $x->owner ? 'Balance for the owner' : ($x->ids === null ? 'Balance for the landlords' : 'Balance for the landlord');
+
         return [
-            'subtitle' => Carbon::parse($x->from)->format('F Y').' · '.($x->property !== null ? $x->property->name : 'All properties').' · '.Carbon::parse($x->from)->format('j M').' to '.Carbon::parse($x->to)->format('j M Y'),
+            'subtitle' => Carbon::parse($x->from)->format('F Y').' · '.($x->property !== null ? $x->property->name : 'All properties').' · '.Carbon::parse($x->from)->format('j M Y').' to '.Carbon::parse($x->to)->format('j M Y'),
             'columns' => [self::c('line', 'Income'), $amount],
             'rows' => $rows,
             'totals' => ['amount_minor' => $incomeTotal],
@@ -910,14 +942,18 @@ final class RentalReports
             'sections' => [
                 ['title' => 'Expenses', 'columns' => [self::c('date', 'Date', 'date'), self::c('category', 'Category'), self::c('description', 'Description'), $amount],
                     'rows' => $expenses, 'totals' => ['amount_minor' => $expenseTotal], 'total_label' => 'Total expenses',
-                    'summary' => ['title' => 'Expenses by category (the CSV lists each one)', 'columns' => [self::c('category', 'Category'), self::c('count', 'Expenses', 'int'), $amount],
+                    'summary' => ['title' => 'Expenses by category (the Excel and CSV files list each one)', 'columns' => [self::c('category', 'Category'), self::c('count', 'Expenses', 'int'), $amount],
                         'rows' => array_values($byCategory)]],
-                ['title' => 'Final balance', 'columns' => [$line, $amount], 'rows' => $balance, 'totals' => ['amount_minor' => $final], 'total_label' => 'Final balance'],
-                ['title' => 'Deposits and money paid ahead (not income)', 'columns' => [$line, $amount], 'rows' => $deposits, 'totals' => []],
+                ['title' => 'Final balance', 'columns' => [self::c('line', 'Worked out as'), $amount], 'rows' => $balance, 'totals' => ['amount_minor' => $final], 'total_label' => $balanceFor],
+                ['title' => 'Deposits and money paid ahead (not income)', 'columns' => [self::c('line', 'The tenants\' money'), $amount], 'rows' => $deposits, 'totals' => []],
+                ['title' => 'Paid out, occupancy and arrears', 'columns' => [self::c('line', 'What'), self::c('count', 'How many', 'int'), $amount], 'rows' => $also, 'totals' => []],
             ],
             'figures' => ['income_minor' => $incomeTotal, 'expenses_minor' => $expenseTotal, 'commission_minor' => $x->owner ? 0 : $commission, 'fees_kept_minor' => $x->owner ? 0 : $kept,
                 'final_balance_minor' => $final, 'deposits_received_minor' => $received, 'deposits_brought_minor' => $brought, 'deposits_used_minor' => $used,
-                'deposits_refunded_minor' => $refunded, 'deposits_held_minor' => $held, 'paid_ahead_minor' => $paidAhead],
+                'deposits_refunded_minor' => $refunded, 'deposits_held_minor' => $held, 'paid_ahead_minor' => $paidAhead,
+                'units' => (int) $occupancy['totals']['units'], 'occupied' => (int) $occupancy['totals']['occupied'], 'occupied_on' => $occupiedOn,
+                'overdue_minor' => $overdueMinor, 'overdue_tenants' => $overdueTenants, 'as_at' => $x->today->toDateString()]
+                + ($paidOut !== null ? ['paid_out_minor' => $paidOut, 'paid_out_label' => $paidOutLabel] : []),
         ];
     }
 
@@ -958,9 +994,9 @@ final class RentalReports
             $use = (int) ($used[$l->id] ?? 0);
             $back = (int) ($refunded[$l->id] ?? 0);
             $rows[] = ['tenant' => $tenants[$l->tenant_id] ?? '', 'unit' => $units[$l->unit_id] ?? '', 'property' => $props[$l->property_id] ?? '', 'landlord' => $landlords[$l->landlord_id] ?? '',
-                'lease' => $l->number, 'status' => $l->isLive() ? ($l->status === 'notice' ? 'Under notice' : 'Living there') : 'Moved out',
+                'lease' => $l->number, 'status' => $l->isLive() ? ($l->status === 'notice' ? 'Under notice' : 'Staying') : 'Moved out',
                 'held_by' => $l->deposit_held_by === 'landlord' ? 'Landlord' : ($x->owner ? 'You' : 'Agency'), 'agreed_minor' => (int) $l->deposit_minor, 'received_minor' => $in,
-                'used_minor' => $use, 'refunded_minor' => $back, 'held_minor' => max(0, $in - $use - $back)];
+                'used_minor' => $use, 'refunded_minor' => $back, 'held_minor' => max(0, $in - $use - $back), '_peek' => 'lease:'.$l->id];
         }
         usort($rows, fn ($a, $b) => [$a['property'], 0] <=> [$b['property'], 0] ?: strnatcasecmp($a['unit'], $b['unit']) ?: strcasecmp($a['tenant'], $b['tenant']));
         $sum = fn (string $k) => array_sum(array_column($rows, $k));
@@ -1003,7 +1039,7 @@ final class RentalReports
         foreach ($tenants as $t) {
             $o = $owed->get($t->id);
             $rows[] = ['code' => $t->code, 'name' => $t->name, 'phone' => $t->phone, 'renting' => ($units->get($t->id) ?? collect())->pluck('code')->implode(', '),
-                'status' => $t->status === 'active' ? 'Current' : 'Former', 'owed_minor' => (int) ($o->owed ?? 0), 'overdue_minor' => (int) ($o->overdue ?? 0)];
+                'status' => $t->status === 'active' ? 'Current' : 'Former', 'owed_minor' => (int) ($o->owed ?? 0), 'overdue_minor' => (int) ($o->overdue ?? 0), '_peek' => 'tenant:'.$t->id];
         }
 
         return [
@@ -1050,7 +1086,7 @@ final class RentalReports
             $rows[] = ['number' => $l->number, 'tenant' => $l->tenant_name, 'phone' => $l->tenant_phone, 'unit' => $l->unit_code, 'property' => $l->property_name,
                 'start' => $l->start_date->toDateString(), 'end' => ($l->ended_on ?? $l->end_date)?->toDateString(), 'status' => $words[$l->status] ?? ucfirst((string) $l->status),
                 'cycle_months' => (int) $l->cycle_months, 'rent_minor' => (int) $l->rent_minor, 'owed_minor' => (int) ($o->owed ?? 0), 'overdue_minor' => (int) ($o->overdue ?? 0),
-                'paid_up_to' => $paid[(int) $l->id] ?? null];
+                'paid_up_to' => $paid[(int) $l->id] ?? null, '_peek' => 'lease:'.$l->id];
         }
 
         return [
@@ -1078,7 +1114,7 @@ final class RentalReports
             'reversed' => $q->whereNotNull('r.reversed_at'),
             default => null,
         };
-        $list = $q->orderBy('r.paid_on')->orderBy('r.id')->get(['r.number', 'r.paid_on', 'r.method', 'r.reference', 'r.amount_minor', 'r.unallocated_minor', 'r.reversed_at',
+        $list = $q->orderBy('r.paid_on')->orderBy('r.id')->get(['r.id', 'r.number', 'r.paid_on', 'r.method', 'r.reference', 'r.amount_minor', 'r.unallocated_minor', 'r.reversed_at',
             't.name as tenant', 't.phone', 'u.code as unit', 'p.name as property', 'l.number as lease'])
             ->filter(fn ($r) => self::matches($x, [(string) $r->number, (string) $r->reference, (string) $r->tenant, (string) $r->phone, (string) $r->unit, (string) $r->lease]));
         $rows = [];
@@ -1089,13 +1125,13 @@ final class RentalReports
             $total += $reversed ? 0 : (int) $r->amount_minor;
             $credit += $reversed ? 0 : (int) $r->unallocated_minor;
             $rows[] = ['number' => $r->number, 'date' => substr((string) $r->paid_on, 0, 10), 'tenant' => $r->tenant, 'unit' => $r->unit, 'property' => $r->property,
-                'method' => self::METHOD_LABELS[$r->method] ?? (string) $r->method, 'reference' => $r->reference, 'status' => $reversed ? 'Reversed' : 'Standing',
-                'amount_minor' => (int) $r->amount_minor, 'credit_minor' => (int) $r->unallocated_minor];
+                'method' => self::METHOD_LABELS[$r->method] ?? (string) $r->method, 'reference' => $r->reference, 'status' => $reversed ? 'Reversed' : null,
+                'amount_minor' => (int) $r->amount_minor, 'credit_minor' => (int) $r->unallocated_minor, '_peek' => 'payment:'.$r->id];
         }
 
         return [
             'columns' => [self::c('number', 'Receipt'), self::c('date', 'Date', 'date'), self::c('tenant', 'Tenant'), self::c('unit', 'Unit'), self::c('property', 'Property'), self::c('method', 'Paid by'),
-                self::c('reference', 'Reference'), self::c('status', 'Status'), self::c('amount_minor', 'Amount', 'money'), self::c('credit_minor', 'Credit left', 'money')],
+                self::c('reference', 'Reference'), self::c('status', 'Status'), self::c('amount_minor', 'Amount', 'money'), self::c('credit_minor', 'Paid ahead', 'money')],
             'rows' => $rows,
             'totals' => ['amount_minor' => $total, 'credit_minor' => $credit, 'receipts' => count($rows)],
             'total_label' => 'Total, not counting reversed',

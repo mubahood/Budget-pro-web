@@ -165,7 +165,7 @@ class RentalsAdminReportsTest extends ApiTestCase
         $csv = RentalExport::csv($r, $cid);
         $this->assertStringContainsString('"Total income",900000', $csv);
         $this->assertStringContainsString('Total expenses', $csv);
-        $this->assertStringContainsString('"Final balance",840000', $csv);
+        $this->assertStringContainsString('"Balance for the owner",840000', $csv);
         $this->assertStringContainsString('Line 60', $csv, 'the CSV keeps every expense');
 
         $pdf = RentalExport::pdf($r, $cid);

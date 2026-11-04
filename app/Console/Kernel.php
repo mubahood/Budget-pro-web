@@ -44,6 +44,9 @@ class Kernel extends ConsoleKernel
         // Estate Ledger (docs/estate-ledger/04-architecture.md §13): each account's bills and late fees at night (a missed night is caught up), then its books proved.
         $schedule->call($task('rentals:daily'))->name('rentals:daily')->dailyAt('01:40')->withoutOverlapping();
         $schedule->call($task('rentals:check'))->name('rentals:check')->dailyAt('03:20')->withoutOverlapping();
+        // Estate Ledger's search: writes reach it as they happen; this repairs anything a crash missed. Minutes the host's */20 scheduler reaches.
+        $schedule->call($task('rentals:search-index'))->name('rentals:search-index')->dailyAt('03:40')->withoutOverlapping(120);
+        $schedule->call($task('rentals:search-index', ['--full' => true]))->name('rentals:search-index --full')->weeklyOn(0, '04:20')->withoutOverlapping(120);
         $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();

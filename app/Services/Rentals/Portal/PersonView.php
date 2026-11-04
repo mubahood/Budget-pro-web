@@ -6,6 +6,7 @@ use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Api\V1\Rentals\Present;
 use App\Models\Company;
 use App\Models\RentalCharge;
+use App\Models\RentalExpense;
 use App\Models\RentalLandlord;
 use App\Models\RentalLease;
 use App\Models\RentalLogin;
@@ -15,6 +16,7 @@ use App\Models\RentalPayout;
 use App\Models\RentalProperty;
 use App\Models\RentalTenant;
 use App\Models\RentalUnit;
+use App\Models\StoredFile;
 use App\Services\Rentals\Collections\Arrears;
 use App\Services\Rentals\Figures;
 use App\Services\Rentals\Landlords\LandlordAccounts;
@@ -22,6 +24,8 @@ use App\Services\Rentals\Landlords\StatementPdf;
 use App\Services\Rentals\Payments\Receipt;
 use App\Services\Rentals\RentalLinks;
 use App\Services\Rentals\RentalsModule;
+use App\Services\Rentals\Reports\RentalExport;
+use App\Services\Rentals\Reports\RentalReports;
 use App\Support\LocalDate;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -200,6 +204,24 @@ final class PersonView
         return $p === null ? null : ['bytes' => Receipt::pdf($p), 'filename' => 'receipt-'.preg_replace('/[^A-Za-z0-9-]+/', '-', (string) $p->number).'.pdf'];
     }
 
+    /**
+     * The tenant's statement for one of their homes as a PDF: every bill and payment with the running balance and the
+     * deposit, from the day the lease began to today. The same report the office prints. Null when the lease is not theirs.
+     *
+     * @return array{bytes: string, filename: string}|null
+     */
+    public function tenantStatementFile(int $leaseId): ?array
+    {
+        $lease = $this->tenantLeases()->find($leaseId);
+        if ($lease === null) {
+            return null;
+        }
+        $report = (new RentalReports)->run('tenant_statement', $this->companyId(), null, ['lease_id' => (int) $lease->id,
+            'from' => $lease->start_date->toDateString(), 'to' => LocalDate::today($this->companyId())->toDateString()]);
+
+        return ['bytes' => RentalExport::pdf($report, $this->companyId()), 'filename' => 'statement-'.preg_replace('/[^A-Za-z0-9-]+/', '-', (string) $lease->number).'.pdf'];
+    }
+
     /** The repair requests about the tenant's homes (theirs, and staff's about their unit), newest first. */
     public function maintenance(int $page = 1, int $perPage = 50): LengthAwarePaginator
     {
@@ -308,6 +330,71 @@ final class PersonView
         return new Paginator($items, count($rows), $perPage, $page);
     }
 
+    /**
+     * What a landlord's first page answers (docs/estate-ledger/03-improvements.md §12): what they are owed, this month so
+     * far, the last money paid to them, which units stand empty and how many repairs are open.
+     *
+     * @return array{owed_minor: int, month: array<string, int>, last_payout: array{paid_on: string, amount_minor: int, method: string}|null, occupancy: array<string, int>, vacant: list<array{code: string, property: string, rent_minor: int}>, repairs_open: int}
+     */
+    public function landlordHome(int $vacantShown = 8): array
+    {
+        $l = $this->landlord();
+        $cid = $this->companyId();
+        $today = LocalDate::today($cid);
+        $month = LandlordAccounts::statement($l, $today->copy()->startOfMonth()->toDateString(), $today->toDateString());
+        $last = RentalPayout::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $l->id)->whereNull('reversed_at')->orderByDesc('paid_on')->orderByDesc('id')->first();
+        $props = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $l->id)->where('status', 'active')->pluck('name', 'id');
+        $let = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->whereIn('status', RentalLease::LIVE)->select('unit_id');
+        $vacant = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->where('status', '!=', 'inactive')
+            ->whereNotIn('id', $let)->orderBy('property_id')->orderBy('code')->limit($vacantShown)->get();
+
+        return ['owed_minor' => LandlordAccounts::balance($l), 'month' => array_map('intval', $month['totals']),
+            'last_payout' => $last === null ? null : ['paid_on' => (string) $last->paid_on->toDateString(), 'amount_minor' => (int) $last->amount_minor, 'method' => (string) $last->method],
+            'occupancy' => LandlordAccounts::occupancy($l),
+            'vacant' => $vacant->map(fn (RentalUnit $u) => ['code' => (string) $u->code, 'property' => (string) ($props[$u->property_id] ?? ''), 'rent_minor' => (int) $u->rent_minor])->all(),
+            'repairs_open' => (int) $this->landlordRepairs()->whereIn('status', ['open', 'in_progress'])->count()];
+    }
+
+    /**
+     * The repairs at the landlord's properties, newest first, to read: what, where, its state, its cost and any photo.
+     * Never which staff member has it: that is between the office and its people.
+     */
+    public function repairs(int $page = 1, int $perPage = 25): LengthAwarePaginator
+    {
+        $p = $this->landlordRepairs()->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
+        $this->present()->prime($p->items());
+
+        return $p->through(function (RentalMaintenance $m) {
+            $shape = $this->present()->maintenance($m);
+            unset($shape['assigned_to'], $shape['expense_id']);
+
+            return $shape;
+        });
+    }
+
+    /** What was spent and charged to the landlord, newest first, each with its receipt image when the office kept one. */
+    public function expenses(int $page = 1, int $perPage = 25): LengthAwarePaginator
+    {
+        $p = RentalExpense::withoutGlobalScopes()->where('company_id', $this->companyId())->where('landlord_id', $this->landlord()->id)->where('charged_to', 'landlord')
+            ->orderByDesc('paid_on')->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
+        $this->present()->prime($p->items());
+        $uuids = collect($p->items())->pluck('receipt_uuid')->filter()->all();
+        $mimes = $uuids === [] ? [] : StoredFile::withoutGlobalScopes()->where('company_id', $this->companyId())->whereIn('uuid', $uuids)->pluck('mime', 'uuid')->all();
+
+        return $p->through(fn (RentalExpense $e) => $this->present()->expense($e) + ['receipt_is_image' => str_starts_with((string) ($mimes[(string) $e->receipt_uuid] ?? ''), 'image/')]);
+    }
+
+    /** The first year this landlord has anything to read a statement for: their oldest lease, or this year. */
+    public function firstStatementYear(): int
+    {
+        $cid = $this->companyId();
+        $props = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $this->landlord()->id)->pluck('id')->all();
+        $oldest = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props ?: [0])->where('status', '!=', 'cancelled')->min('start_date');
+        $year = (int) LocalDate::today($cid)->format('Y');
+
+        return $oldest === null ? $year : min($year, (int) substr((string) $oldest, 0, 4));
+    }
+
     // ── Inside ──────────────────────────────────────────────────────────────
 
     private function tenantId(): int
@@ -328,6 +415,15 @@ final class PersonView
         $l = $this->subject();
 
         return $l;
+    }
+
+    /** @return Builder<RentalMaintenance> */
+    private function landlordRepairs(): Builder
+    {
+        $cid = $this->companyId();
+        $props = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $this->landlord()->id)->pluck('id')->all();
+
+        return RentalMaintenance::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props ?: [0]);
     }
 
     /** @return Builder<RentalLease> */

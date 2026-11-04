@@ -252,9 +252,9 @@ class RentalsPlumbingTest extends ApiTestCase
 
         $section = collect(ShopMenu::sections())->firstWhere('key', 'rentals');
         $this->assertSame(['Rentals', 'rentals'], [$section['label'], $section['module']]);
-        $this->assertSame(['rentals.overview', 'rentals.collect', 'rentals.properties', 'rentals.units', 'rentals.tenants', 'rentals.leases', 'rentals.arrears',
-            'rentals.billing', 'rentals.payments', 'rentals.landlords', 'rentals.payouts', 'rentals.expenses', 'rentals.cash', 'rentals.maintenance', 'rentals.meters',
-            'rentals.reports', 'rentals.settings', 'rentals.activity', 'rentals.import'], array_column($section['entries'], 'route'));
+        $this->assertSame(['rentals.overview', 'rentals.arrears', 'rentals.payments', 'rentals.billing', 'rentals.properties', 'rentals.tenants', 'rentals.maintenance', 'rentals.meters',
+            'rentals.landlords', 'rentals.expenses', 'rentals.cash', 'rentals.reports', 'rentals.settings', 'rentals.import', 'rentals.activity',
+            'rentals.collect', 'rentals.units', 'rentals.leases', 'rentals.payouts'], array_column($section['entries'], 'route'));
 
         $pages = fn () => array_column(ShopMenu::pagesFor($owner, $company), 'key');
         $agency = $pages();
@@ -271,7 +271,7 @@ class RentalsPlumbingTest extends ApiTestCase
         $this->assertTrue(ShopMenu::rentalsOwnerMode((int) $company->id));
         $this->assertTrue(CompanyRules::currencyLocked($company));
         $own = $pages();
-        $this->assertSame(['rentals.landlords', 'rentals.payouts'], array_values(array_diff($agency, $own)));
+        $this->assertEqualsCanonicalizing(['rentals.landlords', 'rentals.payouts'], array_values(array_diff($agency, $own)));
 
         // A caller that does not ask about owner mode (no callable) still shows the page.
         $landlords = collect($section['entries'])->firstWhere('route', 'rentals.landlords');

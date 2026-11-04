@@ -604,7 +604,7 @@ class RentalsOperationsTest extends ApiTestCase
         $this->assertSame('overdue', $r['kind']);
         $this->assertStringContainsString('Hello Asha, your rent for A1', $r['text']);
         $this->assertStringContainsString('You owe UGX 200,000', $r['text']);
-        $this->assertStringContainsString('Pay to: MoMo 0772 000000 Bank Stanbic', $r['text'], 'one line, whatever was typed');
+        $this->assertStringContainsString('Pay to: MoMo 0772 000000. Bank Stanbic.', $r['text'], 'one line, whatever was typed');
         $this->assertSame('https://wa.me/256701234567?text='.rawurlencode($r['text']), $r['whatsapp']);
         $this->assertSame('sms:+256701234567?body='.rawurlencode($r['text']), $r['sms']);
 

@@ -3,7 +3,9 @@
 namespace App\Services\Rentals\Leases;
 
 use App\Exceptions\BusinessRuleException;
+use App\Models\RentalAllocation;
 use App\Models\RentalCharge;
+use App\Models\RentalEntry;
 use App\Models\RentalLease;
 use App\Models\RentalLandlord;
 use App\Models\RentalLeaseItem;
@@ -572,16 +574,111 @@ final class Leases
     }
 
     /**
-     * Where a lease stands (04 §9.1 Position).
+     * Where a lease stands (04 §9.1 Position). For many leases, positions(): same rule, a few reads whatever their number.
      *
      * @return array{owed_minor: int, overdue_minor: int, overdue_days: int, credit_minor: int, deposit_held_minor: int, paid_up_to: ?string, next_due: ?array{date: string, amount_minor: int}, state: string}
      */
     public static function position(RentalLease $lease, ?Carbon $today = null): array
     {
         $cid = (int) $lease->company_id;
-        $today ??= LocalDate::today($cid);
-        $grace = (int) RentalsModule::settings($cid)->grace_days;
-        $open = Payments::openCharges($lease, false);
+        $credit = Payments::credit($lease);
+
+        return self::positionFrom($lease, Payments::openCharges($lease, false), $today ?? LocalDate::today($cid), (int) RentalsModule::settings($cid)->grace_days, $credit,
+            Deposits::held($lease), self::paidUpTo($lease, $credit), fn () => self::nextBill($lease));
+    }
+
+    /**
+     * position() for many leases, in a few reads whatever their number (a rent roll, the deposit reports, a page of a list).
+     * Takes lease ids, or leases already read (they are not read again); the caller has already checked who may see them.
+     *
+     * @param  array<int|RentalLease>  $ids
+     * @return array<int, array{owed_minor: int, overdue_minor: int, overdue_days: int, credit_minor: int, deposit_held_minor: int, paid_up_to: ?string, next_due: ?array{date: string, amount_minor: int}, state: string}> lease id => position
+     */
+    public static function positions(array $ids, ?Carbon $today = null): array
+    {
+        $leases = self::leasesFrom($ids);
+        $out = [];
+        foreach ($leases->groupBy(fn (RentalLease $l) => (int) $l->company_id) as $cid => $group) {
+            $cid = (int) $cid;
+            $day = $today ?? LocalDate::today($cid);
+            $grace = (int) RentalsModule::settings($cid)->grace_days;
+            $list = $group->map(fn (RentalLease $l) => (int) $l->id)->all();
+            $open = RentalCharge::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $list)->where('status', 'open')->where('kind', '!=', 'refund')->get()
+                ->sort(fn (RentalCharge $a, RentalCharge $b) => [$a->due_date->toDateString(), RentalCharge::PRIORITY[$a->kind] ?? 9, $a->id] <=> [$b->due_date->toDateString(), RentalCharge::PRIORITY[$b->kind] ?? 9, $b->id])
+                ->groupBy('lease_id');
+            $credit = array_map('intval', RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $list)->whereNull('reversed_at')
+                ->groupBy('lease_id')->selectRaw('lease_id, SUM(unallocated_minor) AS c')->pluck('c', 'lease_id')->all());
+            $held = self::depositsHeld($group->all());
+            $rents = RentalCharge::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $list)->where('kind', 'rent')->where('status', '!=', 'void')
+                ->orderBy('period_start')->get(['lease_id', 'period_start', 'period_end', 'status', 'amount_minor', 'paid_minor'])->groupBy('lease_id');
+            $live = $group->filter(fn (RentalLease $l) => $l->isLive())->map(fn (RentalLease $l) => (int) $l->id)->values()->all();
+            $items = $live === [] ? collect() : RentalLeaseItem::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $live)->where('active', true)
+                ->groupBy('lease_id')->selectRaw('lease_id, SUM(amount_minor) AS a')->pluck('a', 'lease_id');
+            $changes = $live === [] ? collect() : RentalRentChange::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $live)
+                ->orderByDesc('effective_from')->orderByDesc('id')->get(['lease_id', 'effective_from', 'rent_minor'])->groupBy('lease_id');
+            foreach ($group as $l) {
+                $id = (int) $l->id;
+                $itemsOf = (int) ($items[$id] ?? 0);
+                $changesOf = $changes->get($id, collect());
+                $out[$id] = self::positionFrom($l, $open->get($id, collect()), $day, $grace, (int) ($credit[$id] ?? 0), (int) ($held[$id] ?? 0),
+                    self::paidUpToFrom($l, $rents->get($id, collect()), (int) ($credit[$id] ?? 0), $itemsOf, $changesOf), fn () => self::nextBillFrom($l, $itemsOf, $changesOf));
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Deposits::held() for many leases, in three reads whatever their number.
+     *
+     * @param  array<int|RentalLease>  $ids
+     * @return array<int, int> lease id => deposit held (every lease is in it, 0 when nothing is held)
+     */
+    public static function depositsHeld(array $ids): array
+    {
+        $out = [];
+        foreach (self::leasesFrom($ids)->groupBy(fn (RentalLease $l) => (int) $l->company_id) as $cid => $group) {
+            $cid = (int) $cid;
+            $list = $group->map(fn (RentalLease $l) => (int) $l->id)->all();
+            $collected = RentalAllocation::withoutGlobalScopes()->from('rental_allocations as a')->join('rental_charges as c', 'c.id', '=', 'a.charge_id')
+                ->where('a.company_id', $cid)->where('c.company_id', $cid)->where('c.kind', 'deposit')->whereIn('c.lease_id', $list)
+                ->whereNotIn('a.payment_id', RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $list)->where('method', 'waiver')->select('id'))
+                ->groupBy('c.lease_id')->selectRaw('c.lease_id, SUM(a.amount_minor) AS total')->pluck('total', 'lease_id')->all();
+            $used = RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $list)->where('method', 'deposit')->whereNull('reversed_at')
+                ->groupBy('lease_id')->selectRaw('lease_id, SUM(amount_minor) AS total')->pluck('total', 'lease_id')->all();
+            $refunded = RentalEntry::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', $list)->whereIn('type', Deposits::REFUND_TYPES)->whereNull('reversed_at')
+                ->groupBy('lease_id')->selectRaw('lease_id, -SUM(cash_minor) AS total')->pluck('total', 'lease_id')->all();
+            foreach ($list as $id) {
+                $out[$id] = max(0, (int) ($collected[$id] ?? 0) - (int) ($used[$id] ?? 0) - (int) ($refunded[$id] ?? 0));
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The leases behind a list of ids (or leases already read).
+     *
+     * @param  array<int|RentalLease>  $ids
+     * @return Collection<int, RentalLease>
+     */
+    private static function leasesFrom(array $ids): Collection
+    {
+        $given = collect($ids)->filter(fn ($v) => $v instanceof RentalLease);
+        $wanted = collect($ids)->reject(fn ($v) => $v instanceof RentalLease)->map(fn ($v) => (int) $v)->unique()->values()->all();
+
+        return $given->concat($wanted === [] ? [] : RentalLease::withoutGlobalScopes()->whereIn('id', $wanted)->get()->all())->values();
+    }
+
+    /**
+     * The rule of a position, from what was read.
+     *
+     * @param  Collection  $open  the lease's open bills, oldest first
+     * @param  callable(): ?array{date: string, amount_minor: int}  $nextBill  the next bill not raised yet, asked only when it is needed
+     * @return array{owed_minor: int, overdue_minor: int, overdue_days: int, credit_minor: int, deposit_held_minor: int, paid_up_to: ?string, next_due: ?array{date: string, amount_minor: int}, state: string}
+     */
+    public static function positionFrom(RentalLease $lease, Collection $open, Carbon $today, int $grace, int $credit, int $held, ?string $paidUpTo, callable $nextBill): array
+    {
         $owed = 0;
         $overdue = 0;
         $oldest = null;
@@ -599,14 +696,13 @@ final class Leases
             $next['amount_minor'] = (int) $open->filter(fn ($c) => $c->due_date->equalTo($next['date']))->sum(fn ($c) => $c->left());
             $next['date'] = $next['date']->toDateString();
         } elseif ($lease->isLive()) {
-            $next = self::nextBill($lease);
+            $next = $nextBill();
         }
-        $credit = Payments::credit($lease);
         $state = $overdue > 0 ? 'overdue' : ($owed > 0 ? 'due' : ($credit > 0 ? 'credit' : 'paid'));
 
         return [
             'owed_minor' => $owed, 'overdue_minor' => $overdue, 'overdue_days' => $oldest !== null ? max(0, Periods::days($oldest, $today)) : 0,
-            'credit_minor' => $credit, 'deposit_held_minor' => Deposits::held($lease), 'paid_up_to' => self::paidUpTo($lease, $credit),
+            'credit_minor' => $credit, 'deposit_held_minor' => $held, 'paid_up_to' => $paidUpTo,
             'next_due' => $next, 'state' => $state,
         ];
     }
@@ -657,7 +753,7 @@ final class Leases
     }
 
     /** The rule of paidUpTo(), from its rent bills; the rest is read when it is not given. */
-    private static function paidUpToFrom(RentalLease $lease, Collection $rents, ?int $credit, ?int $items = null, ?Collection $changes = null): ?string
+    public static function paidUpToFrom(RentalLease $lease, Collection $rents, ?int $credit, ?int $items = null, ?Collection $changes = null): ?string
     {
         $cid = (int) $lease->company_id;
         $paid = null;
@@ -701,17 +797,46 @@ final class Leases
         return $paid?->toDateString();
     }
 
+    /**
+     * What paidUpTo() would say if this money came in now, for the screen as a cashier types: $lines is charge id => amount
+     * put on that bill and $credit what stays paid ahead (Payments::suggestSplit). Reads only.
+     *
+     * @param  array<int, int>  $lines
+     */
+    public static function paidUpToIf(RentalLease $lease, array $lines, int $credit): ?string
+    {
+        $rents = RentalCharge::withoutGlobalScopes()->where('company_id', (int) $lease->company_id)->where('lease_id', $lease->id)->where('kind', 'rent')
+            ->where('status', '!=', 'void')->orderBy('period_start')->get(['id', 'period_start', 'period_end', 'status', 'amount_minor', 'paid_minor']);
+        foreach ($rents as $r) {
+            $paid = (int) $r->paid_minor + (int) ($lines[(int) $r->id] ?? 0);
+            $r->paid_minor = $paid;
+            if ($paid >= (int) $r->amount_minor) {
+                $r->status = 'paid';
+            }
+        }
+
+        return self::paidUpToFrom($lease, $rents, Payments::credit($lease) + max(0, $credit));
+    }
+
     /** The next bill of a live lease that has not been raised yet: its date and expected amount. */
     public static function nextBill(RentalLease $lease): ?array
+    {
+        return self::nextBillFrom($lease);
+    }
+
+    /** The rule of nextBill(); the fees and rent changes are read when they are not given (rent changes newest first). */
+    public static function nextBillFrom(RentalLease $lease, ?int $items = null, ?Collection $changes = null): ?array
     {
         $from = $lease->billed_until?->copy()->addDay() ?? $lease->start_date->copy();
         $p = Periods::between($lease->start_date, (int) $lease->cycle_months, (string) $lease->anchor, $from, $from->copy()->addMonths(13))[0] ?? null;
         if ($p === null || ($lease->end_date !== null && $p['start']->gt($lease->end_date)) || ($lease->status === 'notice' && $lease->move_out_on !== null && $p['start']->gt($lease->move_out_on))) {
             return null;
         }
-        $items = (int) RentalLeaseItem::withoutGlobalScopes()->where('company_id', $lease->company_id)->where('lease_id', $lease->id)->where('active', true)->sum('amount_minor');
+        $items ??= (int) RentalLeaseItem::withoutGlobalScopes()->where('company_id', $lease->company_id)->where('lease_id', $lease->id)->where('active', true)->sum('amount_minor');
+        $rent = $changes === null ? Billing::rentAt($lease, $p['start'])
+            : (int) ($changes->first(fn ($c) => $c->effective_from->toDateString() <= $p['start']->toDateString())->rent_minor ?? $lease->rent_minor);
 
-        return ['date' => $p['start']->toDateString(), 'amount_minor' => (Billing::rentAt($lease, $p['start']) + $items) * ($p['part'] ? 1 : (int) $lease->cycle_months)];
+        return ['date' => $p['start']->toDateString(), 'amount_minor' => ($rent + $items) * ($p['part'] ? 1 : (int) $lease->cycle_months)];
     }
 
     /** The amount typed for the unused days (null: none typed, the calculation stands). */

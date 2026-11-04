@@ -25,18 +25,19 @@ use Illuminate\Support\Facades\DB;
  */
 final class RentalMessages
 {
-    public const KINDS = ['bill', 'due', 'overdue', 'receipt', 'statement', 'notice'];
+    public const KINDS = ['bill', 'due', 'overdue', 'final', 'receipt', 'statement', 'notice'];
 
     public const DEFAULTS = [
         'bill' => 'Hello {tenant}, your bill for {unit}, {property} is {amount}, due {due_date}. Balance: {balance}. Pay to: {pay_to}. Thank you. {account}',
         'due' => 'Hello {tenant}, a reminder that rent of {amount} for {unit}, {property} is due on {due_date}. Balance: {balance}. Pay to: {pay_to}. {account}',
         'overdue' => 'Hello {tenant}, your rent for {unit}, {property} is overdue. You owe {balance}. Please pay as soon as you can. Pay to: {pay_to}. {account}',
+        'final' => 'Hello {tenant}, this is our last reminder before we take the next step. Your rent for {unit}, {property} is overdue. You owe {balance}. Please pay now, or call us today to agree a date. Pay to: {pay_to}. {account}',
         'receipt' => 'Thank you {tenant}. We received {amount} for {unit}, {property} (receipt {receipt}). Balance: {balance}. Paid up to {paid_up_to}. {account}',
-        'statement' => 'Hello {landlord}, your statement for {period} is ready. Balance owed to you: {balance}. {account}',
+        'statement' => 'Hello {landlord}, your statement for {period} is ready. Balance owed to you: {balance}. {link} {account}',
         'notice' => 'Hello {tenant}, we have your notice to leave {unit}, {property} on {due_date}. Please clear any balance before then. {account}',
     ];
 
-    public const PLACEHOLDERS = ['tenant', 'landlord', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'receipt', 'period', 'account', 'pay_to'];
+    public const PLACEHOLDERS = ['tenant', 'landlord', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'receipt', 'period', 'account', 'pay_to', 'link'];
 
     /** The account's text for a kind (its own, or the default). */
     public static function template(int $companyId, string $kind): string
@@ -51,7 +52,7 @@ final class RentalMessages
     {
         $cid = (int) $lease->company_id;
         $pos = Leases::position($lease);
-        $amount = $kind === 'overdue' ? $pos['overdue_minor'] : (int) ($pos['next_due']['amount_minor'] ?? $pos['owed_minor']);
+        $amount = in_array($kind, ['overdue', 'final'], true) ? $pos['overdue_minor'] : (int) ($pos['next_due']['amount_minor'] ?? $pos['owed_minor']);
         $due = $kind === 'notice' ? $lease->move_out_on?->toDateString() : ($pos['next_due']['date'] ?? null);
 
         return self::fill(self::template($cid, $kind), self::context($lease) + [
@@ -74,11 +75,65 @@ final class RentalMessages
         ]);
     }
 
+    /**
+     * The message for a landlord's statement, with a link to its PDF when there is one. An account's own words that do
+     * not place {link} get it at the end, so the landlord always has the statement in the one message.
+     */
+    public static function forStatement(int $companyId, string $landlord, string $period, int $balanceMinor, ?string $link = null): string
+    {
+        $template = self::template($companyId, 'statement');
+        if ($link !== null && ! str_contains($template, '{link}')) {
+            $template .= ' {link}';
+        }
+
+        return self::fill($template, ['landlord' => $landlord, 'period' => $period, 'balance' => Minor::format(max(0, $balanceMinor), $companyId), 'link' => (string) $link,
+            'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
+    }
+
+    /**
+     * Fill a message and tidy what filling leaves behind (an empty value, a value ending in its own full stop), so it
+     * reads as sentences: "due ." and ".." never reach a tenant. An ellipsis typed on purpose stays.
+     */
     public static function fill(string $template, array $values): string
     {
-        $out = preg_replace_callback('/\{([a-z_]+)\}/', fn ($m) => (string) ($values[$m[1]] ?? ''), $template);
+        $out = (string) preg_replace_callback('/\{([a-z_]+)\}/', fn ($m) => (string) ($values[$m[1]] ?? ''), $template);
+        $out = (string) preg_replace('/[ \t]{2,}/', ' ', $out);
+        $out = (string) preg_replace('/\s+([.,;!?])/', '$1', $out);
+        $out = (string) preg_replace('/(?<!\.)\.\.(?!\.)/', '.', $out);
 
-        return trim((string) preg_replace('/[ \t]{2,}/', ' ', (string) $out));
+        return trim((string) preg_replace('/([,;])\./', '.', $out));
+    }
+
+    /**
+     * The account's "how to pay" as words that follow "Pay to:" in a sentence. Its own opening ("Pay rent to") goes, list
+     * dashes and line breaks become punctuation, and it ends with no full stop of its own (the message has one).
+     */
+    public static function payTo(?string $instructions): string
+    {
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $instructions) ?: []), fn ($l) => $l !== ''));
+        if ($lines === []) {
+            return 'the office';
+        }
+        $lines[0] = (string) preg_replace('/^(please\s+)?pay(\s+(your|the))?(\s+rent)?(\s+(to|via|by|through|on|at|with))?\s*:?\s*/iu', '', $lines[0], 1);
+        $out = '';
+        $wasItem = false;
+        foreach ($lines as $line) {
+            $isItem = (bool) preg_match('/^[-*•–]\s*/u', $line);
+            $line = trim((string) preg_replace('/^[-*•–]\s*/u', '', $line));
+            if ($line === '') {
+                continue;
+            }
+            $out = match (true) {
+                $out === '' => $line,
+                (bool) preg_match('/[.!?:;]$/u', $out) => $out.' '.$line,
+                $isItem && $wasItem => $out.'; '.$line,
+                default => $out.'. '.$line,
+            };
+            $wasItem = $isItem;
+        }
+        $out = rtrim(trim((string) preg_replace('/\s+/u', ' ', $out)), '.;:, ');
+
+        return $out !== '' ? $out : 'the office';
     }
 
     /** wa.me link (opens WhatsApp with the text, on the user's own phone). */
@@ -118,11 +173,11 @@ final class RentalMessages
         return $id;
     }
 
-    /** The reminder for a lease (the API's GET leases/{id}/reminder): its kind, text and links. */
-    public static function reminder(RentalLease $lease): array
+    /** The reminder for a lease (the API's GET leases/{id}/reminder): its kind, text and links. $kind asks for a given wording, such as the last reminder. */
+    public static function reminder(RentalLease $lease, ?string $kind = null): array
     {
         $pos = Leases::position($lease);
-        $kind = $pos['overdue_minor'] > 0 ? 'overdue' : ($pos['owed_minor'] > 0 || $pos['next_due'] !== null ? 'due' : 'bill');
+        $kind ??= $pos['overdue_minor'] > 0 ? 'overdue' : ($pos['owed_minor'] > 0 || $pos['next_due'] !== null ? 'due' : 'bill');
         $text = self::forLease($lease, $kind);
         $phone = RentalTenant::withoutGlobalScopes()->where('company_id', $lease->company_id)->whereKey($lease->tenant_id)->value('phone_e164');
 
@@ -139,7 +194,7 @@ final class RentalMessages
             'unit' => (string) RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->whereKey($lease->unit_id)->value('code'),
             'property' => (string) RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->whereKey($lease->property_id)->value('name'),
             'account' => (string) Company::withoutGlobalScopes()->whereKey($cid)->value('name'),
-            'pay_to' => trim(preg_replace('/\s+/', ' ', (string) $s->payment_instructions)) ?: 'the office',
+            'pay_to' => self::payTo($s->payment_instructions),
         ];
     }
 }

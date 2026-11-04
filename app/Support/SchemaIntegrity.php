@@ -168,6 +168,8 @@ class SchemaIntegrity
         ['rental_maintenance', 'property_id', 'rental_properties', 'restrict'],
         ['rental_meter_readings', 'unit_id', 'rental_units', 'restrict'],
         ['rental_follow_ups', 'lease_id', 'rental_leases', 'restrict'],
+        ['rental_paid_reports', 'company_id', 'companies', 'restrict'],
+        ['rental_paid_reports', 'lease_id', 'rental_leases', 'restrict'],
         ['rental_logins', 'company_id', 'companies', 'restrict'],
         ['rental_documents', 'company_id', 'companies', 'restrict'],
         ['rental_activities', 'company_id', 'companies', 'restrict'],
@@ -275,6 +277,7 @@ class SchemaIntegrity
         ['rental_maintenance', 'reported_by', ['staff', 'tenant', 'landlord']],
         ['rental_meter_readings', 'utility', ['water', 'power']],
         ['rental_follow_ups', 'channel', ['whatsapp', 'sms', 'call', 'visit', 'note']],
+        ['rental_paid_reports', 'status', ['pending', 'confirmed', 'declined']],
         ['rental_logins', 'subject_type', ['tenant', 'landlord']],
         ['rental_documents', 'owner_type', ['tenant', 'lease', 'property', 'landlord']],
     ];
@@ -347,6 +350,7 @@ class SchemaIntegrity
         'rental_maintenance' => \App\Models\RentalMaintenance::class,
         'rental_meter_readings' => \App\Models\RentalMeterReading::class,
         'rental_follow_ups' => \App\Models\RentalFollowUp::class,
+        'rental_paid_reports' => \App\Models\RentalPaidReport::class,
         'rental_logins' => \App\Models\RentalLogin::class,
         'rental_documents' => \App\Models\RentalDocument::class,
     ];

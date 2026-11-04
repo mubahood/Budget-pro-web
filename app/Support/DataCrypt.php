@@ -27,6 +27,12 @@ final class DataCrypt
         return self::encrypter()->decryptString($payload);
     }
 
+    /** A keyed hash both apps compute alike, so a value can be compared without being stored. `$context` keeps uses apart. */
+    public static function hash(string $context, string $value): string
+    {
+        return hash_hmac('sha256', $context."\0".$value, self::key());
+    }
+
     public static function forget(): void
     {
         self::$encrypter = null;
@@ -37,11 +43,13 @@ final class DataCrypt
         if (self::$encrypter !== null) {
             return self::$encrypter;
         }
-        $key = (string) (config('saas.data_key') ?: config('app.key'));
-        if (Str::startsWith($key, 'base64:')) {
-            $key = base64_decode(substr($key, 7));
-        }
+        return self::$encrypter = new Encrypter(self::key(), (string) config('app.cipher', 'AES-256-CBC'));
+    }
 
-        return self::$encrypter = new Encrypter($key, (string) config('app.cipher', 'AES-256-CBC'));
+    private static function key(): string
+    {
+        $key = (string) (config('saas.data_key') ?: config('app.key'));
+
+        return Str::startsWith($key, 'base64:') ? (string) base64_decode(substr($key, 7)) : $key;
     }
 }

@@ -78,6 +78,7 @@ final class LandlordAccounts
         $originals = RentalEntry::withoutGlobalScopes()->where('company_id', $cid)->whereIn('id', $rows->pluck('reverses_id')->filter()->all() ?: [0])->get()->keyBy('id');
         $origAllocs = RentalAllocation::withoutGlobalScopes()->where('company_id', $cid)->whereIn('id', $originals->pluck('allocation_id')->filter()->all() ?: [0])->get()->keyBy('id');
         $names = self::names($cid, $rows);
+        $chargeKinds = RentalCharge::withoutGlobalScopes()->where('company_id', $cid)->whereIn('id', $allocs->pluck('charge_id')->concat($origAllocs->pluck('charge_id'))->filter()->unique()->values()->all() ?: [0])->pluck('kind', 'id');
         $issued = \App\Services\Rentals\Payments\Receipt::hasSnapshots() ? \App\Models\RentalPayment::withoutGlobalScopes()->where('company_id', $cid)
             ->whereIn('id', $rows->pluck('payment_id')->filter()->unique()->all() ?: [0])->get(['id', 'receipt_snapshot'])->keyBy('id') : collect();
         $totals = ['collected_minor' => 0, 'commission_minor' => 0, 'expenses_minor' => 0, 'payouts_minor' => 0, 'deposits_minor' => 0, 'other_minor' => 0];
@@ -97,7 +98,7 @@ final class LandlordAccounts
             $kind = $src->type;
             if (in_array($kind, ['collected', 'credit_applied', 'deposit_applied', 'unapplied'], true)) {
                 $isDeposit = $alloc !== null && (int) $alloc->landlord_minor > 0 && (int) $alloc->commission_minor === 0
-                    && RentalCharge::withoutGlobalScopes()->whereKey($alloc->charge_id)->value('kind') === 'deposit';
+                    && ($chargeKinds[$alloc->charge_id] ?? null) === 'deposit';
                 if ($isDeposit) {
                     $totals['deposits_minor'] += $amount;
                 } else {

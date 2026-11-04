@@ -20,6 +20,9 @@ final class RentalLinks
 {
     public const MINUTES = 30;
 
+    /** A link sent to a landlord in a message: a week. */
+    public const SHARED_MINUTES = 10080;
+
     /** Who asks: a staff login (`staff`, user id) or a tenant's or landlord's own sign-in (`portal`, login id). */
     public const VIEWERS = ['staff', 'portal'];
 
@@ -29,11 +32,16 @@ final class RentalLinks
         return self::sign('rentals.pdf.receipt', ['company_id' => (int) $payment->company_id, 'payment_id' => (int) $payment->id, 'by' => $viewer, 'by_id' => $viewerId]);
     }
 
-    /** @return array{url: string, expires_in: int} */
-    public static function statementPdf(RentalLandlord $landlord, string $from, string $to, string $viewer, int $viewerId): array
+    /**
+     * A landlord's statement as a PDF. $minutes is longer for a link put in a message to the landlord, who may open it
+     * days later (SHARED_MINUTES); it still checks the person who made it may see the statement.
+     *
+     * @return array{url: string, expires_in: int}
+     */
+    public static function statementPdf(RentalLandlord $landlord, string $from, string $to, string $viewer, int $viewerId, int $minutes = self::MINUTES): array
     {
         return self::sign('rentals.pdf.statement', ['company_id' => (int) $landlord->company_id, 'landlord_id' => (int) $landlord->id, 'from' => $from, 'to' => $to,
-            'by' => $viewer, 'by_id' => $viewerId]);
+            'by' => $viewer, 'by_id' => $viewerId], $minutes);
     }
 
     /** The filters a report download carries (RentalReports): ids and dates only. */
@@ -96,8 +104,8 @@ final class RentalLinks
     }
 
     /** @return array{url: string, expires_in: int} */
-    private static function sign(string $route, array $params): array
+    private static function sign(string $route, array $params, int $minutes = self::MINUTES): array
     {
-        return ['url' => url(URL::temporarySignedRoute($route, now()->addMinutes(self::MINUTES), $params, false)), 'expires_in' => self::MINUTES * 60];
+        return ['url' => url(URL::temporarySignedRoute($route, now()->addMinutes($minutes), $params, false)), 'expires_in' => $minutes * 60];
     }
 }

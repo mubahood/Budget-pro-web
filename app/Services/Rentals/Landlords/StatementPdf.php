@@ -2,26 +2,22 @@
 
 namespace App\Services\Rentals\Landlords;
 
-use App\Models\Company;
 use App\Models\RentalLandlord;
-use App\Services\Rentals\RentalsModule;
+use App\Services\Rentals\Reports\RentalExport;
+use App\Services\Rentals\Reports\RentalReports;
 
 /**
- * A landlord's statement as a PDF (dompdf): LandlordAccounts::statement for the period, headed with the account's own
- * name; "Property income statement" in owner mode (KR-06). Plain, light, square; no other product is named (KR-05).
+ * A landlord's statement as a PDF, the one statement there is: the landlord_statement report (LandlordAccounts::statement
+ * for the period) in the one document layout, headed with the account's own name; "Property income statement" in owner
+ * mode (KR-06). Who may see it is checked by the caller; no other product is named (KR-05).
  */
 final class StatementPdf
 {
     public static function render(RentalLandlord $landlord, string $from, string $to): string
     {
         $cid = (int) $landlord->company_id;
-        $owner = RentalsModule::isOwnerMode($cid);
 
-        return app('dompdf.wrapper')->loadHTML(view('rentals.landlord-statement', [
-            's' => LandlordAccounts::statement($landlord, $from, $to), 'cid' => $cid, 'owner' => $owner,
-            'title' => $owner ? 'Property income statement' : 'Landlord statement',
-            'account' => (string) Company::withoutGlobalScopes()->whereKey($cid)->value('name'),
-        ])->render())->setPaper('a4')->output();
+        return RentalExport::pdf((new RentalReports)->run('landlord_statement', $cid, null, ['landlord_id' => (int) $landlord->id, 'from' => $from, 'to' => $to]), $cid);
     }
 
     public static function filename(RentalLandlord $landlord, string $from, string $to): string
