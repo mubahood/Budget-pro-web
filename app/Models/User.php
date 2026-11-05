@@ -104,6 +104,10 @@ class User extends Administrator
             if ($name != null && strlen($name) > 0) {
                 $model->name = $name;
             }
+            // Whoever sets a password (the person, the owner, a reset), the invite link no longer signs them in.
+            if ($model->isDirty('password') && ! $model->isDirty('password_pending_at')) {
+                $model->password_pending_at = null;
+            }
             // Follow an email change only when the username was the old email (or is empty).
             if ($model->isDirty('email') && (empty($model->username) || $model->username === $model->getOriginal('email'))) {
                 $model->username = $model->email ?: $model->phone_number;

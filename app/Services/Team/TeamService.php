@@ -6,6 +6,7 @@ use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
 use App\Models\User;
 use App\Services\Messaging\Messenger;
+use App\Support\DataCrypt;
 use App\Support\MasterPassword;
 use App\Support\Phone;
 use App\Support\Rules\PasswordPolicy;
@@ -75,7 +76,7 @@ class TeamService
 
         $token = Str::random(40);
         $id = DB::table('invites')->insertGetId([
-            'company_id' => $company->id, 'token_hash' => hash('sha256', $token), 'name' => $name, 'phone_e164' => $e164, 'email' => $email, 'role' => $role,
+            'company_id' => $company->id, 'token_hash' => hash('sha256', $token), 'token_secret' => DataCrypt::encrypt($token), 'name' => $name, 'phone_e164' => $e164, 'email' => $email, 'role' => $role,
             'invited_by_id' => $by->id, 'status' => 'pending', 'expires_at' => now()->addDays(self::INVITE_DAYS), 'created_at' => now(), 'updated_at' => now(),
         ]);
         $invite = DB::table('invites')->find($id);
@@ -90,10 +91,129 @@ class TeamService
         if ($invite->status !== 'pending') {
             throw BusinessRuleException::make('invite_closed', 'This invite is no longer open.');
         }
-        $token = Str::random(40);
-        DB::table('invites')->where('id', $invite->id)->update(['token_hash' => hash('sha256', $token), 'expires_at' => now()->addDays(self::INVITE_DAYS), 'updated_at' => now()]);
+        // The same link, with 7 more days: a link they already hold keeps working.
+        $token = self::tokenOf($invite) ?? Str::random(40);
+        DB::table('invites')->where('id', $invite->id)->update(['token_hash' => hash('sha256', $token), 'token_secret' => DataCrypt::encrypt($token), 'expires_at' => now()->addDays(self::INVITE_DAYS), 'updated_at' => now()]);
 
         return $this->send(DB::table('invites')->find($invite->id), $token, $by, Company::withoutGlobalScopes()->find($invite->company_id));
+    }
+
+    /** The token of an invite's link, so it can be copied at any time; null if it can't be read (a changed key). */
+    public static function tokenOf(object $invite): ?string
+    {
+        if (empty($invite->token_secret)) {
+            return null;
+        }
+        try {
+            return DataCrypt::decrypt((string) $invite->token_secret);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * 7 more days for a link that is still of use: an invite nobody has opened, or someone who joined by it and has not chosen a
+     * password. The link itself stays the same.
+     */
+    public function renewLink(Company $company, int $inviteId): string
+    {
+        MasterPassword::refuseInSession('send team invites');
+        $invite = DB::table('invites')->where('company_id', $company->id)->where('id', $inviteId)->first();
+        if ($invite === null || ! self::stillUseful($invite)) {
+            throw BusinessRuleException::make('invite_closed', 'This invite is no longer open.');
+        }
+        $token = self::tokenOf($invite) ?? Str::random(40);
+        DB::table('invites')->where('id', $invite->id)->update(['token_hash' => hash('sha256', $token), 'token_secret' => DataCrypt::encrypt($token), 'expires_at' => now()->addDays(self::INVITE_DAYS), 'updated_at' => now()]);
+
+        return self::inviteBase().'/invite/'.$token;
+    }
+
+    private static function stillUseful(object $invite): bool
+    {
+        if ($invite->status === 'pending') {
+            return true;
+        }
+
+        return $invite->status === 'accepted' && $invite->accepted_user_id
+            && DB::table('admin_users')->where('id', $invite->accepted_user_id)->whereNotNull('password_pending_at')->exists();
+    }
+
+    /**
+     * Does this account's invite link sign a person straight in? Not a SACCO's: its officers handle members' savings, so they
+     * choose their password before they are in.
+     */
+    public static function linkSignsIn(?Company $company): bool
+    {
+        return $company === null || ! in_array('sacco', $company->modules(), true);
+    }
+
+    /** The invite a link opens: not expired, and either waiting, or its person has not chosen a password yet. */
+    public static function findForLink(string $token): ?object
+    {
+        $invite = DB::table('invites')->where('token_hash', hash('sha256', $token))->first();
+
+        return $invite && now()->lessThan($invite->expires_at) && self::stillUseful($invite) ? $invite : null;
+    }
+
+    /**
+     * Opening the link: their account is made from the invite (or found, if they opened it before) and the caller signs them in.
+     * They choose a password next; until they do, the link keeps working, and they can't sign in without it. Never for an account
+     * that already has a password: that person proves it (acceptExisting).
+     */
+    public function enterByLink(string $token): User
+    {
+        return DB::transaction(function () use ($token) {
+            $invite = DB::table('invites')->where('token_hash', hash('sha256', $token))->lockForUpdate()->first();
+            if (! $invite || ! now()->lessThan($invite->expires_at) || ! self::stillUseful($invite)) {
+                throw BusinessRuleException::make('invite_invalid', 'This invite link has expired or was already used. Ask for a new one.');
+            }
+            if ($invite->status === 'accepted') {
+                return User::withoutGlobalScopes()->findOrFail($invite->accepted_user_id);
+            }
+            if (! self::linkSignsIn(Company::withoutGlobalScopes()->find($invite->company_id))) {
+                throw BusinessRuleException::make('invite_invalid', 'Choose a password to join.');
+            }
+            $taken = User::withoutGlobalScopes()->where(fn ($q) => $q->when($invite->phone_e164, fn ($w) => $w->orWhere('phone_e164', $invite->phone_e164))
+                ->when($invite->email, fn ($w) => $w->orWhereRaw('LOWER(email) = ?', [strtolower((string) $invite->email)])))->exists();
+            if ($taken) {
+                throw BusinessRuleException::make('already_member', 'You already have an account. Enter its password to join.');
+            }
+            [$first, $last] = self::splitName((string) ($invite->name ?: ($invite->email ?: $invite->phone_e164)));
+
+            return $this->createFromInvite($invite, $first, (string) $last, Hash::make(Str::random(40)), true);
+        });
+    }
+
+    /** The person sets their own password (and name) after joining by the link. It closes the link. */
+    public function setOwnPassword(User $user, string $password, ?string $name = null): void
+    {
+        $this->assertPassword($password);
+        if (($name = trim((string) $name)) !== '') {
+            [$first, $last] = self::splitName($name);
+            $user->first_name = $first;
+            $user->last_name = (string) $last;
+            $user->name = $name;
+        }
+        $user->password = Hash::make($password);
+        $user->save();
+    }
+
+    /** Every phone and browser of this person is signed out: on their next page, a browser goes to the sign-in page. */
+    public function signOutEverywhere(Company $company, User $by, User $member): void
+    {
+        MasterPassword::refuseInSession('sign someone out');
+        \App\Services\Onboarding\PublicDemo::guardAccount($member, 'signing this person out');
+        $this->assertMemberOf($company, $member);
+        if ((int) $company->owner_id === (int) $member->id && (int) $by->id !== (int) $member->id) {
+            throw BusinessRuleException::make('owner_password', 'Only the owner can sign the owner out.');
+        }
+        $this->endSessions($member);
+    }
+
+    private function endSessions(User $member): void
+    {
+        $member->tokens()->delete();
+        $member->forceFill(['sessions_valid_from' => now(), 'remember_token' => Str::random(60)])->save();
     }
 
     private function send(object $invite, string $token, User $by, Company $company): string
@@ -125,32 +245,42 @@ class TeamService
             if (! $invite || $invite->status !== 'pending' || now()->greaterThan($invite->expires_at)) {
                 throw BusinessRuleException::make('invite_invalid', 'This invite link has expired or was already used. Ask for a new one.');
             }
-            $user = new User();
-            $user->first_name = trim($firstName);
-            $user->last_name = trim($lastName);
-            $user->name = trim($firstName.' '.$lastName);
-            $user->email = $invite->email;
-            $user->phone_e164 = $invite->phone_e164;
-            $user->phone_number = $invite->phone_e164;
-            $user->username = $invite->email ?: $invite->phone_e164;
-            $user->password = Hash::make($password);
-            $user->company_id = $invite->company_id;
-            $user->status = 'Active';
-            if ($invite->phone_e164) {
-                $user->phone_verified_at = now(); // they received the link on this phone
-            } else {
-                $user->email_verified_at = now();
-            }
-            $user->save();
-            DB::table('company_members')->updateOrInsert(['company_id' => $invite->company_id, 'user_id' => $user->id],
-                ['role' => $invite->role, 'status' => 'active', 'invited_by_id' => $invite->invited_by_id, 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-            $this->syncAdminRole($user, $invite->role);
-            DB::table('invites')->where('id', $invite->id)->update(['status' => 'accepted', 'accepted_user_id' => $user->id, 'accepted_at' => now(), 'updated_at' => now()]);
-            \App\Services\Budget\CommitteeService::claimInvite((int) $invite->id, (int) $user->id); // an event committee place waiting for them
-            app(\App\Services\Notifications\Notifier::class)->notify((int) $invite->company_id, 'team', 'New team member', "{$user->name} joined as ".config("permissions.roles.{$invite->role}.label").'.');
 
-            return $user;
+            return $this->createFromInvite($invite, $firstName, $lastName, Hash::make($password), false);
         });
+    }
+
+    private function createFromInvite(object $invite, string $firstName, string $lastName, string $passwordHash, bool $passwordPending): User
+    {
+        $user = new User();
+        $user->first_name = trim($firstName);
+        $user->last_name = trim($lastName);
+        $user->name = trim($firstName.' '.$lastName);
+        $user->email = $invite->email;
+        $user->phone_e164 = $invite->phone_e164;
+        $user->phone_number = $invite->phone_e164;
+        $user->username = $invite->email ?: $invite->phone_e164;
+        $user->password = $passwordHash;
+        $user->company_id = $invite->company_id;
+        $user->status = 'Active';
+        if ($passwordPending) {
+            $user->password_pending_at = now();
+        }
+        if ($invite->phone_e164) {
+            $user->phone_verified_at = now(); // they received the link on this phone
+        } else {
+            $user->email_verified_at = now();
+        }
+        $user->save();
+        DB::table('company_members')->updateOrInsert(['company_id' => $invite->company_id, 'user_id' => $user->id],
+            ['role' => $invite->role, 'status' => 'active', 'invited_by_id' => $invite->invited_by_id, 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        $this->syncAdminRole($user, $invite->role);
+        DB::table('invites')->where('id', $invite->id)->update(['status' => 'accepted', 'accepted_user_id' => $user->id, 'accepted_at' => now(), 'updated_at' => now()]);
+        \App\Services\Budget\CommitteeService::claimInvite((int) $invite->id, (int) $user->id); // an event committee place waiting for them
+        Permissions::flush();
+        app(\App\Services\Notifications\Notifier::class)->notify((int) $invite->company_id, 'team', 'New team member', "{$user->name} joined as ".config("permissions.roles.{$invite->role}.label").'.');
+
+        return $user;
     }
 
     /**
@@ -260,7 +390,7 @@ class TeamService
         $member->status = $active ? 'Active' : 'Inactive';
         $member->save();
         if (! $active) {
-            $member->tokens()->delete(); // signed out on every phone
+            $this->endSessions($member); // signed out on every phone and browser
         }
         Permissions::flush();
     }
@@ -337,7 +467,11 @@ class TeamService
         $this->assertPassword($password);
         $member->password = Hash::make($password);
         $member->save();
-        $member->tokens()->delete(); // signed out on every phone
+        if ((int) $by->id === (int) $member->id) {
+            $member->tokens()->delete(); // signed out on every phone, and still in this browser
+        } else {
+            $this->endSessions($member); // signed out on every phone and browser
+        }
     }
 
     /**
