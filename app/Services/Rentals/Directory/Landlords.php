@@ -35,10 +35,10 @@ final class Landlords extends Directory
             'payout_details' => ['nullable', 'string', 'max:500'],
             'commission_type' => ['nullable', 'in:percent,flat,none'],
             'commission_bp' => ['nullable', 'integer', 'min:0', 'max:10000'],
-            'commission_minor' => ['nullable', 'integer', 'min:0'],
+            'commission_minor' => ['nullable', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'notes' => ['nullable', 'string', 'max:2000'],
             'status' => ['sometimes', 'in:active,inactive'],
-            'expense_limit_minor' => ['nullable', 'integer', 'min:0'],
+            'expense_limit_minor' => ['nullable', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'withholding_bp' => ['nullable', 'integer', 'min:0', 'max:10000'], // the agency's own percent to hold back (LC-23): no rate comes from here
         ];
     }

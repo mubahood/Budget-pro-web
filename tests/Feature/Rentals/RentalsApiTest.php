@@ -41,7 +41,7 @@ class RentalsApiTest extends ApiTestCase
 
     /** Every staff route and the permission §7 and §9 give it. */
     private const ROUTES = [
-        'GET overview' => 'rentals_view', 'POST setup' => 'manage_settings', 'GET settings' => 'rentals_view', 'PUT settings' => 'rentals_settings',
+        'GET overview' => 'rentals_view', 'POST setup' => 'rentals_settings', 'GET settings' => 'rentals_view', 'PUT settings' => 'rentals_settings',
         'GET landlords' => 'rentals_view', 'POST landlords' => 'rentals_manage', 'GET landlords/{id}' => 'rentals_view', 'PUT landlords/{id}' => 'rentals_manage',
         'GET landlords/{id}/statement' => 'rentals_landlords', 'POST landlords/{id}/login' => 'rentals_settings',
         'GET payouts' => 'rentals_landlords', 'POST payouts' => 'rentals_landlords', 'POST payouts/{id}/reverse' => 'rentals_reverse',
@@ -52,8 +52,9 @@ class RentalsApiTest extends ApiTestCase
         'POST tenants/{id}/login' => 'rentals_settings',
         'GET leases' => 'rentals_view', 'POST leases' => 'rentals_manage', 'GET leases/{id}' => 'rentals_view',
         'POST leases/{id}/notice' => 'rentals_manage', 'POST leases/{id}/withdraw-notice' => 'rentals_manage', 'POST leases/{id}/renew' => 'rentals_manage',
-        'POST leases/{id}/move-out' => 'rentals_manage', 'POST leases/{id}/cancel' => 'rentals_manage', 'POST leases/{id}/refund-deposit' => 'rentals_manage',
-        'POST leases/{id}/refund-credit' => 'rentals_manage', 'POST leases/{id}/rent-change' => 'rentals_bill', 'POST leases/{id}/items' => 'rentals_bill',
+        'POST leases/{id}/move-out' => 'rentals_manage', 'POST leases/{id}/cancel' => 'rentals_manage', 'POST leases/{id}/refund-deposit' => 'rentals_reverse',
+        'POST leases/{id}/refund-credit' => 'rentals_reverse', 'POST leases/{id}/move-out-preview' => 'rentals_manage', 'POST leases/move-in-preview' => 'rentals_manage', 'POST leases/{id}/commission' => 'rentals_manage',
+        'GET refunds' => 'rentals_view', 'GET refunds/waiting' => 'rentals_view', 'POST leases/{id}/rent-change' => 'rentals_bill', 'POST leases/{id}/items' => 'rentals_bill',
         'POST leases/{id}/items/{item}/end' => 'rentals_bill', 'GET leases/{id}/payment-preview' => 'rentals_view', 'GET leases/{id}/reminder' => 'rentals_view',
         'GET charges' => 'rentals_view', 'POST charges' => 'rentals_bill', 'POST charges/{id}/void' => 'rentals_bill', 'POST charges/{id}/waive' => 'rentals_bill', 'POST billing/run' => 'rentals_bill',
         'GET payments' => 'rentals_view', 'POST payments' => 'rentals_collect', 'GET payments/{id}' => 'rentals_view', 'POST payments/{id}/reverse' => 'rentals_reverse', 'GET payments/{id}/receipt' => 'rentals_view',
@@ -67,7 +68,20 @@ class RentalsApiTest extends ApiTestCase
     ];
 
     /** Routes that other builders add for their screens, each with the permission it must have. */
-    private const OTHER_BUILDERS = [];
+    private const OTHER_BUILDERS = [
+        'GET rent-book' => 'rentals_view', 'GET today' => 'rentals_view', 'GET search' => 'rentals_view',
+        'GET team' => null, 'GET tenants/{id}/login' => 'rentals_settings', 'GET landlords/{id}/login' => 'rentals_settings', 'POST properties/{id}/handover/cancel' => 'rentals_manage',
+        'GET paid-reports' => 'rentals_collect', 'POST paid-reports/{id}/confirm' => 'rentals_collect', 'POST paid-reports/{id}/decline' => 'rentals_collect',
+        'GET month-end' => null, 'POST month-end/close' => 'rentals_close', 'POST month-end/reopen' => 'rentals_reopen',
+        'GET month-end/withholding' => null, 'POST month-end/withholding' => 'rentals_expenses', 'GET year-summaries' => 'rentals_landlords', 'POST year-summaries/{id}/prepared' => 'rentals_landlords',
+        'GET payouts/{id}/statement-message' => 'rentals_landlords', 'POST payouts/{id}/statement-prepared' => 'rentals_landlords', 'GET leases/{id}/statement' => 'rentals_view',
+        'GET statements/{id}/message' => 'rentals_landlords', 'POST statements/{id}/sent' => 'rentals_landlords', 'GET landlords/{id}/sheet' => 'rentals_landlords',
+        'GET payout-runs' => 'rentals_landlords', 'POST payout-runs' => 'rentals_landlords', 'GET payout-runs/candidates' => 'rentals_landlords', 'GET payout-runs/{id}' => 'rentals_landlords',
+        'PUT payout-runs/{id}' => 'rentals_landlords', 'POST payout-runs/{id}/post' => 'rentals_landlords', 'POST payout-runs/{id}/cancel' => 'rentals_landlords', 'GET payout-runs/{id}/sheet' => 'rentals_landlords',
+        'GET money-position' => 'rentals_landlords', 'POST cash/drawings' => 'rentals_settings', 'POST cash/drawings/{id}/reverse' => 'rentals_reverse', 'GET properties/{id}/handover-preview' => 'rentals_manage',
+        'GET expenses/landlord-effect' => 'rentals_expenses', 'GET search/marks' => 'rentals_view', 'POST search/opened' => 'rentals_view', 'POST search/pin' => 'rentals_view',
+        'POST maintenance/{id}/ask-landlord' => 'rentals_maintenance', 'POST maintenance/{id}/landlord-answer' => 'rentals_maintenance', 'GET payouts/{id}/advice' => 'rentals_landlords',
+    ];
 
     /** The shapes of §9.1 (the app and the portal read these names). */
     private const POSITION = ['owed_minor', 'overdue_minor', 'overdue_days', 'credit_minor', 'deposit_held_minor', 'paid_up_to', 'next_due', 'state'];

@@ -126,6 +126,13 @@ class User extends Administrator
             self::ensureCompanyOwnerRole($model);
         });
 
+        // A person with an account beside their first (SiblingAccounts) has one password, whichever door changed it.
+        static::saved(function ($model) {
+            if ($model->wasChanged('password')) {
+                \App\Services\Onboarding\SiblingAccounts::spreadPassword($model);
+            }
+        });
+
         static::updated(function ($model) {
             self::ensureCompanyOwnerRole($model);
         });

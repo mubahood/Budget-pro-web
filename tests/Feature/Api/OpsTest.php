@@ -60,6 +60,7 @@ class OpsTest extends ApiTestCase
         $this->assertStringContainsString('Aunt Sarah', (string) $zip->getFromName('customers.csv'));
         $users = (string) $zip->getFromName('admin_users.csv');
         $this->assertStringNotContainsString('password', strtok($users, "\n"), 'no password hashes in the export');
+        $this->assertStringNotContainsString('pin_hash', strtok($users, "\n"), 'no till PIN hashes in the export');
         $this->assertArrayHasKey('customers', json_decode((string) $zip->getFromName('manifest.json'), true)['tables']);
         $zip->close();
         @unlink($file);

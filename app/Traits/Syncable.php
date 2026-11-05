@@ -53,11 +53,13 @@ trait Syncable
     }
 
     /** Persist without firing events but still advance version/seq so devices see the change. */
-    public function saveQuietlySynced(): bool
+    public function saveQuietlySynced(bool $keepClientTime = false): bool
     {
         if ($this->exists) {
             $this->version = ((int) $this->getOriginal('version') ?: (int) $this->version) + 1;
-            $this->client_updated_at = SyncSequence::nowMs();
+            if (! $keepClientTime) {
+                $this->client_updated_at = SyncSequence::nowMs();
+            }
         }
         $this->server_seq = SyncSequence::next();
 

@@ -271,6 +271,15 @@ final class EventInvitations
         return $row;
     }
 
+    /** The same from a phone, which knows the person by name. Nobody on the list by that name: nothing to do, and null says so. */
+    public function unmarkByName(User $by, BudgetProgram $program, string $name): ?EventInvitation
+    {
+        $this->mayWrite($by, $program);
+        $id = EventInvitation::withoutGlobalScopes()->where('company_id', $program->company_id)->where('budget_program_id', $program->id)->where('name_key', self::key($name))->where('is_deleted', 0)->value('id');
+
+        return $id === null ? null : $this->unmark($by, $program, (int) $id);
+    }
+
     private function mayWrite(User $by, BudgetProgram $program): void
     {
         if (! EventBook::isOpen($program->status)) {
@@ -301,7 +310,7 @@ final class EventInvitations
                 $source = $known['source'] ?? 'typed';
                 $row = new EventInvitation;
                 $row->forceFill(['company_id' => $cid, 'budget_program_id' => $eid, 'name' => $clean, 'name_key' => $key, 'source' => $source === 'invited' ? 'typed' : $source,
-                    'source_note' => $known['note'] ?? null, 'contribution_record_id' => $known['pledge_id'] ?? null, 'status' => 'made', 'created_by_id' => $by->id]);
+                    'source_note' => ($known['source'] ?? '') === 'other_event' ? 'Pledged on another event' : ($known['note'] ?? null), 'contribution_record_id' => $known['pledge_id'] ?? null, 'status' => 'made', 'created_by_id' => $by->id]);
             }
             $row->name = $clean; // the same person, as now printed: a title added or dropped
             $row->is_deleted = false;

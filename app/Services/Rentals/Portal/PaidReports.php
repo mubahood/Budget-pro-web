@@ -14,7 +14,9 @@ use App\Services\Rentals\Payments\Payments;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalAudit;
 use App\Support\LocalDate;
+use App\Support\Rentals\Day;
 use App\Support\Rentals\Minor;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -57,7 +59,7 @@ final class PaidReports
         if (! in_array($method, RentalPayment::CASH_METHODS, true)) {
             throw BusinessRuleException::make('method_invalid', 'Choose cash, mobile money, bank or cheque.');
         }
-        $paidOn = LocalDate::date($cid, $data['paid_on'] ?? null);
+        $paidOn = LocalDate::date($cid, Day::strict($data['paid_on'] ?? null, 'the day you paid'));
         if ($paidOn->gt(LocalDate::today($cid))) {
             throw BusinessRuleException::make('date_in_future', 'A payment cannot be dated after today.');
         }
@@ -66,9 +68,16 @@ final class PaidReports
         if ($photo !== null && ! StoredFile::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', $photo)->where('device_id', 'portal:'.$login->id)->exists()) {
             throw BusinessRuleException::make('file_not_found', 'That photo was not found. Please send it again.');
         }
-        $report = RentalPaidReport::withoutGlobalScopes()->create(['company_id' => $cid, 'uuid' => $uuid, 'login_id' => $login->id, 'lease_id' => $lease->id, 'tenant_id' => $lease->tenant_id,
-            'unit_id' => $lease->unit_id, 'property_id' => $lease->property_id, 'amount_minor' => $amount, 'method' => $method, 'reference' => self::text($data['reference'] ?? null, 100),
-            'paid_on' => $paidOn->toDateString(), 'note' => self::text($data['note'] ?? null, 255), 'photo_uuid' => $photo, 'status' => 'pending']);
+        try {
+            $report = RentalPaidReport::withoutGlobalScopes()->create(['company_id' => $cid, 'uuid' => $uuid, 'login_id' => $login->id, 'lease_id' => $lease->id, 'tenant_id' => $lease->tenant_id,
+                'unit_id' => $lease->unit_id, 'property_id' => $lease->property_id, 'amount_minor' => $amount, 'method' => $method, 'reference' => self::text($data['reference'] ?? null, 100),
+                'paid_on' => $paidOn->toDateString(), 'note' => self::text($data['note'] ?? null, 255), 'photo_uuid' => $photo, 'status' => 'pending']);
+        } catch (UniqueConstraintViolationException $e) {
+            // Two sends at once: the first one stands.
+            $first = RentalPaidReport::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', $uuid)->where('tenant_id', (int) $login->subject_id)->first();
+
+            return $first !== null ? ['report' => $first, 'replayed' => true] : throw BusinessRuleException::make('idempotency_conflict', 'This report id was already used.');
+        }
         RentalAudit::record($cid, 'paid_report.made', $report, "The tenant reported a payment on lease {$lease->number}", ['amount_minor' => $amount, 'method' => $method], 'tenant', (int) $lease->tenant_id);
 
         return ['report' => $report, 'replayed' => false];

@@ -513,8 +513,8 @@ Response:
 
   Master data (products, customers, categories…) is always complete.
 
-### 7.8 Push permissions (unchanged, plus one)
-`cash_movements` needs sell.
+### 7.8 Push permissions
+`cash_movements` needs sell. A pushed op on a budget table is judged per event; see "Sync" under Pledge & Budget below.
 
 ## 8. Team chat
 
@@ -954,3 +954,64 @@ the reason. The sign-in page's refusals apply (switched-off account, removed mem
   `resources/views/reports/customer-statement.blade.php`. Web portal: `app/Http/Controllers/Auth/WebLinkSignInController.php` (`GET /web-link`),
   `App\Shop\Navigation::sections()` reads `ShopMenu`.
 - `tests/Feature/Api/{PhoneMetaTest, PhoneSummariesTest, IdempotencyKeyTest, PhoneExportsTest}.php`; web portal `tests/Feature/WebLinkSignInTest.php`.
+
+## Pledge & Budget: what the phone asks that sync cannot answer
+
+Additions only; older phones are unaffected. All under the `budget` module. Who may do what is `App\Services\Budget\BudgetAccess`, the same as the web. A write sends a JSON body, because the host's firewall refuses an empty POST. Plan and reasons: `pledge-and-budget/docs/MOBILE_PARITY_PLAN.md`.
+
+| Route | Answer |
+|---|---|
+| `GET budget/home` | `main_event_id` (chosen, else worked out by `EventChoice`), `chosen_event_id`, `can_create`, `can_invite`, `demo`, `seats` (a list, or null for all), `titles`, and `events[]`: `id, uuid, name, open, date, days_left, seat, role, can{open, see_phones, remind, export, share_names, record_pledges, record_payments, record_spending, withdraw, manage_committee, change_lines, settings, payment_details, close}` |
+| `PUT budget/main-event {event_id\|null}` | Sets the default event for this person on every device. 404 for an event they cannot open. On a public demo it answers and writes nothing, because the sign-in is shared |
+| `GET budget-programs/{id}/withdrawn` | Withdrawn pledges with reason, who and when, and `may_put_back` for this person |
+| `POST budget-programs/{id}/pledges/paste {text}` | `rows[]` (`line, raw, name, phone, amount, group, error, check, duplicate, same_as`), `ready`, `to_check`. Writes nothing |
+| `POST budget-programs/{id}/pledges/import {text, amounts_are_right?}` | Reads the text again and adds what is ready: `added` |
+| `POST budget-programs/{id}/close {held_by?, note?}`, `POST .../reopen {}` | Chair or full access. Closing moves no money |
+| `GET budget-programs/{id}/summary?names=1` | `text` for WhatsApp. Names need `share_names` |
+| `GET budget-programs/{id}/documents` | `documents[]` (`doc, formats, allowed`), `share_names` |
+| `GET budget-programs/{id}/documents/{doc}.{format}?names&blank&group&status` | The file. `doc`: committee, budget, pledges, payments, cards, final. 403 by right, 404 for a format it does not come in |
+| `POST contribution-payments/{id}/receipt-link {}` | `url`, `pdf_url`, `days`: opens with no account. Not for a viewer, and a reversal has none |
+| `POST budget-programs/{id}/members/{m}/resend {}` | A waiting seat's link again: `invite_link`. `POST .../members` also answers `invite_link` |
+| `DELETE budget-programs/{id}/members/{m}` | On a waiting seat it now cancels the invitation |
+| `GET budget-programs/{id}/card-templates` | `templates[]`, `may_change`, `limit`, `fonts`, `defaults` |
+| `POST budget-programs/{id}/card-templates` (multipart) | `card` (png, jpg, webp, pdf), `picture` (the page, for a pdf), `name, is_default, font_key, font_size, color, name_y, letter_case, letter_spacing, max_width, pdf_page` |
+| `POST card-templates/{id}` (multipart or JSON), `POST card-templates/{id}/default {default}`, `DELETE card-templates/{id}`, `POST budget-programs/{id}/card-templates/sample {}` | Those who may change the event's settings. The shared demo takes no files |
+| `GET card-templates/{id}/file/{picture\|source}` | The file, for those with a seat. Cacheable: `file_version` says when it changed |
+| `GET demo/session?app=`, `POST demo/session {app, role}` | Who a demo can be opened as, and opening it so. No `role`: the owner, as before |
+
+These were in use before the routes above, and are listed here so the whole module is in one place:
+
+| Route | Answer |
+|---|---|
+| `GET contribution-records/{id}/payments` | The pledge's payments, and `abilities` |
+| `POST contribution-records/{id}/payments {amount, paid_on?, method?, reference?, notes?, received_by_id?, uuid?}` | `payment`, `record`. The same `uuid` again answers the first result. Chair, treasurer or full access |
+| `POST contribution-payments/{id}/reverse {reason}` | A new negative row. A reversal cannot be reversed, nor a payment twice |
+| `POST contribution-records/{id}/withdraw {reason}`, `POST contribution-records/{id}/put-back {}` | `BudgetAccess::canWithdraw` |
+| `GET budget-items/{id}/payments` | The line's history |
+| `POST budget-items/{id}/payments {amount, paid_on?, method?, paid_to?, reference?, notes?, paid_by_id?, approved_by_id?, uuid?}` | `payment`, `item`. Chair, treasurer or full access. A `uuid` already used on another event is refused with `uuid_reused` |
+| `GET budget-programs/{id}/budget-payments` | The event's spending ledger |
+| `POST budget-programs/{id}/budget-payments` | The same body, with no line: it goes on the event's Not on the budget line |
+| `POST budget-payments/{id}/reverse {reason}` | A new negative row. On a line removed since, it comes off Not on the budget, where the money moved to |
+| `GET budget-programs/{id}/figures` | The six words and what is behind them |
+| `GET budget-programs/{id}/team` | Who may be named as taking money or a pledge: `id, name, role` |
+| `GET budget-programs/{id}/settings`, `PUT budget-programs/{id}/settings` | The event's settings. `BudgetAccess::canEditSettings`, or payment details for the treasurer |
+| `POST budget-programs/{id}/apply-template {key, ...}`, `GET budget-templates`, `GET budget-templates/{key}` | Templates |
+| `GET budget-programs/{id}/members` | `members[]`, `my_role`, `abilities`, `roles`. `phone` is empty for someone who may not see phones |
+| `POST budget-programs/{id}/members {user_id\|phone\|email, name?, role, uuid?}`, `PUT budget-programs/{id}/members/{m} {role}` | Those with `manage_committee`. A `uuid` already used on another event is refused with `uuid_reused` |
+| `POST budget-programs/{id}/print-link {}`, `POST contribution-records/print-link {}` | 30-minute links to a PDF |
+
+**In REST rows,** the people and the account nested in a row (`treasurer`, `changed_by`, `created_by`, `budget_program.company`) have their contact and payout fields empty for someone without full access. The keys stay, for older phones.
+
+**Documents** are limited to 20 a minute.
+
+### Sync
+
+- **By seat.** `pull`, `pull-many` and `bootstrap` send a person's budget rows only for the events they may open, whichever client asks, and every answer carries `budget_seats` (a list, or null for all). A phone that sees a new seat sets its event tables' cursors back to 0; a lost seat removes that event's rows, except unsent work. An older phone gets the filter but not the cursor reset, so a seat given later shows new changes and not older rows until it updates.
+- **A viewer's phone numbers** are blanked in `contribution_records` and `budget_program_members`. Every answer also carries `budget_phones`: the events whose phone numbers this person may hold (a list, or null for all). It moves with a role while `budget_seats` stays the same, and the rows themselves do not change, so a phone that sees it move sets its event tables' cursors back to 0.
+- **`GET sync/conflicts`** leaves out event tables for someone without full access, because a conflict keeps the whole row.
+- **A pushed op is judged on every event it touches:** the one it names (`program_uuid`), the one its row is on now, the event of the payment it reverses, and for a line the event of its category. The person must hold the right on all of them, and none may be closed since the op was made.
+- **Money by a figure.** `paid_amount`, `custom_paid_amount` above zero, and `fully_paid: Yes` post a payment when they change what is paid, so each needs the payment right. An edit newer than a withdrawal puts the pledge back, so it needs the right to withdraw it.
+- **Conflicts and figures.** A payment moves a row's figures and version and leaves `client_updated_at` alone, so an older edit of a pledge's name or a line's details still applies. An op that carries a paid figure is judged by when the row last changed at all, and stays a conflict if it is older.
+- **Refused:** a negative price or quantity, an amount that rounds to nothing, a seat above viewer that does not fit the plan.
+- **New tables.** `pledge_follow_ups` (event: `contribution_uuid, kind, channel?, outcome?, promised_on?, note?`). `event_card_templates` and `event_invitations` come down only. `event_invitation_ops` goes up only (`program_uuid, act: made|invited|unmark, name, format?, template_uuid?`) and is applied by `EventInvitations`, so two phones logging one guest fold into one row. A mark on an event closed since is dropped rather than holding back the batch.
+- **The chair** may push changes to their event's details, categories and lines (`BudgetAccess::allowsChairSyncOp`), as on the web. Making or deleting an event stays with `manage_budget`.

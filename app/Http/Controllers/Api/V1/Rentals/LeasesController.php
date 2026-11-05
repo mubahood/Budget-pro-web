@@ -2,15 +2,25 @@
 
 namespace App\Http\Controllers\Api\V1\Rentals;
 
+use App\Exceptions\BusinessRuleException;
+use App\Models\RentalCharge;
 use App\Models\RentalLease;
 use App\Models\RentalLeaseItem;
-use App\Models\RentalTenant;
+use App\Models\RentalProperty;
 use App\Models\RentalUnit;
+use App\Services\Rentals\Billing\Billing;
+use App\Services\Rentals\Directory\Tenants;
+use App\Services\Rentals\Leases\CommissionChanges;
 use App\Services\Rentals\Leases\Leases;
 use App\Services\Rentals\Payments\Deposits;
 use App\Services\Rentals\Payments\Payments;
+use App\Services\Rentals\RentalAccess;
+use App\Services\Rentals\RentalsModule;
+use App\Support\Rentals\Day;
+use App\Support\Rentals\Minor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Leases (docs/estate-ledger/04-architecture.md §5.7, §5.8): moving in, notice, renewal, moving out with the deposit
@@ -22,7 +32,10 @@ class LeasesController extends RentalsController
     public const MOVE_IN = ['unit_id', 'tenant_id', 'tenant', 'start_date', 'rent_minor', 'cycle_months', 'anchor', 'end_date', 'deposit_minor', 'deposit_held_by',
         'commission', 'late_fee', 'items', 'notes', 'first_payment'];
 
-    /** GET rentals/leases?q&status&property_id&unit_id&tenant_id */
+    /**
+     * GET rentals/leases?q&status&property_id&unit_id&tenant_id&sort=door: `status` is one or more of active, notice, ended, cancelled, or `live`, or as the web's list `term` (past its end date, still live)
+     * or `ending` (ending or moving out in 30 days). `q` also finds the property's name. `sort=door`: by property, then unit. `meta.totals`: {count, rent_minor (live), owed_minor} of the whole list.
+     */
     public function index(Request $request): JsonResponse
     {
         return $this->attempt(function () use ($request) {
@@ -33,6 +46,13 @@ class LeasesController extends RentalsController
                 $q->whereIn('status', $status);
             } elseif ($request->query('status') === 'live') {
                 $q->whereIn('status', RentalLease::LIVE);
+            } elseif ($request->query('status') === 'term') {
+                $q->whereIn('status', RentalLease::LIVE)->whereNotNull('end_date')->where('end_date', '<', $this->present($request)->today()->toDateString());
+            } elseif ($request->query('status') === 'ending') {
+                $today = $this->present($request)->today()->toDateString();
+                $soon = $this->present($request)->today()->addDays(30)->toDateString();
+                $q->whereIn('status', RentalLease::LIVE)->where(fn ($w) => $w->whereBetween('end_date', [$today, $soon])
+                    ->orWhere(fn ($x) => $x->where('status', 'notice')->whereBetween('move_out_on', [$today, $soon])));
             }
             foreach (['property_id', 'unit_id', 'tenant_id'] as $f) {
                 if ($request->filled($f)) {
@@ -40,16 +60,24 @@ class LeasesController extends RentalsController
                 }
             }
             if (($term = trim((string) $request->query('q', ''))) !== '') {
-                $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
+                $like = self::like($term);
                 $q->where(fn ($w) => $w->where('number', 'like', $like)
-                    ->orWhereIn('tenant_id', RentalTenant::withoutGlobalScopes()->where('company_id', $cid)->where(fn ($t) => $t->where('name', 'like', $like)->orWhere('phone', 'like', $like)
-                        ->orWhere('phone_e164', 'like', $like)->orWhere('code', 'like', $like))->select('id'))
-                    ->orWhereIn('unit_id', RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->where('code', 'like', $like)->select('id')));
+                    ->orWhereIn('tenant_id', self::tenantsLike($cid, $term))
+                    ->orWhereIn('unit_id', RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->where('code', 'like', $like)->select('id'))
+                    ->orWhereIn('property_id', RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('name', 'like', $like)->select('id')));
+            }
+            $rent = (int) (clone $q)->toBase()->whereIn('status', RentalLease::LIVE)->sum('rent_minor');
+            $owed = (int) RentalCharge::withoutGlobalScopes()->where('company_id', $cid)->whereIn('lease_id', (clone $q)->select('id'))->where('status', 'open')->where('kind', '!=', 'refund')
+                ->sum(DB::raw('GREATEST(amount_minor - paid_minor, 0)'));
+            if ($request->query('sort') === 'door') {
+                $q->orderBy(RentalProperty::withoutGlobalScopes()->select('name')->whereColumn('rental_properties.id', 'rental_leases.property_id'))
+                    ->orderBy(RentalUnit::withoutGlobalScopes()->selectRaw('LENGTH(code)')->whereColumn('rental_units.id', 'rental_leases.unit_id'))
+                    ->orderBy(RentalUnit::withoutGlobalScopes()->select('code')->whereColumn('rental_units.id', 'rental_leases.unit_id'));
             }
             $p = $this->paginate($q->orderByDesc('start_date')->orderByDesc('id'), $request);
-            $present = $this->present($request)->prime($p->items());
+            $present = $this->present($request)->prime($p->items())->primePositions($p->items());
 
-            return $this->page($p, collect($p->items())->map(fn ($l) => $present->leaseBrief($l))->all());
+            return $this->page($p, collect($p->items())->map(fn ($l) => $present->leaseBrief($l))->all(), ['totals' => ['count' => $p->total(), 'rent_minor' => $rent, 'owed_minor' => $owed]]);
         });
     }
 
@@ -62,7 +90,14 @@ class LeasesController extends RentalsController
         return $this->attempt(function () use ($request) {
             $this->day($request, 'start_date');
             $this->day($request, 'end_date');
+            Day::strict($request->input('first_payment.paid_on'), 'the payment\'s date');
+            foreach ((array) $request->input('items', []) as $item) {
+                Day::strict(is_array($item) ? ($item['ends_on'] ?? null) : null, 'the fee\'s last day');
+            }
             $data = $request->only(self::MOVE_IN);
+            if (! empty($data['tenant_id'])) {
+                app(Tenants::class)->find($this->user($request), (int) $data['tenant_id']); // not found for a caretaker when they rent elsewhere: their name and phone would come back
+            }
             if (! empty($data['first_payment']) && $this->fromApp($request) && empty($data['first_payment']['device_id'])) {
                 $data['first_payment']['device_id'] = $request->header('X-Device-Id');
             }
@@ -99,7 +134,7 @@ class LeasesController extends RentalsController
     }
 
     /**
-     * POST rentals/leases/{id}/move-out {date, readings[{utility, reading}], damages[{description, amount_minor, goes_to}], unused_days,
+     * POST rentals/leases/{id}/move-out {date, readings[{utility, reading}], damages[{description, amount_minor, goes_to}], unused_days (true: forgive them; false: charge the full period),
      * refund_deposit (method or null), refund_credit (method or null), reason}: {lease, settlement}.
      */
     public function moveOut(Request $request, int $id): JsonResponse
@@ -108,10 +143,88 @@ class LeasesController extends RentalsController
 
         return $this->attempt(function () use ($request, $id) {
             $this->day($request, 'date');
-            $out = app(Leases::class)->moveOut($this->user($request), $this->lease($request, $id),
-                $request->only(['date', 'readings', 'damages', 'unused_days', 'refund_deposit', 'refund_credit', 'reason']));
+            $out = app(Leases::class)->moveOut($this->user($request), $this->lease($request, $id), self::moveOutTerms($request));
 
             return $this->success(['lease' => $this->present($request)->lease($out['lease']), 'settlement' => $out['settlement']], 'Moved out.');
+        });
+    }
+
+    /**
+     * POST rentals/leases/{id}/move-out-preview, the same body as move-out: what it would do with these choices, before anyone commits to it (Leases::moveOutPreview). No writes.
+     */
+    public function moveOutPreview(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['readings' => ['nullable', 'array'], 'damages' => ['nullable', 'array']]);
+
+        return $this->attempt(function () use ($request, $id) {
+            $this->day($request, 'date');
+            foreach ((array) $request->input('damages', []) as $damage) {
+                if (is_array($damage) && ! empty($damage['amount_minor'])) {
+                    Minor::positive($damage['amount_minor'], 'damage'); // what the move-out itself refuses, the preview refuses
+                }
+            }
+
+            return $this->success(app(Leases::class)->moveOutPreview($this->lease($request, $id), self::moveOutTerms($request)));
+        });
+    }
+
+    /**
+     * The terms of a move-out as the service takes them. `unused_days` is a yes or a no: any word passed the service's test as a yes, so "charge the full period" forgave the rent.
+     *
+     * @return array<string, mixed>
+     */
+    private static function moveOutTerms(Request $request): array
+    {
+        $data = $request->only(['date', 'readings', 'damages', 'unused_days', 'refund_deposit', 'refund_credit', 'reason']);
+        if (array_key_exists('unused_days', $data)) {
+            $on = filter_var($data['unused_days'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($on === null) {
+                throw BusinessRuleException::make('unused_days_invalid', 'Say yes or no to forgiving the days after the move-out.');
+            }
+            $data['unused_days'] = $on;
+        }
+
+        return $data;
+    }
+
+    /**
+     * POST rentals/leases/move-in-preview {start_date, rent_minor, cycle_months, anchor, end_date, deposit_minor, items[]}: the bills a move-in would raise at once, with a part month's
+     * calculated amount (Leases::moveInPreview). No writes.
+     */
+    public function moveInPreview(Request $request): JsonResponse
+    {
+        $request->validate(['items' => ['nullable', 'array']]);
+
+        return $this->attempt(function () use ($request) {
+            $this->day($request, 'start_date');
+            $this->day($request, 'end_date');
+            foreach (['rent_minor' => 'rent', 'deposit_minor' => 'deposit'] as $k => $label) {
+                if ($request->filled($k)) {
+                    Minor::nonNegative($request->input($k), $label); // the service reads a figure as it comes: a list as 1, "12abc" as 12
+                }
+            }
+            foreach ((array) $request->input('items', []) as $item) {
+                if (is_array($item) && ! empty($item['amount_minor'])) {
+                    Minor::positive($item['amount_minor'], 'fee amount');
+                }
+            }
+
+            return $this->success(Leases::moveInPreview($this->cid($request), $request->only(['start_date', 'rent_minor', 'cycle_months', 'anchor', 'end_date', 'deposit_minor', 'items'])));
+        });
+    }
+
+    /**
+     * POST rentals/leases/{id}/commission {type: percent|flat|none, bp, minor, effective_from, reason}: this lease's commission from a date after what is billed (LC-15). Bills already raised keep theirs and no money moves.
+     */
+    public function changeCommission(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $lease = $this->lease($request, $id);
+            app(CommissionChanges::class)->change($this->user($request), $lease,
+                ['commission_type' => $request->input('type'), 'commission_bp' => $request->input('bp'), 'commission_minor' => $request->input('minor')],
+                $this->requiredDay($request, 'effective_from', 'Choose the day the new commission starts.'), (string) $request->input('reason', ''));
+
+            return $this->success($this->present($request)->lease($lease->fresh()), 'Commission changed.');
         });
     }
 
@@ -171,13 +284,37 @@ class LeasesController extends RentalsController
         });
     }
 
-    /** GET rentals/leases/{id}/payment-preview?amount_minor=: what a payment of that much would settle now, oldest first (Payments::preview). */
+    /**
+     * GET rentals/leases/{id}/payment-preview?amount_minor=&reference=&method=: `reference_warning`, the words when that reference is already on a receipt or a tenant's waiting report (Payments::referenceClash; a warning, never a refusal; alone when
+     * no amount is typed yet); what a payment of that much would settle now, oldest first (Payments::preview), what it could bill ahead (`ahead`, Billing::aheadPlan) and
+     * what it would do if the tenant paid the landlord directly (`direct`, Payments::suggestSplit). No writes. How the money is shared with the landlord only for those who read landlords' money.
+     */
     public function paymentPreview(Request $request, int $id): JsonResponse
     {
         return $this->attempt(function () use ($request, $id) {
             $lease = $this->lease($request, $id);
+            $clash = Payments::referenceClash($this->cid($request), $request->query('reference'), $request->query('method'));
+            if (! $request->filled('amount_minor') && $request->filled('reference')) {
+                return $this->success(['reference_warning' => $clash]); // the reference was typed first
+            }
+            $amount = $this->minor($request, 'amount_minor');
+            $by = $this->user($request);
+            $owner = RentalsModule::isOwnerMode($this->cid($request));
+            $sees = RentalAccess::can($by, 'rentals_landlords') && RentalAccess::propertyIds($by) === null;
+            $ahead = null;
+            if (! $owner && $lease->isLive() && RentalAccess::can($by, 'rentals_bill')) {
+                $ahead = app(Billing::class)->aheadPlan($lease, $amount);
+                if (! $sees) {
+                    $ahead['periods'] = array_map(fn (array $p) => array_diff_key($p, array_flip(['commission_minor', 'landlord_minor', 'agency_minor'])), $ahead['periods']);
+                }
+            }
+            $direct = null;
+            if (! $owner) {
+                $split = app(Payments::class)->suggestSplit($lease, $amount, [], true);
+                $direct = ['open_minor' => (int) array_sum(array_column($split['lines'], 'left_minor')), 'amount_minor' => $amount, 'ok' => (bool) $split['ok']] + ($sees ? ['commission_minor' => (int) $split['commission_minor']] : []);
+            }
 
-            return $this->success(app(Payments::class)->preview($lease, $this->minor($request, 'amount_minor')) + ['currency' => $this->present($request)->currency()]);
+            return $this->success(app(Payments::class)->preview($lease, $amount) + ['currency' => $this->present($request)->currency(), 'ahead' => $ahead, 'direct' => $direct, 'reference_warning' => $clash]);
         });
     }
 }

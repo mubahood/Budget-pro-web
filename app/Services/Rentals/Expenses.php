@@ -14,6 +14,7 @@ use App\Services\Rentals\Payments\CashGuard;
 use App\Services\Rentals\Portal\LandlordApprovals;
 use App\Support\LocalDate;
 use App\Support\Rentals\Minor;
+use Illuminate\Support\Str;
 
 /**
  * Money paid out (rentals_expenses): for a property and charged to its landlord (cash −, landlord −), or the agency's
@@ -72,11 +73,14 @@ final class Expenses
         $landlordId = $chargedTo === 'landlord' ? ($landlord?->id ?? $property?->landlord_id ?? RentalsModule::selfLandlord($cid)->id) : null;
 
         $reason = trim((string) ($data['over_limit_reason'] ?? ''));
+        if (! empty($data['receipt_uuid']) && (! is_string($data['receipt_uuid']) || ! Str::isUuid($data['receipt_uuid']))) {
+            throw BusinessRuleException::make('file_invalid', 'That receipt was not found. Please send it again.');
+        }
 
         return RentalLedger::locked($cid, function () use ($by, $data, $cid, $amount, $method, $category, $on, $chargedTo, $property, $unitId, $landlordId, $reason) {
             CashGuard::assertCovers($cid, $method, $amount);
             $overLimit = $chargedTo === 'landlord' && $property !== null
-                && LandlordApprovals::check($cid, (int) $property->id, $amount, isset($data['maintenance_id']) ? (int) $data['maintenance_id'] : null)['needs_reason'];
+                && LandlordApprovals::check($cid, (int) $property->id, $amount, ! empty($data['maintenance_id']) ? (int) $data['maintenance_id'] : null)['needs_reason'];
             if ($overLimit && $reason === '') {
                 throw BusinessRuleException::make('over_limit_reason_required', 'This is above the limit the landlord set, and they have not agreed to it. Say why it is being paid.');
             }
@@ -84,8 +88,8 @@ final class Expenses
                 'unit_id' => $unitId, 'landlord_id' => $landlordId, 'category' => mb_substr($category, 0, 60),
                 'description' => isset($data['description']) ? mb_substr((string) $data['description'], 0, 255) : null,
                 'vendor' => isset($data['vendor']) ? mb_substr((string) $data['vendor'], 0, 150) : null, 'amount_minor' => $amount, 'method' => $method,
-                'paid_on' => $on->toDateString(), 'charged_to' => $chargedTo, 'receipt_uuid' => $data['receipt_uuid'] ?? null,
-                'maintenance_id' => $data['maintenance_id'] ?? null, 'over_limit_reason' => $overLimit ? mb_substr($reason, 0, 255) : null, 'for_month' => $data['for_month'] ?? null, 'created_by_id' => $by->id]);
+                'paid_on' => $on->toDateString(), 'charged_to' => $chargedTo, 'receipt_uuid' => ! empty($data['receipt_uuid']) ? $data['receipt_uuid'] : null,
+                'maintenance_id' => ! empty($data['maintenance_id']) ? (int) $data['maintenance_id'] : null, 'over_limit_reason' => $overLimit ? mb_substr($reason, 0, 255) : null, 'for_month' => $data['for_month'] ?? null, 'created_by_id' => $by->id]);
             $row = ['occurred_on' => $on->toDateString(), 'method' => $method, 'cash_minor' => -$amount, 'expense_id' => $e->id, 'property_id' => $property?->id,
                 'unit_id' => $unitId, 'description' => trim($category.($e->description ? ': '.$e->description : ''))];
             $row += $chargedTo === 'landlord' ? ['type' => 'expense_landlord', 'landlord_minor' => -$amount, 'landlord_id' => $landlordId] : ['type' => 'expense_agency', 'expense_minor' => $amount];

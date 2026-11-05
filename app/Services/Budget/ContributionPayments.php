@@ -163,7 +163,8 @@ class ContributionPayments
             $record->paid_amount = $paid;
             $record->not_paid_amount = $notPaid;
             $record->fully_paid = $fully;
-            $record->saveQuietlySynced();
+            // Only figures changed: a person's edit made before this, on a phone offline, is still the newest edit (MasterDataService).
+            $record->saveQuietlySynced(true);
         }
         if ($record->budget_program_id) {
             BudgetProgram::recalculateFromChildren((int) $record->budget_program_id);
@@ -322,6 +323,9 @@ class ContributionPayments
             throw BusinessRuleException::make('invalid_amount', 'Enter an amount greater than zero.');
         }
         $amount = Decimal::of((string) $value);
+        if (Decimal::cmp($amount, '0') <= 0) {
+            throw BusinessRuleException::make('invalid_amount', 'Enter an amount greater than zero.'); // 0.001 rounds to nothing
+        }
         if (Decimal::cmp($amount, '999999999999999999') > 0) {
             throw BusinessRuleException::make('invalid_amount', 'That amount is too large.');
         }

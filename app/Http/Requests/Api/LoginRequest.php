@@ -18,6 +18,7 @@ class LoginRequest extends FormRequest
             'identifier' => ['required_without:email', 'nullable', 'string', 'max:191'], // phone or email
             'password' => ['required', 'string'],
             'device_name' => ['nullable', 'string', 'max:100'],
+            'app' => ['nullable', 'string', 'max:40'], // the app signing in: a person with an account beside their first gets that app's
         ];
     }
 }

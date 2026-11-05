@@ -37,7 +37,7 @@ class CommitteeService
                 if ($active !== null) {
                     throw BusinessRuleException::make('already_on_committee', 'This person is already on the committee. Change their role instead.');
                 }
-                $this->assertSeatFits($companyId, $userId, $role);
+                self::assertSeatFits($companyId, $userId, $role);
                 $member = new BudgetProgramMember();
                 $member->forceFill(['uuid' => $data['uuid'] ?? null, 'company_id' => $companyId, 'budget_program_id' => $program->id, 'user_id' => $userId,
                     'role' => $role, 'status' => 'active', 'added_by_id' => $by->id]);
@@ -119,7 +119,7 @@ class CommitteeService
         }
         if ($member->role !== $role) {
             if ($member->user_id) {
-                $this->assertSeatFits((int) $member->company_id, (int) $member->user_id, $role);
+                self::assertSeatFits((int) $member->company_id, (int) $member->user_id, $role);
             }
             $member->role = $role;
             $member->save();
@@ -129,7 +129,7 @@ class CommitteeService
     }
 
     /** Someone the plan does not count yet (viewer seats only) starts to count with a seat above viewer: it must fit the plan. */
-    private function assertSeatFits(int $companyId, int $userId, string $role): void
+    public static function assertSeatFits(int $companyId, int $userId, string $role): void
     {
         if ($role === 'viewer') {
             return;
@@ -162,6 +162,21 @@ class CommitteeService
             }
             $member->delete();
         });
+    }
+
+    /**
+     * A chair who is not the owner would lock themselves out of their own committee by stepping down last (PB-43): the web's rule (Committee::isLastChair), for the API.
+     * Someone with full access keeps the event whatever their seat says, and another person's seat is not theirs to be locked out of.
+     */
+    public static function assertNotLastChair(User $by, BudgetProgramMember $member): void
+    {
+        if ($member->role !== 'chair' || (int) $member->user_id !== (int) $by->id || BudgetAccess::fullAccess($by)) {
+            return;
+        }
+        $another = BudgetProgramMember::withoutGlobalScopes()->where('budget_program_id', $member->budget_program_id)->where('role', 'chair')->where('is_deleted', 0)->where('status', 'active')->where('id', '!=', $member->id)->exists();
+        if (! $another) {
+            throw BusinessRuleException::make('last_chair', 'You are the last chair. Name another chair first.');
+        }
     }
 
     /** Off the committee (a tombstone, so phones remove it too). They stay on the team. */

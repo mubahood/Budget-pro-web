@@ -72,6 +72,7 @@ class AuthController extends Controller
             return $this->forbidden('Your account has been deactivated. Please contact your administrator.');
         }
 
+        $user = \App\Services\Onboarding\SiblingAccounts::forApp($user, $data['app'] ?? null);
         $company = Company::find($user->company_id);
         if ($company === null) {
             return $this->error('Your account is not linked to a company.', 403);
@@ -98,6 +99,25 @@ class AuthController extends Controller
     private function findByIdentifier(string $raw): ?User
     {
         return \App\Services\Auth\AccountLookup::find($raw);
+    }
+
+    /**
+     * POST auth/sibling {app, company_name, device_name}: an account of its own beside this person's, for an app whose books stand
+     * alone, and a sign-in to it. Same shape as a sign-in. Asked twice it finds the first (SiblingAccounts). The old sign-in on this
+     * phone ends: the phone now holds the new one, and the app will open the new account from now on.
+     */
+    public function sibling(Request $request)
+    {
+        $data = $request->validate(['app' => ['required', 'string', 'max:40'], 'company_name' => ['required', 'string', 'max:191'], 'device_name' => ['nullable', 'string', 'max:100']]);
+        try {
+            $made = app(\App\Services\Onboarding\SiblingAccounts::class)->open($request->user(), $data['app'], $data['company_name']);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+        $answer = $this->issue($request, $made['user'], $made['company'], 'Opened.');
+        $request->user()->currentAccessToken()?->delete();
+
+        return $answer;
     }
 
     /** POST auth/otp/request { identifier, purpose: login|register|reset } */
@@ -140,6 +160,9 @@ class AuthController extends Controller
             return $this->error('Account not found.', 404);
         }
         $this->markVerified($user, $id);
+        if ($data['purpose'] === 'login') {
+            $user = \App\Services\Onboarding\SiblingAccounts::forApp($user, is_string($request->input('app')) ? $request->input('app') : null);
+        }
         if ($data['purpose'] === 'reset') {
             // Random, single-use, kept hashed for this account (OneTimeToken): nothing a server key could forge.
             $token = OneTimeToken::issue(OneTimeToken::RESET, (int) $user->id, $id, OneTimeToken::RESET_MINUTES);
@@ -197,6 +220,13 @@ class AuthController extends Controller
     {
         $user = $request->user();
         \App\Services\Onboarding\PublicDemo::guardAccount($user, 'changing the demo account');
+        if (\App\Services\Onboarding\SiblingAccounts::isSiblingUsername((string) $user->username)) {
+            // How this person is reached belongs to their own login, not to the account beside it: an app sending back what it was shown changes nothing.
+            $request->request->remove('email');
+            $request->request->remove('phone_number');
+            $request->json()?->remove('email');
+            $request->json()?->remove('phone_number');
+        }
         $data = $request->validate([
             'first_name' => ['sometimes', 'string', 'max:100'],
             'last_name' => ['sometimes', 'string', 'max:100'],

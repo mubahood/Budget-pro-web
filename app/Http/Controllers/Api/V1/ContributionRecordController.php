@@ -60,6 +60,7 @@ class ContributionRecordController extends BaseCrudController
             }
             $model->setAttribute('extra_amount', Decimal::max(Decimal::sub((string) $model->paid_amount, (string) $model->amount), '0'));
             $model->setAttribute('received_by_id', $model->received_by_id ?? $model->treasurer_id);
+            BudgetAccess::hideNested($model, $user);
         }
 
         return $model;
@@ -212,10 +213,7 @@ class ContributionRecordController extends BaseCrudController
         if (! BudgetAccess::can($user, $programId, BudgetAccess::PLEDGE)) {
             return $this->forbiddenFor(BudgetAccess::PLEDGE, 'Your role on this event does not allow recording pledges.');
         }
-        $paid = $request->input('custom_paid_amount') ?? $request->input('paid_amount');
-        $changesPaid = ($paid !== null && $paid !== '' && Decimal::valid($paid) && Decimal::cmp((string) $paid, $existing ? (string) $existing->paid_amount : '0') !== 0)
-            || ($request->input('fully_paid') === 'Yes' && ($existing === null || $existing->fully_paid !== 'Yes'));
-        if ($changesPaid && ! BudgetAccess::can($user, $programId, BudgetAccess::PAYMENT)) {
+        if (BudgetAccess::changesPaidFigure($request->only(['custom_paid_amount', 'paid_amount', 'fully_paid']), $existing) && ! BudgetAccess::can($user, $programId, BudgetAccess::PAYMENT)) {
             return $this->forbiddenFor(BudgetAccess::PAYMENT, 'Only the treasurer or the chair of this event can record payments.');
         }
 

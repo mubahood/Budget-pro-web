@@ -10,6 +10,14 @@ use Illuminate\Validation\Rule;
 
 class BudgetItemCategoryController extends BaseCrudController
 {
+    /** The people and the account inside a row carry no private details for someone without full access (BudgetAccess::hideNested). */
+    protected function transform(\Illuminate\Database\Eloquent\Model $model)
+    {
+        \App\Services\Budget\BudgetAccess::hideNested($model, request()->user());
+
+        return parent::transform($model);
+    }
+
     protected string $modelClass = BudgetItemCategory::class;
 
     protected string $resourceName = 'Budget category';

@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\Rentals\Demo\RentalsDemo;
 use App\Services\Rentals\Ledger\RentalLedger;
 use App\Support\Money;
+use App\Support\Rentals\Minor;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -161,12 +162,12 @@ final class RentalsModule
             'prorate_first' => ['sometimes', 'boolean'],
             'commission_type' => ['sometimes', 'in:percent,flat,none'],
             'commission_bp' => ['sometimes', 'integer', 'min:0', 'max:10000'],
-            'commission_minor' => ['sometimes', 'integer', 'min:0'],
+            'commission_minor' => ['sometimes', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'commission_on_items' => ['sometimes', 'boolean'],
             'deposit_months' => ['sometimes', 'integer', 'min:0', 'max:12'],
             'deposit_held_by' => ['sometimes', 'in:agency,landlord'],
             'late_fee_type' => ['sometimes', 'in:none,flat,percent'],
-            'late_fee_minor' => ['sometimes', 'integer', 'min:0'],
+            'late_fee_minor' => ['sometimes', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'late_fee_bp' => ['sometimes', 'integer', 'min:0', 'max:10000'],
             'late_fee_to' => ['sometimes', 'in:agency,landlord'],
             'payment_instructions' => ['sometimes', 'nullable', 'string', 'max:2000'],
@@ -197,7 +198,7 @@ final class RentalsModule
                 $this->assertCurrencyCanChange($cid, (string) $s->currency, $newCurrency);
             }
             $newMode = ($data['mode'] ?? $s->mode) !== $s->mode ? (string) $data['mode'] : null;
-            if ($newMode !== null && ! $setup) {
+            if ($newMode !== null) {
                 $this->assertModeCanChange($cid, $newMode);
             }
             if (isset($data['currency'])) {

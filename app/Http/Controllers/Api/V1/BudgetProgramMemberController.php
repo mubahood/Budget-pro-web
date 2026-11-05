@@ -34,8 +34,13 @@ class BudgetProgramMemberController extends Controller
             return $this->notFound('Event not found.');
         }
 
+        $members = collect($this->committee->list($program));
+        if (! BudgetAccess::canSeePhones($request->user(), (int) $program->id)) {
+            $members = $members->map(fn ($m) => array_replace((array) $m, ['phone' => null])); // the field stays, for older phones
+        }
+
         return $this->success([
-            'members' => $this->committee->list($program),
+            'members' => $members->values()->all(),
             'my_role' => BudgetAccess::roleOn($request->user(), (int) $program->id),
             'abilities' => BudgetAccess::abilities($request->user(), (int) $program->id),
             'roles' => BudgetAccess::ROLES,
@@ -61,10 +66,13 @@ class BudgetProgramMemberController extends Controller
             'role' => ['required', Rule::in(BudgetAccess::ROLES)],
             'uuid' => ['nullable', 'uuid'],
         ]);
-        if (empty($data['user_id']) && ! empty($data['phone'] ?? $data['email'] ?? null) && ! \App\Services\Team\Permissions::can($request->user(), 'manage_team')) {
+        if (empty($data['user_id']) && ! empty($data['phone'] ?? $data['email'] ?? null) && ! \App\Services\Team\Permissions::can($request->user(), 'manage_team') && ! BudgetAccess::canManageEvent($request->user(), (int) $program->id)) {
             return $this->refused('manage_team', 'Only the owner or a manager can invite new people to the account. Ask them to invite this person, then add them here.');
         }
         if (! empty($data['uuid']) && ($same = BudgetProgramMember::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $data['uuid'])->first()) !== null) {
+            if ((int) $same->budget_program_id !== (int) $program->id) {
+                return $this->error('This seat id was already used on another event.', 422, ['code' => 'uuid_reused']);
+            }
             return $this->success(CommitteeService::present($same), 'Already on the committee.'); // a retried request
         }
 
@@ -74,7 +82,7 @@ class BudgetProgramMemberController extends Controller
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
-        return $this->created(CommitteeService::present($member), $member->status === 'invited' ? 'Invite sent. They join the committee when they accept.' : 'Added to the committee.');
+        return $this->created(CommitteeService::present($member) + ['invite_link' => $this->committee->inviteLink], $member->status === 'invited' ? 'Invite sent. They join the committee when they accept.' : 'Added to the committee.');
     }
 
     /** {role} */
@@ -87,6 +95,9 @@ class BudgetProgramMemberController extends Controller
         $data = $request->validate(['role' => ['required', Rule::in(BudgetAccess::ROLES)]]);
 
         try {
+            if ($data['role'] !== 'chair') {
+                CommitteeService::assertNotLastChair($request->user(), $member);
+            }
             $member = $this->committee->setRole($member, $data['role']);
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
@@ -101,9 +112,35 @@ class BudgetProgramMemberController extends Controller
         if ($refusal !== null) {
             return $refusal;
         }
+        if ($member->status === 'invited') {
+            $this->committee->cancelInvite($member);
+
+            return $this->success(null, 'Invitation cancelled. The link no longer works.');
+        }
+        try {
+            CommitteeService::assertNotLastChair($request->user(), $member);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
         $this->committee->remove($member);
 
         return $this->success(null, 'Removed from the committee. They are still on your team.');
+    }
+
+    /** POST budget-programs/{id}/members/{m}/resend {}: a seat still waiting gets its link again, to send from the person's own phone. */
+    public function resend(Request $request, $id, $memberId): JsonResponse
+    {
+        [$program, $member, $refusal] = $this->target($request, $id, $memberId);
+        if ($refusal !== null) {
+            return $refusal;
+        }
+        try {
+            $link = $this->committee->resendInvite($request->user(), $member);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return $this->success(CommitteeService::present($member) + ['invite_link' => $link], 'Invite ready to send.');
     }
 
     /** @return array{0: ?BudgetProgram, 1: ?BudgetProgramMember, 2: ?JsonResponse} */

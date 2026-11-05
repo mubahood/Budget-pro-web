@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 class PledgeFollowUps
 {
     /**
-     * @param  array{kind?: string, channel?: ?string, outcome?: ?string, promised_on?: ?string, note?: ?string, uuid?: ?string}  $data
+     * @param  array{kind?: string, channel?: ?string, outcome?: ?string, promised_on?: ?string, note?: ?string, uuid?: ?string, device_id?: ?string, client_created_at?: ?int}  $data
      */
     public function record(User $by, ContributionRecord $pledge, array $data): PledgeFollowUp
     {
@@ -34,6 +34,7 @@ class PledgeFollowUps
             'uuid' => $data['uuid'] ?? null, 'company_id' => $pledge->company_id, 'budget_program_id' => $pledge->budget_program_id, 'contribution_record_id' => $pledge->id,
             'kind' => $kind, 'channel' => $channel, 'outcome' => $outcome, 'promised_on' => $data['promised_on'] ?? null,
             'note' => isset($data['note']) ? mb_substr(trim((string) $data['note']), 0, 255) : null, 'created_by_id' => $by->id,
+            'device_id' => $data['device_id'] ?? null, 'client_created_at' => $data['client_created_at'] ?? null,
         ], fn ($v) => $v !== null));
         $row->save();
 

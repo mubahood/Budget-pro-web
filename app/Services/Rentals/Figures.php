@@ -184,6 +184,34 @@ final class Figures
         return ['owed_minor' => $owed, 'credit_minor' => $credit, 'leases' => $rows];
     }
 
+    /**
+     * tenant() for a page of tenants, in a few reads whatever their number.
+     *
+     * @param  array<int, RentalTenant>  $tenants
+     * @return array<int, array{owed_minor: int, credit_minor: int, leases: list<array{lease: RentalLease, position: array<string, mixed>}>}> tenant id => figures
+     */
+    public static function tenants(int $companyId, array $tenants, ?User $by = null): array
+    {
+        $out = [];
+        foreach ($tenants as $t) {
+            $out[(int) $t->id] = ['owed_minor' => 0, 'credit_minor' => 0, 'leases' => []];
+        }
+        if ($out === []) {
+            return [];
+        }
+        $leases = self::scoped(RentalLease::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('tenant_id', array_keys($out))->where('status', '!=', 'cancelled'),
+            $by === null ? null : RentalAccess::propertyIds($by))->orderByDesc('start_date')->orderByDesc('id')->get();
+        $positions = Leases::positions($leases->all(), LocalDate::today($companyId));
+        foreach ($leases as $l) {
+            $pos = $positions[(int) $l->id];
+            $out[(int) $l->tenant_id]['owed_minor'] += (int) $pos['owed_minor'];
+            $out[(int) $l->tenant_id]['credit_minor'] += (int) $pos['credit_minor'];
+            $out[(int) $l->tenant_id]['leases'][] = ['lease' => $l, 'position' => $pos];
+        }
+
+        return $out;
+    }
+
     /** $part of $whole as a percentage with one decimal (0 when there is no whole). */
     public static function pct(int $part, int $whole): float
     {
@@ -260,7 +288,7 @@ final class Figures
             ->where('u.company_id', $cid)->where('u.status', 'available')->where('p.status', 'active')
             ->whereNotExists(fn ($q) => $q->from('rental_leases as l')->whereColumn('l.unit_id', 'u.id')->whereIn('l.status', RentalLease::LIVE))
             ->when($ids !== null, fn ($q) => $q->whereIn('u.property_id', $ids ?: [0]))
-            ->orderBy('p.name')->orderBy('u.code')->limit(self::ATTENTION_EACH)->get(['u.id', 'u.code', 'p.name as property_name']);
+            ->orderBy('p.name')->orderByRaw('LENGTH(u.code), u.code')->limit(self::ATTENTION_EACH)->get(['u.id', 'u.code', 'p.name as property_name']);
         foreach ($vacant as $u) {
             $out[] = ['kind' => 'vacant', 'title' => 'Vacant', 'detail' => $where($u->code, $u->property_name), 'link' => ['type' => 'unit', 'id' => (int) $u->id]];
         }

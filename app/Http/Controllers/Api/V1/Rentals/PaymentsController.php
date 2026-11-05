@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V1\Rentals;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\RentalPayment;
-use App\Models\RentalTenant;
 use App\Services\Rentals\Billing\Billing;
 use App\Services\Rentals\Payments\Payments;
 use App\Services\Rentals\Payments\Receipt;
@@ -21,7 +20,10 @@ use Illuminate\Support\Str;
  */
 class PaymentsController extends RentalsController
 {
-    /** GET rentals/payments?lease_id&tenant_id&property_id&method&from&to&q */
+    /**
+     * GET rentals/payments?lease_id&tenant_id&property_id&unit_id&method&from&to&q&view=money|reversed|other|all: `q` also finds a tenant's phone, a unit's code and a lease's number.
+     * `view` as the web's: money in, reversed, not money in; with none, every one. `meta.totals`: {count, amount_minor, reversed_minor} of the whole list, whichever page this is.
+     */
     public function index(Request $request): JsonResponse
     {
         return $this->attempt(function () use ($request) {
@@ -41,15 +43,19 @@ class PaymentsController extends RentalsController
             if (($to = $this->day($request, 'to')) !== null) {
                 $q->where('paid_on', '<=', $to);
             }
-            if (($term = trim((string) $request->query('q', ''))) !== '') {
-                $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
-                $q->where(fn ($w) => $w->where('number', 'like', $like)->orWhere('reference', 'like', $like)
-                    ->orWhereIn('tenant_id', RentalTenant::withoutGlobalScopes()->where('company_id', $cid)->where('name', 'like', $like)->select('id')));
-            }
+            self::searchRecord($q, $cid, (string) $request->query('q', ''), ['number', 'reference']);
+            match ($request->query('view')) {
+                'money' => $q->whereIn('method', RentalPayment::CASH_METHODS)->whereNull('reversed_at'),
+                'reversed' => $q->whereNotNull('reversed_at'),
+                'other' => $q->whereNotIn('method', RentalPayment::CASH_METHODS),
+                default => null,
+            };
+            $sums = (clone $q)->toBase()->selectRaw('COALESCE(SUM(CASE WHEN reversed_at IS NULL THEN amount_minor ELSE 0 END), 0) AS amount, COALESCE(SUM(CASE WHEN reversed_at IS NOT NULL THEN amount_minor ELSE 0 END), 0) AS reversed')->first();
             $p = $this->paginate($q->orderByDesc('paid_on')->orderByDesc('id'), $request);
             $present = $this->present($request)->prime($p->items());
 
-            return $this->page($p, collect($p->items())->map(fn ($x) => $present->paymentBrief($x))->all());
+            return $this->page($p, collect($p->items())->map(fn ($x) => $present->paymentBrief($x))->all(),
+                ['totals' => ['count' => $p->total(), 'amount_minor' => (int) $sums->amount, 'reversed_minor' => (int) $sums->reversed]]);
         });
     }
 
@@ -57,7 +63,8 @@ class PaymentsController extends RentalsController
      * POST rentals/payments {uuid, lease_id, amount_minor, method, paid_on, reference, notes, device_id, split}: the Payment
      * with its receipt. `split` is a list of {charge_id, amount_minor}: open bills of this lease, each at most what is left
      * on it, adding up to the amount (Payments::receive refuses anything else). `bill_ahead_periods` (1 to 12, rentals_bill too) bills the next periods now with
-     * what is more than is owed, instead of holding it as credit (LC-07); a resend with the same uuid is one payment and bills nothing more.
+     * what is more than is owed, instead of holding it as credit (LC-07); a resend with the same uuid is one payment and bills nothing more. `method: paid_landlord` is
+     * a tenant who paid the landlord directly (LC-20, Payments::receiveDirect): it settles this landlord's bills and no money comes in.
      */
     public function store(Request $request): JsonResponse
     {
@@ -80,9 +87,15 @@ class PaymentsController extends RentalsController
             if ($ahead !== null && ! is_int($ahead)) {
                 throw BusinessRuleException::make('ahead_invalid', 'Bill between 1 and '.Billing::AHEAD_MAX.' periods ahead.');
             }
-            $payment = $ahead !== null
-                ? app(Billing::class)->receiveAhead($this->user($request), $lease, $data, $ahead, $app ? 'app' : 'web')
-                : app(Payments::class)->receive($this->user($request), $lease, $data, $app ? 'app' : 'web');
+            $direct = $request->input('method') === RentalPayment::DIRECT;
+            if ($direct && $ahead !== null) {
+                throw BusinessRuleException::make('ahead_invalid', 'Paid to the landlord settles bills only: it cannot bill ahead.');
+            }
+            $payment = match (true) {
+                $direct => app(Payments::class)->receiveDirect($this->user($request), $lease, $data, $app ? 'app' : 'web'),
+                $ahead !== null => app(Billing::class)->receiveAhead($this->user($request), $lease, $data, $ahead, $app ? 'app' : 'web'),
+                default => app(Payments::class)->receive($this->user($request), $lease, $data, $app ? 'app' : 'web'),
+            };
             $shape = $this->shape($request, $payment);
 
             return $replay ? $this->success($shape, 'Already received.') : $this->created($shape, 'Payment received.');

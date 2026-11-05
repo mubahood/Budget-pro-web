@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1\Rentals;
 
+use App\Exceptions\BusinessRuleException;
 use App\Models\RentalProperty;
 use App\Services\Rentals\Directory\Properties;
 use App\Services\Rentals\Figures;
 use App\Services\Rentals\Landlords\Handover;
+use App\Services\Rentals\RentalAccess;
+use App\Services\Rentals\RentalsModule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -27,7 +30,7 @@ class PropertiesController extends RentalsController
             self::search($q, $request->query('q'), ['name', 'code', 'address', 'area', 'district']);
             $p = $this->paginate($q->orderBy('name')->orderBy('id'), $request);
             $figures = Figures::properties($cid, collect($p->items())->pluck('id')->map(fn ($x) => (int) $x)->all(), $this->user($request));
-            $present = $this->present($request)->prime($p->items())->primeFiles(collect($p->items())->pluck('photo_uuid'));
+            $present = $this->present($request)->prime($p->items())->primeStaff(collect($p->items())->pluck('id'))->primeFiles(collect($p->items())->pluck('photo_uuid'));
 
             return $this->page($p, collect($p->items())->map(fn ($x) => $present->property($x, $figures[(int) $x->id] ?? null))->all());
         });
@@ -36,7 +39,11 @@ class PropertiesController extends RentalsController
     /** POST rentals/properties {landlord_id, name, kind, address, area, district, lat, lng, photo_uuid, commission_*, deposit_held_by, water_rate_minor, power_rate_minor, notes} */
     public function store(Request $request): JsonResponse
     {
-        return $this->attempt(fn () => $this->created($this->shape($request, app(Properties::class)->create($this->user($request), $request->only(Properties::WRITABLE))), 'Property added.'));
+        return $this->attempt(function () use ($request) {
+            $this->wholeAccount($request);
+
+            return $this->created($this->shape($request, app(Properties::class)->create($this->user($request), $request->only(Properties::WRITABLE))), 'Property added.');
+        });
     }
 
     /** GET rentals/properties/{id} */
@@ -70,6 +77,35 @@ class PropertiesController extends RentalsController
         });
     }
 
+    /** POST rentals/properties/{id}/handover/cancel: take back a handover still waiting for its day. Nothing has moved (Handover::cancelWaiting). */
+    public function cancelHandover(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $property = app(Properties::class)->find($this->user($request), $id);
+            app(Handover::class)->cancelWaiting($this->user($request), $property);
+
+            return $this->success($this->shape($request, $property->fresh()), 'The handover is cancelled. Nothing moved.');
+        });
+    }
+
+    /** GET rentals/properties/{id}/handover-preview?landlord_id=&from=: what a handover would do, before anyone commits to it (Handover::preview). No writes. */
+    public function handoverPreview(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $by = $this->user($request);
+            if (RentalsModule::isOwnerMode($this->cid($request))) {
+                throw BusinessRuleException::make('agency_only', 'This is for agencies that pay landlords.');
+            }
+            $property = app(Properties::class)->find($by, $id);
+            $preview = app(Handover::class)->preview($by, $property, (int) $request->query('landlord_id', '0'), $this->day($request, 'from'));
+            if (RentalAccess::propertyIds($by) !== null) {
+                $preview['old']['balance_minor'] = null; // a landlord's balance is between the office and the landlord (EL-20)
+            }
+
+            return $this->success($preview + ['currency' => $this->present($request)->currency()]);
+        });
+    }
+
     /** PUT rentals/properties/{id}/staff {user_ids: []}: who looks after the property (a caretaker sees only theirs). */
     public function staff(Request $request, int $id): JsonResponse
     {
@@ -83,6 +119,9 @@ class PropertiesController extends RentalsController
 
     private function shape(Request $request, RentalProperty $p): array
     {
-        return $this->present($request)->property($p, Figures::properties($this->cid($request), [(int) $p->id], $this->user($request))[(int) $p->id] ?? null);
+        $waiting = Handover::scheduled($this->cid($request), (int) $p->id);
+
+        return $this->present($request)->property($p, Figures::properties($this->cid($request), [(int) $p->id], $this->user($request))[(int) $p->id] ?? null)
+            + ['waiting_handover' => $waiting === null ? null : ['landlord' => $this->present($request)->ref('landlord', $waiting->landlord_id), 'from' => $waiting->from_date->toDateString()]];
     }
 }

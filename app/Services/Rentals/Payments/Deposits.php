@@ -56,7 +56,7 @@ final class Deposits
     }
 
     /**
-     * A deposit kept at move-out goes back later (rentals_manage; §5.7 "keep it on the lease to refund later"): first it
+     * A deposit kept at move-out goes back later (rentals_reverse and rentals_collect, as on the web: money out of the account; §5.7 "keep it on the lease to refund later"): first it
      * settles whatever the lease still owes (a damage found after they left), then $amount of the rest goes back, all
      * of it by default. A tenant still living there has their deposit held until they leave.
      *
@@ -64,7 +64,8 @@ final class Deposits
      */
     public static function refundKept(User $by, RentalLease $lease, ?int $amount, string $method, ?string $on = null): array
     {
-        RentalAccess::authorize($by, 'rentals_manage');
+        RentalAccess::authorize($by, 'rentals_reverse');
+        RentalAccess::authorize($by, 'rentals_collect');
         RentalAccess::assertInScope($by, (int) $lease->property_id, 'lease');
         $cid = (int) $lease->company_id;
         if (! in_array($method, RentalPayment::CASH_METHODS, true)) {

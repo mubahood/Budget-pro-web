@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Api\V1\Rentals;
 
 use App\Models\RentalCharge;
+use App\Models\RentalLease;
 use App\Services\Rentals\Billing\Billing;
+use App\Services\Rentals\Ledger\RentalLedger;
 use App\Services\Rentals\Payments\Payments;
+use App\Services\Rentals\RentalAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /** Bills: rent and fees each period, one-off charges, voids and waivers, and "Raise bills now" (rentals_bill). */
 class ChargesController extends RentalsController
 {
-    /** GET rentals/charges?lease_id&status=open|paid|void&kind&property_id&from&to&overdue */
+    /**
+     * GET rentals/charges?lease_id&status=open|paid|void&kind&property_id&unit_id&tenant_id&from&to&overdue&no_refunds&q: `q` finds what it is for, the tenant's name or phone, the unit's code, the lease's number.
+     * `no_refunds=1`: bills only, so a page holds what a bills list shows. `meta.totals`: {count, amount_minor (not cancelled), left_minor (still open)} of the whole list.
+     */
     public function index(Request $request): JsonResponse
     {
         return $this->attempt(function () use ($request) {
@@ -38,11 +44,16 @@ class ChargesController extends RentalsController
                 $q->where('status', 'open')->where('kind', '!=', 'refund')
                     ->where('due_date', '<', $present->today()->subDays((int) $present->settingsRow()->grace_days)->toDateString());
             }
-            self::search($q, $request->query('q'), ['description']);
+            if ($request->boolean('no_refunds')) {
+                $q->where('kind', '!=', 'refund');
+            }
+            self::searchRecord($q, $this->cid($request), (string) $request->query('q', ''), ['description']);
+            $sums = (clone $q)->toBase()->selectRaw("COALESCE(SUM(CASE WHEN status <> 'void' THEN amount_minor ELSE 0 END), 0) AS amount, COALESCE(SUM(CASE WHEN status = 'open' THEN GREATEST(amount_minor - paid_minor, 0) ELSE 0 END), 0) AS left_minor")->first();
             $p = $this->paginate($q->orderByDesc('due_date')->orderByDesc('id'), $request, 100);
-            $present = $this->present($request);
+            $present = $this->present($request)->prime($p->items());
 
-            return $this->page($p, collect($p->items())->map(fn ($c) => $present->charge($c))->all());
+            return $this->page($p, collect($p->items())->map(fn ($c) => $present->charge($c) + ['tenant' => $present->tenantRef($c->tenant_id, false), 'unit' => $present->ref('unit', $c->unit_id)])->all(),
+                ['totals' => ['count' => $p->total(), 'amount_minor' => (int) $sums->amount, 'left_minor' => (int) $sums->left_minor]]);
         });
     }
 
@@ -51,7 +62,10 @@ class ChargesController extends RentalsController
     {
         return $this->attempt(function () use ($request) {
             $lease = $this->lease($request, (int) $request->input('lease_id'));
-            $c = app(Billing::class)->charge($this->user($request), $lease, ['amount_minor' => $this->minor($request, 'amount_minor'), 'due_date' => $this->day($request, 'due_date')]
+            if (($due = $this->day($request, 'due_date')) !== null) {
+                RentalLedger::assertOpen($this->cid($request), $due); // a bill back in a closed month would read as money owed since then, on papers already sent
+            }
+            $c = app(Billing::class)->charge($this->user($request), $lease, ['amount_minor' => $this->minor($request, 'amount_minor'), 'due_date' => $due]
                 + $request->only(['kind', 'description', 'goes_to', 'commissionable']));
 
             return $this->created($this->present($request)->charge($c), 'Bill added.');
@@ -79,8 +93,22 @@ class ChargesController extends RentalsController
     /** POST rentals/billing/run {lease_id?}: raise the bills that are due by the horizon now (every lease, or one). */
     public function run(Request $request): JsonResponse
     {
-        return $this->attempt(fn () => $this->success(['bills' => app(Billing::class)->raiseNow($this->user($request),
-            $request->filled('lease_id') ? $this->lease($request, (int) $request->input('lease_id'))->id : null)], 'Bills raised.'));
+        return $this->attempt(function () use ($request) {
+            $by = $this->user($request);
+            if ($request->filled('lease_id')) {
+                return $this->success(['bills' => app(Billing::class)->raiseNow($by, $this->lease($request, (int) $request->input('lease_id'))->id)], 'Bills raised.');
+            }
+            if (RentalAccess::propertyIds($by) === null) {
+                return $this->success(['bills' => app(Billing::class)->raiseNow($by)], 'Bills raised.');
+            }
+            // A login tied to some properties raises their bills, not the whole account's.
+            $made = 0;
+            foreach ($this->scoped(RentalLease::withoutGlobalScopes()->where('company_id', $this->cid($request))->whereIn('status', RentalLease::LIVE), $request)->pluck('id') as $id) {
+                $made += app(Billing::class)->raiseNow($by, (int) $id);
+            }
+
+            return $this->success(['bills' => $made], 'Bills raised.');
+        });
     }
 
     private function charge(Request $request, int $id): RentalCharge

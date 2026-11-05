@@ -16,6 +16,9 @@ class EventCardTemplate extends Model
 
     protected $guarded = ['id'];
 
+    /** Where its files live never leaves the server: they open by the design's id (API) or its route (portal). */
+    protected $hidden = ['background_path', 'source_path'];
+
     protected $casts = [
         'is_deleted' => 'boolean',
         'is_default' => 'boolean',

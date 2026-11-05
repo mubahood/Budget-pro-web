@@ -19,7 +19,7 @@ class TenantDataService
     /** Tables that hold secrets or plumbing, never exported. */
     private const NOT_EXPORTED = ['otp_codes', 'message_log', 'api_idempotency_keys', 'web_link_tokens', 'scheduled_notices', 'sync_batches', 'number_sequences', 'personal_access_tokens', 'data_requests', 'error_events', 'jobs', 'failed_jobs', 'sync_sequence', 'rental_search_entries', 'rental_search_keys', 'rental_search_marks'];
 
-    private const SECRET_COLUMNS = ['password', 'remember_token', 'token_hash', 'code_hash', 'pin_hash'];
+    private const SECRET_COLUMNS = ['password', 'remember_token', 'token_hash', 'code_hash', 'pin_hash', 'pos_pin_hash', 'password_pending_at', 'sessions_valid_from'];
 
     /** @return array<int, string> */
     public static function tenantTables(): array

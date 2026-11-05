@@ -136,4 +136,32 @@ class ConcurrentRentPaymentsTest extends TestCase
 
         $this->assertSame([], app(RentalCheck::class)->run($cid));
     }
+
+    /** Over HTTP, as phones do: four sends of one uuid at the same moment are one record, and all four get an answer, never a 500. */
+    public function test_one_uuid_sent_at_once_over_the_api_is_one_record(): void
+    {
+        if (! function_exists('pcntl_fork')) {
+            $this->markTestSkipped('pcntl is required for the concurrency test.');
+        }
+        [$company, $owner, $lease] = $this->books();
+        $cid = (int) $company->id;
+        $company->forceFill(['license_expire' => now()->addYear()])->saveQuietly();
+        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
+        $h = ['Authorization' => 'Bearer '.$owner->createToken('race')->plainTextToken];
+        $cases = ['payments' => ['rental_payments', ['lease_id' => $lease->id, 'amount_minor' => 1000, 'method' => 'cash']], 'maintenance' => ['rental_maintenance', ['unit_id' => $lease->unit_id, 'title' => 'A tap']],
+            'follow-ups' => ['rental_follow_ups', ['lease_id' => $lease->id, 'channel' => 'call']], 'meter-readings' => ['rental_meter_readings', ['unit_id' => $lease->unit_id, 'utility' => 'water', 'reading' => '10']]];
+        foreach ($cases as $path => [$table, $body]) {
+            $uuid = (string) Str::uuid();
+            $out = $this->race(4, function () use ($path, $body, $uuid, $h) {
+                $res = $this->postJson("/api/v1/rentals/{$path}", $body + ['uuid' => $uuid], $h);
+                if (! in_array($res->getStatusCode(), [200, 201], true)) {
+                    throw new \RuntimeException($res->getStatusCode().' '.substr((string) $res->getContent(), 0, 200));
+                }
+            });
+            $this->assertSame(['ok', 'ok', 'ok', 'ok'], $out, $path);
+            $this->assertSame(1, DB::table($table)->where('company_id', $cid)->where('uuid', $uuid)->count(), $path);
+        }
+        $this->assertSame([], app(RentalCheck::class)->run($cid));
+        DB::table('personal_access_tokens')->where('tokenable_type', User::class)->where('tokenable_id', $owner->id)->delete();
+    }
 }

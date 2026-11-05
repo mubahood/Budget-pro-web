@@ -8,6 +8,9 @@ return [
     // portal, which reads this config as it is, gets the same absolute path. Never under a public folder or a storage link.
     'private_root' => dirname(__DIR__).'/storage/app/rental-private',
 
+    // Where tenants and landlords sign in (…/my), for the invite staff send them. Empty: the web portal's own address.
+    'portal_url' => env('RENTALS_PORTAL_URL', ''),
+
     // The plan line's trial and free plans (EstateLedgerPlanSeeder, PlanLine::ESTATE_LEDGER).
     'plans' => ['trial' => 'estate-ledger-trial', 'free' => 'estate-ledger-free'],
 

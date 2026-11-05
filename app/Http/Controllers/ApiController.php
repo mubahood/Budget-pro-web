@@ -253,6 +253,15 @@ class ApiController extends BaseController
         }
     }
 
+    /** What the old routes may set on a person: their name and picture. Never a password, a way to sign in, a role, or who they belong to. */
+    private const LEGACY_USER_WRITABLE = ['first_name', 'last_name', 'name', 'avatar', 'sex', 'address', 'locale'];
+
+    /** May a pre-v1 route set this column? */
+    public static function legacyMayWrite(string $modelClass, string $column): bool
+    {
+        return ! is_a($modelClass, \App\Models\User::class, true) || in_array($column, self::LEGACY_USER_WRITABLE, true);
+    }
+
     public function my_update(Request $r, $model)
     {
         $u = Utils::get_user($r);
@@ -269,6 +278,9 @@ class ApiController extends BaseController
             $object = new $modelClass();
             $isEdit = false;
         }
+        if (is_a($modelClass, User::class, true) && (! $isEdit || (int) $object->id !== (int) $u->id)) {
+            Utils::error('Access denied.');
+        }
 
         // SAAS Security: Verify existing record belongs to user's company
         if ($isEdit && $object->company_id != $u->company_id) {
@@ -284,7 +296,7 @@ class ApiController extends BaseController
             if (! in_array($key, $columns)) {
                 continue;
             }
-            if (in_array($key, $except)) {
+            if (in_array($key, $except) || ! self::legacyMayWrite($modelClass, $key)) {
                 continue;
             }
             if ($value == null) {

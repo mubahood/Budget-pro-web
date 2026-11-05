@@ -22,6 +22,7 @@ use App\Services\Rentals\Figures;
 use App\Services\Rentals\Landlords\LandlordAccounts;
 use App\Services\Rentals\Landlords\StatementBook;
 use App\Services\Rentals\Landlords\StatementPdf;
+use App\Services\Rentals\Landlords\UnitSheet;
 use App\Services\Rentals\Payments\Receipt;
 use App\Services\Rentals\RentalLinks;
 use App\Services\Rentals\RentalsModule;
@@ -98,13 +99,14 @@ final class PersonView
         return $out;
     }
 
-    /** {id, name, currency, payment_instructions} of the person's account. @return array<string, mixed> */
+    /** {id, name, currency, payment_instructions, phone} of the person's account; `phone` is the business's own number, so they can reach it. @return array<string, mixed> */
     public function account(): array
     {
         $s = RentalsModule::settings($this->companyId());
+        $company = Company::withoutGlobalScopes()->whereKey($this->companyId())->first(['id', 'name', 'phone_number', 'phone_number_2']);
 
-        return ['id' => $this->companyId(), 'name' => (string) Company::withoutGlobalScopes()->whereKey($this->companyId())->value('name'),
-            'currency' => (string) $s->currency, 'payment_instructions' => $s->payment_instructions];
+        return ['id' => $this->companyId(), 'name' => (string) $company?->name,
+            'currency' => (string) $s->currency, 'payment_instructions' => $s->payment_instructions, 'phone' => trim((string) ($company?->phone_number ?: $company?->phone_number_2)) ?: null];
     }
 
     // ── A tenant ────────────────────────────────────────────────────────────
@@ -144,7 +146,7 @@ final class PersonView
             $q->whereIn('status', RentalLease::LIVE);
         }
         $leases = $q->orderByDesc('start_date')->orderByDesc('id')->get();
-        $present = $this->present()->prime($leases);
+        $present = $this->present()->prime($leases)->primePositions($leases);
 
         return $leases->map(fn (RentalLease $l) => $present->leaseBrief($l))->all();
     }
@@ -160,7 +162,7 @@ final class PersonView
         in_array($status, ['open', 'paid', 'void'], true) ? $q->where('status', $status) : $q->where('status', '!=', 'void');
         $p = $q->orderByDesc('due_date')->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
 
-        return $p->through(fn ($c) => $this->present()->charge($c));
+        return $p->through(fn ($c) => $this->present()->charge($c, true));
     }
 
     /** The tenant's payments, newest first. */
@@ -258,10 +260,10 @@ final class PersonView
         $ids = collect($p->items())->pluck('id')->map(fn ($x) => (int) $x)->all();
         $figures = Figures::properties($cid, $ids);
         $units = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $ids ?: [0])->where('status', '!=', 'inactive')
-            ->orderBy('code')->get()->groupBy('property_id');
+            ->orderByRaw('LENGTH(code), code')->get()->groupBy('property_id');
         $leases = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $ids ?: [0])->whereIn('status', RentalLease::LIVE)
             ->orderByDesc('id')->get()->unique('unit_id')->keyBy('unit_id');
-        $present = $this->present()->prime($p->items())->prime($leases->values())->primeFiles(collect($p->items())->pluck('photo_uuid'));
+        $present = $this->present()->prime($p->items())->prime($leases->values())->primePositions($leases->values())->primeFiles(collect($p->items())->pluck('photo_uuid'));
 
         return $p->through(fn ($prop) => $present->property($prop, $figures[(int) $prop->id] ?? null, false) + ['units' => ($units->get($prop->id) ?? collect())
             ->map(fn ($u) => $this->unitForLandlord($u, $leases->get($u->id)))->values()->all()]);
@@ -315,7 +317,56 @@ final class PersonView
             ->orderByDesc('paid_on')->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
         $this->present()->prime($p->items());
 
-        return $p->through(fn ($x) => $this->present()->payout($x));
+        return $p->through(function ($x) {
+            $shape = $this->present()->payout($x);
+            unset($shape['notes'], $shape['advance_reason']); // the staff's own words: the web's page has never shown them
+
+            return $shape;
+        });
+    }
+
+    /** A 30-minute link to the advice of one of the landlord's payouts; null when it is not theirs, or the account has no landlords to advise. @return array{url: string, expires_in: int}|null */
+    public function payoutAdviceLink(int $id): ?array
+    {
+        $p = RentalPayout::withoutGlobalScopes()->where('company_id', $this->companyId())->where('landlord_id', $this->landlord()->id)->find($id);
+
+        return $p === null || RentalsModule::isOwnerMode($this->companyId()) ? null : RentalLinks::payoutAdvicePdf($p, 'portal', (int) $this->login->id);
+    }
+
+    /**
+     * The landlord's units for a month, door by door (UnitSheet, the rent sheet the office reads): who paid, who owes, which stand empty. Names and figures only: no phone,
+     * no ID number, nothing of the agency's. The current month is as of today.
+     *
+     * @return array{month: string, as_of: string, currency: string, rows: list<array<string, mixed>>, totals: array<string, int>}
+     */
+    public function monthSheet(string $month): array
+    {
+        [, $to] = $this->monthRange($month);
+        $rows = UnitSheet::rows($this->landlord(), $to);
+        $sum = fn (string $k) => (int) array_sum(array_column($rows, $k));
+
+        return ['month' => $month, 'as_of' => $to, 'currency' => (string) RentalsModule::settings($this->companyId())->currency,
+            'rows' => array_map(fn (array $r) => array_diff_key($r, array_flip(['lease_id', 'tenant_id', 'origin'])), $rows),
+            'totals' => ['rent_minor' => $sum('rent_minor'), 'billed_minor' => $sum('billed_minor'), 'paid_minor' => $sum('paid_minor'), 'direct_minor' => $sum('direct_minor'), 'owed_minor' => $sum('owed_minor')]];
+    }
+
+    /**
+     * A 30-minute link to the landlord's year summary as a PDF or Excel file.
+     *
+     * @return array{url: string, expires_in: int}
+     */
+    public function yearSummaryLink(string $year, string $format): array
+    {
+        $first = $this->firstStatementYear();
+        $thisYear = (int) LocalDate::today($this->companyId())->format('Y');
+        if (preg_match('/^\d{4}$/', $year) !== 1 || (int) $year < $first || (int) $year > $thisYear) {
+            throw BusinessRuleException::make('invalid_date', "Choose a year from {$first} to {$thisYear}.");
+        }
+        if (! in_array($format, ['pdf', 'xlsx'], true)) {
+            throw BusinessRuleException::make('unknown_format', 'Ask for the summary as pdf or xlsx.');
+        }
+
+        return RentalLinks::yearSummary($this->landlord(), $year, $format, 'portal', (int) $this->login->id);
     }
 
     /**
@@ -327,9 +378,9 @@ final class PersonView
         $cid = $this->companyId();
         $props = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $this->landlord()->id)->pluck('id')->map(fn ($x) => (int) $x)->all();
         $rows = array_values(array_filter(Arrears::list($cid), fn ($r) => in_array((int) $r['property']['id'], $props, true)));
-        $slice = array_slice($rows, ($page - 1) * $perPage, $perPage);
+        $slice = array_slice($rows, (int) min(count($rows), ($page - 1) * $perPage), $perPage); // a page past any number there is: an empty one, not an overflow
         $leases = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('id', array_column($slice, 'lease_id') ?: [0])->get()->keyBy('id');
-        $present = $this->present()->prime($leases->values());
+        $present = $this->present()->prime($leases->values())->primePositions($leases->values());
         $items = [];
         foreach ($slice as $r) {
             if (($lease = $leases->get($r['lease_id'])) === null) {
@@ -359,7 +410,7 @@ final class PersonView
         $props = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $l->id)->where('status', 'active')->pluck('name', 'id');
         $let = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->whereIn('status', RentalLease::LIVE)->select('unit_id');
         $vacant = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->whereNotIn('status', ['inactive', 'in_use'])
-            ->whereNotIn('id', $let)->orderBy('property_id')->orderBy('code')->limit($vacantShown)->get();
+            ->whereNotIn('id', $let)->orderBy('property_id')->orderByRaw('LENGTH(code), code')->limit($vacantShown)->get();
 
         return ['owed_minor' => LandlordAccounts::balance($l), 'month' => array_map('intval', $month['totals']),
             'last_payout' => $last === null ? null : ['paid_on' => (string) $last->paid_on->toDateString(), 'amount_minor' => (int) $last->amount_minor, 'method' => (string) $last->method],
@@ -379,7 +430,7 @@ final class PersonView
 
         return $p->through(function (RentalMaintenance $m) {
             $shape = $this->present()->maintenance($m);
-            unset($shape['assigned_to'], $shape['expense_id']);
+            unset($shape['assigned_to'], $shape['assignee_name'], $shape['expense_id']);
 
             return $shape;
         });

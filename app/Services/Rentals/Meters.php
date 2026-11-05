@@ -45,6 +45,9 @@ final class Meters
         if ($readOn->gt(LocalDate::today($cid))) {
             throw BusinessRuleException::make('date_in_future', 'A reading cannot be dated after today.');
         }
+        if (! empty($data['photo_uuid']) && (! is_string($data['photo_uuid']) || ! Str::isUuid($data['photo_uuid']))) {
+            throw BusinessRuleException::make('file_invalid', 'That photo was not found. Please send it again.');
+        }
         $uuid = (string) ($data['uuid'] ?? Str::uuid());
         if (($same = RentalMeterReading::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', $uuid)->first()) !== null) {
             return $same;
@@ -69,13 +72,16 @@ final class Meters
             $property = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->find($unit->property_id);
             $rate = (int) ($utility === 'water' ? $property?->water_rate_minor : $property?->power_rate_minor);
             $amount = $rate > 0 ? Minor::share($rate, $usedMilli, 1000) : 0;
+            if ($amount > Minor::MAX) {
+                throw BusinessRuleException::make('amount_invalid', 'That reading would make a bill too large. Check the figure and the rate.');
+            }
             $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->where('unit_id', $unit->id)->where('start_date', '<=', $readOn->toDateString())
                 ->where(fn ($q) => $q->whereIn('status', RentalLease::LIVE)->orWhere(fn ($q) => $q->where('status', 'ended')->where('ended_on', '>=', $readOn->toDateString())))
                 ->orderByDesc('start_date')->first();
             $r = RentalMeterReading::create(['company_id' => $cid, 'uuid' => $uuid, 'unit_id' => $unit->id, 'lease_id' => $lease?->id, 'utility' => $utility,
                 'reading' => self::show($milli), 'previous' => self::show($prevMilli ?? $milli), 'used' => self::show($usedMilli), 'rate_minor' => $rate,
                 'amount_minor' => $lease !== null ? $amount : 0, 'read_on' => $readOn->toDateString(), 'reset' => ! empty($data['reset']),
-                'photo_uuid' => $data['photo_uuid'] ?? null, 'recorded_by_id' => $by->id, 'notes' => isset($data['notes']) ? mb_substr((string) $data['notes'], 0, 255) : null]);
+                'photo_uuid' => ! empty($data['photo_uuid']) ? $data['photo_uuid'] : null, 'recorded_by_id' => $by->id, 'notes' => isset($data['notes']) ? mb_substr((string) $data['notes'], 0, 255) : null]);
             if ($lease !== null && $amount > 0) {
                 $label = self::UTILITIES[$utility];
                 $c = app(Billing::class)->makeFor($lease, ['kind' => 'utility', 'meter_reading_id' => $r->id,

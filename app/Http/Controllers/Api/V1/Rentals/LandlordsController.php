@@ -8,10 +8,13 @@ use App\Models\RentalLogin;
 use App\Models\RentalProperty;
 use App\Services\Rentals\Directory\Landlords;
 use App\Services\Rentals\Figures;
+use App\Services\Rentals\Landlords\MonthClose;
 use App\Services\Rentals\Landlords\StatementBook;
+use App\Services\Rentals\Landlords\UnitSheet;
 use App\Services\Rentals\Logins\RentalLogins;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalLinks;
+use App\Services\Rentals\RentalsModule;
 use App\Support\LocalDate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,10 +44,38 @@ class LandlordsController extends RentalsController
         });
     }
 
+    /** GET rentals/landlords/{id}/sheet?month=: every unit of the landlord for a month, as of its last day (UnitSheet), with a 30-minute link to its PDF. Agency staff, never a caretaker. */
+    public function sheet(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $by = $this->user($request);
+            RentalAccess::authorize($by, 'rentals_landlords');
+            $this->wholeAccount($request);
+            $cid = $this->cid($request);
+            if (RentalsModule::isOwnerMode($cid)) {
+                throw BusinessRuleException::make('agency_only', 'This is for agencies that pay landlords.');
+            }
+            $l = RentalLandlord::withoutGlobalScopes()->where('company_id', $cid)->find($id) ?? throw $this->notFoundRecord('landlord');
+            $month = $this->monthFrom($request, $cid, LocalDate::today($cid)->format('Y-m'));
+            $asOf = MonthClose::lastDay($month);
+            $rows = UnitSheet::rows($l, $asOf);
+            $sum = fn (string $k) => (int) array_sum(array_column($rows, $k));
+            $link = RentalLinks::report($cid, (int) $by->id, 'landlord_rent_sheet', 'pdf', ['landlord_id' => (int) $l->id, 'month' => $month]);
+
+            return $this->success(['landlord' => ['id' => (int) $l->id, 'code' => $l->code, 'name' => (string) $l->name], 'month' => $month, 'as_of' => $asOf, 'currency' => $this->present($request)->currency(), 'rows' => $rows,
+                'totals' => ['rent_minor' => $sum('rent_minor'), 'billed_minor' => $sum('billed_minor'), 'paid_minor' => $sum('paid_minor'), 'direct_minor' => $sum('direct_minor'), 'owed_minor' => $sum('owed_minor')],
+                'pdf_url' => $link['url'], 'expires_in' => $link['expires_in']]);
+        });
+    }
+
     /** POST rentals/landlords {name, phone, email, address, id_number, payout_method, payout_details, commission_type, commission_bp, commission_minor, notes} */
     public function store(Request $request): JsonResponse
     {
-        return $this->attempt(fn () => $this->created($this->shape($request, app(Landlords::class)->create($this->user($request), $request->only(Landlords::WRITABLE))), 'Landlord added.'));
+        return $this->attempt(function () use ($request) {
+            $this->wholeAccount($request);
+
+            return $this->created($this->shape($request, app(Landlords::class)->create($this->user($request), $request->only(Landlords::WRITABLE))), 'Landlord added.');
+        });
     }
 
     /** GET rentals/landlords/{id} */
@@ -56,8 +87,12 @@ class LandlordsController extends RentalsController
     /** PUT rentals/landlords/{id} (with inactive_reason when marking a landlord with a balance as no longer with us) */
     public function update(Request $request, int $id): JsonResponse
     {
-        return $this->attempt(fn () => $this->success($this->shape($request,
-            app(Landlords::class)->update($this->user($request), $this->find($request, $id), $request->only([...Landlords::WRITABLE, 'inactive_reason']))), 'Saved.'));
+        return $this->attempt(function () use ($request, $id) {
+            $landlord = $this->find($request, $id);
+            $this->wholeAccount($request);
+
+            return $this->success($this->shape($request, app(Landlords::class)->update($this->user($request), $landlord, $request->only([...Landlords::WRITABLE, 'inactive_reason']))), 'Saved.');
+        });
     }
 
     /** GET rentals/landlords/{id}/statement?from&to[&format=pdf]: the statement (json), or a 30-minute link to its PDF. */
@@ -65,6 +100,7 @@ class LandlordsController extends RentalsController
     {
         return $this->attempt(function () use ($request, $id) {
             $landlord = $this->find($request, $id);
+            $this->wholeAccount($request);
             [$from, $to] = $this->period($request);
             if ($request->query('format') === 'pdf') {
                 return $this->success(RentalLinks::statementPdf($landlord, $from, $to, 'staff', (int) $this->user($request)->id), 'Link ready.');
@@ -79,9 +115,32 @@ class LandlordsController extends RentalsController
     {
         return $this->attempt(function () use ($request, $id) {
             $landlord = $this->find($request, $id);
+            $this->wholeAccount($request);
 
             return $this->success(self::loginState(self::toggleLogin($request, $this->user($request), 'landlord', (int) $landlord->id)), 'Saved.');
         });
+    }
+
+    /** GET rentals/landlords/{id}/login: their sign-in as it stands, what the plan and this server allow, and where they sign in. */
+    public function loginDetails(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $landlord = $this->find($request, $id);
+            if ($landlord->is_self || RentalsModule::isOwnerMode($this->cid($request))) {
+                throw BusinessRuleException::make('owner_mode', 'Landlords sign in when the account manages property for landlords (agency).');
+            }
+
+            return $this->success(self::loginDetailsOf($this->company($request), 'landlord', (int) $landlord->id, $landlord->email, $landlord->phone));
+        });
+    }
+
+    /** What a staff screen needs to open a person's sign-in. @return array<string, mixed> */
+    public static function loginDetailsOf(\App\Models\Company $company, string $type, int $id, ?string $email, ?string $phone): array
+    {
+        $base = rtrim((string) (config('rentals.portal_url') ?: config('saas.new_ui_url')), '/');
+
+        return self::loginState(RentalLogins::forSubject((int) $company->id, $type, $id)) + ['portal_on_plan' => RentalLogins::portalOnPlan($company), 'codes_on' => RentalLogins::codesOn(),
+            'sign_in_url' => $base === '' ? null : $base.'/my', 'person' => ['email' => $email, 'phone' => $phone]];
     }
 
     /** Open, update or close a tenant's or landlord's sign-in from a staff request. */
@@ -92,8 +151,27 @@ class LandlordsController extends RentalsController
             return app(RentalLogins::class)->disable($by, $type, $id);
         }
         $str = fn (string $k) => $request->filled($k) ? trim((string) $request->input($k)) : null;
+        if ($request->hasHeader('X-App-Version')) {
+            self::assertCanSignIn($by, $type, $id, $str('email'), $str('password'));
+        }
 
         return app(RentalLogins::class)->enable($by, $type, $id, $str('email'), $str('phone'), $request->filled('password') ? (string) $request->input('password') : null);
+    }
+
+    /** The web's check, for the phone: with no password yet, a code must be able to reach them, or they would wait for nothing. Codes go by email only. */
+    private static function assertCanSignIn(\App\Models\User $by, string $type, int $id, ?string $email, ?string $password): void
+    {
+        $cid = (int) $by->company_id;
+        if ($password !== null || RentalLogins::forSubject($cid, $type, $id)?->password !== null) {
+            return;
+        }
+        $subject = $type === 'tenant' ? \App\Models\RentalTenant::withoutGlobalScopes()->where('company_id', $cid)->find($id) : RentalLandlord::withoutGlobalScopes()->where('company_id', $cid)->find($id);
+        $address = trim((string) ($email ?? $subject?->email));
+        if ($address !== '' && RentalLogins::codesOn()) {
+            return;
+        }
+        $why = $address === '' ? 'With no email, set a password: sign-in codes go by email only.' : 'Email is switched off on this service, so no code can reach them. Set a first password and give it to them yourself.';
+        throw BusinessRuleException::make('password_required', $why, ['errors' => ['password' => [$why]]]);
     }
 
     /** What staff see of a sign-in. @return array<string, mixed> */
@@ -133,9 +211,11 @@ class LandlordsController extends RentalsController
         return $this->present($request)->landlord($l, Figures::landlords($this->cid($request), [(int) $l->id])[(int) $l->id] ?? null, false, $this->seesPayout($request));
     }
 
-    /** A caretaker never sees how a landlord is paid (§7), whatever their role was given. */
+    /** A landlord's money and how they are paid: for those the web lets open a landlord (rentals_landlords). Never a caretaker (§7), whatever their role was given. */
     private function seesPayout(Request $request): bool
     {
-        return RentalAccess::propertyIds($this->user($request)) === null;
+        $by = $this->user($request);
+
+        return RentalAccess::propertyIds($by) === null && RentalAccess::can($by, 'rentals_landlords');
     }
 }

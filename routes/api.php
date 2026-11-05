@@ -126,6 +126,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:login');
         // "Try the live demo" in the phone apps: a short-lived token for the public demo account (DemoSessionController).
         Route::post('demo/session', [\App\Http\Controllers\Api\V1\DemoSessionController::class, 'store'])->middleware(['edition:saas', 'throttle:demo-session']);
+        Route::get('demo/session', [\App\Http\Controllers\Api\V1\DemoSessionController::class, 'index'])->middleware(['edition:saas', 'throttle:demo-session']);
 
         // Ping Pin's own, independent signup/login (Task 3.1) — NOT the
         // routes above. Same admin_users/Sanctum identity (DECISIONS.md D6),
@@ -169,6 +170,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::get('meta', [\App\Http\Controllers\Api\V1\MetaController::class, 'show']);
         Route::post('web-link', [\App\Http\Controllers\Api\V1\WebLinkController::class, 'store'])->middleware('throttle:10,1');
         Route::post('auth/logout', [AuthController::class, 'logout']);
+        Route::post('auth/sibling', [AuthController::class, 'sibling'])->middleware(['edition:saas', 'throttle:5,1']);
         Route::post('auth/logout-all', [AuthController::class, 'logoutAll']);
         Route::put('auth/password', [AuthController::class, 'updatePassword']);
         Route::put('auth/profile', [AuthController::class, 'updateProfile']);
@@ -492,6 +494,27 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('budget-programs/{id}/members', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'store'])->whereNumber('id');
         Route::match(['put', 'patch'], 'budget-programs/{id}/members/{memberId}', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'update'])->whereNumber(['id', 'memberId']);
         Route::delete('budget-programs/{id}/members/{memberId}', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'destroy'])->whereNumber(['id', 'memberId']);
+        Route::post('budget-programs/{id}/members/{memberId}/resend', [\App\Http\Controllers\Api\V1\BudgetProgramMemberController::class, 'resend'])->whereNumber(['id', 'memberId'])->middleware('throttle:30,1');
+        // The phone app's own answers (docs/MOBILE_API_CONTRACT.md, Pledge & Budget): who the person is on each event, the default event, and what a phone cannot work out alone.
+        Route::get('budget/home', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'home']);
+        Route::put('budget/main-event', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'mainEvent']);
+        Route::get('budget-programs/{id}/withdrawn', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'withdrawn'])->whereNumber('id');
+        Route::post('budget-programs/{id}/pledges/paste', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'paste'])->whereNumber('id');
+        Route::post('budget-programs/{id}/pledges/import', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'import'])->whereNumber('id');
+        Route::post('budget-programs/{id}/close', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'close'])->whereNumber('id');
+        Route::post('budget-programs/{id}/reopen', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'reopen'])->whereNumber('id');
+        Route::get('budget-programs/{id}/summary', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'summary'])->whereNumber('id');
+        Route::get('budget-programs/{id}/documents', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'documents'])->whereNumber('id');
+        Route::get('budget-programs/{id}/documents/{doc}.{format}', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'document'])->whereNumber('id')->whereIn('doc', \App\Services\Budget\EventExport::DOCUMENTS)->whereIn('format', ['pdf', 'xlsx', 'csv'])->middleware('throttle:20,1');
+        Route::post('contribution-payments/{id}/receipt-link', [\App\Http\Controllers\Api\V1\EventHomeController::class, 'receiptLink'])->whereNumber('id')->middleware('throttle:60,1');
+        // Invitation card designs: they have files, so they change here and not by sync. Their figures come down with sync (event_card_templates).
+        Route::get('budget-programs/{id}/card-templates', [\App\Http\Controllers\Api\V1\EventCardController::class, 'index'])->whereNumber('id');
+        Route::post('budget-programs/{id}/card-templates', [\App\Http\Controllers\Api\V1\EventCardController::class, 'store'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('budget-programs/{id}/card-templates/sample', [\App\Http\Controllers\Api\V1\EventCardController::class, 'sample'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('card-templates/{id}', [\App\Http\Controllers\Api\V1\EventCardController::class, 'update'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post('card-templates/{id}/default', [\App\Http\Controllers\Api\V1\EventCardController::class, 'setDefault'])->whereNumber('id');
+        Route::delete('card-templates/{id}', [\App\Http\Controllers\Api\V1\EventCardController::class, 'destroy'])->whereNumber('id');
+        Route::get('card-templates/{id}/file/{kind}', [\App\Http\Controllers\Api\V1\EventCardController::class, 'file'])->whereNumber('id')->whereIn('kind', ['picture', 'source']);
     });
 
     // The v1 poultry sync is core, like every sync route: a sync is never cut by a module (DECISIONS.md 2026-10-17). Older

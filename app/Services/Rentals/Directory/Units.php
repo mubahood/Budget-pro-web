@@ -36,9 +36,9 @@ final class Units extends Directory
             'block' => ['nullable', 'string', 'max:20'],
             'bedrooms' => ['nullable', 'integer', 'min:0', 'max:50'],
             'bathrooms' => ['nullable', 'integer', 'min:0', 'max:50'],
-            'size_sqm' => ['nullable', 'integer', 'min:0'],
-            'rent_minor' => [$req, 'integer', 'min:0', 'max:'.Minor::MAX],
-            'deposit_minor' => ['nullable', 'integer', 'min:0', 'max:'.Minor::MAX],
+            'size_sqm' => ['nullable', 'integer', 'min:0', 'max:10000000'],
+            'rent_minor' => [$req, 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
+            'deposit_minor' => ['nullable', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'cycle_months' => ['sometimes', 'in:1,3,6,12'],
             'status' => ['sometimes', 'in:available,reserved,maintenance,inactive,in_use'],
             'in_use_by' => ['nullable', 'string', 'max:100'],
@@ -48,7 +48,7 @@ final class Units extends Directory
             'photo_uuid' => ['nullable', 'string', 'size:36'],
             'commission_type' => ['nullable', 'in:percent,flat,none'],
             'commission_bp' => ['nullable', 'integer', 'min:0', 'max:10000'],
-            'commission_minor' => ['nullable', 'integer', 'min:0', 'max:'.Minor::MAX],
+            'commission_minor' => ['nullable', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
         ];
     }
 

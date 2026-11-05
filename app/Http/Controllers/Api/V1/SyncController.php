@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\StockItem;
 use App\Models\SyncConflict;
+use App\Services\Budget\BudgetAccess;
 use App\Services\Shop\StockService;
 use App\Services\Sync\SyncApplier;
 use App\Services\Sync\SyncPuller;
@@ -96,12 +97,12 @@ class SyncController extends Controller
             if (! empty($data['tables'])) {
                 $out = [];
                 foreach (array_filter(array_map('trim', explode(',', $data['tables']))) as $table) {
-                    $out[$table] = $puller->pull((int) $company->id, $table, $since, $limit);
+                    $out[$table] = $puller->pull((int) $company->id, $table, $since, $limit, $request->user());
                 }
 
-                return $this->success(['tables' => $out, 'server_time' => SyncSequence::nowMs()], 'Pulled.');
+                return $this->success(['tables' => $out, 'server_time' => SyncSequence::nowMs(), 'budget_seats' => BudgetAccess::seats($request->user()), 'budget_phones' => BudgetAccess::phoneSeats($request->user())], 'Pulled.');
             }
-            $res = $puller->pull((int) $company->id, (string) $data['table'], $since, $limit);
+            $res = $puller->pull((int) $company->id, (string) $data['table'], $since, $limit, $request->user());
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
@@ -110,7 +111,7 @@ class SyncController extends Controller
             $device->forceFill(['last_pull_seq' => max((int) $device->last_pull_seq, $res['next_seq'])])->saveQuietly();
         }
 
-        return $this->success($res + ['server_time' => SyncSequence::nowMs()], 'Pulled.');
+        return $this->success($res + ['server_time' => SyncSequence::nowMs(), 'budget_seats' => BudgetAccess::seats($request->user()), 'budget_phones' => BudgetAccess::phoneSeats($request->user())], 'Pulled.');
     }
 
     public function bootstrap(Request $request)
@@ -131,9 +132,9 @@ class SyncController extends Controller
         $scope = (string) ($request->header('X-Device-Id') ?: $request->input('device_id') ?: 'u'.$request->user()->id);
         $out = app(SyncPuller::class)->bootstrap((int) $company->id, $tables, (int) ($data['page'] ?? 1), (int) ($data['page_size'] ?? 500), [
             'after' => $data['after'] ?? [], 'upto' => $data['upto'] ?? null, 'history_days' => $data['history_days'] ?? null, 'scope' => $scope,
-        ]);
+        ], $request->user());
 
-        return $this->success($out + ['server_time' => SyncSequence::nowMs(), 'tables_order' => SyncRegistry::keys()], 'Bootstrap snapshot.');
+        return $this->success($out + ['server_time' => SyncSequence::nowMs(), 'tables_order' => SyncRegistry::keys(), 'budget_seats' => BudgetAccess::seats($request->user()), 'budget_phones' => BudgetAccess::phoneSeats($request->user())], 'Bootstrap snapshot.');
     }
 
     /** POST sync/pull-many { tables: {table: since_seq}, limit? } — every table's page and next cursor in one response. */
@@ -145,7 +146,7 @@ class SyncController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:'.SyncPuller::MAX_LIMIT],
         ]);
         $company = $this->company($request);
-        $out = app(SyncPuller::class)->pullMany((int) $company->id, $data['tables'], (int) ($data['limit'] ?? 500));
+        $out = app(SyncPuller::class)->pullMany((int) $company->id, $data['tables'], (int) ($data['limit'] ?? 500), $request->user());
         if ($device = $this->device($request, $company)) {
             $seqs = [0];
             foreach ($out as $name => $t) {
@@ -156,7 +157,7 @@ class SyncController extends Controller
             $device->forceFill(['last_pull_seq' => max((int) $device->last_pull_seq, ...$seqs)])->saveQuietly();
         }
 
-        return $this->success(['tables' => $out, 'server_time' => SyncSequence::nowMs()], 'Pulled.');
+        return $this->success(['tables' => $out, 'server_time' => SyncSequence::nowMs(), 'budget_seats' => BudgetAccess::seats($request->user()), 'budget_phones' => BudgetAccess::phoneSeats($request->user())], 'Pulled.');
     }
 
     public function conflicts(Request $request)
@@ -164,6 +165,8 @@ class SyncController extends Controller
         $state = $request->query('state', 'open');
         $rows = SyncConflict::withoutGlobalScopes()->where('company_id', $request->user()->company_id)
             ->when($state !== 'all', fn ($q) => $q->where('state', $state))
+            // A conflict keeps the whole row, phone number included: event rows go only to who may see every event.
+            ->when(! BudgetAccess::fullAccess($request->user()), fn ($q) => $q->whereNotIn('table_name', [...array_keys(SyncRegistry::SEAT_TABLES), 'event_invitation_ops']))
             ->orderByDesc('id')->limit(200)->get();
 
         return $this->success($rows, 'Conflicts listed.');

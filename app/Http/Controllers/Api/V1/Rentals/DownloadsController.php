@@ -6,20 +6,25 @@ use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\RentalLandlord;
+use App\Models\RentalLease;
 use App\Models\RentalLogin;
 use App\Models\RentalPayment;
 use App\Models\RentalPayout;
+use App\Models\RentalPayoutRun;
 use App\Models\StoredFile;
 use App\Models\User;
 use App\Services\Rentals\Landlords\PayoutAdvice;
+use App\Services\Rentals\Landlords\PayoutRuns;
 use App\Services\Rentals\Landlords\StatementBook;
 use App\Services\Rentals\Landlords\StatementPdf;
 use App\Services\Rentals\Logins\RentalLogins;
 use App\Services\Rentals\Payments\Receipt;
+use App\Services\Rentals\Portal\PersonView;
 use App\Services\Rentals\PrivateFiles;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalLinks;
 use App\Services\Rentals\RentalsModule;
+use App\Services\Rentals\Reports\LandlordReports;
 use App\Services\Rentals\Reports\RentalExport;
 use App\Services\Rentals\Reports\RentalReports;
 use Illuminate\Http\Request;
@@ -85,6 +90,76 @@ class DownloadsController extends Controller
             }
 
             return response(PayoutAdvice::pdf($p), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.PayoutAdvice::filename($p).'"', 'Cache-Control' => 'private, no-store']);
+        });
+    }
+
+    /** GET rentals/pdf/tenant-statement?company_id&lease_id&by&by_id (signed): the tenant's own statement, read again through their own sign-in. */
+    public function tenantStatement(Request $request): Response
+    {
+        return $this->guard($request, function () use ($request) {
+            $cid = (int) $request->query('company_id');
+            $login = $request->query('by') === 'portal' ? app(RentalLogins::class)->resolve((int) $request->query('by_id')) : null;
+            if ($login === null || (int) $login->company_id !== $cid || $login->subject_type !== 'tenant') {
+                return $this->missing();
+            }
+            $file = PersonView::for($login)->tenantStatementFile((int) $request->query('lease_id'));
+            if ($file === null) {
+                return $this->missing();
+            }
+
+            return response($file['bytes'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.$file['filename'].'"', 'Cache-Control' => 'private, no-store']);
+        });
+    }
+
+    /**
+     * GET rentals/pdf/lease-statement?company_id&lease_id&format&from&to&by&by_id (signed): a tenancy's statement for staff who may see the lease, read again for them. Who may see it is
+     * checked here: it belongs with the lease, not with the reports permission (the web's own link).
+     */
+    public function leaseStatement(Request $request): Response
+    {
+        return $this->guard($request, function () use ($request) {
+            $cid = (int) $request->query('company_id');
+            $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->find((int) $request->query('lease_id'));
+            if ($lease === null || ! $this->maySee($request, $cid, fn (User $u) => RentalAccess::can($u, 'rentals_view') && RentalAccess::inScope($u, (int) $lease->property_id), fn (RentalLogin $l) => false)) {
+                return $this->missing();
+            }
+            $report = (new RentalReports())->run('tenant_statement', $cid, null, ['lease_id' => (int) $lease->id] + $request->only(['from', 'to']));
+            [$bytes, $type, $name] = RentalExport::render($report, $cid, (string) $request->query('format'));
+
+            return response($bytes, 200, ['Content-Type' => $type, 'Content-Disposition' => 'attachment; filename="'.$name.'"', 'Cache-Control' => 'private, no-store']);
+        });
+    }
+
+    /** GET rentals/pdf/year-summary?company_id&landlord_id&year&format&by&by_id (signed): a landlord's year, for them or for staff of the whole account. */
+    public function yearSummary(Request $request): Response
+    {
+        return $this->guard($request, function () use ($request) {
+            $cid = (int) $request->query('company_id');
+            $year = (string) $request->query('year');
+            $l = RentalLandlord::withoutGlobalScopes()->where('company_id', $cid)->find((int) $request->query('landlord_id'));
+            if ($l === null || preg_match('/^\d{4}$/', $year) !== 1 || ! $this->maySee($request, $cid, fn (User $u) => RentalAccess::can($u, 'rentals_landlords') && RentalAccess::propertyIds($u) === null,
+                fn (RentalLogin $login) => $login->subject_type === 'landlord' && (int) $login->subject_id === (int) $l->id)) {
+                return $this->missing();
+            }
+            $format = (string) $request->query('format') === 'xlsx' ? 'xlsx' : 'pdf';
+            [$bytes, $type, $name] = LandlordReports::yearFile($l, $year, $format);
+
+            return response($bytes, 200, ['Content-Type' => $type, 'Content-Disposition' => ($format === 'pdf' ? 'inline' : 'attachment').'; filename="'.$name.'"', 'Cache-Control' => 'private, no-store']);
+        });
+    }
+
+    /** GET rentals/pdf/payout-run?company_id&run_id&format&by&by_id (signed): the sheet to take to the bank. */
+    public function payoutRun(Request $request): Response
+    {
+        return $this->guard($request, function () use ($request) {
+            $cid = (int) $request->query('company_id');
+            $run = RentalPayoutRun::withoutGlobalScopes()->where('company_id', $cid)->find((int) $request->query('run_id'));
+            if ($run === null || RentalsModule::isOwnerMode($cid) || ! $this->maySee($request, $cid, fn (User $u) => RentalAccess::can($u, 'rentals_landlords') && RentalAccess::propertyIds($u) === null, fn (RentalLogin $l) => false)) {
+                return $this->missing();
+            }
+            [$bytes, $type, $name] = RentalExport::render(PayoutRuns::sheet($run), $cid, (string) $request->query('format'));
+
+            return response($bytes, 200, ['Content-Type' => $type, 'Content-Disposition' => 'attachment; filename="'.$name.'"', 'Cache-Control' => 'private, no-store']);
         });
     }
 

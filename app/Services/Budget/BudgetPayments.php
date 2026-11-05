@@ -149,6 +149,10 @@ class BudgetPayments
             if (BudgetPayment::withoutGlobalScopes()->where('reverses_id', $original->id)->exists()) {
                 throw BusinessRuleException::make('already_reversed', 'This payment was already reversed.');
             }
+            // Removing a line moved its money to Not on the budget, and a removed line counts for nothing, so the reversal comes off where the money now is.
+            if ((int) $item->is_deleted === 1) {
+                $item = $this->unbudgetedLine($companyId, (int) $item->budget_program_id, $userId);
+            }
             $payment = $this->append($item, [
                 'uuid' => $uuid, 'amount' => Decimal::neg((string) $original->amount), 'paid_on' => LocalDate::today($companyId)->format('Y-m-d'), 'method' => $original->method, 'paid_to' => $original->paid_to,
                 'paid_by_id' => $original->paid_by_id, 'approved_by_id' => $original->approved_by_id, 'source' => 'reversal', 'reverses_id' => $original->id,
@@ -214,7 +218,8 @@ class BudgetPayments
             $item->balance = $balance;
             $item->setAttribute('percentage_done', $percent);
             $item->is_complete = $complete;
-            $item->saveQuietlySynced();
+            // Only the figure changed: a person's edit made before this, on a phone offline, is still the newest edit (MasterDataService).
+            $item->saveQuietlySynced(true);
         } else {
             DB::table('budget_items')->where('id', $item->id)->update(['balance' => $balance, 'percentage_done' => $percent, 'is_complete' => $complete]);
         }
@@ -539,6 +544,10 @@ class BudgetPayments
             throw BusinessRuleException::make('uuid_reused', 'This payment id was already used for a different payment.');
         }
         $item = BudgetItem::withoutGlobalScopes()->without(['budgetItemCategory', 'createdBy'])->find($existing->budget_item_id);
+        // A retry is on the same event: the same id from another event's line is not a retry, and its answer would show that event's figures.
+        if ($itemId !== null && $item !== null && (int) $item->budget_program_id !== (int) DB::table('budget_items')->where('company_id', $companyId)->where('id', $itemId)->value('budget_program_id')) {
+            throw BusinessRuleException::make('uuid_reused', 'This payment id was already used for a different payment.');
+        }
 
         return ['payment' => $existing, 'item' => $item, 'replayed' => true];
     }
@@ -581,6 +590,9 @@ class BudgetPayments
             throw BusinessRuleException::make('invalid_amount', 'Enter an amount greater than zero.');
         }
         $amount = Decimal::of((string) $value);
+        if (Decimal::cmp($amount, '0') <= 0) {
+            throw BusinessRuleException::make('invalid_amount', 'Enter an amount greater than zero.'); // 0.001 rounds to nothing
+        }
         if (Decimal::cmp($amount, '999999999999999999') > 0) {
             throw BusinessRuleException::make('invalid_amount', 'That amount is too large.');
         }

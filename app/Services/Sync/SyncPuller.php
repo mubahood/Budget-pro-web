@@ -3,6 +3,8 @@
 namespace App\Services\Sync;
 
 use App\Exceptions\BusinessRuleException;
+use App\Models\User;
+use App\Services\Budget\BudgetAccess;
 use App\Support\Sync\SyncSequence;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +32,7 @@ class SyncPuller
     }
 
     /** @return array{table: string, rows: array, next_seq: int, has_more: bool} */
-    public function pull(int $companyId, string $table, int $sinceSeq, int $limit = 500): array
+    public function pull(int $companyId, string $table, int $sinceSeq, int $limit = 500, ?User $for = null): array
     {
         $config = SyncRegistry::get($table);
         if ($config === null) {
@@ -54,6 +56,7 @@ class SyncPuller
             // An in-kind pledge (PB-39) has no money in it and no meaning on a phone yet: web only until PB-32.
             $query->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', \App\Services\Budget\EventBook::KIND_IN_KIND));
         }
+        $this->limitToSeats($query, $table, $for);
         $rows = $query->get();
         $hasMore = $rows->count() > $limit;
         $rows = $rows->take($limit);
@@ -66,7 +69,7 @@ class SyncPuller
             $next = max($next, (int) $row->server_seq);
         }
 
-        return ['table' => $table, 'rows' => $this->enrich($companyId, $table, $wire), 'next_seq' => $next, 'has_more' => $hasMore];
+        return ['table' => $table, 'rows' => $this->enrich($companyId, $table, $this->hidePhones($table, $wire, $for)), 'next_seq' => $next, 'has_more' => $hasMore];
     }
 
     /**
@@ -76,12 +79,12 @@ class SyncPuller
      * @param  array<string, int|string|null>  $cursors
      * @return array<string, array<string, mixed>>
      */
-    public function pullMany(int $companyId, array $cursors, int $limit = 500): array
+    public function pullMany(int $companyId, array $cursors, int $limit = 500, ?User $for = null): array
     {
         $out = [];
         foreach ($cursors as $table => $since) {
             try {
-                $out[(string) $table] = $this->pull($companyId, (string) $table, (int) $since, $limit);
+                $out[(string) $table] = $this->pull($companyId, (string) $table, (int) $since, $limit, $for);
             } catch (BusinessRuleException $e) {
                 $out[(string) $table] = ['table' => (string) $table, 'rows' => [], 'next_seq' => (int) $since, 'has_more' => false, 'error' => $e->errorCode()];
             }
@@ -99,7 +102,7 @@ class SyncPuller
      *
      * @param  array{after?: array<string, int>, upto?: ?int, history_days?: ?int, scope?: ?string}  $opts
      */
-    public function bootstrap(int $companyId, array $tables, int $page, int $pageSize = 500, array $opts = []): array
+    public function bootstrap(int $companyId, array $tables, int $page, int $pageSize = 500, array $opts = [], ?User $for = null): array
     {
         $page = max(1, $page);
         $pageSize = max(1, min($pageSize, self::MAX_LIMIT));
@@ -148,6 +151,7 @@ class SyncPuller
             if ($days > 0 && in_array($table, SyncRegistry::HISTORY_TABLES, true)) {
                 $this->historyWindow($query, $companyId, $table, now()->subDays($days));
             }
+            $this->limitToSeats($query, $table, $for);
 
             $offset = null;
             if (array_key_exists($table, $after)) {
@@ -178,7 +182,7 @@ class SyncPuller
             $this->serializer->preload($table, $rows);
             $wire = $rows->map(fn ($r) => $this->serializer->row($table, $r))->values()->all();
             $out[$table] = [
-                'rows' => $this->enrich($companyId, $table, $wire),
+                'rows' => $this->enrich($companyId, $table, $this->hidePhones($table, $wire, $for)),
                 'next_page' => $hasMore ? $page + 1 : null,
                 'has_more' => $hasMore,
                 'next_after' => $hasMore ? $last : null,
@@ -187,6 +191,41 @@ class SyncPuller
         }
 
         return ['tables' => $out, 'seq' => $upto ?? SyncSequence::current(), 'history_days' => $days];
+    }
+
+    /**
+     * An event's rows go only to a phone whose person may open that event (the review's PB-09, PB-32). Every client gets this: a flag a client could leave
+     * out would not be privacy. Someone with full access sees no change, and the answer's budget_seats tells a newer phone what to fetch or drop.
+     */
+    private function limitToSeats($query, string $table, ?User $for): void
+    {
+        $column = SyncRegistry::SEAT_TABLES[$table] ?? null;
+        if ($for !== null && $column !== null) {
+            BudgetAccess::limitToSeats($query, $for, $column);
+        }
+    }
+
+    /**
+     * A viewer sees names and amounts, not phone numbers: they never reach the phone.
+     *
+     * @param  list<array<string, mixed>>  $wire
+     * @return list<array<string, mixed>>
+     */
+    private function hidePhones(string $table, array $wire, ?User $for): array
+    {
+        if ($for === null || ! in_array($table, ['contribution_records', 'budget_program_members'], true)) {
+            return $wire;
+        }
+        $may = [];
+        foreach ($wire as &$row) {
+            $event = (int) ($row['budget_program_id'] ?? 0);
+            $may[$event] ??= BudgetAccess::canSeePhones($for, $event);
+            if (! $may[$event]) {
+                $row['phone'] = null;
+            }
+        }
+
+        return $wire;
     }
 
     /** Only the recent history of an event table, plus what is still open. */
@@ -279,6 +318,28 @@ class SyncPuller
     /** Derived, read-only fields added to a page of rows (customers: `loyalty_points`, the loyalty ledger's sum). */
     private function enrich(int $companyId, string $table, array $wire): array
     {
+        if ($table === 'event_card_templates' && $wire !== []) {
+            // Where the picture lives stays on the server; this says when the phone's copy is out of date.
+            $paths = DB::table('event_card_templates')->where('company_id', $companyId)->whereIn('id', array_column($wire, 'id'))->pluck('background_path', 'id');
+            foreach ($wire as &$row) {
+                $row['file_version'] = substr(md5((string) ($paths[(int) $row['id']] ?? '')), 0, 10);
+            }
+            unset($row);
+
+            return $wire;
+        }
+        if ($table === 'budget_program_members' && $wire !== []) {
+            // A seat somebody sits in stores no name of its own: it is that person's, as the web shows it. Their number stays where hidePhones decides.
+            $names = DB::table('admin_users')->where('company_id', $companyId)->whereIn('id', array_filter(array_map(fn ($r) => (int) ($r['user_id'] ?? 0), $wire)))->pluck('name', 'id');
+            foreach ($wire as &$row) {
+                if (trim((string) ($row['name'] ?? '')) === '' && isset($names[(int) ($row['user_id'] ?? 0)])) {
+                    $row['name'] = $names[(int) $row['user_id']];
+                }
+            }
+            unset($row);
+
+            return $wire;
+        }
         if ($table !== 'customers' || $wire === [] || SyncRegistry::columns('loyalty_ledger') === []) {
             return $wire;
         }

@@ -92,10 +92,21 @@ final class EventClosure
      */
     public static function refusesSyncOp(int $companyId, string $table, array $data, string $uuid, array $op): bool
     {
-        $programId = self::programOfOp($companyId, $table, $data, $uuid);
-        if ($programId === null) {
-            return false;
+        foreach (self::programsOfOp($companyId, $table, $data, $uuid) as $programId) {
+            if (self::closedFor($companyId, $programId, $table, $data, $op)) {
+                return true;
+            }
         }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $op
+     */
+    private static function closedFor(int $companyId, int $programId, string $table, array $data, array $op): bool
+    {
         $event = DB::table('budget_programs')->where('company_id', $companyId)->where('id', $programId)->first(['status', 'closed_at', 'updated_at']);
         if ($event === null || EventBook::isOpen($event->status)) {
             return false;
@@ -110,21 +121,26 @@ final class EventClosure
         return $madeAt > 0 && $closedAt !== null && $madeAt >= Carbon::parse($closedAt)->getTimestampMs();
     }
 
-    /** @param  array<string, mixed>  $data */
-    private static function programOfOp(int $companyId, string $table, array $data, string $uuid): ?int
+    /**
+     * Every event an op touches: the one it names and the one its row is on, which a pushed op could make differ.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<int>
+     */
+    private static function programsOfOp(int $companyId, string $table, array $data, string $uuid): array
     {
         $by = fn (string $from, mixed $key) => is_string($key) && $key !== ''
             ? DB::table($from)->where('company_id', $companyId)->where('uuid', $key)->value($from === 'budget_programs' ? 'id' : 'budget_program_id') : null;
-        $id = match ($table) {
-            'budget_programs' => $by('budget_programs', $uuid),
-            'contribution_records' => $by('budget_programs', $data['program_uuid'] ?? null) ?? $by('contribution_records', $uuid),
-            'contribution_payments' => $by('contribution_payments', $data['reverses_uuid'] ?? null) ?? $by('contribution_records', $data['contribution_uuid'] ?? null),
-            'budget_item_categories' => $by('budget_programs', $data['program_uuid'] ?? null) ?? $by('budget_item_categories', $uuid),
-            'budget_payments' => $by('budget_payments', $data['reverses_uuid'] ?? null) ?? $by('budget_items', $data['item_uuid'] ?? null) ?? $by('budget_programs', $data['program_uuid'] ?? null),
-            'budget_items' => $by('budget_item_categories', $data['category_uuid'] ?? null) ?? $by('budget_programs', $data['program_uuid'] ?? null) ?? $by('budget_items', $uuid),
-            default => null,
+        $ids = match ($table) {
+            'budget_programs' => [$by('budget_programs', $uuid)],
+            'contribution_records' => [$by('budget_programs', $data['program_uuid'] ?? null), $by('contribution_records', $uuid)],
+            'contribution_payments' => [$by('contribution_payments', $data['reverses_uuid'] ?? null), $by('contribution_records', $data['contribution_uuid'] ?? null)],
+            'budget_item_categories' => [$by('budget_programs', $data['program_uuid'] ?? null), $by('budget_item_categories', $uuid)],
+            'budget_payments' => [$by('budget_payments', $data['reverses_uuid'] ?? null), $by('budget_items', $data['item_uuid'] ?? null), $by('budget_programs', $data['program_uuid'] ?? null)],
+            'budget_items' => [$by('budget_item_categories', $data['category_uuid'] ?? null), $by('budget_programs', $data['program_uuid'] ?? null), $by('budget_items', $uuid)],
+            default => [],
         };
 
-        return $id === null ? null : (int) $id;
+        return array_values(array_unique(array_map('intval', array_filter($ids))));
     }
 }

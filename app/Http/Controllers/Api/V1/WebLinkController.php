@@ -25,7 +25,9 @@ class WebLinkController extends Controller
             return $this->error('This account has been switched off. Ask the shop owner to switch it back on.', 403, ['code' => 'account_inactive']);
         }
         try {
-            $link = WebLink::issue($user, $data['path']);
+            // A rent account's web pages are on its own address, not the family's.
+            $own = in_array('rentals', (array) \App\Models\Company::withoutGlobalScopes()->find($user->company_id)?->modules(), true) ? trim((string) config('rentals.portal_url')) : '';
+            $link = WebLink::issue($user, $data['path'], $own !== '' ? $own : null);
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), $e->errorCode() === 'web_link_unavailable' ? 503 : 422, $e->toErrors());
         }

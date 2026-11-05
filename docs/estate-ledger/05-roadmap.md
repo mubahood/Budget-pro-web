@@ -53,13 +53,13 @@ suites once); no push or deploy without the owner's word.
 
 ## WP5 App
 
-- [ ] Flavor `estate-ledger` (Gradle, res, icons, splash, `AppFlavor`, square theme flag, strings EN/SW)
-- [ ] Data layer (`KeyrollApi`, models, cache, offline queue)
-- [ ] Staff screens, tenant screens, landlord screens (04 §11.2)
-- [ ] Tests (`flutter analyze`, `flutter test test/rentals`), release AAB from a fresh-install check
+- [x] Flavor `estateledger` (Gradle, res, icons, splash, `AppFlavor`, square theme flag, strings EN/SW)
+- [x] Data layer (`RentalsApi`, models, cache, the offline rent book and queue)
+- [x] Staff screens, tenant screens, landlord screens (04 §11.2), on branch `estate-ledger-app`, not merged yet
+- [x] Tests (`flutter analyze`, `flutter test test/rentals`), release AAB from a fresh-install check
 
 ## WP6 Integration
 
 - [x] Full kernel and portal suites once; demo built locally; `rentals:check` clean on the demo
-- [ ] Store listing text and screenshots (`~/Desktop/github/keyroll/store`)
+- [ ] Store listing text and screenshots (`~/Desktop/github/estate-ledger/store`)
 - [x] Deploy (done 2026-11-04): migrations, seeders, env `APP_ESTATE_LEDGER_DOMAIN`, subdomain + AutoSSL, demo

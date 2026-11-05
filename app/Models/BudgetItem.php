@@ -119,6 +119,9 @@ class BudgetItem extends Model
         // Exact: unit price × quantity in bcmath (DECIMAL(20,2) × DECIMAL(15,3)), never floats.
         $data->unit_price = Decimal::valid($data->unit_price) ? Decimal::of((string) $data->unit_price) : '0.00';
         $data->quantity = Decimal::valid($data->quantity) ? Decimal::of((string) $data->quantity, 3) : '0.000';
+        if (($data->isDirty('unit_price') || $data->isDirty('quantity')) && (Decimal::cmp($data->unit_price, '0') < 0 || Decimal::cmp($data->quantity, '0') < 0)) {
+            throw BusinessRuleException::make('validation', 'A price and a quantity cannot be below zero.'); // the forms and the API say so too; a pushed op reaches here
+        }
         $data->target_amount = Decimal::mul($data->unit_price, $data->quantity);
 
         // Use auth user first for company_id (most reliable), fallback to created_by_id

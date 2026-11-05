@@ -31,8 +31,25 @@ class RouteServiceProvider extends ServiceProvider
                 return RateLimiter::limiter('sync')($request);
             }
 
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            // The rentals screens read several things each; a phone moving between them is not abuse.
+            $perMinute = $request->is('api/v1/rentals/*') ? 240 : 60;
+            if (($user = $request->user()) !== null) {
+                return Limit::perMinute($perMinute)->by($user->id);
+            }
+            // A tenant's or landlord's token is checked after this limit (RentalPortalAuth), so there is no user yet. Counting them by
+            // address would make everyone behind one mobile network share a budget, and one busy person lock the others out.
+            if (($token = $request->bearerToken()) !== null && $request->is('api/v1/rentals/me*')) {
+                return [Limit::perMinute($perMinute)->by('person|'.hash('sha256', $token)), Limit::perMinute(3000)->by('people|'.$request->ip())];
+            }
+
+            return Limit::perMinute($perMinute)->by($request->ip());
         });
+
+        // A tenant's or landlord's own requests: each token its own budget, with a ceiling for one address.
+        RateLimiter::for('rental-person', fn (Request $request) => [
+            Limit::perMinute(240)->by('rental-person|'.hash('sha256', (string) $request->bearerToken())),
+            Limit::perMinute(3000)->by('rental-people|'.$request->ip()),
+        ]);
 
         // Sync push/pull/pull-many/bootstrap: 300 a minute per user and device (X-Device-Id). A 429 carries Retry-After.
         RateLimiter::for('sync', function (Request $request) {

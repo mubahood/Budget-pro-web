@@ -56,6 +56,49 @@ final class RentalLinks
         return self::sign('rentals.pdf.payout-advice', ['company_id' => (int) $payout->company_id, 'payout_id' => (int) $payout->id, 'by' => $viewer, 'by_id' => $viewerId], $minutes);
     }
 
+    /**
+     * A tenant's statement for one of their homes as a PDF, from the day the lease began to today (PersonView::tenantStatementFile), for their own sign-in.
+     *
+     * @return array{url: string, expires_in: int}
+     */
+    public static function tenantStatementPdf(int $companyId, int $leaseId, int $loginId): array
+    {
+        return self::sign('rentals.pdf.tenant-statement', ['company_id' => $companyId, 'lease_id' => $leaseId, 'by' => 'portal', 'by_id' => $loginId]);
+    }
+
+    /**
+     * A lease's statement for staff who may see the lease: it belongs with the lease, not with the reports permission (as the web's own link). `format` is pdf, xlsx or csv.
+     *
+     * @param  array<string, mixed>  $period  from, to (optional)
+     * @return array{url: string, expires_in: int}
+     */
+    public static function leaseStatement(int $companyId, int $leaseId, int $userId, string $format = 'pdf', array $period = []): array
+    {
+        $period = array_filter(array_intersect_key($period, array_flip(['from', 'to'])), fn ($v) => is_string($v) && $v !== '');
+
+        return self::sign('rentals.pdf.lease-statement', ['company_id' => $companyId, 'lease_id' => $leaseId, 'format' => $format, 'by' => 'staff', 'by_id' => $userId] + $period);
+    }
+
+    /**
+     * A landlord's year summary as a PDF or Excel file. $minutes as for a statement: longer for a link put in a message to the landlord.
+     *
+     * @return array{url: string, expires_in: int}
+     */
+    public static function yearSummary(RentalLandlord $landlord, string $year, string $format, string $viewer, int $viewerId, int $minutes = self::MINUTES): array
+    {
+        return self::sign('rentals.pdf.year-summary', ['company_id' => (int) $landlord->company_id, 'landlord_id' => (int) $landlord->id, 'year' => $year, 'format' => $format, 'by' => $viewer, 'by_id' => $viewerId], $minutes);
+    }
+
+    /**
+     * A payout run's sheet (PayoutRuns::sheet) as a PDF, Excel or CSV file, for a staff login.
+     *
+     * @return array{url: string, expires_in: int}
+     */
+    public static function payoutRunSheet(int $companyId, int $runId, string $format, int $userId): array
+    {
+        return self::sign('rentals.pdf.payout-run', ['company_id' => $companyId, 'run_id' => $runId, 'format' => $format, 'by' => 'staff', 'by_id' => $userId]);
+    }
+
     /** The filters a report download carries (RentalReports): ids and dates only. */
     public const REPORT_PARAMS = ['month', 'year', 'from', 'to', 'property_id', 'landlord_id', 'as_of', 'days', 'lease_id', 'method', 'q', 'status', 'state', 'category', 'bucket', 'view'];
 

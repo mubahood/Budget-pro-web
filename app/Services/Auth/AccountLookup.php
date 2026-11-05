@@ -15,7 +15,8 @@ class AccountLookup
     public static function find(string $raw): ?User
     {
         $raw = trim($raw);
-        if ($raw === '') {
+        // A second account's owner login is reached through the person's own (SiblingAccounts), never typed.
+        if ($raw === '' || \App\Services\Onboarding\SiblingAccounts::isSiblingUsername($raw)) {
             return null;
         }
         if (str_contains($raw, '@')) {

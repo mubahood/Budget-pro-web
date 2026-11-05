@@ -26,9 +26,10 @@ class TenantsController extends RentalsController
             $tenants = collect($p->items());
             $logins = RentalLogin::withoutGlobalScopes()->where('company_id', $cid)->where('subject_type', 'tenant')->whereNull('disabled_at')
                 ->whereIn('subject_id', $tenants->pluck('id')->all() ?: [0])->pluck('subject_id')->map(fn ($x) => (int) $x)->all();
-            $present = $this->present($request)->primeFiles($tenants->pluck('photo_uuid'));
+            $figures = Figures::tenants($cid, $tenants->all(), $this->user($request));
+            $present = $this->present($request)->primeFiles($tenants->pluck('photo_uuid'))->prime(collect($figures)->flatMap(fn ($f) => array_column($f['leases'], 'lease'))->all());
 
-            return $this->page($p, $tenants->map(fn ($t) => $present->tenant($t, Figures::tenant($t, $this->user($request)), in_array((int) $t->id, $logins, true)))->all());
+            return $this->page($p, $tenants->map(fn ($t) => $present->tenant($t, $figures[(int) $t->id], in_array((int) $t->id, $logins, true)))->all());
         });
     }
 
@@ -52,6 +53,16 @@ class TenantsController extends RentalsController
             $tenant = app(Tenants::class)->find($this->user($request), $id);
 
             return $this->success($this->shape($request, app(Tenants::class)->update($this->user($request), $tenant, $request->only(Tenants::WRITABLE))), 'Saved.');
+        });
+    }
+
+    /** GET rentals/tenants/{id}/login: their sign-in as it stands, what the plan and this server allow, and where they sign in. */
+    public function loginDetails(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $tenant = app(Tenants::class)->find($this->user($request), $id);
+
+            return $this->success(LandlordsController::loginDetailsOf($this->company($request), 'tenant', (int) $tenant->id, $tenant->email, $tenant->phone));
         });
     }
 

@@ -120,6 +120,9 @@ final class MonthClose
     public function reopen(User $by, string $month, string $reason): RentalClose
     {
         RentalAccess::authorize($by, 'rentals_reopen');
+        if (RentalAccess::propertyIds($by) !== null) {
+            throw BusinessRuleException::make('forbidden', 'Reopening a month covers the whole account\'s money. Ask your property manager.');
+        }
         $month = self::valid($month);
         $reason = trim($reason);
         if ($reason === '') {

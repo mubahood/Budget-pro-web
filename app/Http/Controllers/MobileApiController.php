@@ -879,11 +879,14 @@ class MobileApiController extends BaseController
         $columns = Schema::getColumnListing($table);
         $except = ['id', 'created_at', 'updated_at'];
 
+        if ($object instanceof User && (! $isEdit || (int) $object->id !== (int) $u->id)) {
+            Utils::error('Access denied.');
+        }
         foreach ($r->all() as $key => $value) {
             if (! in_array($key, $columns)) {
                 continue;
             }
-            if (in_array($key, $except)) {
+            if (in_array($key, $except) || ! ApiController::legacyMayWrite($modelClass, $key)) {
                 continue;
             }
             if ($value === null || $value === '') {

@@ -238,10 +238,9 @@ final class BudgetAccess
     }
 
     /**
-     * May edit the event itself, close or reopen it, and its budget (the web portal's Events pages): full access,
-     * or the event's chair. Not one of ABILITIES on purpose: the API and sync still keep event, category and
-     * item edits with `manage_budget` (ApiPermissionMap, SyncApplier::permissionFor), so the phone's answer
-     * does not offer the chair what its own screens would be refused.
+     * May edit the event itself, close or reopen it, and its budget: full access, or the event's chair. On the web's Events pages and, by allowsChairSyncOp,
+     * from a phone. Not one of ABILITIES, which older phones read as a list of what a committee role may do. The older REST routes for event, category and item edits
+     * (ApiPermissionMap) stay with `manage_budget`; capabilities() says this as `change_lines`.
      */
     public static function canManageEvent(?User $user, int $programId): bool
     {
@@ -306,12 +305,147 @@ final class BudgetAccess
     }
 
     /**
+     * Everything this person may do on this event, in one map, for the phone (GET budget/home): the same answers as the web's `access`.
+     * Whether the event is open is a separate fact the phone already holds, so these say who may, not whether it is closed.
+     *
+     * @return array<string, bool>
+     */
+    public static function capabilities(?User $user, int $programId): array
+    {
+        return [
+            'open' => self::canOpen($user, $programId),
+            'see_phones' => self::canSeePhones($user, $programId),
+            'remind' => self::canRemind($user, $programId),
+            'export' => self::canExport($user, $programId),
+            'share_names' => self::canShareNames($user, $programId),
+            'record_pledges' => self::can($user, $programId, self::PLEDGE),
+            'record_payments' => self::can($user, $programId, self::PAYMENT),
+            'record_spending' => self::can($user, $programId, self::SPENDING),
+            'withdraw' => self::can($user, $programId, self::WITHDRAW),
+            'manage_committee' => self::can($user, $programId, self::COMMITTEE),
+            'change_lines' => self::canManageEvent($user, $programId),
+            'settings' => self::canEditSettings($user, $programId),
+            'payment_details' => self::canEditPaymentDetails($user, $programId),
+            'close' => self::canManageEvent($user, $programId),
+        ];
+    }
+
+    /**
+     * The events this person's phone may hold (the review's PB-32): null means every event of the account (full access), a list means those
+     * where they have an active seat, and someone switched off gets none.
+     *
+     * @return list<int>|null
+     */
+    public static function seats(?User $user): ?array
+    {
+        if ($user === null || Permissions::roleOf($user) === 'none') {
+            return [];
+        }
+        if (self::fullAccess($user)) {
+            return null;
+        }
+
+        return DB::table('budget_program_members')->where('user_id', $user->id)->where('company_id', $user->company_id)->where('is_deleted', 0)->where('status', 'active')
+            ->orderBy('budget_program_id')->pluck('budget_program_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+    }
+
+    /**
+     * The events whose phone numbers this person's phone may hold: null means all of them. It changes with a role, while the seat list does not, so a phone refetches when
+     * it moves (a viewer made treasurer gets the numbers, a member made viewer loses them).
+     *
+     * @return list<int>|null
+     */
+    public static function phoneSeats(?User $user): ?array
+    {
+        if ($user === null || Permissions::roleOf($user) === 'none') {
+            return [];
+        }
+        if (self::fullAccess($user)) {
+            return null;
+        }
+
+        return DB::table('budget_program_members')->where('user_id', $user->id)->where('company_id', $user->company_id)->where('is_deleted', 0)->where('status', 'active')->whereIn('role', self::SEE_PHONES)
+            ->orderBy('budget_program_id')->pluck('budget_program_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+    }
+
+    /** What a person's record says that a teammate has no need of. The keys stay, empty, for older phones. */
+    private const PERSON_PRIVATE = ['phone_number', 'phone_e164', 'phone_verified_at', 'phone_number_2', 'address', 'sex', 'dob', 'email', 'email_verified_at', 'last_login_at', 'last_active_at', 'password_pending_at', 'sessions_valid_from'];
+
+    /** The same for the account's own contact and payout details. */
+    private const COMPANY_PRIVATE = ['phone_number', 'phone_number_2', 'email', 'address', 'pobox', 'momo_subaccount_id', 'momo_payout_phone', 'momo_payout_network'];
+
+    /** Empties the private details of the people and the account inside an API row (treasurer, changed_by, budget_program.company), unless this person has full access. */
+    public static function hideNested(\Illuminate\Database\Eloquent\Model $model, ?User $user): void
+    {
+        if (self::fullAccess($user)) {
+            return;
+        }
+        self::hideIn($model, 0);
+    }
+
+    private static function hideIn(\Illuminate\Database\Eloquent\Model $model, int $depth): void
+    {
+        if ($depth >= 4) {
+            return;
+        }
+        foreach ($model->getRelations() as $related) {
+            foreach ($related instanceof \Illuminate\Support\Collection ? $related : [$related] as $row) {
+                if (! $row instanceof \Illuminate\Database\Eloquent\Model) {
+                    continue;
+                }
+                $private = $row instanceof User ? self::PERSON_PRIVATE : ($row instanceof \App\Models\Company ? self::COMPANY_PRIVATE : []);
+                if ($private !== []) {
+                    $row->setRawAttributes(array_replace($row->getAttributes(), array_intersect_key(array_fill_keys($private, null), $row->getAttributes())));
+                }
+                self::hideIn($row, $depth + 1);
+            }
+        }
+    }
+
+    /**
+     * A pushed change the web already lets an event's chair make: its budget lines and categories, and its own details. Only on an event that exists, and never making or
+     * deleting one (SyncApplier::permissionFor keeps that with manage_budget).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function allowsChairSyncOp(?User $actor, int $companyId, string $table, string $action, array $data, string $uuid): bool
+    {
+        if ($actor === null) {
+            return false;
+        }
+        if ($table === 'budget_programs') {
+            if (! in_array($action, ['update', 'upsert'], true)) {
+                return false;
+            }
+            $programId = DB::table('budget_programs')->where('company_id', $companyId)->where('uuid', $uuid)->where('is_deleted', 0)->value('id');
+
+            return $programId !== null && self::canManageEvent($actor, (int) $programId);
+        }
+        if (! in_array($table, ['budget_item_categories', 'budget_items'], true)) {
+            return false;
+        }
+        // The event it names, the event its category is on (a line follows its category) and the event it is on now: all of them are theirs, or none.
+        $events = array_unique(array_filter([
+            self::programByUuid($companyId, $data['program_uuid'] ?? null),
+            $table === 'budget_items' ? self::programOfRow($companyId, 'budget_item_categories', $data['category_uuid'] ?? null) : null,
+            self::programOfRow($companyId, $table, $uuid),
+        ]));
+        foreach ($events as $programId) {
+            if (! self::canManageEvent($actor, (int) $programId)) {
+                return false;
+            }
+        }
+
+        return $events !== [];
+    }
+
+    /**
      * A pushed op on a budget table (SyncApplier): null when allowed, else the ability that is missing.
      * Event, category and item edits stay with `manage_budget` (SyncApplier::permissionFor).
      */
-    public static function refuseSyncOp(?User $actor, int $companyId, string $table, string $action, array $data, string $uuid): ?string
+    public static function refuseSyncOp(?User $actor, int $companyId, string $table, string $action, array $data, string $uuid, int $clientUpdatedAt = 0): ?string
     {
-        if (! in_array($table, ['contribution_records', 'contribution_payments', 'budget_program_members'], true)) {
+        if (! in_array($table, ['contribution_records', 'contribution_payments', 'budget_program_members', 'pledge_follow_ups', 'event_invitation_ops'], true)) {
             return null;
         }
         if ($actor === null) {
@@ -321,36 +455,97 @@ final class BudgetAccess
             return null;
         }
 
-        if ($table === 'contribution_payments') {
+        if ($table === 'pledge_follow_ups') {
             $programId = self::programOfPledge($companyId, $data['contribution_uuid'] ?? null);
 
-            return $programId !== null && self::can($actor, $programId, self::PAYMENT) ? null : self::PAYMENT;
+            return $programId !== null && self::canRemind($actor, $programId) ? null : self::PLEDGE;
+        }
+
+        if ($table === 'event_invitation_ops') {
+            $programId = self::programByUuid($companyId, $data['program_uuid'] ?? null);
+
+            return $programId !== null && self::can($actor, $programId, self::PLEDGE) ? null : self::PLEDGE;
+        }
+
+        if ($table === 'contribution_payments') {
+            // A reversal acts on the payment it names, whatever pledge it says, so the right is checked on the payment's event too.
+            return self::mayOnAll($actor, [self::programOfRow($companyId, 'contribution_payments', $data['reverses_uuid'] ?? null), self::programOfPledge($companyId, $data['contribution_uuid'] ?? null)], self::PAYMENT)
+                ? null : self::PAYMENT;
         }
 
         if ($table === 'budget_program_members') {
-            $programId = self::programByUuid($companyId, $data['program_uuid'] ?? null)
-                ?? DB::table('budget_program_members')->where('company_id', $companyId)->where('uuid', $uuid)->value('budget_program_id');
-
-            return $programId !== null && self::can($actor, (int) $programId, self::COMMITTEE) ? null : self::COMMITTEE;
+            return self::mayOnAll($actor, [self::programByUuid($companyId, $data['program_uuid'] ?? null), self::programOfRow($companyId, 'budget_program_members', $uuid)], self::COMMITTEE)
+                ? null : self::COMMITTEE;
         }
 
         // contribution_records: a pledge; a changed paid figure from an older app is a payment.
-        $existing = DB::table('contribution_records')->where('company_id', $companyId)->where('uuid', $uuid)->first(['budget_program_id', 'paid_amount']);
-        $programId = self::programByUuid($companyId, $data['program_uuid'] ?? null) ?? ($existing ? (int) $existing->budget_program_id : null);
-        if ($programId === null || ! self::can($actor, $programId, self::PLEDGE)) {
+        $existing = DB::table('contribution_records')->where('company_id', $companyId)->where('uuid', $uuid)
+            ->first(['id', 'budget_program_id', 'paid_amount', 'fully_paid', 'is_deleted', 'client_updated_at', 'treasurer_id', 'created_at']);
+        $named = self::programByUuid($companyId, $data['program_uuid'] ?? null);
+        $events = [$named, $existing ? (int) $existing->budget_program_id : null];
+        if (! self::mayOnAll($actor, $events, self::PLEDGE)) {
             return self::PLEDGE;
         }
         if ($action === 'delete') {
             return null; // refused by the model either way (pledges are never deleted)
         }
-        $paid = $data['custom_paid_amount'] ?? $data['paid_amount'] ?? null;
-        if ($paid !== null && $paid !== '' && \App\Support\Decimal::valid($paid)
-            && \App\Support\Decimal::cmp((string) $paid, $existing ? (string) $existing->paid_amount : '0') !== 0
-            && ! self::can($actor, $programId, self::PAYMENT)) {
+        if (self::changesPaidFigure($data, $existing) && ! self::mayOnAll($actor, $events, self::PAYMENT)) {
             return self::PAYMENT;
+        }
+        // An edit newer than a withdrawal puts the pledge back (MasterDataService), and putting back is the withdrawer's to do.
+        if ($existing !== null && $existing->is_deleted && $clientUpdatedAt >= (int) $existing->client_updated_at && ! self::canWithdraw($actor, $existing)) {
+            return self::WITHDRAW;
         }
 
         return null;
+    }
+
+    /**
+     * Would this save post money (ContributionRecord::prepare)? Each way in is read on its own: the model takes custom_paid_amount only above zero, then
+     * paid_amount, then the flag.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function changesPaidFigure(array $data, ?object $existing): bool
+    {
+        $was = $existing ? (string) $existing->paid_amount : '0';
+        foreach (['custom_paid_amount', 'paid_amount'] as $field) {
+            $value = $data[$field] ?? null;
+            if ($value === null || $value === '' || ! \App\Support\Decimal::valid($value)) {
+                continue;
+            }
+            if ($field === 'custom_paid_amount' && \App\Support\Decimal::cmp((string) $value, '0') <= 0) {
+                continue;
+            }
+            if (\App\Support\Decimal::cmp((string) $value, $was) !== 0) {
+                return true;
+            }
+        }
+
+        return ($data['fully_paid'] ?? null) === 'Yes' && ($existing === null || ($existing->fully_paid ?? null) !== 'Yes');
+    }
+
+    /** @param  array<int, int|string|null>  $programIds  true when at least one is known and they may do this on every one */
+    private static function mayOnAll(?User $actor, array $programIds, string $ability): bool
+    {
+        $events = array_unique(array_filter($programIds));
+        foreach ($events as $programId) {
+            if (! self::can($actor, (int) $programId, $ability)) {
+                return false;
+            }
+        }
+
+        return $events !== [];
+    }
+
+    private static function programOfRow(int $companyId, string $table, mixed $uuid): ?int
+    {
+        if (! is_string($uuid) || $uuid === '') {
+            return null;
+        }
+        $id = DB::table($table)->where('company_id', $companyId)->where('uuid', $uuid)->value('budget_program_id');
+
+        return $id === null ? null : (int) $id;
     }
 
     private static function programByUuid(int $companyId, mixed $uuid): ?int

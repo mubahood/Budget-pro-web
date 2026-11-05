@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Rentals;
 
 use App\Services\Rentals\Figures;
+use App\Services\Rentals\RentalAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -16,6 +17,10 @@ class OverviewController extends RentalsController
             $o = Figures::overview($this->user($request));
             $present = $this->present($request)->prime($o['today']);
             $o['today'] = array_map(fn ($p) => $present->paymentBrief($p), $o['today']);
+            $o['demo'] = (bool) $this->company($request)->is_demo; // the app says so on its tabs
+            if (RentalAccess::propertyIds($this->user($request)) !== null) {
+                $o['landlords_minor'] = null; // as on Today: what is owed to landlords is between the office and them (EL-26)
+            }
 
             return $this->success($o);
         });

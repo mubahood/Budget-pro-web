@@ -39,6 +39,19 @@ final class RentalMessages
         'year_summary' => 'Hello {landlord}, your year summary for {period} is ready. It is a summary of money handled, not tax advice. {link} {account}',
     ];
 
+    /** The blanks each message can fill: a text with any other would reach a tenant with the brace in it. */
+    public const TAGS = [
+        'bill' => ['tenant', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'pay_to', 'account'],
+        'due' => ['tenant', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'pay_to', 'account'],
+        'overdue' => ['tenant', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'pay_to', 'account'],
+        'final' => ['tenant', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'pay_to', 'account'],
+        'receipt' => ['tenant', 'unit', 'property', 'amount', 'balance', 'receipt', 'paid_up_to', 'pay_to', 'account'],
+        'statement' => ['landlord', 'balance', 'period', 'account', 'link'],
+        'notice' => ['tenant', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'pay_to', 'account'],
+        'approval' => ['landlord', 'unit', 'property', 'what', 'amount', 'link', 'photo', 'account'],
+        'year_summary' => ['landlord', 'period', 'link', 'account'],
+    ];
+
     public const PLACEHOLDERS = ['tenant', 'landlord', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'receipt', 'period', 'account', 'pay_to', 'link', 'what', 'photo'];
 
     /** The account's text for a kind (its own, or the default). */
@@ -92,6 +105,15 @@ final class RentalMessages
             'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
     }
 
+    /** The words that go with a payout's advice, on someone's own phone. A reversed payout says so: its advice carries why. */
+    public static function forPayoutAdvice(int $companyId, string $landlord, string $number, int $amountMinor, string $paidOn, string $link, bool $reversed = false): string
+    {
+        $template = $reversed ? 'Hello {landlord}, payout {receipt} of {amount} was reversed. The advice says why: {link} {account}' : 'Hello {landlord}, we paid you {amount} on {due_date} (payout {receipt}). Your advice: {link} {account}';
+
+        return self::fill($template, ['landlord' => $landlord, 'receipt' => $number, 'amount' => Minor::format($amountMinor, $companyId), 'due_date' => $paidOn, 'link' => $link,
+            'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
+    }
+
     /**
      * The message asking a landlord about a repair above their limit (LC-17). $link: the words and address of where they answer, or what to do when
      * they have no sign-in; $photo: the repair's photo, when there is one.
@@ -108,14 +130,14 @@ final class RentalMessages
     }
 
     /** The message that sends a landlord their year summary (LC-18), with its link wherever the account's own words leave it out. */
-    public static function forYearSummary(int $companyId, string $landlord, string $year, string $link): string
+    public static function forYearSummary(int $companyId, string $landlord, string $year, string $link, ?string $account = null, ?string $template = null): string
     {
-        $template = self::template($companyId, 'year_summary');
+        $template ??= self::template($companyId, 'year_summary');
         if (! str_contains($template, '{link}')) {
             $template .= ' {link}';
         }
 
-        return self::fill($template, ['landlord' => $landlord, 'period' => $year, 'link' => $link, 'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
+        return self::fill($template, ['landlord' => $landlord, 'period' => $year, 'link' => $link, 'account' => $account ?? (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
     }
 
     /**

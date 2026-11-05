@@ -7,6 +7,7 @@ use App\Models\RentalLease;
 use App\Models\RentalMaintenance;
 use App\Models\RentalProperty;
 use App\Models\RentalUnit;
+use App\Models\StoredFile;
 use App\Models\User;
 use App\Services\Rentals\Ledger\RentalLedger;
 use App\Support\LocalDate;
@@ -39,6 +40,12 @@ final class Maintenance
             throw BusinessRuleException::make('title_required', 'Say what the problem is, for example "Kitchen tap leaking".');
         }
         $unit = ! empty($data['unit_id']) ? RentalUnit::withoutGlobalScopes()->where('company_id', $companyId)->find((int) $data['unit_id']) : null;
+        if (! empty($data['unit_id']) && $unit === null) {
+            throw BusinessRuleException::make('not_found', 'That unit was not found.');
+        }
+        if ($unit !== null && ! empty($data['property_id']) && (int) $data['property_id'] !== (int) $unit->property_id) {
+            throw BusinessRuleException::make('not_found', 'That unit is not in this property.');
+        }
         $propertyId = (int) ($unit?->property_id ?? ($data['property_id'] ?? 0));
         $property = RentalProperty::withoutGlobalScopes()->where('company_id', $companyId)->find($propertyId)
             ?? throw BusinessRuleException::make('not_found', 'Choose the property.');
@@ -56,12 +63,15 @@ final class Maintenance
         }
 
         return RentalLedger::locked($companyId, function () use ($by, $companyId, $data, $title, $unit, $property, $priority, $uuid, $lease, $reporter) {
+            if (($same = RentalMaintenance::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first()) !== null) {
+                return $same; // two sends at once: the second waited for the lock, and finds the first
+            }
             $m = RentalMaintenance::create(['company_id' => $companyId, 'uuid' => $uuid, 'number' => RentalsModule::nextNumber($companyId, 'ticket'),
                 'property_id' => $property->id, 'unit_id' => $unit?->id, 'lease_id' => $lease?->id, 'tenant_id' => $reporter[0] === 'tenant' ? $reporter[1] : $lease?->tenant_id,
                 'title' => mb_substr($title, 0, 150), 'details' => isset($data['details']) ? mb_substr((string) $data['details'], 0, 5000) : null,
                 'priority' => $priority, 'status' => 'open', 'reported_by' => $reporter[0], 'reported_by_id' => $reporter[1] ?? $by?->id,
-                'assigned_to_id' => $data['assigned_to_id'] ?? null, 'assignee_name' => isset($data['assignee_name']) ? mb_substr((string) $data['assignee_name'], 0, 150) : null,
-                'photos' => array_values(array_filter(array_map('strval', (array) ($data['photos'] ?? [])), fn ($u) => Str::isUuid($u))) ?: null,
+                'assigned_to_id' => ! empty($data['assigned_to_id']) ? (int) $data['assigned_to_id'] : null, 'assignee_name' => isset($data['assignee_name']) ? mb_substr((string) $data['assignee_name'], 0, 150) : null,
+                'photos' => self::ownPhotos($companyId, (array) ($data['photos'] ?? [])) ?: null,
                 'created_by_id' => $by?->id]);
             RentalAudit::record($companyId, 'maintenance.opened', $m, "Opened {$m->number}: {$m->title}", ['priority' => $priority], $reporter[0], $reporter[1] ?? $by?->id);
 
@@ -77,6 +87,9 @@ final class Maintenance
         if (in_array($m->status, ['done', 'cancelled'], true)) {
             throw BusinessRuleException::make('ticket_closed', 'This request is closed.');
         }
+        if (array_key_exists('title', $data) && trim((string) $data['title']) === '') {
+            throw BusinessRuleException::make('title_required', 'Say what the problem is, for example "Kitchen tap leaking".');
+        }
         $fill = [];
         foreach (['title' => 150, 'details' => 5000, 'assignee_name' => 150] as $k => $max) {
             if (array_key_exists($k, $data)) {
@@ -90,11 +103,14 @@ final class Maintenance
             $fill['status'] = $data['status'];
         }
         if (array_key_exists('assigned_to_id', $data)) {
-            $fill['assigned_to_id'] = $data['assigned_to_id'] !== null && User::withoutGlobalScopes()->where('company_id', $m->company_id)->whereKey((int) $data['assigned_to_id'])->exists()
-                ? (int) $data['assigned_to_id'] : null;
+            $who = $data['assigned_to_id'];
+            if (! in_array($who, [null, ''], true) && ! User::withoutGlobalScopes()->where('company_id', $m->company_id)->whereKey((int) $who)->exists()) {
+                throw BusinessRuleException::make('not_found', 'Choose someone from your own team.');
+            }
+            $fill['assigned_to_id'] = in_array($who, [null, ''], true) ? null : (int) $who;
         }
         if (isset($data['photos'])) {
-            $fill['photos'] = array_values(array_unique(array_merge((array) $m->photos, array_filter((array) $data['photos'], fn ($u) => Str::isUuid((string) $u)))));
+            $fill['photos'] = array_values(array_unique(array_merge((array) $m->photos, self::ownPhotos((int) $m->company_id, (array) $data['photos']))));
         }
         $m->forceFill($fill)->save();
         RentalAudit::record((int) $m->company_id, 'maintenance.updated', $m, "Updated {$m->number}", ['fields' => array_keys($fill)], 'staff', $by->id);
@@ -153,6 +169,14 @@ final class Maintenance
 
             return $m->fresh();
         });
+    }
+
+    /** The files of this account among those named: a photo of another account's is no photo of this repair. @param array<int|string, mixed> $uuids @return list<string> */
+    private static function ownPhotos(int $companyId, array $uuids): array
+    {
+        $list = array_values(array_filter(array_map('strval', $uuids), fn ($u) => Str::isUuid($u)));
+
+        return $list === [] ? [] : array_values(array_intersect($list, StoredFile::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('uuid', $list)->pluck('uuid')->map(fn ($u) => (string) $u)->all()));
     }
 
     public function cancel(User $by, RentalMaintenance $m, string $reason): RentalMaintenance

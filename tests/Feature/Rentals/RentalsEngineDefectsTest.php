@@ -119,9 +119,9 @@ class RentalsEngineDefectsTest extends ApiTestCase
         $this->assertSame(100000, $out['settlement']['deposit_kept_minor']);
 
         $h = $this->token($owner);
-        // Staff who may not settle a tenancy are refused, and a live lease's deposit stays held.
-        $accountant = $this->rentalsStaff($company, 'rentals_accountant');
-        $this->postJson("/api/v1/rentals/leases/{$lease->id}/refund-deposit", ['method' => 'cash'], $this->token($accountant))->assertStatus(403);
+        // Staff who may not pay money out are refused (the web's rule: rentals_reverse and rentals_collect, so a caretaker cannot and an accountant can), and a live lease's deposit stays held.
+        $caretaker = $this->rentalsStaff($company, 'rentals_caretaker');
+        $this->postJson("/api/v1/rentals/leases/{$lease->id}/refund-deposit", ['method' => 'cash'], $this->token($caretaker))->assertStatus(403);
         $this->postJson("/api/v1/rentals/leases/{$lease->id}/refund-deposit", ['method' => 'nope'], $h)->assertStatus(422)->assertJsonPath('errors.code', 'method_invalid');
 
         $this->postJson("/api/v1/rentals/leases/{$lease->id}/refund-deposit", ['method' => 'cash', 'amount_minor' => 30000], $h)->assertOk()

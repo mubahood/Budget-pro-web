@@ -172,6 +172,8 @@ class SyncApplier
                 if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)
                     // An event's settings and payment details belong to its chair (and treasurer): BudgetAccess.
                     && ! \App\Services\Budget\BudgetAccess::allowsSettingsSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))
+                    // The chair changes the event and its budget on the web, so on the phone too.
+                    && ! \App\Services\Budget\BudgetAccess::allowsChairSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))
                     // What was paid out on a line is the treasurer's too (PB-08).
                     && ! \App\Services\Budget\BudgetPayments::allowsSpendingSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''), $op)) {
                     $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role does not allow this.', 'permission' => $need];
@@ -179,7 +181,7 @@ class SyncApplier
                     break;
                 }
                 // Pledges, pledge payments and committees are per event (chair, treasurer, secretary…): BudgetAccess.
-                $need = \App\Services\Budget\BudgetAccess::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))
+                $need = \App\Services\Budget\BudgetAccess::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''), (int) ($op['client_updated_at'] ?? 0))
                     ?? \App\Services\Budget\BudgetPayments::refuseSyncOp($actor, $companyId, $table, is_array($op['data'] ?? null) ? $op['data'] : []);
                 if ($need !== null) {
                     $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role on this event does not allow this.', 'permission' => $need];
@@ -324,6 +326,9 @@ class SyncApplier
             'supplier_payment' => $this->applySupplierPayment($companyId, $userId, $uuid, $action, $data),
             'contribution_payment' => $this->applyContributionPayment($companyId, $deviceId, $userId, $uuid, $action, $data, $op),
             'budget_payment' => $this->applyBudgetPayment($companyId, $deviceId, $userId, $uuid, $action, $data, $op),
+            'pledge_follow_up' => $this->applyPledgeFollowUp($companyId, $deviceId, $userId, $uuid, $data, $op),
+            'event_invitation' => $this->applyEventInvitation($companyId, $userId, $data),
+            'read_only' => ['status' => 'rejected', 'code' => 'read_only_table', 'message' => 'This comes from the server and cannot be changed from a phone.'],
             'sacco_transaction' => $this->applySaccoTransaction($company, $deviceId, $userId, $uuid, $action, $data, $op),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
@@ -614,6 +619,63 @@ class SyncApplier
         ], $userId, true);
 
         return ['status' => 'applied', 'model' => $r['payment']];
+    }
+
+    /** A reminder opened or what someone said, on the phone: once, by the op uuid. A pledge withdrawn since is no reason to lose it: it stays with the pledge. */
+    private function applyPledgeFollowUp(int $companyId, ?string $deviceId, int $userId, string $uuid, array $data, array $op): array
+    {
+        $existing = \App\Models\PledgeFollowUp::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', strtolower($uuid))->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $pledge = ! empty($data['contribution_uuid']) ? \App\Models\ContributionRecord::withoutGlobalScopes()->without(['budgetProgram', 'treasurer', 'changedBy'])->where('company_id', $companyId)->where('uuid', (string) $data['contribution_uuid'])->first() : null;
+        if ($pledge === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'contribution_uuid'];
+        }
+        $by = \App\Models\User::withoutGlobalScopes()->where('company_id', $companyId)->find($userId);
+        if ($by === null) {
+            return ['status' => 'rejected', 'code' => 'forbidden'];
+        }
+        $row = (new \App\Services\Budget\PledgeFollowUps())->record($by, $pledge, [
+            'uuid' => strtolower($uuid), 'kind' => $data['kind'] ?? 'reminder', 'channel' => $data['channel'] ?? null, 'outcome' => $data['outcome'] ?? null,
+            'promised_on' => $data['promised_on'] ?? null, 'note' => $data['note'] ?? null, 'device_id' => $deviceId,
+            'client_created_at' => isset($op['client_created_at']) ? (int) $op['client_created_at'] : null,
+        ]);
+
+        return ['status' => 'applied', 'model' => $row];
+    }
+
+    /**
+     * What happened to a guest on the phone. Applied by EventInvitations, so the row is the one for that person whichever phone got there first. An event closed since drops the
+     * mark instead of holding back the batch: no money is in it, and the event's list is finished.
+     */
+    private function applyEventInvitation(int $companyId, int $userId, array $data): array
+    {
+        $program = ! empty($data['program_uuid']) ? \App\Models\BudgetProgram::withoutGlobalScopes()->without('company')->where('company_id', $companyId)->where('uuid', (string) $data['program_uuid'])->first() : null;
+        if ($program === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'program_uuid'];
+        }
+        $by = \App\Models\User::withoutGlobalScopes()->where('company_id', $companyId)->find($userId);
+        if ($by === null) {
+            return ['status' => 'rejected', 'code' => 'forbidden'];
+        }
+        $template = ! empty($data['template_uuid']) ? \App\Models\EventCardTemplate::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', (string) $data['template_uuid'])->value('id') : null;
+        $svc = new \App\Services\Budget\EventInvitations();
+        try {
+            $row = match ((string) ($data['act'] ?? '')) {
+                'made' => $svc->cardMade($by, $program, (string) ($data['name'] ?? ''), (string) ($data['format'] ?? 'png'), $template === null ? null : (int) $template),
+                'invited' => $svc->markInvited($by, $program, (string) ($data['name'] ?? ''), $template === null ? null : (int) $template),
+                'unmark' => $svc->unmarkByName($by, $program, (string) ($data['name'] ?? '')),
+                default => throw BusinessRuleException::make('validation', 'Unknown guest action.'),
+            };
+        } catch (BusinessRuleException $e) {
+            if ($e->errorCode() === 'event_closed') {
+                return ['status' => 'replayed'];
+            }
+            throw $e;
+        }
+
+        return $row === null ? ['status' => 'replayed'] : ['status' => 'applied', 'model' => $row];
     }
 
     /**

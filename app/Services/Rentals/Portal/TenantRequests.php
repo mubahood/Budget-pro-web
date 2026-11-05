@@ -17,6 +17,8 @@ use App\Services\Rentals\Maintenance;
 use App\Services\Rentals\PrivateFiles;
 use App\Services\Rentals\RentalAudit;
 use App\Support\LocalDate;
+use App\Support\Rentals\Day;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 
@@ -60,8 +62,15 @@ final class TenantRequests
         }
         (new Quotas())->assertCanStore(Company::withoutGlobalScopes()->findOrFail($cid), (int) $file->getSize());
         $path = PrivateFiles::store($file, $cid, $uuid);
-        $stored = StoredFile::withoutGlobalScopes()->create(['company_id' => $cid, 'uuid' => $uuid, 'purpose' => 'rental_photo', 'path' => $path,
-            'mime' => $file->getMimeType(), 'size_bytes' => (int) $file->getSize(), 'uploaded_by_id' => null, 'device_id' => 'portal:'.$login->id]);
+        try {
+            $stored = StoredFile::withoutGlobalScopes()->create(['company_id' => $cid, 'uuid' => $uuid, 'purpose' => 'rental_photo', 'path' => $path,
+                'mime' => $file->getMimeType(), 'size_bytes' => (int) $file->getSize(), 'uploaded_by_id' => null, 'device_id' => 'portal:'.$login->id]);
+        } catch (UniqueConstraintViolationException) {
+            // Two sends at once: the first one stands, and this one kept the same name on the disk.
+            $first = StoredFile::withoutGlobalScopes()->where('uuid', $uuid)->where('company_id', $cid)->where('device_id', 'portal:'.$login->id)->first();
+
+            return $first !== null ? ['file' => $first, 'replayed' => true] : throw BusinessRuleException::make('idempotency_conflict', 'This file id was already used.');
+        }
 
         return ['file' => $stored, 'replayed' => false];
     }
@@ -118,7 +127,7 @@ final class TenantRequests
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
             throw BusinessRuleException::make('date_required', 'Choose the day you plan to move out.');
         }
-        $out = LocalDate::date($cid, $raw);
+        $out = LocalDate::date($cid, Day::strict($raw, 'the day you plan to move out'));
         $today = LocalDate::today($cid);
         if ($out->lt($today) || $out->lt($lease->start_date)) {
             throw BusinessRuleException::make('date_invalid', 'Choose a move-out day from today on.');

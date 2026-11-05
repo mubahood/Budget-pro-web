@@ -212,8 +212,10 @@ class BudgetTemplatesApiTest extends ApiTestCase
         $settings = json_encode(['v' => 1, 'messages' => ['thanks' => 'Webale {name}'], 'presets' => [20000]]);
         $r = $this->push($chair, [$this->op('budget_programs', 'update', ['groups' => '["Church","Friends"]', 'venue' => 'Namirembe', 'event_type' => 'wedding', 'settings' => $settings], $uuid, ['groups', 'venue', 'event_type', 'settings'])]);
         $this->assertSame('applied', $r['status'], json_encode($r));
-        // …but not the event's name, nor payment details mixed in by someone who may not.
-        $r = $this->push($chair, [$this->op('budget_programs', 'update', ['name' => 'Renamed', 'venue' => 'X'], $uuid, ['name', 'venue'])]);
+        // The event's own details too, as the chair edits them on the web (BudgetAccess::allowsChairSyncOp); others may not.
+        $r = $this->push($chair, [$this->op('budget_programs', 'update', ['name' => 'Renamed', 'venue' => 'Namirembe'], $uuid, ['name', 'venue'])]);
+        $this->assertSame('applied', $r['status'], json_encode($r));
+        $r = $this->push($treasurer, [$this->op('budget_programs', 'update', ['name' => 'Not mine'], $uuid, ['name'])]);
         $this->assertSame('manage_budget', $r['ops'][0]['permission'] ?? null, json_encode($r));
         $r = $this->push($treasurer, [$this->op('budget_programs', 'update', ['venue' => 'Elsewhere'], $uuid, ['venue'])]);
         $this->assertSame('rejected', $r['status']);

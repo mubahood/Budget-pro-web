@@ -6,9 +6,14 @@ use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\RentalLease;
+use App\Models\RentalTenant;
+use App\Models\RentalUnit;
 use App\Models\User;
 use App\Services\Rentals\RentalAccess;
+use App\Support\LocalDate;
+use App\Support\Rentals\Day;
 use App\Support\Rentals\Minor;
+use App\Support\Rentals\SearchText;
 use App\Traits\ApiResponse;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -34,6 +39,50 @@ abstract class RentalsController extends Controller
 
     public const MAX_PER_PAGE = 100;
 
+    /** A path's id too long for 64 bits is no record's id. Left alone, PHP refuses it as the method's int: a 500 for what is only a wrong address. */
+    public function callAction($method, $parameters)
+    {
+        if (self::idTooLong($parameters)) {
+            return $this->error('That record was not found.', 404, ['code' => 'not_found']);
+        }
+        if (! self::idsAreIds(request()->all())) {
+            return $this->error('Give a record\'s id as a whole number.', 422, ['code' => 'field_invalid']);
+        }
+
+        return parent::callAction($method, $parameters);
+    }
+
+    /** @param array<int|string, mixed> $parameters */
+    public static function idTooLong(array $parameters): bool
+    {
+        foreach ($parameters as $v) {
+            if (is_string($v) && ctype_digit($v) && strlen(ltrim($v, '0')) > 18) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Every `*_id` a client sends, however deep, is a whole number or empty. Cast as it came, a list would read as 1 and "12abc" as 12: someone else's record, in the same account. A device's id is its own text.
+     *
+     * @param  array<int|string, mixed>  $input
+     */
+    public static function idsAreIds(array $input): bool
+    {
+        foreach ($input as $k => $v) {
+            if (is_string($k) && str_ends_with($k, '_id') && $k !== 'device_id' && $v !== null && $v !== '' && ! is_int($v) && ! (is_string($v) && ctype_digit($v))) {
+                return false;
+            }
+            if (is_array($v) && ! self::idsAreIds($v)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     protected function company(Request $request): Company
     {
         $company = $request->attributes->get('company');
@@ -56,6 +105,9 @@ abstract class RentalsController extends Controller
         $p = $request->attributes->get('rentals_present');
         if (! $p instanceof Present) {
             $p = new Present($this->cid($request), 'staff', (int) $request->user()->id);
+            if (RentalAccess::propertyIds($request->user()) !== null) {
+                $p->tiedToSomeProperties();
+            }
             $request->attributes->set('rentals_present', $p);
         }
 
@@ -85,7 +137,7 @@ abstract class RentalsController extends Controller
     /** A client sent an array for a text or number field: its mistake, not a server fault. */
     public static function listWhereOneValueBelongs(\Throwable $e): bool
     {
-        return str_contains($e->getMessage(), 'Array to string conversion') || str_contains($e->getMessage(), 'array given');
+        return str_contains($e->getMessage(), 'Array to string conversion') || str_contains($e->getMessage(), 'array given') || str_contains($e->getMessage(), 'array offset type') || str_contains($e->getMessage(), 'Illegal offset type');
     }
 
     protected function refusal(BusinessRuleException $e): JsonResponse
@@ -130,7 +182,7 @@ abstract class RentalsController extends Controller
         $per = $this->perPage($request, $default);
         $page = max(1, (int) $request->query('page', '1'));
 
-        return new Paginator(array_slice($rows, ($page - 1) * $per, $per), count($rows), $per, $page);
+        return new Paginator(array_slice($rows, (int) min(count($rows), ($page - 1) * $per), $per), count($rows), $per, $page); // a page past any number there is: an empty one, not an overflow
     }
 
     protected function paginate(Builder $q, Request $request, int $default = 50): LengthAwarePaginator
@@ -160,15 +212,7 @@ abstract class RentalsController extends Controller
     /** A Y-m-d day from the query or body, or null; anything else is refused. */
     protected function day(Request $request, string $key): ?string
     {
-        $v = $request->input($key);
-        if ($v === null || $v === '') {
-            return null;
-        }
-        if (! is_string($v) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) || ! checkdate((int) substr($v, 5, 2), (int) substr($v, 8, 2), (int) substr($v, 0, 4))) {
-            throw BusinessRuleException::make('date_invalid', "Give {$key} as a date like 2026-10-31.");
-        }
-
-        return $v;
+        return Day::strict($request->input($key), $key);
     }
 
     /** A Y-m-d day that must be there. */
@@ -185,10 +229,77 @@ abstract class RentalsController extends Controller
         return $lease ?? throw $this->notFoundRecord('lease');
     }
 
+    /** The whole account's money: a login tied to some properties never reads it, whatever its role was given (EL-20, EL-26). */
+    protected function wholeAccount(Request $request): void
+    {
+        if (RentalAccess::propertyIds($this->user($request)) !== null) {
+            throw BusinessRuleException::make('forbidden', 'This covers the whole account\'s money. Ask your property manager.');
+        }
+    }
+
+    /** A 'Y-m' month from the query, at most this month; $default when none was asked for. */
+    protected function monthFrom(Request $request, int $companyId, string $default): string
+    {
+        $month = trim((string) $request->query('month', ''));
+        if ($month === '') {
+            return $default;
+        }
+        if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
+            throw BusinessRuleException::make('date_invalid', 'Give the month like 2026-10.');
+        }
+        if ($month > LocalDate::today($companyId)->format('Y-m')) {
+            throw BusinessRuleException::make('date_in_future', 'That month has not started yet.');
+        }
+
+        return $month;
+    }
+
     /** The app sends X-App-Version; its writes are the phone's (channel `app`). */
     protected function fromApp(Request $request): bool
     {
         return $request->hasHeader('X-App-Version');
+    }
+
+    /** What a person typed, safe inside a LIKE. */
+    protected static function like(string $term): string
+    {
+        return '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
+    }
+
+    /** This account's tenants by name, code or phone, however the number is written (0772 123456, 772123456, +256772123456): for whereIn('tenant_id', …). @return Builder<RentalTenant> */
+    protected static function tenantsLike(int $cid, string $term): Builder
+    {
+        $like = self::like($term);
+
+        return RentalTenant::withoutGlobalScopes()->where('company_id', $cid)->where(function ($t) use ($like, $term) {
+            $t->where('name', 'like', $like)->orWhere('code', 'like', $like)->orWhere('phone', 'like', $like)->orWhere('phone_e164', 'like', $like);
+            $digits = SearchText::looksLikePhone($term) ? SearchText::national($term) : '';
+            if (strlen($digits) >= 3) {
+                $t->orWhere('phone', 'like', '%'.$digits.'%')->orWhere('phone_e164', 'like', '%'.$digits.'%');
+            }
+        })->select('id');
+    }
+
+    /**
+     * A search on a money record that has a tenant, a unit and a lease: its own columns, the tenant's name or phone, the unit's code, the lease's number.
+     *
+     * @param  list<string>  $columns
+     */
+    protected static function searchRecord(Builder $q, int $cid, string $term, array $columns): void
+    {
+        $term = trim($term);
+        if ($term === '') {
+            return;
+        }
+        $like = self::like($term);
+        $q->where(function ($w) use ($columns, $like, $cid, $term) {
+            foreach ($columns as $c) {
+                $w->orWhere($c, 'like', $like);
+            }
+            $w->orWhereIn('tenant_id', self::tenantsLike($cid, $term))
+                ->orWhereIn('unit_id', RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->where('code', 'like', $like)->select('id'))
+                ->orWhereIn('lease_id', RentalLease::withoutGlobalScopes()->where('company_id', $cid)->where('number', 'like', $like)->select('id'));
+        });
     }
 
     /** A free-text search on several columns. @param list<string> $columns */

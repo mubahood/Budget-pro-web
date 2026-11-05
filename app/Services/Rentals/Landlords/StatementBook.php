@@ -425,7 +425,7 @@ final class StatementBook
             ->leftJoin('rental_properties as p', 'p.id', '=', 'l.property_id')->leftJoin('rental_tenants as t', 't.id', '=', 'l.tenant_id')
             ->where('e.company_id', $cid)->where('l.landlord_id', $landlordId)->where('e.occurred_on', '<=', $to)
             ->groupBy('e.lease_id', 'u.code', 'p.name', 't.name')->selectRaw('u.code AS unit, p.name AS property, t.name AS tenant, SUM(e.deposit_minor) AS deposit, SUM(e.credit_minor) AS credit')
-            ->havingRaw('SUM(e.deposit_minor) <> 0 OR SUM(e.credit_minor) <> 0')->orderBy('p.name')->orderBy('u.code')->get() as $r) {
+            ->havingRaw('SUM(e.deposit_minor) <> 0 OR SUM(e.credit_minor) <> 0')->orderBy('p.name')->orderByRaw('LENGTH(u.code), u.code')->get() as $r) {
             $rows[] = ['unit' => $r->unit, 'property' => $r->property, 'tenant' => $r->tenant, 'deposit_minor' => (int) $r->deposit, 'credit_minor' => (int) $r->credit];
         }
 

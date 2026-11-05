@@ -55,7 +55,12 @@ class ApiPermissionMap
         // controllers by App\Services\Budget\BudgetAccess; the owner and manage_budget keep full access.
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^contribution-records(/\d+(/payments|/withdraw|/put-back)?)?$#', null],
         [['POST'], '#^contribution-payments/\d+/reverse$#', null],
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^budget-programs/\d+/members(/\d+)?$#', null],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^budget-programs/\d+/members(/\d+(/resend)?)?$#', null],
+        // The phone's own routes (EventHomeController, EventCardController): each says who may, by BudgetAccess.
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^budget/main-event$#', null],
+        [['POST'], '#^budget-programs/\d+/(pledges/(paste|import)|close|reopen|card-templates(/sample)?)$#', null],
+        [['POST'], '#^contribution-payments/\d+/receipt-link$#', null],
+        [['POST', 'DELETE'], '#^card-templates/\d+(/default)?$#', null],
         // An event's settings (chair; payment details also the treasurer) and applying a budget template (chair): BudgetAccess.
         [['POST', 'PUT', 'PATCH'], '#^budget-programs/\d+/(settings|apply-template)$#', null],
         // Spending: the chair, the treasurer or full access on that event (BudgetAccess, in the controller).
@@ -120,24 +125,46 @@ class ApiPermissionMap
         [['GET'], '#^sacco(/.*)?$#', null], // every other read: sacco_view or sacco_audit_view (controller)
         // Estate Ledger (docs/estate-ledger/04-architecture.md §9, §7): one line per group of the §9 table. The services check the
         // permission again and a caretaker's properties (RentalAccess).
-        [['POST'], '#^rentals/setup$#', 'manage_settings'],
+        [['POST'], '#^rentals/setup$#', 'rentals_settings'],
         [['POST'], '#^rentals/cash/opening$#', 'rentals_settings'],
         [['POST', 'DELETE'], '#^rentals/documents(/\d+)?$#', 'rentals_manage'],
         [['PUT', 'PATCH'], '#^rentals/settings$#', 'rentals_settings'],
         [['GET'], '#^rentals/activity$#', 'rentals_settings'],
         [['PUT', 'PATCH'], '#^rentals/properties/\d+/staff$#', 'rentals_settings'],
-        [['POST'], '#^rentals/(tenants|landlords)/\d+/login$#', 'rentals_settings'],
-        [['POST'], '#^rentals/properties/\d+/handover$#', 'rentals_manage'],
+        [['GET', 'POST'], '#^rentals/(tenants|landlords)/\d+/login$#', 'rentals_settings'],
+        [['GET'], '#^rentals/team$#', null], // rentals_settings or rentals_maintenance (SettingsController)
+        [['POST'], '#^rentals/properties/\d+/handover(/cancel)?$#', 'rentals_manage'],
         [['GET'], '#^rentals/landlords/\d+/statement$#', 'rentals_landlords'],
         [['POST'], '#^rentals/(payments|payouts|expenses)/\d+/reverse$#', 'rentals_reverse'],
         [['GET', 'POST'], '#^rentals/payouts$#', 'rentals_landlords'],
         [['POST'], '#^rentals/(payments|follow-ups)$#', 'rentals_collect'],
         [['GET', 'POST'], '#^rentals/(expenses|cash|cash/transfers)$#', 'rentals_expenses'],
+        [['GET'], '#^rentals/expenses/landlord-effect$#', 'rentals_expenses'],
+        [['POST'], '#^rentals/search/(opened|pin)$#', 'rentals_view'],
         [['GET', 'POST', 'PUT', 'PATCH'], '#^rentals/(maintenance(/\d+)?|meter-readings)$#', 'rentals_maintenance'],
         [['GET'], '#^rentals/reports(/[a-z0-9_]+)?$#', 'rentals_reports'],
         [['POST'], '#^rentals/leases/\d+/(rent-change|items(/\d+/end)?)$#', 'rentals_bill'],
+        [['POST'], '#^rentals/leases/\d+/refund-(deposit|credit)$#', 'rentals_reverse'], // and rentals_collect, in the services: money going back, as the web's MoneyBack asks
+        [['POST'], '#^rentals/leases/(move-in-preview|\d+/(move-out-preview|commission))$#', 'rentals_manage'],
         [['POST'], '#^rentals/(charges(/\d+/(void|waive))?|billing/run)$#', 'rentals_bill'],
-        [['POST', 'PUT', 'PATCH'], '#^rentals/(landlords|properties|units|tenants|leases)(/\d+(/(notice|withdraw-notice|renew|move-out|cancel|refund-deposit|refund-credit))?)?$#', 'rentals_manage'],
+        [['POST', 'PUT', 'PATCH'], '#^rentals/(landlords|properties|units|tenants|leases)(/\d+(/(notice|withdraw-notice|renew|move-out|cancel))?)?$#', 'rentals_manage'],
+        // The phone (the app's plan, section 7). The agency's own money is rentals_settings, as CashBook::agencyDrawing says (EL-28).
+        [['GET', 'POST'], '#^rentals/paid-reports(/\d+/(confirm|decline))?$#', 'rentals_collect'],
+        [['GET'], '#^rentals/month-end$#', null], // rentals_close or rentals_landlords (MonthEndController)
+        [['GET'], '#^rentals/month-end/withholding$#', null], // rentals_close or rentals_landlords, as the month end (LandlordMoneyController)
+        [['POST'], '#^rentals/month-end/withholding$#', 'rentals_expenses'],
+        [['GET', 'POST'], '#^rentals/year-summaries(/\d+/prepared)?$#', 'rentals_landlords'],
+        [['GET', 'POST'], '#^rentals/payouts/\d+/statement-(message|prepared)$#', 'rentals_landlords'],
+        [['POST'], '#^rentals/month-end/close$#', 'rentals_close'],
+        [['POST'], '#^rentals/month-end/reopen$#', 'rentals_reopen'],
+        [['GET', 'POST'], '#^rentals/statements/\d+/(message|sent)$#', 'rentals_landlords'],
+        [['GET'], '#^rentals/(landlords/\d+/sheet|payouts/\d+/advice)$#', 'rentals_landlords'],
+        [['GET', 'POST', 'PUT', 'PATCH'], '#^rentals/payout-runs(/(candidates|\d+(/(post|cancel|sheet))?))?$#', 'rentals_landlords'],
+        [['GET'], '#^rentals/money-position$#', 'rentals_landlords'],
+        [['POST'], '#^rentals/cash/drawings$#', 'rentals_settings'],
+        [['POST'], '#^rentals/cash/drawings/\d+/reverse$#', 'rentals_reverse'],
+        [['GET'], '#^rentals/properties/\d+/handover-preview$#', 'rentals_manage'],
+        [['POST'], '#^rentals/maintenance/\d+/(ask-landlord|landlord-answer)$#', 'rentals_maintenance'],
         [['GET'], '#^rentals(/.*)?$#', 'rentals_view'], // every other read
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],

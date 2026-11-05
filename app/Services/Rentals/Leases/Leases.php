@@ -578,7 +578,7 @@ final class Leases
         $s = RentalsModule::settings($companyId);
         $start = LocalDate::date($companyId, $data['start_date'] ?? null);
         $rent = max(0, (int) ($data['rent_minor'] ?? 0));
-        $cycle = in_array((int) ($data['cycle_months'] ?? 1), [1, 3, 6, 12], true) ? (int) $data['cycle_months'] : 1;
+        $cycle = in_array((int) ($data['cycle_months'] ?? 1), [1, 3, 6, 12], true) ? (int) ($data['cycle_months'] ?? 1) : 1;
         $anchor = in_array($data['anchor'] ?? null, ['start', 'first'], true) ? (string) $data['anchor'] : (string) $s->anchor;
         $stop = ! empty($data['end_date']) ? LocalDate::date($companyId, $data['end_date'])->addDay() : null;
         $typed = isset($data['part_rent_minor']) && $data['part_rent_minor'] !== '' ? max(0, (int) $data['part_rent_minor']) : null;

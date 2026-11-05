@@ -69,6 +69,11 @@ class SyncRegistry
     public const CUSTOMER_STORE_FIELDS = ['price_level', 'marketing_opt_in', 'messages_opt_out', 'reminders_enabled', 'payment_terms_days'];
 
     /** Event tables whose history a bootstrap limits to a window (SyncPuller::bootstrap `history_days`). */
+    /** An event's rows: a phone holds them only for the events its person may open (BudgetAccess::seats). table => the column naming the event. */
+    public const SEAT_TABLES = ['budget_programs' => 'id', 'budget_item_categories' => 'budget_program_id', 'budget_items' => 'budget_program_id', 'contribution_records' => 'budget_program_id',
+        'contribution_payments' => 'budget_program_id', 'budget_payments' => 'budget_program_id', 'budget_program_members' => 'budget_program_id', 'pledge_follow_ups' => 'budget_program_id',
+        'event_card_templates' => 'budget_program_id', 'event_invitations' => 'budget_program_id'];
+
     public const HISTORY_TABLES = ['shifts', 'sales', 'sale_items', 'payments', 'sale_returns', 'goods_receipts', 'stock_takes', 'stock_movements', 'cash_movements'];
 
     /** @return array<string, array{model: class-string, kind: string, fields?: string[], refs?: array<string, array{model: class-string, column: string}>, derived?: bool, handler?: string, user_fields?: string[]}> */
@@ -163,6 +168,17 @@ class SyncRegistry
             'budget_payments' => ['model' => BudgetPayment::class, 'kind' => self::KIND_EVENT, 'handler' => 'budget_payment',
                 'refs' => ['item_uuid' => ['model' => BudgetItem::class, 'column' => 'budget_item_id'], 'program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'],
                     'reverses_uuid' => ['model' => BudgetPayment::class, 'column' => 'reverses_id']]],
+            // Chasing with memory (PB-19): append-only. Op data: {contribution_uuid, kind, channel?, outcome?, promised_on? (Y-m-d), note?}. The op uuid is the row's uuid.
+            'pledge_follow_ups' => ['model' => \App\Models\PledgeFollowUp::class, 'kind' => self::KIND_EVENT, 'handler' => 'pledge_follow_up',
+                'refs' => ['contribution_uuid' => ['model' => ContributionRecord::class, 'column' => 'contribution_record_id'], 'program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
+            // Invitation cards. A design changes only through the API (it has files), so this comes down and never goes up. The guest list comes down from event_invitations, and goes
+            // up as what happened (event_invitation_ops): {program_uuid, act: made|invited|unmark, name, format?, template_uuid?}, applied by EventInvitations, so two phones logging
+            // one guest fold into one row.
+            'event_card_templates' => ['model' => \App\Models\EventCardTemplate::class, 'kind' => self::KIND_EVENT, 'handler' => 'read_only',
+                'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
+            'event_invitations' => ['model' => \App\Models\EventInvitation::class, 'kind' => self::KIND_EVENT, 'handler' => 'read_only',
+                'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'], 'template_uuid' => ['model' => \App\Models\EventCardTemplate::class, 'column' => 'template_id']]],
+            'event_invitation_ops' => ['model' => \App\Models\EventInvitation::class, 'kind' => self::KIND_EVENT, 'handler' => 'event_invitation', 'push_only' => true],
             // An event's committee (master, last write wins; a removal is a tombstone). user_id must be a teammate.
             'budget_program_members' => ['model' => BudgetProgramMember::class, 'kind' => self::KIND_MASTER, 'fields' => ['user_id', 'role'],
                 'user_fields' => ['user_id', 'added_by_id'],
@@ -243,8 +259,11 @@ class SyncRegistry
             if (str_starts_with($key, 'sacco_')) {
                 return self::columns($key) !== []; // the Akiba migrations not run yet
             }
-            if ($key === 'contribution_payments' || $key === 'budget_program_members' || $key === 'budget_payments') {
+            if ($key === 'contribution_payments' || $key === 'budget_program_members' || $key === 'budget_payments' || $key === 'pledge_follow_ups' || $key === 'event_card_templates' || $key === 'event_invitations') {
                 return self::columns($key) !== []; // the pledges migrations not run yet
+            }
+            if ($key === 'event_invitation_ops') {
+                return self::columns('event_invitations') !== [];
             }
 
             return true;

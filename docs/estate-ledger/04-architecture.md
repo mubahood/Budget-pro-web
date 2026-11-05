@@ -561,7 +561,7 @@ meter readings and maintenance requests also take a body `uuid`.
 | `GET rentals/arrears`, `GET/POST rentals/follow-ups`, `GET rentals/leases/{id}/reminder` | view / collect | reminder returns the text and the WhatsApp and SMS links |
 | `GET/POST rentals/expenses`, `POST rentals/expenses/{id}/reverse`, `GET rentals/cash`, `POST rentals/cash/transfers` | expenses / reverse | |
 | `POST rentals/cash/opening` | settings | what an account held when the books began (cash +, equity +); once per account, `replace` corrects it |
-| `POST rentals/leases/{id}/refund-deposit`, `POST rentals/leases/{id}/refund-credit` | manage | money kept at move-out goes back later; a kept deposit settles what is still owed first; a live lease's deposit stays held (`lease_live`) |
+| `POST rentals/leases/{id}/refund-deposit`, `POST rentals/leases/{id}/refund-credit` | reverse and collect | money kept at move-out goes back later; a kept deposit settles what is still owed first; a live lease's deposit stays held (`lease_live`) |
 | `GET/POST rentals/documents`, `DELETE rentals/documents/{id}` | view / manage | papers on a tenant, lease, property or landlord; the file through `POST files`, purpose `rental_document`; an ID copy only for rentals_manage |
 | `GET/POST rentals/maintenance`, `GET/PUT rentals/maintenance/{id}` | maintenance | photos are `files` uuids (`POST files`, purpose `rental_photo`) |
 | `GET/POST rentals/meter-readings` | maintenance | |
@@ -571,6 +571,31 @@ meter readings and maintenance requests also take a body `uuid`.
 | `GET rentals/me` | person | tenant: profile, leases with `position`; landlord: profile, totals |
 | tenant: `GET rentals/me/charges`, `GET rentals/me/payments`, `GET rentals/me/payments/{id}/receipt`, `GET rentals/me/lease/{id}`, `GET/POST rentals/me/maintenance`, `POST rentals/me/notice` | person | own leases only |
 | landlord: `GET rentals/me/properties`, `GET rentals/me/statement?month`, `GET rentals/me/payouts`, `GET rentals/me/arrears` | person | own properties only |
+| `GET rentals/rent-book` | view | the phone's offline book, one document (`Today\RentBook`): the person's properties, units, leases with `position`, tenants, landlords; `ETag`, and 304 when nothing changed; no ID number, note, commission or landlord's balance; reads do not grow with the doors |
+| `GET rentals/today` | view | the web's Today as data (`Today\TodayWork`, a copy of the portal's `RentalRules`): `first_steps`, `groups[]` with `lines[]` and a `link`, `figures` (Overview), `board` (the web's own Today figures), `money_position`, `my_cash`, `paid_reports_waiting`, `month_end_next` |
+| `GET rentals/search?q=` | view | over the search index (`Search\RentalFinder`, a copy of the portal's `RentalSearch`): 0772…, 772…, +256772… are one phone; by kind, each result with a `link`; each kind's permission and a caretaker's properties |
+| `POST rentals/follow-ups` also takes `uuid` | collect | the same uuid is the same follow-up (200); another lease 409 `idempotency_conflict` |
+| `GET rentals/leases/{id}/payment-preview` also says `ahead` and `direct` | view | what `bill_ahead_periods` and `method: paid_landlord` would do; `ahead` needs rentals_bill; commission only with rentals_landlords and no property limit |
+| `GET rentals/payouts/{id}/advice` | landlords | a week's signed link to the advice and the words for one's own phone; agency |
+| `GET rentals/charges` rows also carry `tenant:{id, name}` and `unit:{id, code}` | view | |
+| `POST rentals/payments` also takes `method: paid_landlord` | collect | `Payments::receiveDirect`: settles this landlord's bills; no money comes in |
+| `PUT rentals/maintenance/{id}` also takes `quote_minor` | maintenance | a new figure is a new question for the landlord; answers carry `quote_minor`, and for the office `approval`, `limit_minor`, `needs_answer` |
+| `GET rentals/paid-reports`, `POST rentals/paid-reports/{id}/{confirm,decline}` | collect | what tenants say they paid; confirm answers the Payment, once |
+| `GET rentals/month-end?month&check` | close or landlords | the month before it is final, what to look at, each landlord's row, the send list |
+| `POST rentals/month-end/close {month}`, `POST rentals/month-end/reopen {month, reason}` | close / reopen | `MonthClose` |
+| `GET rentals/statements/{id}/message`, `POST rentals/statements/{id}/sent {via}` | landlords | a week's signed link and the words for one's own phone; written down as prepared, never delivered |
+| `GET rentals/landlords/{id}/sheet?month` | landlords | `UnitSheet::rows` with a signed PDF link; agency |
+| `GET/POST rentals/payout-runs`, `GET rentals/payout-runs/candidates?above`, `GET/PUT rentals/payout-runs/{id}`, `POST rentals/payout-runs/{id}/{post,cancel}`, `GET rentals/payout-runs/{id}/sheet?format` | landlords | `PayoutRuns`, each answer with its `check`; agency |
+| `GET rentals/money-position?as_of` | landlords | `MoneyPosition::asOf` |
+| `POST rentals/cash/drawings {method, amount_minor, on, note, below_zero_agreed}`, `POST rentals/cash/drawings/{id}/reverse {reason}` | settings / reverse | `CashBook::agencyDrawing`, `reverseDrawing`; agency |
+| `GET rentals/properties/{id}/handover-preview?landlord_id&from` | manage | `Handover::preview`; no writes; agency |
+| `POST rentals/maintenance/{id}/ask-landlord`, `POST rentals/maintenance/{id}/landlord-answer {yes, via, who, note}` | maintenance and landlords | `LandlordApprovals`; ask answers with the message for one's own phone; a web link in it needs `rentals.portal_url` |
+| `GET rentals/me/home` | person | a tenant's homes and next bills, or `PersonView::landlordHome` |
+| tenant: `GET/POST rentals/me/paid-reports`, `GET rentals/me/lease/{id}/statement-link` | person | `PaidReports`; the same uuid is one report; a 30-minute signed link |
+| landlord: `GET rentals/me/approvals`, `POST rentals/me/approvals/{id} {yes, note}`, `GET rentals/me/repairs`, `GET rentals/me/expenses`, `GET rentals/me/statements` | person | `LandlordApprovals`, `PersonView`; never a tenant's phone or which staff member has it |
+| `GET demo/session?app=estate-ledger`, `POST demo/session {app, role, account}`, `POST rentals/portal-auth/demo {account, role}` | public, SaaS only | the demo's roles, a staff token, a tenant's or landlord's token; never a password |
+
+Signed files for the phone: `GET rentals/pdf/payout-run` (a run's sheet) and `GET rentals/pdf/tenant-statement` (a tenant's statement, through their own sign-in).
 
 ### 9.1 Resource shapes (the API's `data`; the app and the portal read these names)
 
@@ -592,11 +617,11 @@ PaymentBrief {id, uuid, number, paid_on, amount_minor, method, reference, revers
 Payment      PaymentBrief + {lease:{id, number}, currency, received_by:{id, name}|null, channel, notes, unallocated_minor,
               allocations:[{charge_id, description, source, amount_minor, commission_minor, landlord_minor, agency_minor, deposit_minor}],
               reversed_at, reverse_reason, owed_after_minor, paid_up_to, receipt:{text, pdf_url}}
-Landlord     {id, code, name, phone, email, address, payout_method, payout_details, commission:{type, bp, minor}|null, is_self, status,
-              properties_count, units_count, balance_minor, notes}   (payout_method, payout_details and notes are null for a caretaker, §7)
+Landlord     {id, code, name, phone, email, address, payout_method, payout_details, expense_limit_minor, commission:{type, bp, minor}|null, is_self, status,
+              properties_count, units_count, balance_minor, notes}   (payout_method, payout_details, expense_limit_minor and notes are null for a caretaker, §7; the limit and notes on the landlord's own view too)
 Property     {id, code, name, kind, address, area, district, lat, lng, photo_url, landlord:{id, name}, commission:{…}|null,
               deposit_held_by, water_rate_minor, power_rate_minor, status, units_count, occupied_count, vacant_count, occupancy_pct,
-              arrears_minor, staff:[{user_id, name}]}
+              arrears_minor, staff:[{user_id, name}], notes}   (notes null on the landlord's own view)
 Unit         {id, property:{id, name}, code, kind, floor, block, bedrooms, bathrooms, size_sqm, rent_minor, deposit_minor, cycle_months,
               status, state: vacant|occupied|overdue|notice|reserved|maintenance|inactive, water_meter, power_meter, notes, photo_url,
               lease:LeaseBrief|null}
@@ -609,7 +634,7 @@ Maintenance  {id, uuid, number, property:{id, name}, unit:{id, code}|null, tenan
               reported_by, assigned_to:{id, name}|null, assignee_name, photos:[{uuid, url}], cost_minor, expense_id, resolved_on,
               resolution, created_at}
 MeterReading {id, uuid, unit:{id, code}, utility, reading, previous, used, rate_minor, amount_minor, read_on, reset, charge_id}
-FollowUp     {id, channel, note, owed_minor, promise_on, by:{id, name}|null, created_at}
+FollowUp     {id, uuid, channel, note, owed_minor, promise_on, by:{id, name}|null, created_at}
 Overview     {currency, mode, units, occupied, vacant, occupancy_pct, month:{billed_minor, collected_minor, rate_pct},
               arrears:{total_minor, leases, aging:{d0_30, d31_60, d61_90, d90_plus}}, credit_minor, deposits_minor, landlords_minor,
               maintenance_open, ending_30, cash:{cash, bank, mobile_money, cheque, total},
@@ -618,7 +643,7 @@ Statement    {landlord:{id, name}, from, to, currency, opening_minor, closing_mi
               lines:[{date, type, description, property, unit, tenant, gross_minor, commission_minor, amount_minor}],
               totals:{collected_minor, commission_minor, expenses_minor, payouts_minor, deposits_minor, other_minor},
               occupancy:{units, occupied, vacant}, arrears:[{unit, tenant, owed_minor, days}]}
-Person (me)  {type: tenant|landlord, account:{id, name, currency, payment_instructions}, tenant|landlord: Tenant|Landlord (own fields only)}
+Person (me)  {type: tenant|landlord, account:{id, name, currency, payment_instructions, phone}, tenant|landlord: Tenant|Landlord (own fields only)}
 ```
 
 Refusal codes: `unit_taken`, `unit_unavailable`, `lease_not_live`, `amount_invalid`, `date_in_future`,
@@ -687,11 +712,11 @@ text form for WhatsApp and 58 mm Bluetooth printers.
 
 ## 11. App (A)
 
-### 11.1 Flavor `estate-ledger`
+### 11.1 Flavor `estateledger`
 
-- Gradle `productFlavors { estate-ledger { dimension "app"; applicationId "com.solavia.estateledger"; resValue "string","app_name","Estate Ledger" } }`,
-  `android/app/src/keyroll/res` (launcher icons, splash), manifest as Akiba's.
-- `AppFlavor.keyroll`: name `Estate Ledger`, accent ink `#1E2B33`, slug `estate-ledger`, `home: FlavorHome.module`,
+- Gradle `productFlavors { estateledger { dimension "app"; applicationId "com.solavia.estateledger"; resValue "string","app_name","Estate Ledger" } }`,
+  `android/app/src/estateledger/res` (launcher icons, splash), manifest as Akiba's.
+- `AppFlavor.estateLedger`: name `Estate Ledger`, accent ink `#1E2B33`, slug `estate-ledger`, `home: FlavorHome.module`,
   `modules: ['rentals']`, `module: 'rentals'`, `businessType: 'rentals'`, `signUpModules: ['rentals']`,
   `demo: false`, `liveDemo: true` once the demo exists (its own, §14), `pinRequired: false`, `memberSignIn: true`
   (here: "I'm a tenant or landlord"), `wording: 'estate-ledger'`, `menuKeys: _accountMenu`, `square: true` (new flag: the

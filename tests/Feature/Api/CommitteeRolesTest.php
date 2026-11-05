@@ -114,12 +114,44 @@ class CommitteeRolesTest extends ApiTestCase
         // Removed people can be added again.
         $this->postJson("/api/v1/budget-programs/{$program}/members", ['user_id' => $later['user_id'], 'role' => 'viewer'], $chair['h'])->assertStatus(201);
 
-        // A chair cannot invite new people into the account (manage_team).
-        $this->postJson("/api/v1/budget-programs/{$program}/members", ['phone' => '0772500099', 'role' => 'member'], $chair['h'])->assertStatus(403)->assertJsonPath('errors.permission', 'manage_team');
+        // A chair may invite to their own event, as on the web (PB-22): a waiting seat, with a link to send from their own phone.
+        $this->postJson("/api/v1/budget-programs/{$program}/members", ['phone' => '0772500099', 'role' => 'member'], $chair['h'])->assertStatus(201)->assertJsonPath('data.status', 'invited');
 
         $list = $this->getJson("/api/v1/budget-programs/{$program}/members", $this->oh)->assertOk()->json('data');
         $this->assertSame('chair', $list['members'][0]['role'], 'chair listed first');
         $this->assertContains('manage_committee', $list['abilities'], 'the owner has full access');
+    }
+
+    public function test_the_last_chair_cannot_leave_or_step_down(): void
+    {
+        $program = $this->program();
+        $chair = $this->teammate('0772500021');
+        $other = $this->teammate('0772500022');
+        $url = "/api/v1/budget-programs/{$program}/members";
+        // The owner, who created the event, holds a chair seat too: it goes, so that this person is the only chair left.
+        $ownerSeat = (int) BudgetProgramMember::withoutGlobalScopes()->where('budget_program_id', $program)->where('role', 'chair')->value('id');
+        $seat = $this->seat($program, $chair['user_id'], 'chair');
+        $this->deleteJson("{$url}/{$ownerSeat}", [], $this->oh)->assertOk();
+
+        $this->deleteJson("{$url}/{$seat}", [], $chair['h'])->assertStatus(422)->assertJsonPath('errors.code', 'last_chair');
+        $this->patchJson("{$url}/{$seat}", ['role' => 'member'], $chair['h'])->assertStatus(422)->assertJsonPath('errors.code', 'last_chair');
+        $this->assertSame('chair', BudgetProgramMember::withoutGlobalScopes()->where('id', $seat)->value('role'));
+        $this->assertSame(0, (int) BudgetProgramMember::withoutGlobalScopes()->where('id', $seat)->value('is_deleted'));
+        $this->patchJson("{$url}/{$seat}", ['role' => 'chair'], $chair['h'])->assertOk(); // staying chair is no change
+
+        // A waiting chair does not count: only someone who can use the seat keeps the event running.
+        $waiting = $this->postJson($url, ['phone' => '0772500098', 'role' => 'chair'], $chair['h'])->assertStatus(201)->json('data.id');
+        $this->deleteJson("{$url}/{$seat}", [], $chair['h'])->assertStatus(422);
+        $this->deleteJson("{$url}/{$waiting}", [], $chair['h'])->assertOk();
+
+        // With another chair, they may go.
+        $otherSeat = $this->seat($program, $other['user_id'], 'chair');
+        $this->patchJson("{$url}/{$seat}", ['role' => 'member'], $chair['h'])->assertOk()->assertJsonPath('data.role', 'member');
+        $this->patchJson("{$url}/{$seat}", ['role' => 'chair'], $this->oh)->assertOk();
+        $this->deleteJson("{$url}/{$seat}", [], $chair['h'])->assertOk();
+
+        // Full access keeps the event whatever the seat says, as on the web. And the rule is about one's own seat: the owner may take off the last chair.
+        $this->patchJson("{$url}/{$otherSeat}", ['role' => 'treasurer'], $this->oh)->assertOk();
     }
 
     public function test_people_outside_the_team_or_company_cannot_be_seated(): void

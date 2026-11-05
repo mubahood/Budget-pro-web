@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Rentals;
 use App\Exceptions\BusinessRuleException;
 use App\Models\RentalMeterReading;
 use App\Models\RentalUnit;
+use App\Services\Rentals\Ledger\RentalLedger;
 use App\Services\Rentals\Meters;
 use App\Services\Rentals\RentalAccess;
 use Illuminate\Http\JsonResponse;
@@ -42,7 +43,7 @@ class MetersController extends RentalsController
                 $q->where('read_on', '<=', $to);
             }
             $p = $this->paginate($q->orderByDesc('read_on')->orderByDesc('id'), $request, 100);
-            $present = $this->present($request)->prime($p->items());
+            $present = $this->present($request)->prime($p->items())->primeFiles(collect($p->items())->pluck('photo_uuid'));
 
             return $this->page($p, collect($p->items())->map(fn ($r) => $present->meterReading($r))->all());
         });
@@ -60,7 +61,9 @@ class MetersController extends RentalsController
             if ($uuid !== null && $uuid !== '' && (! is_string($uuid) || ! Str::isUuid($uuid))) {
                 throw BusinessRuleException::make('uuid_invalid', 'The reading id is not valid.');
             }
-            $this->day($request, 'read_on');
+            if (($on = $this->day($request, 'read_on')) !== null && ! ($uuid && RentalMeterReading::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', $uuid)->exists())) {
+                RentalLedger::assertOpen($cid, $on); // its bill would be dated in a month whose papers have gone out; a resend of a reading already kept is still that reading
+            }
             $data = $request->only(['unit_id', 'utility', 'reading', 'read_on', 'reset', 'photo_uuid', 'notes']) + ['uuid' => $uuid ?: null];
             $existing = $uuid ? RentalMeterReading::withoutGlobalScopes()->where('company_id', $cid)->where('uuid', $uuid)->first() : null;
             if ($existing !== null) {

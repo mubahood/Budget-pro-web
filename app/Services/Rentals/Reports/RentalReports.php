@@ -23,6 +23,7 @@ use App\Services\Rentals\Payments\Deposits;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalsModule;
 use App\Support\LocalDate;
+use App\Support\Rentals\Day;
 use App\Support\Rentals\Minor;
 use App\Support\Rentals\Periods;
 use Illuminate\Support\Carbon;
@@ -149,6 +150,32 @@ final class RentalReports
     public static function keys(): array
     {
         return array_keys(self::REPORTS);
+    }
+
+    /** The one record a report cannot run without: `landlord`, `lease`, or null. An owner-run account has one landlord: itself. */
+    public static function needs(string $key, bool $owner): ?string
+    {
+        return match (true) {
+            $key === 'tenant_statement' => 'lease',
+            $key === 'landlord_rent_sheet', ! $owner && in_array($key, ['landlord_statement', 'landlord_year'], true) => 'landlord',
+            default => null,
+        };
+    }
+
+    /**
+     * Refused in the words the report itself would use, before any link to its file is made.
+     *
+     * @param  array<string, mixed>  $params
+     */
+    public static function refuseWithout(string $key, bool $owner, array $params): void
+    {
+        $needs = self::needs($key, $owner);
+        if ($needs === 'landlord' && empty($params['landlord_id'])) {
+            throw BusinessRuleException::make('landlord_required', 'Choose the landlord.');
+        }
+        if ($needs === 'lease' && empty($params['lease_id'])) {
+            throw BusinessRuleException::make('lease_required', 'Choose the tenancy (lease).');
+        }
     }
 
     /** Whether a report exists. */
@@ -1182,6 +1209,9 @@ final class RentalReports
         }
         if ($from !== null && $to !== null && $from > $to) {
             throw BusinessRuleException::make('invalid_dates', 'The start date is after the end date.');
+        }
+        if (($from !== null && $from < Day::FIRST) || ($to !== null && $to > Day::LAST)) {
+            throw BusinessRuleException::make('invalid_date', 'Choose dates this century: a report over thousands of years is a slip of the keyboard.'); // and it walks the months, for every door
         }
         $ids = RentalAccess::propertyIds($by);
         $property = null;

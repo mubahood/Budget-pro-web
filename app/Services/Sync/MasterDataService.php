@@ -30,6 +30,18 @@ class MasterDataService
         /** @var Model|null $existing */
         $existing = $modelClass::query()->withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', $uuid)->first();
 
+        // A chair stepping down from a phone meets the same rule as on the web: someone must be left to run the event.
+        if ($existing instanceof \App\Models\BudgetProgramMember && ! $existing->is_deleted && ($action === 'delete' || (array_key_exists('role', $op['data'] ?? []) && ($op['data']['role'] ?? null) !== 'chair'))) {
+            $by = \App\Models\User::withoutGlobalScopes()->find((int) ($op['_user_id'] ?? 0));
+            if ($by !== null) {
+                try {
+                    \App\Services\Budget\CommitteeService::assertNotLastChair($by, $existing);
+                } catch (BusinessRuleException $e) {
+                    return ['status' => 'rejected', 'code' => $e->errorCode(), 'message' => $e->getMessage()];
+                }
+            }
+        }
+
         if ($action === 'delete') {
             if ($existing === null) {
                 return ['status' => 'applied'];
@@ -48,8 +60,15 @@ class MasterDataService
             return ['status' => 'applied', 'model' => $existing->fresh() ?? $existing];
         }
 
+        // A row's figures move with its payments and leave its edit time alone, so an older edit of its name or amount still goes through. An op that carries a figure
+        // from an older phone is judged by when the row last changed at all: applying it would take money back.
+        $carriesFigure = array_intersect(['paid_amount', 'custom_paid_amount', 'invested_amount', 'fully_paid'], array_keys($op['data'] ?? []), is_array($op['changed_fields'] ?? null) ? $op['changed_fields'] : array_keys($op['data'] ?? [])) !== [];
+        $lastChanged = (int) ($existing->client_updated_at ?? 0);
+        if ($carriesFigure && $existing?->updated_at !== null) {
+            $lastChanged = max($lastChanged, (int) $existing->updated_at->getTimestampMs() + 999); // updated_at keeps whole seconds: on a tie, the money stands
+        }
         if ($existing !== null && $clientVersion > 0 && $clientVersion < (int) $existing->version
-            && (int) $existing->client_updated_at > $clientUpdatedAt) {
+            && $lastChanged > $clientUpdatedAt) {
             $serverRow = $serializer->row($table, $existing);
             $conflict = $this->conflict($companyId, $deviceId, $table, $uuid, 'stale_version', $op, $serverRow);
 
@@ -118,6 +137,12 @@ class MasterDataService
         // Who-did-it columns default to the pushing user; a supplied user id must be a teammate.
         $pushUser = (int) ($op['_user_id'] ?? 0);
         foreach ($config['user_fields'] ?? [] as $column) {
+            // Who changed it is who pushed it: a paid figure from an older phone is credited to this column (ContributionRecord::finalizer).
+            if ($pushUser > 0 && in_array($column, ['chaned_by_id', 'changed_by_id'], true)) {
+                $model->setAttribute($column, $pushUser);
+
+                continue;
+            }
             $given = (int) $model->getAttribute($column);
             if ($given > 0 && ! \App\Models\User::withoutGlobalScopes()->where('id', $given)->where('company_id', $companyId)->exists()) {
                 return ['status' => 'rejected', 'code' => 'validation', 'message' => 'User '.$given.' is not part of this company.'];
@@ -134,6 +159,9 @@ class MasterDataService
         }
 
         try {
+            if ($model instanceof \App\Models\BudgetProgramMember && $model->user_id && ($existing === null || $model->isDirty('role'))) {
+                \App\Services\Budget\CommitteeService::assertSeatFits($companyId, (int) $model->user_id, (string) $model->role);
+            }
             $model->save();
         } catch (BusinessRuleException $e) {
             return ['status' => 'rejected', 'code' => $e->errorCode() === 'business_rule' ? 'validation' : $e->errorCode(), 'message' => $e->getMessage(), 'errors' => $e->toErrors()];

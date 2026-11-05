@@ -295,7 +295,7 @@ class RentalsPersonApiTest extends ApiTestCase
         $h = $this->tenantToken($w);
         $me = $this->getJson('/api/v1/rentals/me', $h)->assertOk()->json('data');
         $this->assertSame(['type', 'account', 'tenant'], array_keys($me));
-        $this->assertSame(['id', 'name', 'currency', 'payment_instructions'], array_keys($me['account']));
+        $this->assertSame(['id', 'name', 'currency', 'payment_instructions', 'phone'], array_keys($me['account']));
         $this->assertSame('CF••••••••789Z', $me['tenant']['id_number_masked']);
         $this->assertNull($me['tenant']['notes'], 'no staff notes');
         $this->assertStringNotContainsString('CF90SECRET789Z', (string) json_encode($me));

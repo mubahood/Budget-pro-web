@@ -14,6 +14,7 @@ use App\Services\Rentals\Demo\RentalsDemo;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalAudit;
 use App\Services\Rentals\RentalsModule;
+use App\Support\Rentals\Minor;
 
 /** Properties: buildings, estates and plots, each owned by one landlord ("You" in owner mode). */
 final class Properties extends Directory
@@ -38,10 +39,10 @@ final class Properties extends Directory
             'photo_uuid' => ['nullable', 'string', 'size:36'],
             'commission_type' => ['nullable', 'in:percent,flat,none'],
             'commission_bp' => ['nullable', 'integer', 'min:0', 'max:10000'],
-            'commission_minor' => ['nullable', 'integer', 'min:0'],
+            'commission_minor' => ['nullable', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'deposit_held_by' => ['nullable', 'in:agency,landlord'],
-            'water_rate_minor' => ['sometimes', 'integer', 'min:0'],
-            'power_rate_minor' => ['sometimes', 'integer', 'min:0'],
+            'water_rate_minor' => ['sometimes', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
+            'power_rate_minor' => ['sometimes', 'integer', 'numeric', 'min:0', 'max:'.Minor::MAX],
             'notes' => ['nullable', 'string', 'max:2000'],
             'status' => ['sometimes', 'in:active,archived'],
         ];

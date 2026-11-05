@@ -36,19 +36,19 @@ final class CashBook
         }
         $opening = (int) (clone $base)->where('occurred_on', '<', $from)->sum('cash_minor');
         $rows = (clone $base)->whereBetween('occurred_on', [$from, $to])->orderBy('occurred_on')->orderBy('id')->limit($limit)->get();
+        // The period's own figures, not the rows': past the limit a sum of the rows would close on the wrong balance.
+        $in = (int) (clone $base)->whereBetween('occurred_on', [$from, $to])->where('cash_minor', '>', 0)->sum('cash_minor');
+        $out = -(int) (clone $base)->whereBetween('occurred_on', [$from, $to])->where('cash_minor', '<', 0)->sum('cash_minor');
         $run = $opening;
-        $in = 0;
-        $out = 0;
         $list = [];
         foreach ($rows as $r) {
             $run += (int) $r->cash_minor;
-            $r->cash_minor > 0 ? $in += (int) $r->cash_minor : $out += -(int) $r->cash_minor;
             $list[] = ['id' => (int) $r->id, 'date' => $r->occurred_on->toDateString(), 'type' => $r->type, 'method' => $r->method,
                 'description' => (string) $r->description, 'in_minor' => max(0, (int) $r->cash_minor), 'out_minor' => max(0, -(int) $r->cash_minor),
                 'balance_minor' => $run, 'payment_id' => $r->payment_id, 'payout_id' => $r->payout_id, 'expense_id' => $r->expense_id, 'lease_id' => $r->lease_id, 'reversed' => $r->reversed_at !== null];
         }
 
-        return ['opening_minor' => $opening, 'closing_minor' => $run, 'in_minor' => $in, 'out_minor' => $out, 'rows' => $list];
+        return ['opening_minor' => $opening, 'closing_minor' => $opening + $in - $out, 'in_minor' => $in, 'out_minor' => $out, 'rows' => $list];
     }
 
     /** Move money between methods (banking cash, withdrawing mobile money): two rows, one group (rentals_expenses). */

@@ -7,6 +7,7 @@ use App\Models\RentalAllocation;
 use App\Models\RentalCharge;
 use App\Models\RentalEntry;
 use App\Models\RentalLease;
+use App\Models\RentalPaidReport;
 use App\Models\RentalPayment;
 use App\Models\User;
 use App\Services\Rentals\Ledger\RentalLedger;
@@ -454,13 +455,14 @@ final class Payments
     }
 
     /**
-     * Credit kept at move-out, or asked for by a tenant, goes back later (rentals_manage): $amount of it, all by default.
+     * Credit kept at move-out, or asked for by a tenant, goes back later (rentals_reverse and rentals_collect, as on the web): $amount of it, all by default.
      *
      * @return array{credit_refunded_minor: int, credit_minor: int}
      */
     public function refundKeptCredit(User $by, RentalLease $lease, ?int $amount, string $method, ?string $on = null): array
     {
-        RentalAccess::authorize($by, 'rentals_manage');
+        RentalAccess::authorize($by, 'rentals_reverse');
+        RentalAccess::authorize($by, 'rentals_collect');
         RentalAccess::assertInScope($by, (int) $lease->property_id, 'lease');
         $cid = (int) $lease->company_id;
         $day = LocalDate::date($cid, $on);
@@ -621,6 +623,25 @@ final class Payments
 
         return ['lines' => $lines, 'credit_minor' => $credit, 'unplaced_minor' => $unplaced, 'over_minor' => $over, 'commission_minor' => $cut,
             'ok' => $over === 0 && $unplaced === 0 && ! collect($lines)->contains('too_much', true) && (! $direct || $credit === 0)];
+    }
+
+    /**
+     * A warning for the till when a reference is already on a receipt, or on a tenant's report waiting for a look: the words of the web's Collect. Null when there is none, and for
+     * cash, which has no reference to clash. Never a refusal: a person checks it is not the same money, and may save it.
+     */
+    public static function referenceClash(int $companyId, mixed $reference, mixed $method): ?string
+    {
+        $ref = is_string($reference) ? trim($reference) : '';
+        if ($ref === '' || $method === 'cash') {
+            return null;
+        }
+        $p = RentalPayment::withoutGlobalScopes()->where('company_id', $companyId)->where('reference', $ref)->whereNull('reversed_at')->orderByDesc('id')->first(['number', 'paid_on']);
+        if ($p !== null) {
+            return 'Receipt '.$p->number.' of '.Carbon::parse($p->paid_on)->format('j M').' already has this reference. Check it is not the same money.';
+        }
+        $waiting = RentalPaidReport::withoutGlobalScopes()->where('company_id', $companyId)->where('status', 'pending')->where('reference', $ref)->exists();
+
+        return $waiting ? 'A tenant\'s report waiting for a look already has this reference. Check it is not the same money.' : null;
     }
 
     /** A lease's open bills in the order money settles them (KR-10). @return Collection<int, RentalCharge> */

@@ -23,7 +23,9 @@ use App\Services\Rentals\Collections\FollowUps;
 use App\Services\Rentals\Directory\Directory;
 use App\Services\Rentals\Directory\Units;
 use App\Services\Rentals\Expenses;
+use App\Services\Rentals\Leases\CommissionChanges;
 use App\Services\Rentals\Leases\Leases;
+use App\Services\Rentals\Ledger\RentalLedger;
 use App\Services\Rentals\Messages\RentalMessages;
 use App\Services\Rentals\Payments\Receipt;
 use App\Services\Rentals\RentalLinks;
@@ -67,8 +69,24 @@ final class Present
     /** @var array<string, ?string> */
     private array $files = [];
 
+    /** @var array<int, array<string, mixed>> lease id => its position, read together for a page */
+    private array $positions = [];
+
+    /** @var array<int, list<array{user_id: int, name: string}>> property id => who looks after it, read together for a page */
+    private array $staff = [];
+
+    /** A login tied to some properties: how the money is shared with the landlord, and what a landlord is owed, are between the office and the landlord (EL-20, EL-26). */
+    private bool $tied = false;
+
     /** $viewer, $viewerId: who the rows are for (RentalLinks::VIEWERS); a private file's link is made for that person alone. */
     public function __construct(public readonly int $cid, private readonly ?string $viewer = null, private readonly ?int $viewerId = null) {}
+
+    public function tiedToSomeProperties(): self
+    {
+        $this->tied = true;
+
+        return $this;
+    }
 
     public function settingsRow(): RentalSetting
     {
@@ -162,7 +180,39 @@ final class Present
     /** Position (Leases::position). @return array<string, mixed> */
     public function position(RentalLease $l): array
     {
-        return Leases::position($l, $this->today());
+        return $this->positions[(int) $l->id] ?? Leases::position($l, $this->today());
+    }
+
+    /** Read the positions of a page of leases together: a few queries, not several per row. @param iterable<RentalLease> $leases */
+    public function primePositions(iterable $leases): self
+    {
+        $list = [];
+        foreach ($leases as $l) {
+            $list[] = $l;
+        }
+        if ($list !== []) {
+            $this->positions = Leases::positions($list, $this->today()) + $this->positions;
+        }
+
+        return $this;
+    }
+
+    /** Read who looks after a page of properties together. @param iterable<int|string> $propertyIds */
+    public function primeStaff(iterable $propertyIds): self
+    {
+        $ids = [];
+        foreach ($propertyIds as $id) {
+            $ids[(int) $id] = true;
+            $this->staff[(int) $id] = [];
+        }
+        if ($ids !== []) {
+            foreach (DB::table('rental_property_staff as s')->join('admin_users as u', 'u.id', '=', 's.user_id')->where('s.company_id', $this->cid)->whereIn('s.property_id', array_keys($ids))
+                ->orderBy('u.name')->get(['s.property_id', 's.user_id', 'u.name']) as $r) {
+                $this->staff[(int) $r->property_id][] = ['user_id' => (int) $r->user_id, 'name' => (string) $r->name];
+            }
+        }
+
+        return $this;
     }
 
     /** LeaseBrief. @param array<string, mixed>|null $position */
@@ -189,35 +239,37 @@ final class Present
         return $this->leaseBrief($l) + [
             'landlord' => $forTenant ? null : $this->ref('landlord', $l->landlord_id),
             'anchor' => (string) $l->anchor, 'deposit_minor' => (int) $l->deposit_minor, 'deposit_held_by' => (string) $l->deposit_held_by,
-            'commission' => $forTenant ? null : self::commission($l->commission_type ?? 'none', $l->commission_bp, $l->commission_minor),
+            'commission' => $forTenant || $this->tied ? null : self::commission($l->commission_type ?? 'none', $l->commission_bp, $l->commission_minor),
             'late_fee' => (string) $l->late_fee, 'billed_until' => self::day($l->billed_until), 'notice_on' => self::day($l->notice_on), 'move_out_on' => self::day($l->move_out_on),
             'ended_on' => self::day($l->ended_on), 'end_reason' => $l->end_reason, 'notes' => $forTenant ? null : $l->notes,
             'term_ended' => Leases::termEnded($l, $this->today()),
-            'items' => RentalLeaseItem::withoutGlobalScopes()->where('company_id', $cid)->where('lease_id', $l->id)->orderBy('id')->get()->map(fn ($i) => $this->item($i))->all(),
+            'commission_changes' => $forTenant || $this->tied ? [] : CommissionChanges::history($l)->map(fn ($c) => ['effective_from' => self::day($c->effective_from), 'commission' => self::commission($c->commission_type, $c->commission_bp, $c->commission_minor), 'reason' => $c->reason])->all(),
+            'items' => RentalLeaseItem::withoutGlobalScopes()->where('company_id', $cid)->where('lease_id', $l->id)->orderBy('id')->get()->map(fn ($i) => $this->item($i, $forTenant))->all(),
             'rent_changes' => RentalRentChange::withoutGlobalScopes()->where('company_id', $cid)->where('lease_id', $l->id)->orderBy('effective_from')->orderBy('id')->get()
                 ->map(fn ($c) => ['rent_minor' => (int) $c->rent_minor, 'effective_from' => self::day($c->effective_from), 'reason' => $c->reason])->all(),
-            'charges' => $charges->map(fn ($c) => $this->charge($c))->all(),
+            'charges' => $charges->map(fn ($c) => $this->charge($c, $forTenant))->all(),
             'payments' => $payments->map(fn ($p) => $this->paymentBrief($p))->all(),
             'follow_ups' => $followUps->map(fn ($f) => $this->followUp($f))->values()->all(),
         ];
     }
 
-    public function item(RentalLeaseItem $i): array
+    /** $forTenant: who a fee goes to, and whether it earns commission, are between the agency and the landlord. */
+    public function item(RentalLeaseItem $i, bool $forTenant = false): array
     {
-        return ['id' => (int) $i->id, 'name' => (string) $i->name, 'amount_minor' => (int) $i->amount_minor, 'goes_to' => (string) $i->goes_to, 'commissionable' => (bool) $i->commissionable,
-            'starts_on' => self::day($i->starts_on), 'ends_on' => self::day($i->ends_on), 'active' => (bool) $i->active];
+        return ['id' => (int) $i->id, 'name' => (string) $i->name, 'amount_minor' => (int) $i->amount_minor] + ($forTenant ? [] : ['goes_to' => (string) $i->goes_to, 'commissionable' => (bool) $i->commissionable])
+            + ['starts_on' => self::day($i->starts_on), 'ends_on' => self::day($i->ends_on), 'active' => (bool) $i->active];
     }
 
-    /** Charge: overdue once open past its due date and the grace days; days counted from the due date. */
-    public function charge(RentalCharge $c): array
+    /** Charge: overdue once open past its due date and the grace days; days counted from the due date. $forTenant: not who it goes to. */
+    public function charge(RentalCharge $c, bool $forTenant = false): array
     {
         $today = $this->today();
         $overdue = $c->status === 'open' && $c->due_date->copy()->addDays((int) $this->settingsRow()->grace_days)->lt($today);
 
         return ['id' => (int) $c->id, 'lease_id' => (int) $c->lease_id, 'kind' => (string) $c->kind, 'description' => (string) $c->description,
             'period_start' => self::day($c->period_start), 'period_end' => self::day($c->period_end), 'due_date' => self::day($c->due_date),
-            'amount_minor' => (int) $c->amount_minor, 'paid_minor' => (int) $c->paid_minor, 'left_minor' => $c->status === 'void' ? 0 : $c->left(), 'status' => (string) $c->status,
-            'goes_to' => (string) $c->goes_to, 'overdue' => $overdue, 'days_overdue' => $overdue ? max(0, Periods::days($c->due_date, $today)) : 0];
+            'amount_minor' => (int) $c->amount_minor, 'paid_minor' => (int) $c->paid_minor, 'left_minor' => $c->status === 'void' ? 0 : $c->left(), 'status' => (string) $c->status]
+            + ($forTenant ? [] : ['goes_to' => (string) $c->goes_to]) + ['overdue' => $overdue, 'days_overdue' => $overdue ? max(0, Periods::days($c->due_date, $today)) : 0];
     }
 
     public function paymentBrief(RentalPayment $p): array
@@ -245,16 +297,16 @@ final class Present
             'lease' => $this->ref('lease', $p->lease_id), 'currency' => $this->currency(), 'received_by' => $this->ref('user', $p->received_by_id),
             'channel' => (string) $p->channel, 'notes' => $forTenant ? null : $p->notes, 'unallocated_minor' => (int) $p->unallocated_minor,
             'allocations' => $allocs->map(fn ($a) => ['charge_id' => (int) $a->charge_id, 'description' => (string) ($descriptions[$a->charge_id] ?? ''), 'source' => (string) $a->source,
-                'amount_minor' => (int) $a->amount_minor] + ($forTenant ? [] : ['commission_minor' => (int) $a->commission_minor, 'landlord_minor' => (int) $a->landlord_minor,
-                    'agency_minor' => (int) $a->agency_minor, 'deposit_minor' => (int) $a->deposit_minor]))->all(),
+                'amount_minor' => (int) $a->amount_minor] + ($forTenant || $this->tied ? [] : ['commission_minor' => (int) $a->commission_minor, 'landlord_minor' => (int) $a->landlord_minor,
+                    'agency_minor' => (int) $a->agency_minor]) + ($forTenant ? [] : ['deposit_minor' => (int) $a->deposit_minor]))->all(),
             'reversed_at' => $p->reversed_at?->toIso8601String(), 'reverse_reason' => $p->reverse_reason,
             'owed_after_minor' => (int) ($pos['owed_minor'] ?? 0), 'paid_up_to' => $pos['paid_up_to'] ?? null, 'receipt' => $receipt,
         ];
     }
 
     /**
-     * Landlord. $own: the landlord's own view (no staff notes). $payout false (a caretaker, §7): how the landlord is paid,
-     * their bank or mobile-money numbers and the staff notes that may hold them are null.
+     * Landlord. $own: the landlord's own view (no staff notes, no limit on repairs). $payout false (a caretaker or anyone else without rentals_landlords, §7): how the landlord is paid,
+     * their bank or mobile-money numbers, their limit on repairs, the staff notes that may hold them, their balance and their commission are null.
      *
      * @param  array{properties_count: int, units_count: int, balance_minor: int}|null  $figures  Figures::landlords
      */
@@ -263,13 +315,14 @@ final class Present
         return ['id' => (int) $l->id, 'code' => $l->code, 'name' => (string) $l->name, 'phone' => $l->phone, 'phone_2' => $payout ? $l->phone_2 : null, 'email' => $l->email, 'address' => $l->address,
             'payout_method' => $payout ? (string) $l->payout_method : null, 'payout_details' => $payout ? $l->payout_details : null,
             'withholding_bp' => $payout && $l->withholding_bp !== null ? (int) $l->withholding_bp : null,
-            'commission' => $l->commission_type === null ? null : self::commission($l->commission_type, $l->commission_bp, $l->commission_minor),
+            'expense_limit_minor' => $payout && ! $own && $l->expense_limit_minor !== null ? (int) $l->expense_limit_minor : null,
+            'commission' => ! $payout || $l->commission_type === null ? null : self::commission($l->commission_type, $l->commission_bp, $l->commission_minor),
             'is_self' => (bool) $l->is_self, 'status' => (string) $l->status, 'properties_count' => (int) ($figures['properties_count'] ?? 0),
-            'units_count' => (int) ($figures['units_count'] ?? 0), 'balance_minor' => (int) ($figures['balance_minor'] ?? 0), 'notes' => $own || ! $payout ? null : $l->notes];
+            'units_count' => (int) ($figures['units_count'] ?? 0), 'balance_minor' => $payout ? (int) ($figures['balance_minor'] ?? 0) : null, 'notes' => $own || ! $payout ? null : $l->notes];
     }
 
     /**
-     * Property. $staff: who looks after it (left out of a landlord's own view).
+     * Property. $staff: who looks after it and the staff's notes (left out of a landlord's own view).
      *
      * @param  array{units_count: int, occupied_count: int, vacant_count: int, occupancy_pct: float, arrears_minor: int}|null  $figures  Figures::properties
      */
@@ -277,17 +330,17 @@ final class Present
     {
         $team = [];
         if ($staff) {
-            $team = DB::table('rental_property_staff as s')->join('admin_users as u', 'u.id', '=', 's.user_id')->where('s.company_id', $this->cid)->where('s.property_id', $p->id)
+            $team = $this->staff[(int) $p->id] ?? DB::table('rental_property_staff as s')->join('admin_users as u', 'u.id', '=', 's.user_id')->where('s.company_id', $this->cid)->where('s.property_id', $p->id)
                 ->orderBy('u.name')->get(['s.user_id', 'u.name'])->map(fn ($r) => ['user_id' => (int) $r->user_id, 'name' => (string) $r->name])->all();
         }
 
         return ['id' => (int) $p->id, 'code' => $p->code, 'name' => (string) $p->name, 'kind' => (string) $p->kind, 'address' => $p->address, 'area' => $p->area,
             'district' => $p->district, 'lat' => $p->lat === null ? null : (float) $p->lat, 'lng' => $p->lng === null ? null : (float) $p->lng, 'photo_url' => $this->fileUrl($p->photo_uuid),
             'landlord' => $this->ref('landlord', $p->landlord_id),
-            'commission' => $p->commission_type === null ? null : self::commission($p->commission_type, $p->commission_bp, $p->commission_minor),
+            'commission' => $p->commission_type === null || $this->tied ? null : self::commission($p->commission_type, $p->commission_bp, $p->commission_minor),
             'deposit_held_by' => $p->deposit_held_by, 'water_rate_minor' => (int) $p->water_rate_minor, 'power_rate_minor' => (int) $p->power_rate_minor, 'status' => (string) $p->status,
             'units_count' => (int) ($figures['units_count'] ?? 0), 'occupied_count' => (int) ($figures['occupied_count'] ?? 0), 'vacant_count' => (int) ($figures['vacant_count'] ?? 0),
-            'occupancy_pct' => (float) ($figures['occupancy_pct'] ?? 0), 'arrears_minor' => (int) ($figures['arrears_minor'] ?? 0), 'staff' => $team];
+            'occupancy_pct' => (float) ($figures['occupancy_pct'] ?? 0), 'arrears_minor' => (int) ($figures['arrears_minor'] ?? 0), 'staff' => $team, 'notes' => $staff ? $p->notes : null];
     }
 
     /** Unit, with its state (Units::state) and its live lease. @param array<string, mixed>|null $position */
@@ -349,7 +402,7 @@ final class Present
         return ['id' => (int) $m->id, 'uuid' => (string) $m->uuid, 'number' => (string) $m->number, 'property' => $this->ref('property', $m->property_id),
             'unit' => $this->ref('unit', $m->unit_id), 'tenant' => $this->tenantRef($m->tenant_id, false), 'title' => (string) $m->title, 'details' => $m->details,
             'priority' => (string) $m->priority, 'status' => (string) $m->status, 'reported_by' => (string) $m->reported_by,
-            'assigned_to' => $forTenant ? null : $this->ref('user', $m->assigned_to_id), 'assignee_name' => $m->assignee_name,
+            'assigned_to' => $forTenant ? null : $this->ref('user', $m->assigned_to_id), 'assignee_name' => $forTenant ? null : $m->assignee_name,
             'photos' => array_map(fn ($u) => ['uuid' => $u, 'url' => $this->files[$u] ?? null], $photos),
             'cost_minor' => $forTenant || $m->cost_minor === null ? null : (int) $m->cost_minor, 'expense_id' => $forTenant || $m->expense_id === null ? null : (int) $m->expense_id,
             'resolved_on' => self::day($m->resolved_on), 'resolution' => $m->resolution, 'created_at' => $m->created_at?->toIso8601String()];
@@ -359,12 +412,12 @@ final class Present
     {
         return ['id' => (int) $r->id, 'uuid' => (string) $r->uuid, 'unit' => $this->ref('unit', $r->unit_id), 'utility' => (string) $r->utility, 'reading' => (float) $r->reading,
             'previous' => (float) $r->previous, 'used' => (float) $r->used, 'rate_minor' => (int) $r->rate_minor, 'amount_minor' => (int) $r->amount_minor,
-            'read_on' => self::day($r->read_on), 'reset' => (bool) $r->reset, 'charge_id' => $r->charge_id === null ? null : (int) $r->charge_id];
+            'read_on' => self::day($r->read_on), 'reset' => (bool) $r->reset, 'charge_id' => $r->charge_id === null ? null : (int) $r->charge_id, 'photo_url' => $this->fileUrl($r->photo_uuid)];
     }
 
     public function followUp(RentalFollowUp $f): array
     {
-        return ['id' => (int) $f->id, 'channel' => (string) $f->channel, 'note' => $f->note, 'owed_minor' => (int) $f->owed_minor, 'promise_on' => self::day($f->promise_on),
+        return ['id' => (int) $f->id, 'uuid' => $f->getAttribute('uuid'), 'channel' => (string) $f->channel, 'note' => $f->note, 'owed_minor' => (int) $f->owed_minor, 'promise_on' => self::day($f->promise_on),
             'by' => $this->ref('user', $f->created_by_id), 'created_at' => $f->created_at?->toIso8601String()];
     }
 
@@ -377,7 +430,8 @@ final class Present
         }
         $out['messages'] = (object) ((array) ($s->messages ?? []));
 
-        return $out + ['setup_at' => $s->setup_at?->toIso8601String(), 'set_up' => $s->setup_at !== null, 'lists' => [
+        return $out + ['setup_at' => $s->setup_at?->toIso8601String(), 'set_up' => $s->setup_at !== null, 'closed_through' => RentalLedger::closedThrough((int) $s->company_id), 'lists' => [
+            'currencies' => array_values(array_unique([...(array) config('saas.currencies'), (string) $s->currency])), 'message_tags' => RentalMessages::TAGS,
             'unit_kinds' => (array) config('rentals.unit_kinds'), 'property_kinds' => (array) config('rentals.property_kinds'), 'methods' => (array) config('rentals.methods'),
             'cycles' => (array) config('rentals.cycles'), 'item_presets' => array_values((array) config('rentals.item_presets')), 'expense_categories' => Expenses::categories(),
             'message_kinds' => RentalMessages::KINDS, 'message_defaults' => RentalMessages::DEFAULTS, 'placeholders' => RentalMessages::PLACEHOLDERS,
