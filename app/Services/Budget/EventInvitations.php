@@ -27,14 +27,70 @@ final class EventInvitations
 
     private const ROLES = ['chair' => 'Chair', 'treasurer' => 'Treasurer', 'secretary' => 'Secretary', 'member' => 'Member', 'viewer' => 'Viewer'];
 
+    /**
+     * The titles people write in front of a name in Uganda, most used first, for the chips on the name box. `words` is every
+     * way it gets typed, in lower case with no full stop. A `solo` title stands alone (Mr., Aunt); a `rank` can stack, in order
+     * of `stack` (Hon. Dr.), and take a partner (Dr. & Mrs.). The browser reads this same list, so both sides agree on who is who.
+     */
+    public const TITLES = [
+        ['key' => 'mr', 'text' => 'Mr.', 'words' => ['mr', 'mister'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'mrs', 'text' => 'Mrs.', 'words' => ['mrs'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'dr', 'text' => 'Dr.', 'words' => ['dr', 'doctor'], 'kind' => 'rank', 'stack' => 6],
+        ['key' => 'eng', 'text' => 'Eng.', 'words' => ['eng', 'engineer'], 'kind' => 'rank', 'stack' => 7],
+        ['key' => 'pastor', 'text' => 'Pastor', 'words' => ['pastor', 'pr', 'ps'], 'kind' => 'rank', 'stack' => 3],
+        ['key' => 'mama', 'text' => 'Mama', 'words' => ['mama', 'maama'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'hon', 'text' => 'Hon.', 'words' => ['hon', 'honourable', 'honorable'], 'kind' => 'rank', 'stack' => 1],
+        ['key' => 'rev', 'text' => 'Rev.', 'words' => ['rev', 'reverend'], 'kind' => 'rank', 'stack' => 3],
+        ['key' => 'ms', 'text' => 'Ms.', 'words' => ['ms'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'miss', 'text' => 'Miss', 'words' => ['miss'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'prof', 'text' => 'Prof.', 'words' => ['prof', 'professor'], 'kind' => 'rank', 'stack' => 5],
+        ['key' => 'hajji', 'text' => 'Hajji', 'words' => ['hajji', 'haji', 'hajj'], 'kind' => 'rank', 'stack' => 3],
+        ['key' => 'hajjat', 'text' => 'Hajjat', 'words' => ['hajjat', 'hajat', 'hajati'], 'kind' => 'rank', 'stack' => 3],
+        ['key' => 'sheikh', 'text' => 'Sheikh', 'words' => ['sheikh', 'sheik'], 'kind' => 'rank', 'stack' => 3],
+        ['key' => 'fr', 'text' => 'Fr.', 'words' => ['fr', 'father'], 'kind' => 'rank', 'stack' => 3],
+        ['key' => 'bishop', 'text' => 'Bishop', 'words' => ['bishop', 'bp'], 'kind' => 'rank', 'stack' => 2],
+        ['key' => 'uncle', 'text' => 'Uncle', 'words' => ['uncle'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'aunt', 'text' => 'Aunt', 'words' => ['aunt', 'auntie', 'aunty'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'sister', 'text' => 'Sister', 'words' => ['sister', 'sr', 'sis'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'bro', 'text' => 'Bro.', 'words' => ['bro', 'brother'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'mzee', 'text' => 'Mzee', 'words' => ['mzee'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'jjajja', 'text' => 'Jjajja', 'words' => ['jjajja', 'jajja'], 'kind' => 'solo', 'stack' => 0],
+        ['key' => 'capt', 'text' => 'Capt.', 'words' => ['capt', 'captain'], 'kind' => 'rank', 'stack' => 4],
+        ['key' => 'maj', 'text' => 'Maj.', 'words' => ['maj', 'major'], 'kind' => 'rank', 'stack' => 4],
+        ['key' => 'gen', 'text' => 'Gen.', 'words' => ['gen', 'general'], 'kind' => 'rank', 'stack' => 4],
+        ['key' => 'counsel', 'text' => 'Counsel', 'words' => ['counsel'], 'kind' => 'rank', 'stack' => 6],
+    ];
+
     public static function cleanName(mixed $name): string
     {
         return mb_substr(Str::squish(strip_tags((string) $name)), 0, 120);
     }
 
+    /**
+     * Who a name means: lower case, single spaces, and without its titles, so "Mr. & Mrs. Kato Paul" is the "Kato Paul" of the
+     * pledge book, and a title added on a card never makes a second guest. Only with two words of name left: "Mama Joan" is
+     * usually Joan's mother, and "Mr. Kato" and "Mrs. Kato" are two people. resources/js/cards/titles.js does the same.
+     */
     public static function key(string $name): string
     {
-        return mb_strtolower(self::cleanName($name));
+        $clean = self::cleanName($name);
+        $rest = trim((string) preg_replace(self::titlesPattern(), '', $clean));
+
+        return mb_strtolower(count(preg_split('/\s+/u', $rest, -1, PREG_SPLIT_NO_EMPTY) ?: []) >= 2 ? $rest : $clean);
+    }
+
+    /** The titles at the start of a name, however they were typed: "Mr. & Mrs.", "Mr and Mrs", "Hon. Dr.". */
+    private static function titlesPattern(): string
+    {
+        static $pattern = null;
+        if ($pattern === null) {
+            $words = array_merge(...array_column(self::TITLES, 'words'));
+            usort($words, fn ($a, $b) => strlen($b) <=> strlen($a));
+            $any = implode('|', $words);
+            $pattern = '/^(?:(?:'.$any.')(?:\.\s*|\s+|(?=&))(?:(?:&|and\b)\s*(?:'.$any.')(?:\.\s*|\s+))?)+/iu';
+        }
+
+        return $pattern;
     }
 
     /**
@@ -83,6 +139,7 @@ final class EventInvitations
             ->get(['i.id', 'i.name', 'i.status', 'i.source', 'i.source_note', 'i.invited_at', 'i.cards_made', 'i.last_card_at', 'u.name as by_name'])
             ->each(function ($r) use ($add) {
                 $add((string) $r->name, 'invited', '', [
+                    'name' => (string) $r->name, // as it was last printed on their card, with the title they were given
                     'kept_note' => $r->source_note ?: 'Added by hand', // what was known when they were logged: shown only if the books no longer know them
                     'here' => true, 'id' => (int) $r->id, 'status' => (string) $r->status, 'invited_at' => $r->invited_at, 'invited_by' => $r->by_name, 'cards' => (int) $r->cards_made, 'last_card_at' => $r->last_card_at,
                 ]);
@@ -119,7 +176,8 @@ final class EventInvitations
      */
     public static function log(array $people, string $filter = 'all', string $search = ''): array
     {
-        $needle = self::key($search);
+        $needle = mb_strtolower(self::cleanName($search));
+        $found = fn (array $p) => str_contains($p['key'], $needle) || str_contains(mb_strtolower($p['name']), $needle) || str_contains($p['key'], self::key($search));
         $rows = array_filter($people, fn ($p) => $p['here']
             && match ($filter) {
                 'invited' => $p['status'] === 'invited',
@@ -127,7 +185,7 @@ final class EventInvitations
                 'waiting' => $p['status'] !== 'invited',
                 default => true,
             }
-            && ($needle === '' || str_contains($p['key'], $needle)));
+            && ($needle === '' || $found($p)));
         $rows = array_values($rows);
         usort($rows, fn ($a, $b) => [$b['invited_at'] ?? '', $a['name']] <=> [$a['invited_at'] ?? '', $b['name']]);
 
@@ -245,6 +303,7 @@ final class EventInvitations
                 $row->forceFill(['company_id' => $cid, 'budget_program_id' => $eid, 'name' => $clean, 'name_key' => $key, 'source' => $source === 'invited' ? 'typed' : $source,
                     'source_note' => $known['note'] ?? null, 'contribution_record_id' => $known['pledge_id'] ?? null, 'status' => 'made', 'created_by_id' => $by->id]);
             }
+            $row->name = $clean; // the same person, as now printed: a title added or dropped
             $row->is_deleted = false;
             if ($template !== null) {
                 $row->template_id = (int) $template;

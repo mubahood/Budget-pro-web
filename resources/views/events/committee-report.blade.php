@@ -15,7 +15,7 @@
   <td><div class="cap">Still owed</div><div class="fig" style="font-size:13px">{{ $m($e['owed']) }}</div></td>
   <td><div class="cap">Paid out</div><div class="fig" style="font-size:13px">{{ $m($e['spent']) }}</div></td>
 </tr></table>
-<p class="note">Amounts in {{ $label }}.{{ $when }} Budget {{ $m($e['budget']) }}. This week: {{ $m($r['week']['pledged']) }} pledged and {{ $m($r['week']['collected']) }} collected@if(\App\Support\Decimal::cmp($r['week']['paid_out'] ?? '0', '0') !== 0), {{ $m($r['week']['paid_out']) }} paid out@endif.</p>
+<p class="note">Amounts in {{ $label }}.{{ $when }} Budget {{ $m($e['budget']) }}. This week: {{ $m($r['week']['pledged']) }} pledged and {{ $m($r['week']['collected']) }} collected{{ \App\Support\Decimal::cmp($r['week']['paid_out'] ?? '0', '0') !== 0 ? ', '.$m($r['week']['paid_out']).' paid out' : '' }}.</p>
 
 <table class="t whole">
   <thead><tr><th class="st" colspan="4">By group</th></tr><tr><th>Group</th><th class="n">Pledged</th><th class="n">Collected</th><th class="n">Still owed</th></tr></thead>
