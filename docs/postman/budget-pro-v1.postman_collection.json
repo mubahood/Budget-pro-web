@@ -84,6 +84,36 @@
             "name": "Auth",
             "item": [
                 {
+                    "name": "POST auth/google {id_token, app?, device_name?, company_name?, currency?, country?, business_type?, modules?}: Sign in with Google.",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/google",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "google"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id_token\": \"\",\n    \"app\": \"\",\n    \"device_name\": \"\",\n    \"company_name\": \"\",\n    \"currency\": \"\"\n}"
+                        }
+                    }
+                },
+                {
                     "name": "Authenticate and issue an API token.",
                     "request": {
                         "method": "POST",

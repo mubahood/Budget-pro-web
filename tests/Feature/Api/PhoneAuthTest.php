@@ -42,7 +42,11 @@ class PhoneAuthTest extends ApiTestCase
             ->assertJsonPath('data.channel', 'mail')->assertJsonPath('data.sent_to', \App\Services\Auth\OtpService::mask($email));
         $this->assertSame('mail', DB::table('message_log')->where('to', $email)->where('purpose', 'otp')->value('channel'));
         $this->assertFalse(DB::table('message_log')->where('to', '+256701000002')->where('purpose', 'otp')->exists(), 'Nothing is sent to the phone.');
-        $this->postJson('/api/v1/auth/otp/verify', ['identifier' => '0701000002', 'purpose' => 'login', 'code' => $this->code('+256701000002')])->assertOk()->assertJsonStructure(['data' => ['token']]);
+        $proved = $this->postJson('/api/v1/auth/otp/verify', ['identifier' => '0701000002', 'purpose' => 'login', 'code' => $this->code('+256701000002')])->assertOk()->assertJsonStructure(['data' => ['token']])->json('data.token');
+        // That code was the first proof of this email: the session from before it has ended (EmailProof).
+        app('auth')->forgetGuards();
+        $this->getJson('/api/v1/auth/me', $this->auth($t['token']))->assertStatus(401);
+        app('auth')->forgetGuards();
 
         // An older account with only a phone is told to use its password.
         DB::table('admin_users')->insert(['username' => '0701000003', 'phone_number' => '0701000003', 'phone_e164' => '+256701000003', 'password' => bcrypt('secret123'),
@@ -50,7 +54,7 @@ class PhoneAuthTest extends ApiTestCase
         $this->postJson('/api/v1/auth/otp/request', ['identifier' => '0701000003', 'purpose' => 'reset'])->assertStatus(422)->assertJsonPath('errors.code', 'no_email');
 
         // A phone number is not verified by code.
-        $this->postJson('/api/v1/auth/verify/request', ['channel' => 'phone'], $this->auth($t['token']))->assertStatus(422)->assertJsonPath('errors.code', 'phone_codes_off');
+        $this->postJson('/api/v1/auth/verify/request', ['channel' => 'phone'], $this->auth($proved))->assertStatus(422)->assertJsonPath('errors.code', 'phone_codes_off');
         $this->assertSame('m•••@gmail.com', \App\Services\Auth\OtpService::mask('mary@gmail.com'));
     }
 

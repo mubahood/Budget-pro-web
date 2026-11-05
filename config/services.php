@@ -33,4 +33,9 @@ return [
 
     // Error tracking: forwarded to Sentry only when the SDK is installed and this is set (plan Part D).
     'sentry_dsn' => env('SENTRY_LARAVEL_DSN'),
+    // Sign in with Google on the phone: the Web client ID of the Firebase project (not a secret; the app is told it by app/version). Empty: no Google button.
+    'google' => [
+        'web_client_id' => env('GOOGLE_WEB_CLIENT_ID', ''),
+    ],
+
 ];

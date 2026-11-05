@@ -102,6 +102,65 @@ class AuthController extends Controller
     }
 
     /**
+     * POST auth/google {id_token, app?, device_name?, company_name?, currency?, country?, business_type?, modules?}: Sign in with Google.
+     * Someone we know signs in. Someone new is asked one thing, what their business is called: the first answer is {new: true, email,
+     * first_name, last_name} and no account is made until the same token comes back with company_name. Google has already proved the email.
+     */
+    public function google(Request $request)
+    {
+        $rules = RegistrationService::rules();
+        $data = $request->validate([
+            'id_token' => ['required', 'string', 'max:4096'], 'app' => ['nullable', 'string', 'max:40'], 'device_name' => ['nullable', 'string', 'max:191'], 'company_name' => ['nullable', 'string', 'max:191'],
+            'currency' => ['nullable', ...array_slice($rules['currency'], 1)], 'country' => $rules['country'], 'business_type' => $rules['business_type'], 'modules' => $rules['modules'] ?? ['nullable', 'array'], 'modules.*' => $rules['modules.*'] ?? ['string'],
+        ]);
+        try {
+            $who = app(\App\Services\Auth\GoogleSignIn::class)->verify($data['id_token']);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), $e->errorCode() === 'google_off' ? 503 : 422, $e->toErrors());
+        }
+
+        $user = $this->findByIdentifier($who['email']);
+        if ($user !== null) {
+            if (strtolower((string) $user->status) === 'inactive') {
+                return $this->forbidden('Your account has been deactivated. Please contact your administrator.');
+            }
+            \App\Services\Auth\EmailProof::claim($user); // the first proof of this email: nothing set up before it stays valid
+            $this->markVerified($user, $who['email']);
+            $user = \App\Services\Onboarding\SiblingAccounts::forApp($user, $data['app'] ?? null);
+            $company = Company::find($user->company_id);
+
+            return $company === null ? $this->error('Your account is not linked to a company.', 403) : $this->issue($request, $user, $company, 'Login successful.');
+        }
+
+        if (! \App\Support\Edition::isSaas()) {
+            return $this->error('New accounts cannot sign up here.', 403, ['code' => 'registration_closed']);
+        }
+        $name = trim((string) ($data['company_name'] ?? ''));
+        if ($name === '') {
+            return $this->success(['new' => true, 'email' => $who['email'], 'first_name' => $who['first_name'], 'last_name' => $who['last_name']], 'Name your business.');
+        }
+        try {
+            ['user' => $user, 'company' => $company] = app(RegistrationService::class)->register([
+                'first_name' => $who['first_name'] !== '' ? $who['first_name'] : strstr($who['email'], '@', true),
+                'last_name' => $who['last_name'],
+                'email' => $who['email'],
+                'password' => \Illuminate\Support\Str::password(40),
+                'company_name' => $name,
+                'currency' => $data['currency'] ?? 'UGX',
+                'country' => $data['country'] ?? 'UG',
+                'business_type' => $data['business_type'] ?? null,
+                'modules' => $data['modules'] ?? null,
+                'verification_token' => RegistrationService::verificationToken($who['email']),
+            ], RegistrationService::PRODUCT_BUDGET, 'google');
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+        app(\App\Services\Notifications\Notifier::class)->welcome($user, $company);
+
+        return $this->issue($request, $user, $company, 'Registration successful.');
+    }
+
+    /**
      * POST auth/sibling {app, company_name, device_name}: an account of its own beside this person's, for an app whose books stand
      * alone, and a sign-in to it. Same shape as a sign-in. Asked twice it finds the first (SiblingAccounts). The old sign-in on this
      * phone ends: the phone now holds the new one, and the app will open the new account from now on.
@@ -159,6 +218,7 @@ class AuthController extends Controller
         if ($user === null) {
             return $this->error('Account not found.', 404);
         }
+        \App\Services\Auth\EmailProof::claim($user); // the first proof of this address: nothing set up before it stays valid
         $this->markVerified($user, $id);
         if ($data['purpose'] === 'login') {
             $user = \App\Services\Onboarding\SiblingAccounts::forApp($user, is_string($request->input('app')) ? $request->input('app') : null);

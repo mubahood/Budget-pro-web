@@ -27,6 +27,7 @@ final class EditionMeta
         return [
             'edition' => Edition::name(),
             'registration_open' => Edition::isSaas(),
+            'google_client_id' => Edition::isSaas() && (string) config('services.google.web_client_id') !== '' ? (string) config('services.google.web_client_id') : null,
             'name' => (string) config('app.name'),
             'version' => Edition::version(),
         ];
