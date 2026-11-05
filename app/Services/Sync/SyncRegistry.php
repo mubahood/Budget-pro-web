@@ -4,6 +4,7 @@ namespace App\Services\Sync;
 
 use App\Models\BudgetItem;
 use App\Models\BudgetItemCategory;
+use App\Models\BudgetPayment;
 use App\Models\BudgetProgram;
 use App\Models\BudgetProgramMember;
 use App\Models\CashMovement;
@@ -139,22 +140,29 @@ class SyncRegistry
             // a settings-only update is the chair's (payment details also the treasurer's): BudgetAccess::allowsSettingsSyncOp.
             'budget_programs' => ['model' => BudgetProgram::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'status', 'deadline', 'rsvp', 'title', 'bottom', 'groups', 'is_active', 'is_default', 'logo'],
                 self::present('budget_programs', ['event_type', 'template_key', 'venue', 'settings', 'payment_details']))],
-            'budget_item_categories' => ['model' => BudgetItemCategory::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'target_amount'],
+            'budget_item_categories' => ['model' => BudgetItemCategory::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'target_amount'], self::present('budget_item_categories', ['sort_order'])),
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
-            'budget_items' => ['model' => BudgetItem::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'unit_price', 'quantity', 'approved', 'details', 'priority', 'invested_amount'],
+            // invested_amount stays writable for older phones: a changed figure is posted as a row of the difference (BudgetItem::prepare, BudgetPayments::settleTo).
+            'budget_items' => ['model' => BudgetItem::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'unit_price', 'quantity', 'approved', 'details', 'priority', 'invested_amount'], self::present('budget_items', ['unit', 'sort_order'])),
                 'user_fields' => ['created_by_id', 'changed_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'], 'category_uuid' => ['model' => BudgetItemCategory::class, 'column' => 'budget_item_category_id']]],
             // paid_amount / custom_paid_amount / fully_paid stay writable for older apps: a changed paid figure is posted as a
             // payment of the difference (ContributionRecord::prepare). Newer apps send contribution_payments ops instead.
-            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id', 'category_id'], self::present('contribution_records', ['phone'])),
+            'contribution_records' => ['model' => ContributionRecord::class, 'kind' => self::KIND_MASTER, 'fields' => array_merge(['name', 'amount', 'paid_amount', 'custom_amount', 'custom_paid_amount', 'fully_paid', 'treasurer_id', 'category_id'], self::present('contribution_records', ['phone', 'received_by_id'])),
                 'user_fields' => ['treasurer_id', 'chaned_by_id'],
                 'refs' => ['program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id']]],
             // Pledge payments (roadmap 02 §6): append-only events. Op data: {contribution_uuid, amount, paid_on? (Y-m-d),
-            // method?, receipt_no?, reference?, notes?}; a reversal: {reverses_uuid, reason}. Applied by ContributionPayments
+            // method?, receipt_no?, reference?, notes?, received_by_id?}; a reversal: {reverses_uuid, reason}. Applied by ContributionPayments
             // (the op uuid is the payment's uuid and idempotency key); the pledge's new paid figures come down with contribution_records.
             'contribution_payments' => ['model' => ContributionPayment::class, 'kind' => self::KIND_EVENT, 'handler' => 'contribution_payment',
                 'refs' => ['contribution_uuid' => ['model' => ContributionRecord::class, 'column' => 'contribution_record_id'], 'program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'],
                     'reverses_uuid' => ['model' => ContributionPayment::class, 'column' => 'reverses_id']]],
+            // Spending (PB-13): append-only events. Op data: {item_uuid, amount, paid_on? (Y-m-d), method?, paid_to?, reference?, notes?, paid_by_id?, approved_by_id?}; with no line:
+            // {program_uuid, ...}, which goes on the event's Not on the budget line; a reversal: {reverses_uuid, reason}. Applied by BudgetPayments, the op uuid is the row's uuid
+            // and idempotency key; the line's new figure comes down with budget_items.
+            'budget_payments' => ['model' => BudgetPayment::class, 'kind' => self::KIND_EVENT, 'handler' => 'budget_payment',
+                'refs' => ['item_uuid' => ['model' => BudgetItem::class, 'column' => 'budget_item_id'], 'program_uuid' => ['model' => BudgetProgram::class, 'column' => 'budget_program_id'],
+                    'reverses_uuid' => ['model' => BudgetPayment::class, 'column' => 'reverses_id']]],
             // An event's committee (master, last write wins; a removal is a tombstone). user_id must be a teammate.
             'budget_program_members' => ['model' => BudgetProgramMember::class, 'kind' => self::KIND_MASTER, 'fields' => ['user_id', 'role'],
                 'user_fields' => ['user_id', 'added_by_id'],
@@ -235,7 +243,7 @@ class SyncRegistry
             if (str_starts_with($key, 'sacco_')) {
                 return self::columns($key) !== []; // the Akiba migrations not run yet
             }
-            if ($key === 'contribution_payments' || $key === 'budget_program_members') {
+            if ($key === 'contribution_payments' || $key === 'budget_program_members' || $key === 'budget_payments') {
                 return self::columns($key) !== []; // the pledges migrations not run yet
             }
 

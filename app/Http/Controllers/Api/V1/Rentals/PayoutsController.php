@@ -35,14 +35,14 @@ class PayoutsController extends RentalsController
         });
     }
 
-    /** POST rentals/payouts {landlord_id, amount_minor, method, paid_on, reference, period_from, period_to, notes, pay_ahead} */
+    /** POST rentals/payouts {landlord_id, amount_minor, method, paid_on, reference, period_from, period_to, notes, pay_ahead, advance_reason, advance_others_ok} */
     public function store(Request $request): JsonResponse
     {
         return $this->attempt(function () use ($request) {
             $landlord = RentalLandlord::withoutGlobalScopes()->where('company_id', $this->cid($request))->find((int) $request->input('landlord_id'))
                 ?? throw $this->notFoundRecord('landlord');
             $this->day($request, 'paid_on');
-            $data = $request->only(['method', 'paid_on', 'reference', 'notes']) + ['amount_minor' => $this->minor($request, 'amount_minor'),
+            $data = $request->only(['method', 'paid_on', 'reference', 'notes', 'advance_reason']) + ['advance_others_ok' => $request->boolean('advance_others_ok'), 'amount_minor' => $this->minor($request, 'amount_minor'),
                 'period_from' => $this->day($request, 'period_from'), 'period_to' => $this->day($request, 'period_to'),
                 'advance' => $request->boolean('pay_ahead') || $request->boolean('advance')];
 

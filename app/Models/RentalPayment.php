@@ -25,7 +25,10 @@ class RentalPayment extends Model
     /** Methods that bring money into the account's cash. */
     public const CASH_METHODS = ['cash', 'bank', 'mobile_money', 'cheque'];
 
-    public const METHODS = ['cash', 'bank', 'mobile_money', 'cheque', 'deposit', 'waiver', 'opening'];
+    /** The tenant paid the landlord at the gate (LC-20): a bill is settled, and no money comes into the agency's accounts. */
+    public const DIRECT = 'paid_landlord';
+
+    public const METHODS = ['cash', 'bank', 'mobile_money', 'cheque', 'deposit', 'waiver', 'opening', self::DIRECT];
 
     public function movesCash(): bool
     {

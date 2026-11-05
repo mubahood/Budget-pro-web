@@ -17,6 +17,11 @@
 return [
     'enabled' => (bool) env('DEMO_PUBLIC', true),
 
+    // The owner's two real invitation cards on the demo events (CardTemplates::DEMO), instead of the made-up sample. They show a
+    // real couple and relatives' phone numbers, so they are off unless switched on here, and need their files in the portal.
+    // Switched off, the next upkeep takes them off the demo events again.
+    'real_cards' => (bool) env('EVENT_CARDS_DEMO_REAL', false),
+
     // Budget Pro's sign-in. The address is on our own domain, and nothing is ever sent to it.
     'email' => env('DEMO_EMAIL', 'demo@schooldynamics.ug'),
     'password' => env('DEMO_PASSWORD', 'demo2026'),

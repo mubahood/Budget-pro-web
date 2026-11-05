@@ -48,7 +48,7 @@ class TeamService
     }
 
     /** @return array{invite: object, link: string} */
-    public function invite(User $by, string $role, ?string $phone, ?string $email, ?string $name = null): array
+    public function invite(User $by, string $role, ?string $phone, ?string $email, ?string $name = null, bool $viewerSeat = false): array
     {
         MasterPassword::refuseInSession('invite people to the team');
         \App\Services\Onboarding\PublicDemo::guard((int) $by->company_id, 'inviting people');
@@ -68,7 +68,10 @@ class TeamService
         if ($existing) {
             throw BusinessRuleException::make('already_member', (int) $existing->company_id === (int) $company->id ? 'This person is already on your team.' : 'This person already has a '.\App\Support\SupportContact::productName($company).' account for another business.');
         }
-        (new \App\Services\Billing\Quotas())->assertCanAdd($company, 'users');
+        // A viewer's seat on an event is free on every plan (Quotas::logins).
+        if (! $viewerSeat) {
+            (new \App\Services\Billing\Quotas())->assertCanAdd($company, 'users');
+        }
 
         $token = Str::random(40);
         $id = DB::table('invites')->insertGetId([

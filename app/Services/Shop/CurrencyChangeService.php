@@ -70,6 +70,7 @@ class CurrencyChangeService
         'budget_programs' => ['budget_total', 'budget_balance', 'total_collected', 'total_in_pledge', 'budget_spent', 'total_expected'],
         'contribution_records' => ['amount', 'not_paid_amount', 'paid_amount'],
         'contribution_payments' => ['amount'],
+        'budget_payments' => ['amount'],
         'handover_records' => ['amount'],
         'poultry_batches' => ['cost_per_chick'],
         'poultry_daily_records' => ['egg_unit_price', 'feed_price_per_kg'],
@@ -146,6 +147,13 @@ class CurrencyChangeService
                     }
                 }
                 $this->convertSettings($company, $rate);
+                if (Schema::hasTable('budget_payments')) {
+                    // Each payment out was rounded on its own: a line's paid-out figure is their sum again, and its category's and event's follow.
+                    DB::statement('UPDATE budget_items i SET i.invested_amount = (SELECT COALESCE(SUM(p.amount), 0) FROM budget_payments p WHERE p.budget_item_id = i.id AND p.is_deleted = 0) WHERE i.company_id = ? AND EXISTS (SELECT 1 FROM budget_payments q WHERE q.budget_item_id = i.id)', [$company->id]);
+                    DB::statement('UPDATE budget_items i SET i.balance = i.target_amount - i.invested_amount WHERE i.company_id = ?', [$company->id]);
+                    DB::statement('UPDATE budget_item_categories c SET c.invested_amount = (SELECT COALESCE(SUM(i.invested_amount), 0) FROM budget_items i WHERE i.budget_item_category_id = c.id AND i.is_deleted = 0) WHERE c.company_id = ?', [$company->id]);
+                    DB::statement('UPDATE budget_programs b SET b.budget_spent = (SELECT COALESCE(SUM(i.invested_amount), 0) FROM budget_items i WHERE i.budget_program_id = b.id AND i.is_deleted = 0) WHERE b.company_id = ?', [$company->id]);
+                }
                 if (Schema::hasTable('contribution_payments')) {
                     // Each payment was rounded on its own: a pledge's paid figure is their sum again (roadmap 02 §6).
                     DB::statement('UPDATE contribution_records r SET r.paid_amount = (SELECT COALESCE(SUM(p.amount), 0) FROM contribution_payments p WHERE p.contribution_record_id = r.id AND p.is_deleted = 0),

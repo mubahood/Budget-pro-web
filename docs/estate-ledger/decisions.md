@@ -110,3 +110,25 @@ an agency has money before its first rent; the guard then protects real overdraf
 **KR-27: A receipt is a snapshot written once when the payment is posted.** A reprint shows what it showed when issued; a
 reversal adds a line and changes nothing else. *Why:* ADR 0010's claim, and a paper a tenant holds must match the paper
 reprinted later.
+
+**KR-28: A month closes, once, and what was issued stays.** Closing locks the month at `RentalLedger` and issues each landlord a numbered statement with a proof. Late money
+is dated today and marked for its month. Only the account owner reopens, with a reason, and only the latest month; a correction makes a new version that says what it
+replaces. It is on every plan. *Why:* an agency sends these papers to landlords, and books that can change under a sent paper cannot be trusted. *Alternative:* recomputing a
+statement from the rows each time (ADR 0010 before this): a unit switched off or a name corrected would change a paper the landlord already holds.
+
+**KR-29: Bill ahead is a choice beside KR-12, not a replacement.** Money above what is owed stays credit by default, and the till offers billing the next periods now, as one write
+with real bills and their commission. A setting flips which is offered first. *Why:* some agencies pay landlords on money received, while KR-12's protection of the tenant stays the default.
+
+**KR-30: An advance to a landlord needs a tick and a reason, and a second tick if the agency's own money does not cover it.** It is a warning that can be passed, never a refusal. The
+landlord's balance goes below zero and clears as rent comes in. *Why:* agencies do this, and it should be written down, not hidden in a note.
+
+**KR-31: A tenant who paid the landlord directly is a payment with no cash** (`paid_landlord`, journal `collected_direct`). The bill is settled and the landlord's balance falls by the commission.
+It settles this landlord's bills only, leaves no credit, never pays a deposit, and is never offered to a phone. *Why:* otherwise staff invent a payment and a payout to record it. The agent still earns.
+
+**KR-32: Money held back for a landlord is the agency's own percent, recorded when actually paid over.** Off by default. No law is stated and no tax is worked out by the system: it multiplies the
+agency's typed percent by the rent the agency collected, as a figure the office can change. The screen says to confirm the rate with an accountant. It is an expense charged to the landlord, so
+no new account is needed. *Alternative:* a held-but-unpaid liability: it would need a new column and rule (ADR 0010), for a rule nobody here can state.
+
+**KR-33: A room the landlord or caretaker uses is its own unit status** (`in_use`, with who). Not vacant, not let, no rent lost, left out of occupancy and counted apart. A tenant moves in only once it is cleared.
+*Why:* Leases refuse zero rent, so such a room otherwise reads as vacant and as rent lost.
+

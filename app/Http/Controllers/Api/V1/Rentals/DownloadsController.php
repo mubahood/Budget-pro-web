@@ -8,14 +8,18 @@ use App\Models\Company;
 use App\Models\RentalLandlord;
 use App\Models\RentalLogin;
 use App\Models\RentalPayment;
+use App\Models\RentalPayout;
 use App\Models\StoredFile;
 use App\Models\User;
+use App\Services\Rentals\Landlords\PayoutAdvice;
+use App\Services\Rentals\Landlords\StatementBook;
 use App\Services\Rentals\Landlords\StatementPdf;
 use App\Services\Rentals\Logins\RentalLogins;
 use App\Services\Rentals\Payments\Receipt;
 use App\Services\Rentals\PrivateFiles;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalLinks;
+use App\Services\Rentals\RentalsModule;
 use App\Services\Rentals\Reports\RentalExport;
 use App\Services\Rentals\Reports\RentalReports;
 use Illuminate\Http\Request;
@@ -59,8 +63,28 @@ class DownloadsController extends Controller
                 return $this->missing();
             }
 
-            return response(StatementPdf::render($l, $from, $to), 200, ['Content-Type' => 'application/pdf',
+            $copy = $request->filled('statement_id') ? StatementBook::byId($l, (int) $request->query('statement_id')) : null;
+            if ($request->filled('statement_id') && $copy === null) {
+                return $this->missing();
+            }
+
+            return response(StatementPdf::render($l, $from, $to, $copy?->id), 200, ['Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="'.StatementPdf::filename($l, $from, $to).'"', 'Cache-Control' => 'private, no-store']);
+        });
+    }
+
+    /** GET rentals/pdf/payout-advice?company_id&payout_id&by&by_id (signed) */
+    public function payoutAdvice(Request $request): Response
+    {
+        return $this->guard($request, function () use ($request) {
+            $cid = (int) $request->query('company_id');
+            $p = RentalPayout::withoutGlobalScopes()->where('company_id', $cid)->find((int) $request->query('payout_id'));
+            if ($p === null || RentalsModule::isOwnerMode($cid) || ! $this->maySee($request, $cid, fn (User $u) => RentalAccess::can($u, 'rentals_landlords') && RentalAccess::propertyIds($u) === null,
+                fn (RentalLogin $login) => $login->subject_type === 'landlord' && (int) $login->subject_id === (int) $p->landlord_id)) {
+                return $this->missing();
+            }
+
+            return response(PayoutAdvice::pdf($p), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.PayoutAdvice::filename($p).'"', 'Cache-Control' => 'private, no-store']);
         });
     }
 

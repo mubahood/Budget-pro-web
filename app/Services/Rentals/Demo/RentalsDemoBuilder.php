@@ -15,6 +15,7 @@ use App\Models\RentalLeaseItem;
 use App\Models\RentalMaintenance;
 use App\Models\RentalPayment;
 use App\Models\RentalPayout;
+use App\Models\RentalPayoutRunLine;
 use App\Models\RentalProperty;
 use App\Models\RentalTenant;
 use App\Models\RentalUnit;
@@ -33,8 +34,13 @@ use App\Services\Rentals\Directory\Tenants;
 use App\Services\Rentals\Directory\Units;
 use App\Services\Rentals\Expenses;
 use App\Services\Rentals\Import\RentalImport;
+use App\Services\Rentals\Landlords\Handover;
 use App\Services\Rentals\Landlords\LandlordAccounts;
+use App\Services\Rentals\Landlords\MonthClose;
+use App\Services\Rentals\Landlords\PayoutRuns;
 use App\Services\Rentals\Landlords\Payouts;
+use App\Services\Rentals\Landlords\Withholding;
+use App\Services\Rentals\Leases\CommissionChanges;
 use App\Services\Rentals\Leases\Leases;
 use App\Services\Rentals\Ledger\RentalLedger;
 use App\Services\Rentals\Logins\RentalLogins;
@@ -43,6 +49,7 @@ use App\Services\Rentals\Meters;
 use App\Services\Rentals\Payments\Deposits;
 use App\Services\Rentals\Payments\Payments;
 use App\Services\Rentals\PrivateFiles;
+use App\Services\Rentals\Portal\LandlordApprovals;
 use App\Services\Rentals\Portal\TenantRequests;
 use App\Services\Rentals\RentalAudit;
 use App\Services\Rentals\RentalsModule;
@@ -74,7 +81,10 @@ use Ramsey\Uuid\Uuid;
 final class RentalsDemoBuilder
 {
     /** Bumped when a build changes what the demo holds. A live demo of an older build is rebuilt on the next run, not healed. */
-    public const BUILD = 1;
+    public const BUILD = 2;
+
+    /** A month closes on this day of the next one: the month just ended is usually still there for a visitor to close. */
+    private const CLOSE_DAY = 25;
 
     /** Grouping for ids made from names (uuid v5). */
     private const UUID_SPACE = '6f1d3a52-6d6e-5a54-9a2f-0d7a4e6b2c11';
@@ -115,6 +125,9 @@ final class RentalsDemoBuilder
 
     private bool $healing = false;
 
+    /** The first month this build closes ('Y-m'). A heal closes only what follows what is closed. */
+    private ?string $closeFrom = null;
+
     /** @var array<string, User> sign-in key => user */
     private array $users = [];
 
@@ -142,8 +155,11 @@ final class RentalsDemoBuilder
     /** Tenants made so far: their phone numbers count from the block's start. */
     private int $tenantSeq = 0;
 
-    /** @var array<int, string> unit id => status held (reserved, under repair) */
+    /** @var array<int, string> unit id => status held (reserved, under repair, in use) */
     private array $unitStates = [];
+
+    /** @var array<int, string> unit id => who uses it */
+    private array $unitUsers = [];
 
     /** @var array<string, int> people's sign-in key => rental login id */
     private array $logins = [];
@@ -165,7 +181,7 @@ final class RentalsDemoBuilder
     {
         $shared = ['names' => $all['names'], 'occupations' => $all['occupations'], 'kin' => $all['kin'], 'notes' => $all['notes']];
         $empty = array_fill_keys(['logins', 'staff', 'people', 'landlords', 'properties', 'empty_on_day_one', 'tenancies', 'opening_cash', 'move_ins', 'move_outs', 'cancelled', 'notices',
-            'rent_changes', 'items', 'one_offs', 'waivers', 'former_pays', 'unit_states', 'maintenance', 'vendors', 'monthly_expenses', 'one_expenses', 'documents'], []);
+            'rent_changes', 'items', 'one_offs', 'waivers', 'former_pays', 'unit_states', 'maintenance', 'vendors', 'monthly_expenses', 'one_expenses', 'documents', 'landlord_work'], []);
         if ($account === RentalsDemo::SOLO) {
             return (array) $all['solo'] + $shared + $empty;
         }
@@ -187,6 +203,9 @@ final class RentalsDemoBuilder
         $this->rangeFrom = $this->start->toDateString();
         $this->rangeTo = $this->today->toDateString();
         $this->token = strtolower(Str::random(6));
+        if ((int) ($this->data['landlord_work']['close_months'] ?? 0) > 0) {
+            $this->closeFrom = $this->today->copy()->startOfMonth()->subMonthsNoOverflow((int) $this->data['landlord_work']['close_months'])->format('Y-m');
+        }
 
         $guards = [];
         RentalsDemo::$building = true;
@@ -254,6 +273,11 @@ final class RentalsDemoBuilder
         try {
             OnboardingEvents::muted(function () use (&$repairs) {
                 $last = Carbon::parse($this->rangeFrom);
+                // A visitor may have closed a month while the upkeep was behind: a closed day takes no more money, so it is not run.
+                $closed = RentalLedger::closedThrough($this->cid);
+                if ($closed !== null && $last->toDateString() < $closed) {
+                    $last = Carbon::parse($closed);
+                }
                 $from = $last->copy()->addDay();
                 if ($from->lte($this->today)) {
                     $this->rangeFrom = $from->toDateString();
@@ -611,6 +635,161 @@ final class RentalsDemoBuilder
             $date = $this->dateOf($r);
             $this->scene($date, 11, fn () => $this->reversedPayout($r));
         }
+        $this->planLandlordWork((array) $this->data['landlord_work']);
+    }
+
+    /**
+     * What an agency does for its landlords, through the same services as a visitor's screens (LC-25): a property changing hands, commission changed from a date, rent billed
+     * ahead, a repair above a landlord's limit, money held back, an advance, a month reopened and issued again. Each runs on its own day, before and after months close.
+     *
+     * @param  array<string, mixed>  $w
+     */
+    private function planLandlordWork(array $w): void
+    {
+        if (isset($w['unit_rule'])) {
+            $u = $w['unit_rule'];
+            $this->scene($this->dateOf($u), 9, fn () => app(Units::class)->setCommission($this->users['owner'], $this->propertyModel((string) $u['property']), [(int) $this->units[$u['property'].':'.$u['unit']]],
+                ['commission_type' => 'percent', 'commission_bp' => (int) $u['percent'] * 100]));
+        }
+        if (isset($w['lease_rate'])) {
+            $r = $w['lease_rate'];
+            $this->scene($this->dateOf($r), 11, fn () => app(CommissionChanges::class)->change($this->users['owner'], $this->lease((string) $r['lease']),
+                ['commission_type' => 'percent', 'commission_bp' => (int) $r['percent'] * 100], $this->dateOf(['ago' => $r['from']]), (string) $r['reason']));
+        }
+        if (isset($w['landlord_rate'])) {
+            $r = $w['landlord_rate'];
+            $this->scene($this->dateOf($r), 11, fn () => app(CommissionChanges::class)->changeMany($this->users['owner'], (int) $this->landlords[$r['landlord']], null,
+                ['commission_type' => 'percent', 'commission_bp' => (int) $r['percent'] * 100], $this->dateOf(['ago' => $r['from']]), (string) $r['reason'], [], true));
+        }
+        if (isset($w['handover'])) {
+            $h = $w['handover'];
+            $this->scene($this->dateOf($h), 8, fn () => app(Handover::class)->handOver($this->users['owner'], $this->propertyModel((string) $h['property']), ['landlord_id' => (int) $this->landlords[$h['to']], 'from' => $this->current, 'reason' => (string) $h['reason']]));
+        }
+        foreach ((array) ($w['bill_ahead'] ?? []) as $a) {
+            $this->scene($this->dateOf($a), 12, fn () => $this->billAhead((string) $a['lease'], (int) $a['periods']));
+        }
+        if (isset($w['repair_limit'])) {
+            $l = $w['repair_limit'];
+            $this->scene($this->dateOf($l), 8, fn () => app(Landlords::class)->update($this->users['owner'], $this->landlordModel((string) $l['landlord']), ['expense_limit_minor' => (int) $l['limit']]));
+        }
+        foreach ((array) ($w['repairs'] ?? []) as $r) {
+            $this->scene($this->dateOf($r), 10, fn () => $this->repairAboveLimit($r));
+        }
+        if (isset($w['hold_back'])) {
+            $h = $w['hold_back'];
+            $this->scene($this->dateOf($h), 8, fn () => app(Landlords::class)->update($this->users['owner'], $this->landlordModel((string) $h['landlord']), ['withholding_bp' => (int) $h['percent'] * 100]));
+            foreach ((array) $h['paid'] as $p) {
+                $this->scene($this->dateOf($p), 14, fn () => $this->holdBack((string) $h['landlord'], (int) $p['for_ago']));
+            }
+        }
+        if (isset($w['advance'])) {
+            $a = $w['advance'];
+            $this->scene($this->dateOf($a), 14, function () use ($a) {
+                $landlord = $this->landlordModel((string) $a['landlord']);
+                $amount = max(0, LandlordAccounts::balance($landlord)) + (int) $a['over'];
+                $this->fund('mobile_money', $amount);
+                app(Payouts::class)->record($this->users['accountant'] ?? $this->users['owner'], $landlord, ['amount_minor' => $amount, 'method' => 'mobile_money', 'paid_on' => $this->current,
+                    'reference' => 'MP'.(27000000 + crc32($this->current) % 999999), 'advance' => true, 'advance_reason' => (string) $a['reason'], 'advance_others_ok' => true]);
+            });
+        }
+        if (isset($w['late_receipt'])) {
+            $r = $w['late_receipt'];
+            $this->scene($this->dateOf($r), 12, function () use ($r) {
+                $mark = RentalLedger::lateMark($this->today->copy()->startOfMonth()->subMonthsNoOverflow((int) $r['month_ago'])->toDateString(), Carbon::parse($this->current));
+                app(Payments::class)->receive($this->users['accountant'] ?? $this->users['owner'], $this->lease((string) $r['lease']), ['amount_minor' => (int) $r['amount'], 'method' => 'cash', 'paid_on' => $this->current, 'notes' => $mark,
+                    'uuid' => $this->uuid('late|'.$this->current)]);
+            });
+        }
+        if (isset($w['reissue'])) {
+            $r = $w['reissue'];
+            $this->scene($this->dateOf($r), 9, fn () => $this->reissue($r));
+        }
+    }
+
+    /** A tenant pays what is open and the next periods with it, and the choice at the till bills them now. */
+    private function billAhead(string $key, int $periods): void
+    {
+        $lease = $this->lease($key);
+        $billing = app(Billing::class);
+        $owed = $this->owed($lease);
+        $plan = $billing->aheadPlan($lease, $owed + 12 * ((int) $lease->rent_minor + (int) RentalLeaseItem::withoutGlobalScopes()->where('company_id', $this->cid)->where('lease_id', $lease->id)->where('active', true)->sum('amount_minor')));
+        $lines = array_slice($plan['periods'], 0, $periods);
+        if (count($lines) !== $periods) {
+            throw BusinessRuleException::make('demo_skip', "{$key} cannot be billed {$periods} periods ahead.");
+        }
+        $billing->receiveAhead($this->users['owner'], $lease, ['amount_minor' => $owed + (int) array_sum(array_column($lines, 'amount_minor')), 'method' => 'bank', 'paid_on' => $this->current,
+            'reference' => 'FT'.(2600000 + crc32($key.$this->current) % 99999), 'uuid' => $this->uuid("ahead|{$key}|{$this->current}")], $periods);
+    }
+
+    /** A repair quoted above the landlord's limit: they said yes, or could not be reached and the office said why, or the question is still waiting on their own page. @param array<string, mixed> $r */
+    private function repairAboveLimit(array $r): void
+    {
+        $by = $this->users['owner'];
+        $service = app(Maintenance::class);
+        $ticket = $service->open($by, $this->cid, ['title' => (string) $r['title'], 'priority' => 'high', 'details' => null, 'unit_id' => (int) $this->units[$r['unit']]]);
+        $ticket = $service->quote($by, $ticket, (int) $r['quote']);
+        $approvals = app(LandlordApprovals::class);
+        if (! empty($r['ask'])) {
+            $approvals->ask($by, $ticket);
+
+            return;
+        }
+        if (isset($r['yes'])) {
+            $approvals->ask($by, $ticket);
+            $approvals->record($by, $ticket->fresh(), true, 'phone', (string) $r['yes'], 'Said yes on a call');
+        }
+        $id = (int) $ticket->id;
+        $done = Carbon::parse($this->current)->addDays(max(1, (int) $r['done']))->toDateString();
+        $this->event($done, 15, function () use ($by, $id, $r, $done) {
+            $this->fund('bank', (int) $r['quote']);
+            app(Maintenance::class)->complete($by, $this->ticket($id), ['cost_minor' => (int) $r['quote'], 'vendor' => (string) $r['by'], 'method' => 'bank', 'paid_on' => $done, 'charged_to' => 'landlord',
+                'resolved_on' => $done, 'resolution' => 'Done by '.$r['by'].'.'] + (isset($r['reason']) ? ['over_limit_reason' => (string) $r['reason']] : []));
+        });
+    }
+
+    /** The office pays over what it holds back for a landlord: its own percent of the rent of that month, recorded on the day the money goes. */
+    private function holdBack(string $landlordKey, int $forAgo): void
+    {
+        $month = $this->today->copy()->startOfMonth()->subMonthsNoOverflow($forAgo)->format('Y-m');
+        $landlord = $this->landlordModel($landlordKey);
+        $row = collect(Withholding::suggestions($this->cid, $month))->firstWhere('landlord_id', (int) $landlord->id);
+        $amount = (int) ($row['left_minor'] ?? 0);
+        if ($amount <= 0) {
+            throw BusinessRuleException::make('demo_skip', "No rent to hold back for {$month}.");
+        }
+        $this->fund('bank', $amount);
+        app(Withholding::class)->record($this->users['accountant'] ?? $this->users['owner'], $landlord, $month, ['amount_minor' => $amount, 'method' => 'bank', 'paid_on' => $this->current, 'vendor' => $this->data['vendors']['tax'] ?? null]);
+    }
+
+    /** A bill found after its month closed: the owner reopens it with a reason, it goes in, and the month closes again with a new statement that says what it replaces. @param array<string, mixed> $r */
+    private function reissue(array $r): void
+    {
+        $month = $this->today->copy()->startOfMonth()->subMonthsNoOverflow((int) $r['month_ago'])->format('Y-m');
+        app(MonthClose::class)->reopen($this->users['owner'], $month, (string) $r['reason']);
+        $this->fund('cash', (int) $r['amount']);
+        app(Expenses::class)->record($this->users['accountant'] ?? $this->users['owner'], ['property_id' => $this->properties[$r['property']], 'category' => (string) $r['category'], 'description' => (string) $r['what'],
+            'vendor' => $this->data['vendors'][$r['vendor']] ?? null, 'amount_minor' => (int) $r['amount'], 'method' => 'cash', 'paid_on' => MonthClose::lastDay($month), 'charged_to' => 'landlord']);
+        app(MonthClose::class)->close($this->users['accountant'] ?? $this->users['owner'], $month);
+    }
+
+    /** The month before this day's closes, once this demo has reached the months it closes. A refused close (a visitor closed or reopened one) changes nothing. */
+    private function closeLastMonth(Carbon $day): void
+    {
+        $month = $day->copy()->subMonthNoOverflow()->format('Y-m');
+        if ($this->closeFrom !== null ? $month < $this->closeFrom : RentalLedger::closedThrough($this->cid) === null) {
+            return;
+        }
+        app(MonthClose::class)->close($this->users['accountant'] ?? $this->users['owner'], $month);
+    }
+
+    private function propertyModel(string $key): RentalProperty
+    {
+        return RentalProperty::withoutGlobalScopes()->where('company_id', $this->cid)->findOrFail($this->properties[$key]);
+    }
+
+    private function landlordModel(string $key): RentalLandlord
+    {
+        return RentalLandlord::withoutGlobalScopes()->where('company_id', $this->cid)->findOrFail($this->landlords[$key]);
     }
 
     /** @param array<string, mixed> $spec */
@@ -872,6 +1051,9 @@ final class RentalsDemoBuilder
             case 'ahead':
                 $at($on(-4), 10, fn () => $this->payAhead($id, $b, $tag));
                 break;
+            case 'direct':
+                $at($on(2), 11, fn () => $this->payLandlord($id, $tag));
+                break;
             case 'parts':
                 $at($on(1 + $h % 3), 11, fn () => $this->payPart($id, $b, 0.5, "part1:{$tag}"));
                 if ($h % 3 === 0) {
@@ -927,6 +1109,17 @@ final class RentalsDemoBuilder
         if ($lease !== null && ($owed = $this->owed($lease)) > 0) {
             $this->receive($lease, $b, $owed, $tag);
         }
+    }
+
+    /** The tenant paid the landlord at the gate, and the office records it (LC-20). */
+    private function payLandlord(int $id, string $tag): void
+    {
+        $lease = $this->live($id);
+        if ($lease === null || ($open = (int) Payments::directBills($lease, false)->sum(fn (RentalCharge $c) => $c->left())) <= 0) {
+            return;
+        }
+        app(Payments::class)->receiveDirect($this->users['accountant'] ?? $this->users['owner'], $lease, ['amount_minor' => $open, 'paid_on' => $this->current, 'notes' => 'The landlord says it came on the day',
+            'uuid' => $this->uuid("direct|{$lease->id}|{$tag}")]);
     }
 
     /** @param array<string, mixed> $b */
@@ -1084,6 +1277,12 @@ final class RentalsDemoBuilder
         if ($day->day === 12) {
             $this->event($date, 11, fn () => $this->chaseFormers($date));
         }
+        if ($day->day === 20 && isset($this->data['landlord_work']['pays_twice'])) {
+            $this->event($date, 16, fn () => $this->secondPayout((string) $this->data['landlord_work']['pays_twice'], $date));
+        }
+        if ($day->day === self::CLOSE_DAY && (int) ($this->data['landlord_work']['close_months'] ?? 0) > 0) {
+            $this->event($date, 18, fn () => $this->closeLastMonth($day));
+        }
         if ($day->day === 27) {
             $this->event($date, 8, fn () => $this->meters($date));
         }
@@ -1102,26 +1301,62 @@ final class RentalsDemoBuilder
         }
     }
 
-    /** Monthly payouts: what each landlord is owed, to the nearest 50,000 down; owner mode's drawing is the same payment. */
+    /**
+     * Monthly payouts: what each landlord is owed, to the nearest 50,000 down. An agency pays them as one run, every line or none (LC-09); owner mode's drawing is one payment.
+     */
     private function payouts(string $date): void
     {
         $by = $this->users['accountant'] ?? $this->users['owner'];
         $from = Carbon::parse($date)->subMonthNoOverflow()->startOfMonth();
+        $lines = [];
+        $paying = [];
         foreach (RentalLandlord::withoutGlobalScopes()->where('company_id', $this->cid)->where('status', 'active')->orderBy('id')->get() as $l) {
-            $balance = LandlordAccounts::balance($l);
-            $amount = intdiv(max(0, $balance), 50_000) * 50_000;
+            $amount = intdiv(max(0, LandlordAccounts::balance($l)), 50_000) * 50_000;
             if ($amount < 200_000) {
                 continue;
             }
             $method = (string) ($l->payout_method ?: 'bank');
-            $this->fund($method, $amount);
-            $have = RentalLedger::cash($this->cid)[$method] ?? 0;
+            $already = $paying[$method] ?? 0;
+            $this->fund($method, $already + $amount);
+            $have = (int) (RentalLedger::cash($this->cid)[$method] ?? 0) - $already;
             $amount = min($amount, intdiv(max(0, $have), 50_000) * 50_000);
             if ($amount > 0) {
-                app(Payouts::class)->record($by, $l, ['amount_minor' => $amount, 'method' => $method, 'paid_on' => $date, 'period_from' => $from->toDateString(), 'period_to' => $from->copy()->endOfMonth()->toDateString(),
-                    'reference' => $method === 'mobile_money' ? 'MP'.(27000000 + crc32($date.$l->id) % 999999) : 'FT'.(2700000 + crc32($date.$l->id) % 99999)]);
+                $paying[$method] = $already + $amount;
+                $lines[(int) $l->id] = ['landlord' => $l, 'landlord_id' => (int) $l->id, 'amount_minor' => $amount, 'method' => $method];
             }
         }
+        $reference = fn (string $method, int $landlordId) => $method === 'mobile_money' ? 'MP'.(27000000 + crc32($date.$landlordId) % 999999) : 'FT'.(2700000 + crc32($date.$landlordId) % 99999);
+        if ($this->account === RentalsDemo::SOLO) {
+            foreach ($lines as $id => $line) {
+                app(Payouts::class)->record($by, $line['landlord'], ['amount_minor' => $line['amount_minor'], 'method' => $line['method'], 'paid_on' => $date, 'period_from' => $from->toDateString(),
+                    'period_to' => $from->copy()->endOfMonth()->toDateString(), 'reference' => $reference($line['method'], $id)]);
+            }
+
+            return;
+        }
+        if ($lines === []) {
+            return;
+        }
+        $run = app(PayoutRuns::class)->save($by, array_values(array_map(fn (array $l) => ['landlord_id' => $l['landlord_id'], 'amount_minor' => $l['amount_minor'], 'method' => $l['method']], $lines)));
+        $references = [];
+        foreach (RentalPayoutRunLine::withoutGlobalScopes()->where('company_id', $this->cid)->where('run_id', $run->id)->get() as $line) {
+            $references[(int) $line->id] = $reference((string) $line->method, (int) $line->landlord_id);
+        }
+        app(PayoutRuns::class)->post($by, $run, ['paid_on' => $date, 'references' => $references]);
+    }
+
+    /** A landlord who likes money sooner: what came in since the 5th, when it is worth sending. */
+    private function secondPayout(string $landlordKey, string $date): void
+    {
+        $l = $this->landlordModel($landlordKey);
+        $amount = intdiv(max(0, LandlordAccounts::balance($l)), 50_000) * 50_000;
+        if ($amount < 500_000) {
+            return;
+        }
+        $method = (string) ($l->payout_method ?: 'bank');
+        $this->fund($method, $amount);
+        app(Payouts::class)->record($this->users['accountant'] ?? $this->users['owner'], $l, ['amount_minor' => $amount, 'method' => $method, 'paid_on' => $date, 'notes' => 'Second payment this month',
+            'reference' => 'FT'.(2750000 + crc32($date.$l->id) % 99999)]);
     }
 
     /** The monthly call to former tenants who still owe. */
@@ -1233,7 +1468,7 @@ final class RentalsDemoBuilder
                     }
                     $b = $this->behaviour[$id];
                     $lease = $this->live((int) $id);
-                    if ($lease === null || str_starts_with((string) $b['pay'], 'ahead') || str_starts_with((string) $b['pay'], 'behind')) {
+                    if ($lease === null || str_starts_with((string) $b['pay'], 'ahead') || str_starts_with((string) $b['pay'], 'behind') || $b['pay'] === 'direct') {
                         continue;
                     }
                     $owed = $this->owed($lease);
@@ -1271,8 +1506,11 @@ final class RentalsDemoBuilder
         $owner = $this->users['owner'];
         foreach ($this->data['unit_states'] as $key => $s) {
             $unit = $this->unitModel($key);
-            $this->quietly(fn () => app(Units::class)->update($owner, $unit, ['status' => $s['status'], 'notes' => $s['notes']]));
+            $this->quietly(fn () => app(Units::class)->update($owner, $unit, ['status' => $s['status'], 'notes' => $s['notes']] + (isset($s['in_use_by']) ? ['in_use_by' => $s['in_use_by']] : [])));
             $this->unitStates[(int) $unit->id] = (string) $s['status'];
+            if (isset($s['in_use_by'])) {
+                $this->unitUsers[(int) $unit->id] = (string) $s['in_use_by'];
+            }
         }
         foreach ($this->data['people'] as $key => $p) {
             $subject = $p['type'] === 'landlord' ? $this->landlords[$p['landlord']] : (int) $this->lease((string) $p['tenancy'])->tenant_id;
@@ -1346,9 +1584,9 @@ final class RentalsDemoBuilder
         $settings = \App\Models\RentalSetting::withoutGlobalScopes()->where('company_id', $this->cid)->first();
 
         return ['build' => self::BUILD, 'users' => array_map(fn (User $u) => (int) $u->id, $this->users), 'landlords' => $this->landlords, 'properties' => $this->properties, 'units' => $this->units,
-            'behaviour' => $this->behaviour, 'logins' => $this->logins, 'staff' => $staff, 'unit_states' => $this->unitStates,
+            'behaviour' => $this->behaviour, 'logins' => $this->logins, 'staff' => $staff, 'unit_states' => $this->unitStates, 'unit_users' => $this->unitUsers,
             'settings' => $settings?->only(['mode', 'currency', 'bill_days_before', 'grace_days', 'anchor', 'prorate_first', 'commission_type', 'commission_bp', 'commission_minor', 'commission_on_items',
-                'deposit_months', 'deposit_held_by', 'late_fee_type', 'late_fee_minor', 'late_fee_bp', 'late_fee_to', 'payment_instructions', 'receipt_footer']),
+                'deposit_months', 'deposit_held_by', 'late_fee_type', 'late_fee_minor', 'late_fee_bp', 'late_fee_to', 'payment_instructions', 'receipt_footer', 'ahead_default', 'withholding_on']),
             'through' => $this->today->toDateString(), 'started_on' => $this->start->toDateString()];
     }
 

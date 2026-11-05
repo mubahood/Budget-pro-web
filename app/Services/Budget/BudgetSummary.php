@@ -3,6 +3,7 @@
 namespace App\Services\Budget;
 
 use App\Models\Company;
+use App\Models\User;
 use App\Support\LocalTime;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -27,11 +28,13 @@ use Illuminate\Support\Facades\DB;
 final class BudgetSummary
 {
     /**
+     * With $viewer, only the events that person may open (BudgetAccess: a seat, or full access).
+     *
      * @return array{open_count: int, events: list<array{id: int, name: string, date: ?string, days_left: ?int,
      *   budget: float, spent: float, pledged: float, paid: float, owed: float, still_needed: float,
      *   not_pledged: float, weeks_left: ?int, per_week: ?float, pledges: int}>}
      */
-    public function for(Company $company, ?Carbon $now = null, int $limit = 3): array
+    public function for(Company $company, ?Carbon $now = null, int $limit = 3, ?User $viewer = null): array
     {
         $cid = (int) $company->id;
         $today = ($now ?? now())->copy()->setTimezone(LocalTime::timezone($company))->startOfDay();
@@ -41,10 +44,11 @@ final class BudgetSummary
         $sum = fn (string $table, string $expr, string $alias) => DB::raw(sprintf('(SELECT COALESCE(%s, 0) FROM %s x WHERE x.company_id = p.company_id AND x.budget_program_id = p.id AND %s) AS %s',
             $expr, $table, sprintf($alive, 'x'), $alias));
         $programs = DB::table('budget_programs as p')->where('p.company_id', $cid)->whereRaw(sprintf($alive, 'p'))
+            ->when($viewer !== null, fn ($q) => BudgetAccess::limitToSeats($q, $viewer, 'p.id'))
             ->where(fn ($q) => $q->whereNull('p.status')->orWhere('p.status', '')->orWhere('p.status', 'Active'))
             ->select(['p.id', 'p.name', 'p.title', 'p.deadline',
                 $sum('budget_items', 'SUM(x.target_amount)', 'budget'), $sum('budget_items', 'SUM(x.invested_amount)', 'spent'),
-                $sum('contribution_records', 'COUNT(*)', 'n'), $sum('contribution_records', 'SUM(x.amount)', 'pledged'),
+                $sum('contribution_records', sprintf("SUM(CASE WHEN x.kind IS NULL OR x.kind != '%s' THEN 1 ELSE 0 END)", EventBook::KIND_IN_KIND), 'n'), $sum('contribution_records', 'SUM(x.amount)', 'pledged'),
                 $sum('contribution_records', 'SUM(x.paid_amount)', 'paid'), $sum('contribution_records', 'SUM(x.not_paid_amount)', 'owed')])
             ->get();
         if ($programs->isEmpty()) {

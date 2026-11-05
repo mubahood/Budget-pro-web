@@ -30,22 +30,25 @@ class RentalLease extends Model
     /** A lease that holds its unit: billed, and the tenant lives there. */
     public const LIVE = ['active', 'notice'];
 
+    /** Where the tenant came from (LC-22): already living there when the agency took over, or found by it. */
+    public const ORIGINS = ['new', 'sitting'];
+
     public function isLive(): bool
     {
         return in_array($this->status, self::LIVE, true);
     }
 
-    public function unit()
+    public function unit(): BelongsTo
     {
         return $this->belongsTo(RentalUnit::class, 'unit_id');
     }
 
-    public function property()
+    public function property(): BelongsTo
     {
         return $this->belongsTo(RentalProperty::class, 'property_id');
     }
 
-    public function landlord()
+    public function landlord(): BelongsTo
     {
         return $this->belongsTo(RentalLandlord::class, 'landlord_id');
     }
@@ -63,6 +66,11 @@ class RentalLease extends Model
     public function rentChanges()
     {
         return $this->hasMany(RentalRentChange::class, 'lease_id');
+    }
+
+    public function commissionChanges()
+    {
+        return $this->hasMany(RentalCommissionChange::class, 'lease_id');
     }
 
     public function charges()

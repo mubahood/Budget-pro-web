@@ -6,7 +6,9 @@ use App\Exceptions\BusinessRuleException;
 use App\Models\RentalEntry;
 use App\Models\RentalSetting;
 use App\Services\Rentals\RentalsModule;
+use App\Support\LocalDate;
 use Closure;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -18,11 +20,17 @@ use Illuminate\Support\Str;
  * deleted; reverse() posts its negation and marks the original. All money writes of one account run inside
  * locked(), which holds the account's `rental_settings` row FOR UPDATE for the length of the transaction, so two
  * payments, a payout and the nightly billing can never interleave.
+ *
+ * A closed month (LC-02) is refused here, at the one place all money passes: a row dated on or before the account's
+ * `closed_through` is `period_closed`. The day is read under the lock, so a close and a posting cannot cross.
  */
 final class RentalLedger
 {
     /** Accounts already locked in this process (a nested locked() call runs inside the outer transaction). */
     private static array $held = [];
+
+    /** @var array<int, ?string> `closed_through` of the accounts locked in this process, read under the lock. */
+    private static array $closed = [];
 
     /**
      * @template T
@@ -38,12 +46,13 @@ final class RentalLedger
         RentalsModule::settings($companyId); // the lock row exists before the transaction takes it
 
         return DB::transaction(function () use ($companyId, $fn) {
-            RentalSetting::withoutGlobalScopes()->where('company_id', $companyId)->lockForUpdate()->first(['id']);
+            $settings = RentalSetting::withoutGlobalScopes()->where('company_id', $companyId)->lockForUpdate()->first();
+            self::$closed[$companyId] = self::day($settings?->getAttribute('closed_through'));
             self::$held[$companyId] = true;
             try {
                 return $fn();
             } finally {
-                unset(self::$held[$companyId]);
+                unset(self::$held[$companyId], self::$closed[$companyId]);
             }
         }, 3);
     }
@@ -51,6 +60,55 @@ final class RentalLedger
     public static function isLocked(int $companyId): bool
     {
         return isset(self::$held[$companyId]) && DB::transactionLevel() > 0;
+    }
+
+    /** The last day of the account's books that is closed, or null. Under the lock, the day read with it. */
+    public static function closedThrough(int $companyId): ?string
+    {
+        if (self::isLocked($companyId)) {
+            return self::$closed[$companyId] ?? null;
+        }
+
+        return self::day(RentalSetting::withoutGlobalScopes()->where('company_id', $companyId)->first()?->getAttribute('closed_through'));
+    }
+
+    /** Closing or reopening a month moved the day, inside this lock (MonthClose only). */
+    public static function closedThroughMoved(int $companyId, ?string $through): void
+    {
+        if (! self::isLocked($companyId)) {
+            throw new \LogicException('A month is closed or reopened only inside RentalLedger::locked().');
+        }
+        self::$closed[$companyId] = $through;
+    }
+
+    /**
+     * Refuse a date in a closed month: what the ledger does to a row, for what posts no row of its own (a waiver, a move-out's day).
+     *
+     * @throws BusinessRuleException period_closed, with what a form or a phone needs to offer today instead
+     */
+    public static function assertOpen(int $companyId, string $date): void
+    {
+        $date = substr($date, 0, 10);
+        $through = self::closedThrough($companyId);
+        if ($through === null || $date > $through) {
+            return;
+        }
+        $month = Carbon::parse($date);
+        $today = LocalDate::today($companyId);
+        $late = self::lateMark($date, $today);
+        $name = $month->format('F');
+
+        throw BusinessRuleException::make('period_closed', "{$name} is closed. Date this today, and it will show on {$today->format('F')}'s statement, marked \"{$late}\". Or ask the account owner to reopen {$name}.",
+            ['closed_through' => $through, 'month' => $month->format('Y-m'), 'use_date' => $today->toDateString(), 'mark' => $late]);
+    }
+
+    /** What marks a late entry for the month it belongs to (D7): "For October", with the year when it is not the same year. */
+    public static function lateMark(string $date, Carbon $today): string
+    {
+        $month = Carbon::parse(substr($date, 0, 10));
+        $sameYear = $month->year === $today->year || ($month->month === 12 && $today->month === 1 && $month->year === $today->year - 1);
+
+        return 'For '.$month->format($sameYear ? 'F' : 'F Y');
     }
 
     /** A new id for rows posted together (one payment, one move-out, one transfer). */
@@ -74,6 +132,7 @@ final class RentalLedger
         $rows = array_map(fn ($r) => self::normalise($r), $rows);
         $sum = 0;
         foreach ($rows as $row) {
+            self::assertOpen($companyId, self::day($row['occurred_on']) ?? '');
             if ($row['type'] !== 'transfer') {
                 self::assertBalanced($row); // every row but a transfer's two legs balances on its own
             }
@@ -104,6 +163,7 @@ final class RentalLedger
         if (! self::isLocked($companyId)) {
             throw new \LogicException('Rentals money is reversed only inside RentalLedger::locked().');
         }
+        self::assertOpen($companyId, $occurredOn);
         $group = self::group();
         $out = [];
         $sum = 0;
@@ -166,6 +226,16 @@ final class RentalLedger
         $out['total'] = array_sum($out);
 
         return $out;
+    }
+
+    /** A date column or a date given to the ledger, as Y-m-d. */
+    private static function day(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : substr((string) $value, 0, 10);
     }
 
     private static function normalise(array $row): array

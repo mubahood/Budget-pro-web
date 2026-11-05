@@ -3,9 +3,11 @@
 namespace App\Services\Rentals\Directory;
 
 use App\Exceptions\BusinessRuleException;
+use App\Models\RentalEntry;
 use App\Models\RentalLandlord;
 use App\Models\RentalLease;
 use App\Models\RentalProperty;
+use App\Models\RentalPropertyOwner;
 use App\Models\RentalPropertyStaff;
 use App\Models\User;
 use App\Services\Rentals\Demo\RentalsDemo;
@@ -64,7 +66,16 @@ final class Properties extends Directory
         $cid = (int) $property->company_id;
         $d = self::validated($data, self::WRITABLE, self::rules(true));
         if (array_key_exists('landlord_id', $d)) {
-            $d['landlord_id'] = $this->landlordFor($cid, $d['landlord_id']);
+            if ((int) $d['landlord_id'] === (int) $property->landlord_id) {
+                unset($d['landlord_id']); // the same landlord, whatever their status now: nothing to check, nothing changes
+            } else {
+                $d['landlord_id'] = $this->landlordFor($cid, $d['landlord_id']);
+                if ((int) $d['landlord_id'] === (int) $property->landlord_id) {
+                    unset($d['landlord_id']);
+                } elseif (self::landlordLocked($property)) {
+                    throw BusinessRuleException::make('use_handover', 'Money or a tenant is already recorded here, so changing the landlord would split it. Use Hand over to another landlord.');
+                }
+            }
         }
         if (($d['status'] ?? null) === 'archived' && RentalLease::withoutGlobalScopes()->where('company_id', $cid)->where('property_id', $property->id)->whereIn('status', RentalLease::LIVE)->exists()) {
             throw BusinessRuleException::make('property_occupied', 'Tenants still live here. Move them out before archiving the property.');
@@ -73,6 +84,19 @@ final class Properties extends Directory
         RentalAudit::record($cid, 'property.updated', $property, "Updated property {$property->name}", ['fields' => array_keys($d)], 'staff', $by->id);
 
         return $property->fresh();
+    }
+
+    /**
+     * Whether the landlord now changes only through a handover (LC-01): the property has a lease, a journal row or a handover behind it. Before any of
+     * those, a different landlord is only a typing fix.
+     */
+    public static function landlordLocked(RentalProperty $property): bool
+    {
+        $cid = (int) $property->company_id;
+
+        return RentalLease::withoutGlobalScopes()->where('company_id', $cid)->where('property_id', $property->id)->exists()
+            || RentalEntry::withoutGlobalScopes()->where('company_id', $cid)->where('property_id', $property->id)->exists()
+            || RentalPropertyOwner::withoutGlobalScopes()->where('company_id', $cid)->where('property_id', $property->id)->exists();
     }
 
     /** The caretakers (or any staff) assigned to a property (rentals_settings). @param list<int> $userIds */

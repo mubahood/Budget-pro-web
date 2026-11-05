@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Exceptions\BusinessRuleException;
 use App\Scopes\CompanyScope;
 use App\Services\Budget\ContributionPayments;
+use App\Services\Budget\EventClosure;
 use App\Support\Decimal;
 use App\Traits\AuditLogger;
 use App\Traits\Syncable;
@@ -39,6 +40,8 @@ class ContributionRecord extends Model
         'paid_amount' => 'decimal:2',
         'not_paid_amount' => 'decimal:2',
         'date' => 'date',
+        'withdrawn_at' => 'datetime',
+        'in_kind_value' => 'decimal:2',
     ];
 
     /** A paid figure sent with this save, posted as a payment of the difference after it (prepare → finalizer). */
@@ -54,16 +57,12 @@ class ContributionRecord extends Model
             throw new BusinessRuleException('Deleting is not allowed');
         });
 
+        // Two people may share a name (the review's PB-05, decision D1): a phone's batch is never rejected over one.
+        // The form asks, and paste marks it (PledgeService); "Worth a look" lists them (EventBook::insights).
         static::creating(function ($model) {
 
             $model->name = trim($model->name);
-            $withSameName = ContributionRecord::where([
-                'name' => $model->name,
-                'budget_program_id' => $model->budget_program_id,
-            ])->first();
-            if ($withSameName) {
-                throw new BusinessRuleException('Name already exists');
-            }
+            EventClosure::assertOpen($model->budget_program_id);
 
             $model = self::prepare($model);
 
@@ -72,12 +71,9 @@ class ContributionRecord extends Model
 
         static::updating(function ($model) {
             $model->name = trim($model->name);
-            $withSameName = ContributionRecord::where([
-                'name' => $model->name,
-                'budget_program_id' => $model->budget_program_id,
-            ])->where('id', '!=', $model->id)->first();
-            if ($withSameName) {
-                throw new BusinessRuleException('Name already exists');
+            EventClosure::assertOpen($model->budget_program_id);
+            if ($model->isDirty('budget_program_id')) {
+                EventClosure::assertOpen($model->getOriginal('budget_program_id'));
             }
 
             $model = self::prepare($model);
@@ -181,6 +177,24 @@ class ContributionRecord extends Model
             }
         }
 
+        // Who took the pledge (OB-06): whoever is named if they are on the account, else whoever entered it. The web and the
+        // API check the event's team first; a phone's list can be out of date, and its work is never refused for that.
+        $receivedBy = (int) $data->received_by_id;
+        if ($receivedBy > 0 && $data->isDirty('received_by_id') && ! DB::table('admin_users')->where('id', $receivedBy)->where('company_id', $data->company_id)->exists()) {
+            $receivedBy = 0;
+            $data->received_by_id = null;
+        }
+        if ($receivedBy <= 0 && ! $data->exists) {
+            $data->received_by_id = $data->treasurer_id;
+        }
+
+        // An older phone's edit after a withdrawal puts the pledge back (Appendix E's "edit after delete"): the trail goes with it.
+        if ($data->exists && $data->isDirty('is_deleted') && ! $data->is_deleted) {
+            $data->withdrawn_at = null;
+            $data->withdrawn_by_id = null;
+            $data->withdrawn_reason = null;
+        }
+
         // Track who last modified this record
         if ($loggedUser !== null) {
             $data->chaned_by_id = $loggedUser->id;
@@ -277,6 +291,12 @@ class ContributionRecord extends Model
     public function changedBy()
     {
         return $this->belongsTo(User::class, 'chaned_by_id');
+    }
+
+    /** Who took the pledge. Older rows have nobody here and read as treasurer_id, who entered them. */
+    public function receivedBy()
+    {
+        return $this->belongsTo(User::class, 'received_by_id');
     }
 
     public function financialPeriod()

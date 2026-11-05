@@ -17,7 +17,7 @@ class RentalLandlord extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['is_self' => 'boolean', 'commission_bp' => 'integer', 'commission_minor' => 'integer'];
+    protected $casts = ['is_self' => 'boolean', 'commission_bp' => 'integer', 'commission_minor' => 'integer', 'expense_limit_minor' => 'integer', 'withholding_bp' => 'integer'];
 
     protected $hidden = ['id_number'];
 

@@ -17,7 +17,7 @@ class RentalMaintenance extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['photos' => 'array', 'cost_minor' => 'integer', 'resolved_on' => 'date:Y-m-d'];
+    protected $casts = ['photos' => 'array', 'cost_minor' => 'integer', 'resolved_on' => 'date:Y-m-d', 'quote_minor' => 'integer', 'approval_at' => 'datetime'];
 
     public function property()
     {

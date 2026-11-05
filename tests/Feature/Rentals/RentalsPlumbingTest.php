@@ -37,6 +37,9 @@ class RentalsPlumbingTest extends ApiTestCase
     private const TEN = ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords',
         'rentals_expenses', 'rentals_maintenance', 'rentals_reports', 'rentals_settings'];
 
+    /** The first ten, plus closing a month and reopening one (owner only). */
+    private const ALL = [...self::TEN, 'rentals_close', 'rentals_reopen'];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -214,10 +217,10 @@ class RentalsPlumbingTest extends ApiTestCase
         $cid = (int) $company->id;
         $owner = User::withoutGlobalScopes()->findOrFail($t['user_id']);
 
-        $this->assertSame(self::TEN, config('permissions.module_permissions.rentals'));
+        $this->assertSame(self::ALL, config('permissions.module_permissions.rentals'));
         $roles = [
-            'rentals_manager' => ['Property manager', self::TEN],
-            'rentals_accountant' => ['Accountant', ['rentals_view', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses', 'rentals_reports']],
+            'rentals_manager' => ['Property manager', [...self::TEN, 'rentals_close']],
+            'rentals_accountant' => ['Accountant', ['rentals_view', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses', 'rentals_reports', 'rentals_close']],
             'rentals_caretaker' => ['Caretaker', ['rentals_view', 'rentals_collect', 'rentals_maintenance']],
         ];
         foreach ($roles as $role => [$label, $perms]) {
@@ -253,8 +256,8 @@ class RentalsPlumbingTest extends ApiTestCase
         $section = collect(ShopMenu::sections())->firstWhere('key', 'rentals');
         $this->assertSame(['Rentals', 'rentals'], [$section['label'], $section['module']]);
         $this->assertSame(['rentals.overview', 'rentals.arrears', 'rentals.payments', 'rentals.billing', 'rentals.properties', 'rentals.tenants', 'rentals.maintenance', 'rentals.meters',
-            'rentals.landlords', 'rentals.expenses', 'rentals.cash', 'rentals.reports', 'rentals.settings', 'rentals.import', 'rentals.activity',
-            'rentals.collect', 'rentals.units', 'rentals.leases', 'rentals.payouts'], array_column($section['entries'], 'route'));
+            'rentals.landlords', 'rentals.expenses', 'rentals.cash', 'rentals.month-end', 'rentals.reports', 'rentals.settings', 'rentals.import', 'rentals.activity',
+            'rentals.collect', 'rentals.units', 'rentals.leases', 'rentals.payouts', 'rentals.payouts.run', 'rentals.commission-change'], array_column($section['entries'], 'route'));
 
         $pages = fn () => array_column(ShopMenu::pagesFor($owner, $company), 'key');
         $agency = $pages();
@@ -271,7 +274,7 @@ class RentalsPlumbingTest extends ApiTestCase
         $this->assertTrue(ShopMenu::rentalsOwnerMode((int) $company->id));
         $this->assertTrue(CompanyRules::currencyLocked($company));
         $own = $pages();
-        $this->assertEqualsCanonicalizing(['rentals.landlords', 'rentals.payouts'], array_values(array_diff($agency, $own)));
+        $this->assertEqualsCanonicalizing(array_values(array_intersect(['rentals.landlords', 'rentals.payouts', 'rentals.payouts.run', 'rentals.commission-change'], $agency)), array_values(array_diff($agency, $own)));
 
         // A caller that does not ask about owner mode (no callable) still shows the page.
         $landlords = collect($section['entries'])->firstWhere('route', 'rentals.landlords');

@@ -344,7 +344,7 @@ final class RentalsDemo
         foreach ((array) ($snap['unit_states'] ?? []) as $unitId => $status) {
             $unit = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->find((int) $unitId);
             if ($unit !== null && $unit->status !== $status && ! RentalLease::withoutGlobalScopes()->where('company_id', $cid)->where('unit_id', $unit->id)->whereIn('status', RentalLease::LIVE)->exists()) {
-                $unit->forceFill(['status' => $status])->save();
+                $unit->forceFill(['status' => $status, 'in_use_by' => $status === 'in_use' ? ($snap['unit_users'][$unitId] ?? $unit->in_use_by) : null])->save();
                 $repairs[] = "unit {$unit->code}";
             }
         }

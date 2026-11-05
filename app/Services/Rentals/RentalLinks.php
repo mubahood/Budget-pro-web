@@ -4,6 +4,7 @@ namespace App\Services\Rentals;
 
 use App\Models\RentalLandlord;
 use App\Models\RentalPayment;
+use App\Models\RentalPayout;
 use App\Models\StoredFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
@@ -34,18 +35,29 @@ final class RentalLinks
 
     /**
      * A landlord's statement as a PDF. $minutes is longer for a link put in a message to the landlord, who may open it
-     * days later (SHARED_MINUTES); it still checks the person who made it may see the statement.
+     * days later (SHARED_MINUTES); it still checks the person who made it may see the statement. $statementId names one
+     * issued statement, so a link keeps opening that copy.
      *
      * @return array{url: string, expires_in: int}
      */
-    public static function statementPdf(RentalLandlord $landlord, string $from, string $to, string $viewer, int $viewerId, int $minutes = self::MINUTES): array
+    public static function statementPdf(RentalLandlord $landlord, string $from, string $to, string $viewer, int $viewerId, int $minutes = self::MINUTES, ?int $statementId = null): array
     {
         return self::sign('rentals.pdf.statement', ['company_id' => (int) $landlord->company_id, 'landlord_id' => (int) $landlord->id, 'from' => $from, 'to' => $to,
-            'by' => $viewer, 'by_id' => $viewerId], $minutes);
+            'by' => $viewer, 'by_id' => $viewerId] + ($statementId !== null ? ['statement_id' => $statementId] : []), $minutes);
+    }
+
+    /**
+     * A payout's advice as a PDF. $minutes as for a statement: longer for a link put in a message to the landlord.
+     *
+     * @return array{url: string, expires_in: int}
+     */
+    public static function payoutAdvicePdf(RentalPayout $payout, string $viewer, int $viewerId, int $minutes = self::MINUTES): array
+    {
+        return self::sign('rentals.pdf.payout-advice', ['company_id' => (int) $payout->company_id, 'payout_id' => (int) $payout->id, 'by' => $viewer, 'by_id' => $viewerId], $minutes);
     }
 
     /** The filters a report download carries (RentalReports): ids and dates only. */
-    public const REPORT_PARAMS = ['month', 'from', 'to', 'property_id', 'landlord_id', 'as_of', 'days', 'lease_id', 'method', 'q', 'status', 'state', 'category', 'bucket', 'view'];
+    public const REPORT_PARAMS = ['month', 'year', 'from', 'to', 'property_id', 'landlord_id', 'as_of', 'days', 'lease_id', 'method', 'q', 'status', 'state', 'category', 'bucket', 'view'];
 
     /**
      * A report as CSV, XLSX or PDF (staff only); opening it runs the report again for the person who asked.

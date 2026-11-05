@@ -32,7 +32,7 @@ final class SearchIndex
         \App\Models\RentalLease::class => ['lease', ['number', 'unit_id', 'property_id', 'tenant_id', 'status']],
         \App\Models\RentalPayment::class => ['payment', ['number', 'reference', 'amount_minor', 'paid_on', 'method', 'reversed_at', 'lease_id', 'tenant_id', 'property_id']],
         \App\Models\RentalCharge::class => ['bill', ['description', 'amount_minor', 'due_date', 'status', 'lease_id', 'tenant_id', 'property_id']],
-        \App\Models\RentalLandlord::class => ['landlord', ['code', 'name', 'phone', 'phone_e164', 'status', 'is_self']],
+        \App\Models\RentalLandlord::class => ['landlord', ['code', 'name', 'phone', 'phone_e164', 'phone_2', 'phone_2_e164', 'status', 'is_self']],
         \App\Models\RentalProperty::class => ['property', ['code', 'name', 'area', 'district', 'status']],
         \App\Models\RentalPayout::class => ['payout', ['number', 'reference', 'landlord_id', 'amount_minor', 'paid_on', 'reversed_at']],
         \App\Models\RentalExpense::class => ['expense', ['number', 'category', 'description', 'vendor', 'property_id', 'amount_minor', 'paid_on', 'reversed_at']],
@@ -361,6 +361,8 @@ final class SearchIndex
         $this->code($keys, $l->email);
         $this->phone($keys, $l->phone);
         $this->phone($keys, $l->phone_e164);
+        $this->phone($keys, $l->phone_2);
+        $this->phone($keys, $l->phone_2_e164);
 
         return $this->doc($l, $l->name, $l->phone, $l->status, $keys);
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\BudgetProgram;
+use App\Services\Budget\BudgetAccess;
 use App\Services\Budget\BudgetTemplates;
 use App\Services\Budget\EventSettings;
 use App\Services\Budget\MessageTemplates;
@@ -33,7 +34,7 @@ class BudgetProgramSettingsController extends Controller
     public function show(Request $request, $id): JsonResponse
     {
         $program = $this->program($request, $id);
-        if ($program === null) {
+        if ($program === null || ! BudgetAccess::canOpen($request->user(), (int) $program->id)) {
             return $this->notFound('Event not found.');
         }
 

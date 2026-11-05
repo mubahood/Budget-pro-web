@@ -8,7 +8,7 @@ use App\Models\RentalLogin;
 use App\Models\RentalProperty;
 use App\Services\Rentals\Directory\Landlords;
 use App\Services\Rentals\Figures;
-use App\Services\Rentals\Landlords\LandlordAccounts;
+use App\Services\Rentals\Landlords\StatementBook;
 use App\Services\Rentals\Logins\RentalLogins;
 use App\Services\Rentals\RentalAccess;
 use App\Services\Rentals\RentalLinks;
@@ -53,11 +53,11 @@ class LandlordsController extends RentalsController
         return $this->attempt(fn () => $this->success($this->shape($request, $this->find($request, $id))));
     }
 
-    /** PUT rentals/landlords/{id} */
+    /** PUT rentals/landlords/{id} (with inactive_reason when marking a landlord with a balance as no longer with us) */
     public function update(Request $request, int $id): JsonResponse
     {
         return $this->attempt(fn () => $this->success($this->shape($request,
-            app(Landlords::class)->update($this->user($request), $this->find($request, $id), $request->only(Landlords::WRITABLE))), 'Saved.'));
+            app(Landlords::class)->update($this->user($request), $this->find($request, $id), $request->only([...Landlords::WRITABLE, 'inactive_reason']))), 'Saved.'));
     }
 
     /** GET rentals/landlords/{id}/statement?from&to[&format=pdf]: the statement (json), or a 30-minute link to its PDF. */
@@ -70,7 +70,7 @@ class LandlordsController extends RentalsController
                 return $this->success(RentalLinks::statementPdf($landlord, $from, $to, 'staff', (int) $this->user($request)->id), 'Link ready.');
             }
 
-            return $this->success(LandlordAccounts::statement($landlord, $from, $to));
+            return $this->success(StatementBook::read($landlord, $from, $to));
         });
     }
 

@@ -32,6 +32,12 @@ class RentalsDocumentsTest extends ApiTestCase
 
     private const CAP = 30;
 
+    /**
+     * Not an N+1: a statement read live from the journal fetches each section it prints once (lines, what tenants owed, the unit table, expenses, payouts, what is held, corrections,
+     * LC-08), the test below holds it flat as leases grow, and an issued one reads only its copy.
+     */
+    private const STATEMENT_CAP = 46;
+
     private const PERIOD = ['from' => '2026-03-01', 'to' => '2026-03-31', 'month' => '2026-03'];
 
     protected function tearDown(): void
@@ -161,11 +167,11 @@ class RentalsDocumentsTest extends ApiTestCase
         };
         $counts = $run($small);
         foreach ($counts as $key => $n) {
-            $this->assertLessThanOrEqual(self::CAP, $n, "{$key} runs {$n} queries");
+            $this->assertLessThanOrEqual($key === 'landlord_statement' ? self::STATEMENT_CAP : self::CAP, $n, "{$key} runs {$n} queries");
         }
         $large = $this->books(20);
         foreach ($run($large) as $key => $n) {
-            $this->assertLessThanOrEqual(self::CAP, $n, "{$key} runs {$n} queries with more leases");
+            $this->assertLessThanOrEqual($key === 'landlord_statement' ? self::STATEMENT_CAP : self::CAP, $n, "{$key} runs {$n} queries with more leases");
             if (in_array($key, ['rent_roll', 'deposits_held', 'deposit_register', 'lease_expiries', 'lease_list', 'tenant_list', 'arrears_aging', 'landlord_statement'], true)) {
                 $this->assertLessThanOrEqual($counts[$key] + 3, $n, "{$key} grows with the leases");
             }
@@ -453,5 +459,101 @@ class RentalsDocumentsTest extends ApiTestCase
         $letterhead = RentalDocument::letterhead($b->cid);
         $this->assertSame((string) Company::withoutGlobalScopes()->find($b->cid)->name, $letterhead['name']);
         $this->assertNull($letterhead['logo']);
+    }
+
+    public function test_the_statement_a_landlord_reads_in_one_look_lc08(): void
+    {
+        $b = $this->books();
+        $this->at('2026-04-02 09:00:00');
+        $cid = (int) $b->cid;
+        $landlord = \App\Models\RentalLandlord::withoutGlobalScopes()->findOrFail($b->p->landlord_id);
+        $report = StatementPdf::report($landlord, '2026-03-01', '2026-03-31');
+        $keys = array_column($report['sections'], 'key');
+        foreach (['units', 'held', 'arrears'] as $key) {
+            $this->assertContains($key, $keys);
+        }
+        $this->assertSame('Commission: 10% of rent collected', $report['figures']['statement']['commission_rule']);
+        $units = collect($report['sections'])->firstWhere('key', 'units');
+        $this->assertSame(['unit', 'tenant', 'rent_minor', 'paid_minor', 'owed_minor', 'behind', 'paid_up_to'], array_values(array_diff(array_column($units['columns'], 'key'), ['property'])));
+
+        // In the order the paper promises, with what is empty left out.
+        $html = $this->html($report, $cid);
+        $at = fn (string $words) => strpos($html, $words);
+        $this->assertLessThan($at('Each line'), $at('Unit by unit'));
+        $this->assertLessThan($at('Held for you, not in your balance'), $at('Each line'));
+        $this->assertStringContainsString('It is not in your balance.', $html);
+        $this->assertStringNotContainsString('Corrections from earlier months', $html);
+        $this->assertStringContainsString('Commission: 10% of rent collected', $html);
+        $this->assertStringNotContainsString('What tenants still owe', $html, 'the unit table says it, former tenants included');
+
+        // Held for you is the deposit register and the lease credit, and is no part of the balance.
+        $held = collect($report['sections'])->firstWhere('key', 'held');
+        $deposits = (new \App\Services\Rentals\Reports\RentalReports)->run('deposit_register', $cid, null, ['landlord_id' => (int) $landlord->id]);
+        $this->assertSame((int) $deposits['totals']['held_minor'], (int) $held['totals']['deposit_minor']);
+        $credit = (int) \Illuminate\Support\Facades\DB::table('rental_entries')->where('company_id', $cid)->where('occurred_on', '<=', '2026-03-31')->sum('credit_minor');
+        $this->assertSame($credit, (int) $held['totals']['credit_minor']);
+        $this->assertSame(\App\Services\Rentals\Landlords\LandlordAccounts::balance($landlord, '2026-03-31'), (int) $report['totals']['closing_minor'], 'the closing line is the journal, with or without what is held');
+
+        // Every file of it opens: sheet names cut to what a spreadsheet allows, and no other app named.
+        foreach (['csv', 'xlsx', 'pdf'] as $format) {
+            [$bytes] = RentalExport::render($report, $cid, $format);
+            $this->assertNotSame('', $bytes);
+        }
+        foreach (['Budget Pro', 'Shelfie', 'Kuku Tally', 'Akiba', 'Pledge', 'Solavia'] as $other) {
+            $this->assertStringNotContainsString($other, $html);
+        }
+
+        // Frozen: a later payment moves nothing on the issued paper; the unit table says what it said.
+        app(\App\Services\Rentals\Landlords\MonthClose::class)->close($b->owner, '2026-01');
+        $this->at('2026-04-03 09:00:00');
+        app(\App\Services\Rentals\Landlords\MonthClose::class)->close($b->owner, '2026-02');
+        app(\App\Services\Rentals\Landlords\MonthClose::class)->close($b->owner, '2026-03');
+        $issued = StatementPdf::report($landlord, '2026-03-01', '2026-03-31');
+        $before = collect($issued['sections'])->firstWhere('key', 'units');
+        $lease = \App\Models\RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('status', \App\Models\RentalLease::LIVE)->firstOrFail();
+        app(Payments::class)->receive($b->owner, $lease, ['amount_minor' => 123000, 'method' => 'cash']);
+        $this->assertEquals($before, collect(StatementPdf::report($landlord, '2026-03-01', '2026-03-31')['sections'])->firstWhere('key', 'units'));
+        $this->assertBooksAgree($cid);
+    }
+
+    public function test_many_properties_go_under_headings_expenses_and_payouts_show_and_owner_mode_has_no_commission_line(): void
+    {
+        $this->at('2026-03-01 09:00:00');
+        [$company, $owner] = $this->rentalsAccount();
+        $cid = (int) $company->id;
+        $landlord = app(\App\Services\Rentals\Directory\Landlords::class)->create($owner, ['name' => 'Two Buildings', 'phone' => '0772444555', 'commission_type' => 'percent', 'commission_bp' => 1000]);
+        $first = app(\App\Services\Rentals\Directory\Properties::class)->create($owner, ['name' => 'First Court', 'landlord_id' => $landlord->id, 'kind' => 'residential']);
+        $second = app(\App\Services\Rentals\Directory\Properties::class)->create($owner, ['name' => 'Second Court', 'landlord_id' => $landlord->id, 'kind' => 'residential', 'commission_type' => 'flat', 'commission_minor' => 15000]);
+        $u1 = app(\App\Services\Rentals\Directory\Units::class)->createMany($owner, (int) $first->id, 'A', 1, 1, ['rent_minor' => 300000, 'kind' => 'apartment']);
+        $u2 = app(\App\Services\Rentals\Directory\Units::class)->createMany($owner, (int) $second->id, 'B', 1, 1, ['rent_minor' => 200000, 'kind' => 'apartment']);
+        $l1 = $this->tenantIn($owner, $u1[0], '2026-03-01', ['deposit_minor' => 0]);
+        $l2 = $this->tenantIn($owner, $u2[0], '2026-03-01', ['deposit_minor' => 0]);
+        app(Payments::class)->receive($owner, $l1, ['amount_minor' => 300000, 'method' => 'cash']);
+        app(Payments::class)->receive($owner, $l2, ['amount_minor' => 200000, 'method' => 'cash']);
+        app(\App\Services\Rentals\Expenses::class)->record($owner, ['amount_minor' => 20000, 'method' => 'cash', 'category' => 'Repairs', 'description' => 'Tap', 'vendor' => 'Musa', 'charged_to' => 'landlord', 'property_id' => $first->id]);
+        app(\App\Services\Rentals\Landlords\Payouts::class)->record($owner, $landlord, ['amount_minor' => 50000, 'method' => 'cash', 'reference' => 'SL-1']);
+        $this->at('2026-04-02 09:00:00');
+        $report = StatementPdf::report($landlord, '2026-03-01', '2026-03-31');
+        $this->assertSame('Commission: by unit, see below', $report['figures']['statement']['commission_rule']);
+        $html = $this->html($report, $cid);
+        foreach (['First Court', 'Second Court', 'Expenses', 'Musa', 'Repairs: Tap', 'Paid to you', 'SL-1', 'Commission: by unit, see below'] as $words) {
+            $this->assertStringContainsString($words, $html);
+        }
+        $expenses = collect($report['sections'])->firstWhere('key', 'expenses');
+        $this->assertSame('No', $expenses['rows'][0]['receipt']);
+
+        $this->at('2026-03-01 09:00:00');
+        [$solo, $me] = $this->rentalsAccount('owner');
+        [, $units] = $this->building($me, 1, 300000);
+        $lease = $this->tenantIn($me, $units[0], '2026-03-01', ['deposit_minor' => 100000]);
+        app(Payments::class)->receive($me, $lease, ['amount_minor' => 400000, 'method' => 'cash']);
+        $this->at('2026-04-02 09:00:00');
+        $self = \App\Services\Rentals\RentalsModule::selfLandlord((int) $solo->id);
+        $report = StatementPdf::report($self, '2026-03-01', '2026-03-31');
+        $this->assertNull($report['figures']['statement']['commission_rule']);
+        $html = $this->html($report, (int) $solo->id);
+        $this->assertStringNotContainsString('Commission', $html);
+        $this->assertStringContainsString('Held for your tenants', $html);
+        $this->assertBooksAgree((int) $solo->id);
     }
 }

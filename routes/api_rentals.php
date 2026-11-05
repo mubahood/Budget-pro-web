@@ -35,6 +35,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('rentals/pdf/receipt', [DownloadsController::class, 'receipt'])->name('rentals.pdf.receipt');
     Route::get('rentals/pdf/statement', [DownloadsController::class, 'statement'])->name('rentals.pdf.statement');
+    Route::get('rentals/pdf/payout-advice', [DownloadsController::class, 'payoutAdvice'])->name('rentals.pdf.payout-advice');
     Route::get('rentals/report-download', [DownloadsController::class, 'report'])->name('rentals.report.download');
     Route::get('rentals/files/{uuid}', [DownloadsController::class, 'file'])->where('uuid', '[0-9a-fA-F-]{36}')->name('rentals.file');
 });
@@ -62,6 +63,7 @@ Route::prefix('rentals')->middleware(['auth:sanctum', 'api.tenant', 'api.module:
     Route::get('properties/{id}', [PropertiesController::class, 'show'])->whereNumber('id');
     Route::match(['put', 'patch'], 'properties/{id}', [PropertiesController::class, 'update'])->whereNumber('id');
     Route::put('properties/{id}/staff', [PropertiesController::class, 'staff'])->whereNumber('id');
+    Route::post('properties/{id}/handover', [PropertiesController::class, 'handover'])->whereNumber('id');
 
     Route::get('units', [UnitsController::class, 'index']);
     Route::post('units', [UnitsController::class, 'store']);

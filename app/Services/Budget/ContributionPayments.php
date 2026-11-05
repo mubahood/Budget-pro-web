@@ -15,25 +15,39 @@ use Illuminate\Support\Str;
 /**
  * Pledge payments (roadmap 02 §6): the only writer of contribution_payments and of a pledge's paid figures.
  *
- *  - record():  a payment received. Idempotent on its uuid (the phone's op uuid or the API's `uuid`).
+ *  - record():  a payment received. Idempotent on its uuid (the phone's op uuid or the API's `uuid`). The same reference
+ *    on the event, or the same pledge and amount within minutes, asks before going ahead (possible_duplicate).
  *  - reverse(): a mistake put right with a new negative row and a reason; the original is never touched.
  *  - settleTo(): the older apps' way (they send the pledge's new paid_amount) as a payment of the difference.
  *
  * Every write locks the pledge row, appends, then sets paid_amount = SUM(payments) in the same transaction,
  * so two payments at the same moment both count and the figure always equals the history (bcmath, no floats).
+ *
+ * received_by_id is who took the money and holds it; created_by_id is who recorded it. A reversal stays with the person
+ * who held the money, and its created_by_id says who reversed it. A closed event takes none of this (EventClosure).
  */
 class ContributionPayments
 {
     public const RECEIPT_KIND = 'plg'; // receipt numbers PLG-2026-000001 (NumberSequencer)
 
+    /** The same pledge and amount within this many minutes looks like the same payment. */
+    public const DUPLICATE_MINUTES = 10;
+
+    private const SHILLINGS = ['UGX', 'KES', 'TZS', 'SOS', 'SSP'];
+
     /**
-     * @param  array{amount: mixed, paid_on?: ?string, method?: ?string, receipt_no?: ?string, reference?: ?string, notes?: ?string, uuid?: ?string, device_id?: ?string, client_created_at?: ?int}  $data
-     * @param  bool  $allowOverpay  true for payments made offline (sync): money already received is never refused
+     * @param  array{amount: mixed, paid_on?: ?string, method?: ?string, receipt_no?: ?string, reference?: ?string, notes?: ?string, uuid?: ?string, device_id?: ?string, client_created_at?: ?int, received_by_id?: mixed, confirm_duplicate?: bool}  $data
+     * @param  int  $userId  who is recording it; who received it too, unless received_by_id names someone on the event's team
+     * @param  bool  $allowOverpay  true for payments made offline (sync): money already received is never refused, not for
+     *                              going past the pledge, a fraction, a likely duplicate, or a withdrawn pledge
      * @return array{payment: ContributionPayment, record: ContributionRecord, replayed: bool}
      */
     public function record(int $companyId, int $recordId, array $data, int $userId, bool $allowOverpay = false): array
     {
         $amount = $this->positiveAmount($data['amount'] ?? null);
+        if (! $allowOverpay) {
+            self::assertExact($companyId, (string) $data['amount']);
+        }
         $method = $this->method($data['method'] ?? null);
         $paidOn = $this->paidOn($companyId, $data['paid_on'] ?? null);
         $uuid = $this->uuid($data['uuid'] ?? null);
@@ -42,7 +56,12 @@ class ContributionPayments
             if ($uuid !== null && ($replay = $this->replay($companyId, $uuid, $recordId, null)) !== null) {
                 return $replay;
             }
-            $record = $this->lockPledge($companyId, $recordId);
+            $record = $this->lockPledge($companyId, $recordId, ! $allowOverpay);
+            EventClosure::assertOpen($record->budget_program_id);
+            if ($record->is_deleted) {
+                $this->backFromWithdrawn($record, $amount, $data['device_id'] ?? null);
+            }
+            $receivedBy = $this->receiver($companyId, (int) $record->budget_program_id, $data['received_by_id'] ?? null, $userId, $allowOverpay);
             if (! $allowOverpay && Decimal::cmp($record->amount, '0') > 0) {
                 $owed = Decimal::sub($record->amount, $this->sum($record->id));
                 if (Decimal::cmp($amount, $owed) > 0) {
@@ -52,9 +71,13 @@ class ContributionPayments
                         ['owed' => $owed]);
                 }
             }
+            $reference = $this->text($data['reference'] ?? null, 100);
+            if (! $allowOverpay && empty($data['confirm_duplicate'])) {
+                $this->refuseLikelyDuplicate($record, $amount, $reference);
+            }
             $payment = $this->append($record, [
-                'uuid' => $uuid, 'amount' => $amount, 'paid_on' => $paidOn, 'method' => $method, 'received_by_id' => $userId,
-                'receipt_no' => $this->receiptNo($companyId, $data['receipt_no'] ?? null), 'reference' => $this->text($data['reference'] ?? null, 100),
+                'uuid' => $uuid, 'amount' => $amount, 'paid_on' => $paidOn, 'method' => $method, 'received_by_id' => $receivedBy,
+                'receipt_no' => $this->receiptNo($companyId, $data['receipt_no'] ?? null), 'reference' => $reference,
                 'notes' => $this->text($data['notes'] ?? null, 255), 'source' => 'payment', 'created_by_id' => $userId,
                 'device_id' => $data['device_id'] ?? null, 'client_created_at' => $data['client_created_at'] ?? null,
             ]);
@@ -81,6 +104,7 @@ class ContributionPayments
                 return $replay;
             }
             $record = $this->lockPledge($companyId, (int) $original->contribution_record_id);
+            EventClosure::assertOpen($record->budget_program_id);
             if ($original->reverses_id !== null) {
                 throw BusinessRuleException::make('cannot_reverse_reversal', 'A reversal cannot be reversed. Record the payment again instead.');
             }
@@ -89,7 +113,7 @@ class ContributionPayments
             }
             $payment = $this->append($record, [
                 'uuid' => $uuid, 'amount' => Decimal::neg($original->amount), 'paid_on' => LocalDate::today($companyId)->format('Y-m-d'), 'method' => $original->method,
-                'received_by_id' => $userId, 'reference' => $original->receipt_no, 'source' => 'reversal', 'reverses_id' => $original->id,
+                'received_by_id' => $original->received_by_id, 'reference' => $original->receipt_no, 'source' => 'reversal', 'reverses_id' => $original->id,
                 'reason' => mb_substr($reason, 0, 255), 'created_by_id' => $userId, 'device_id' => $deviceId,
             ]);
 
@@ -161,7 +185,99 @@ class ContributionPayments
             ->selectRaw('COALESCE(SUM(amount), 0) AS s')->value('s'));
     }
 
+    /**
+     * Web and API money only (PB-07): nothing is rounded silently, so a fraction in a currency without cents is refused,
+     * and so is more precision than the book keeps. Sync takes what the phone holds, exactly as it is.
+     */
+    public static function assertExact(int $companyId, string $amount): void
+    {
+        if (\App\Support\Money::decimals($companyId) === 0 && ! Decimal::isWhole($amount)) {
+            $words = in_array(\App\Support\Money::symbol($companyId), self::SHILLINGS, true) ? 'Whole shillings only.' : 'Whole amounts only, with no cents.';
+
+            throw BusinessRuleException::make('invalid_amount', $words);
+        }
+        if (Decimal::cmp($amount, Decimal::of($amount)) !== 0) {
+            throw BusinessRuleException::make('invalid_amount', 'That amount has too many decimal places.');
+        }
+    }
+
+    /** assertExact as a validation rule, for the API and the web forms that validate money themselves. */
+    public static function exactRule(int $companyId): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($companyId) {
+            if (! Decimal::valid($value)) {
+                return;
+            }
+            try {
+                self::assertExact($companyId, (string) $value);
+            } catch (BusinessRuleException $e) {
+                $fail($e->getMessage());
+            }
+        };
+    }
+
     // ------------------------------------------------------------------
+
+    /**
+     * Who took the money. Nobody named: the person recording it. On the web and the API it must be someone on the
+     * event's team; from a phone it is taken if they are on the account, else it falls to the person pushing, since
+     * a phone's list can be out of date and its money is never refused.
+     */
+    private function receiver(int $companyId, int $programId, mixed $given, int $userId, bool $fromPhone): int
+    {
+        $id = is_numeric($given) ? (int) $given : 0;
+        if ($id <= 0 || $id === $userId) {
+            return $userId;
+        }
+        if ($fromPhone) {
+            return DB::table('admin_users')->where('id', $id)->where('company_id', $companyId)->exists() ? $id : $userId;
+        }
+        if (! BudgetAccess::onTeam($companyId, $programId, $id)) {
+            throw BusinessRuleException::make('invalid_receiver', "Choose someone on this event's team.");
+        }
+
+        return $id;
+    }
+
+    /**
+     * Money came from a phone for a pledge withdrawn meanwhile. The money is real, so the pledge goes back in the book,
+     * and the owner is told through the sync inbox.
+     */
+    private function backFromWithdrawn(ContributionRecord $record, string $amount, ?string $deviceId): void
+    {
+        if ($record->withdrawn_at === null) {
+            throw BusinessRuleException::make('not_found', 'This pledge was not found.');
+        }
+        $why = (string) $record->withdrawn_reason;
+        $record->is_deleted = 0;
+        $record->withdrawn_at = null;
+        $record->withdrawn_by_id = null;
+        $record->withdrawn_reason = null;
+        $record->saveQuietlySynced();
+        (new \App\Services\Sync\MasterDataService())->conflict((int) $record->company_id, $deviceId, 'contribution_records', (string) $record->uuid, 'paid_after_withdrawn',
+            ['amount' => $amount, 'withdrawn_reason' => $why], null, 'Money came in on a withdrawn pledge of '.$record->name.', so it is back in the book');
+    }
+
+    /** The soft guard (PB-02): the same reference on this event, or the same pledge and amount just now, asks first. A reversed payment does not count. */
+    private function refuseLikelyDuplicate(ContributionRecord $record, string $amount, ?string $reference): void
+    {
+        $live = fn () => ContributionPayment::withoutGlobalScopes()->where('is_deleted', 0)->whereNull('reverses_id')->where('source', '!=', 'opening')
+            ->whereNotIn('id', DB::table('contribution_payments')->where('budget_program_id', $record->budget_program_id)->whereNotNull('reverses_id')->select('reverses_id'))
+            ->latest('id');
+        $earlier = $reference === null ? null
+            : $live()->where('budget_program_id', $record->budget_program_id)->whereRaw('LOWER(reference) = ?', [mb_strtolower($reference)])->first();
+        $earlier ??= $live()->where('contribution_record_id', $record->id)->where('amount', $amount)->where('created_at', '>=', now()->subMinutes(self::DUPLICATE_MINUTES))->first();
+        if ($earlier === null) {
+            return;
+        }
+        $at = $earlier->created_at;
+        $who = trim((string) DB::table('admin_users')->where('id', $earlier->created_by_id ?? $earlier->received_by_id)->value('name'));
+        $when = $at !== null && $at->gt(now()->subDay()) ? $at->diffForHumans() : 'on '.\Illuminate\Support\Carbon::parse((string) $earlier->getRawOriginal('paid_on'))->format('j M Y');
+        $tail = $earlier->receipt_no ? ' ('.$earlier->receipt_no.')' : '';
+
+        throw BusinessRuleException::make('possible_duplicate', 'This looks like the payment recorded '.$when.($who !== '' ? ' by '.$who : '').$tail.'. Record it again?',
+            ['earlier' => ['id' => (int) $earlier->id, 'date' => substr((string) $earlier->getRawOriginal('paid_on'), 0, 10), 'by' => $who, 'receipt' => $earlier->receipt_no, 'at' => $at?->toIso8601String()]]);
+    }
 
     private function lockPledge(int $companyId, int $recordId, bool $mustBeLive = true): ContributionRecord
     {

@@ -70,7 +70,8 @@ class SyncApplier
         }
 
         try {
-            return $this->applyInTransaction($company, $companyId, $deviceId, $userId, $batch, $batchUuid);
+            // A line's older-phone figure is posted in the name of whoever pushed it.
+            return \App\Services\Budget\BudgetPayments::actingFor($userId, $deviceId, fn () => $this->applyInTransaction($company, $companyId, $deviceId, $userId, $batch, $batchUuid));
         } catch (BatchRejected $e) {
             // Rejections are recorded too, so a replay of the same bad batch answers identically.
             $result = ['batch_uuid' => $batchUuid, 'status' => 'rejected', 'ops' => $e->ops, 'server_seq_max' => SyncSequence::current(), 'assigned' => [], 'derived' => ['products' => [], 'customers' => []], 'stock_exceptions' => []];
@@ -170,15 +171,24 @@ class SyncApplier
                 $need = self::permissionFor($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
                 if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)
                     // An event's settings and payment details belong to its chair (and treasurer): BudgetAccess.
-                    && ! \App\Services\Budget\BudgetAccess::allowsSettingsSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))) {
+                    && ! \App\Services\Budget\BudgetAccess::allowsSettingsSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))
+                    // What was paid out on a line is the treasurer's too (PB-08).
+                    && ! \App\Services\Budget\BudgetPayments::allowsSpendingSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''), $op)) {
                     $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role does not allow this.', 'permission' => $need];
                     $failed = true;
                     break;
                 }
                 // Pledges, pledge payments and committees are per event (chair, treasurer, secretary…): BudgetAccess.
-                $need = \App\Services\Budget\BudgetAccess::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''));
+                $need = \App\Services\Budget\BudgetAccess::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))
+                    ?? \App\Services\Budget\BudgetPayments::refuseSyncOp($actor, $companyId, $table, is_array($op['data'] ?? null) ? $op['data'] : []);
                 if ($need !== null) {
                     $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => 'Your role on this event does not allow this.', 'permission' => $need];
+                    $failed = true;
+                    break;
+                }
+                // A closed event (D5): work made before it closed is applied, later work is refused so the phone tells its user.
+                if (\App\Services\Budget\EventClosure::refusesSyncOp($companyId, $table, is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''), $op)) {
+                    $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => \App\Services\Budget\EventClosure::CODE, 'message' => \App\Services\Budget\EventClosure::MESSAGE];
                     $failed = true;
                     break;
                 }
@@ -190,12 +200,15 @@ class SyncApplier
                     break;
                 }
                 try {
-                    $r = match ($config['kind']) {
-                        SyncRegistry::KIND_EVENT => $this->applyEvent($company, $deviceId, $userId, $table, $config, $op, $assigned, $touchedProducts, $stockExceptions),
-                        SyncRegistry::KIND_MASTER => $this->master->apply($companyId, $deviceId, $table, $config, $op, $this->serializer),
-                        SyncRegistry::KIND_POULTRY => $this->applyPoultry($companyId, $config, $op),
-                        default => ['status' => 'rejected', 'code' => 'read_only_table'],
-                    };
+                    // Judged just above, so the models' closed-event guard stands aside for this op.
+                    $r = \App\Services\Budget\EventClosure::allowing(function () use ($company, $companyId, $deviceId, $userId, $table, $config, $op, &$assigned, &$touchedProducts, &$stockExceptions) {
+                        return match ($config['kind']) {
+                            SyncRegistry::KIND_EVENT => $this->applyEvent($company, $deviceId, $userId, $table, $config, $op, $assigned, $touchedProducts, $stockExceptions),
+                            SyncRegistry::KIND_MASTER => $this->master->apply($companyId, $deviceId, $table, $config, $op, $this->serializer),
+                            SyncRegistry::KIND_POULTRY => $this->applyPoultry($companyId, $config, $op),
+                            default => ['status' => 'rejected', 'code' => 'read_only_table'],
+                        };
+                    });
                 } catch (BusinessRuleException $e) {
                     $r = ['status' => 'rejected', 'code' => $e->errorCode() === 'business_rule' ? 'validation' : $e->errorCode(), 'message' => $e->getMessage(), 'errors' => $e->toErrors()];
                 }
@@ -310,6 +323,7 @@ class SyncApplier
             'cash_movement' => $this->applyCashMovement($companyId, $userId, $uuid, $action, $data),
             'supplier_payment' => $this->applySupplierPayment($companyId, $userId, $uuid, $action, $data),
             'contribution_payment' => $this->applyContributionPayment($companyId, $deviceId, $userId, $uuid, $action, $data, $op),
+            'budget_payment' => $this->applyBudgetPayment($companyId, $deviceId, $userId, $uuid, $action, $data, $op),
             'sacco_transaction' => $this->applySaccoTransaction($company, $deviceId, $userId, $uuid, $action, $data, $op),
             default => ['status' => 'rejected', 'code' => 'unknown_table'],
         };
@@ -565,7 +579,8 @@ class SyncApplier
 
     /**
      * A pledge payment (or its reversal) recorded on the phone: ContributionPayments, idempotent on the op uuid.
-     * Money already received offline is never refused for going past the pledge (allowOverpay).
+     * Money already received offline is never refused for going past the pledge, a fraction, a likely duplicate or a
+     * withdrawn pledge (allowOverpay).
      */
     private function applyContributionPayment(int $companyId, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array $op): array
     {
@@ -595,9 +610,51 @@ class SyncApplier
             'uuid' => $uuid, 'amount' => isset($data['amount']) ? (string) $data['amount'] : null, 'paid_on' => $data['paid_on'] ?? null, 'method' => $data['method'] ?? null,
             'receipt_no' => $data['receipt_no'] ?? null, 'reference' => $data['reference'] ?? null, 'notes' => $data['notes'] ?? null,
             'device_id' => $deviceId, 'client_created_at' => isset($op['client_created_at']) ? (int) $op['client_created_at'] : null,
+            'received_by_id' => $data['received_by_id'] ?? null, // a newer phone's choice; older phones send none, and the person pushing took it
         ], $userId, true);
 
         return ['status' => 'applied', 'model' => $r['payment']];
+    }
+
+    /**
+     * A payment out (or its reversal) recorded on the phone: BudgetPayments, idempotent on the op uuid. Money already paid out is never refused for going past
+     * the line, a fraction, a likely duplicate or a line removed meanwhile.
+     */
+    private function applyBudgetPayment(int $companyId, ?string $deviceId, int $userId, string $uuid, string $action, array $data, array $op): array
+    {
+        if ($action !== 'insert' && $action !== 'upsert') {
+            return ['status' => 'rejected', 'code' => 'immutable_event', 'message' => 'A payment out cannot be changed. Reverse it and record it again.'];
+        }
+        $existing = \App\Models\BudgetPayment::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', strtolower($uuid))->first();
+        if ($existing) {
+            return ['status' => 'replayed', 'model' => $existing];
+        }
+        $svc = new \App\Services\Budget\BudgetPayments();
+        if (! empty($data['reverses_uuid'])) {
+            $original = \App\Models\BudgetPayment::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', (string) $data['reverses_uuid'])->first();
+            if ($original === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'reverses_uuid'];
+            }
+
+            return ['status' => 'applied', 'model' => $svc->reverse($companyId, (int) $original->id, (string) ($data['reason'] ?? ''), $userId, $uuid, $deviceId)['payment']];
+        }
+        $form = ['uuid' => $uuid, 'amount' => isset($data['amount']) ? (string) $data['amount'] : null, 'paid_on' => $data['paid_on'] ?? null, 'method' => $data['method'] ?? null, 'paid_to' => $data['paid_to'] ?? null,
+            'reference' => $data['reference'] ?? null, 'notes' => $data['notes'] ?? null, 'paid_by_id' => $data['paid_by_id'] ?? null, 'approved_by_id' => $data['approved_by_id'] ?? null,
+            'device_id' => $deviceId, 'client_created_at' => isset($op['client_created_at']) ? (int) $op['client_created_at'] : null];
+        if (! empty($data['item_uuid'])) {
+            $itemId = \App\Models\BudgetItem::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', (string) $data['item_uuid'])->value('id');
+            if ($itemId === null) {
+                return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'item_uuid'];
+            }
+
+            return ['status' => 'applied', 'model' => $svc->record($companyId, (int) $itemId, $form, $userId, true)['payment']];
+        }
+        $programId = ! empty($data['program_uuid']) ? \App\Models\BudgetProgram::withoutGlobalScopes()->where('company_id', $companyId)->where('uuid', (string) $data['program_uuid'])->value('id') : null;
+        if ($programId === null) {
+            return ['status' => 'rejected', 'code' => 'missing_parent', 'parent' => 'program_uuid'];
+        }
+
+        return ['status' => 'applied', 'model' => $svc->record($companyId, null, $form + ['budget_program_id' => (int) $programId], $userId, true)['payment']];
     }
 
     /**

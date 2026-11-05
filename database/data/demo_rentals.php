@@ -30,7 +30,7 @@ return [
         'phones' => ['tenant' => 256_700_000_400, 'kin' => 256_700_000_600],
         'settings' => ['mode' => 'agency', 'currency' => 'UGX', 'bill_days_before' => 5, 'grace_days' => 5, 'anchor' => 'start', 'prorate_first' => true,
             'commission_type' => 'percent', 'commission_bp' => 1000, 'commission_minor' => 0, 'commission_on_items' => false, 'deposit_months' => 1,
-            'deposit_held_by' => 'agency', 'late_fee_type' => 'percent', 'late_fee_bp' => 500, 'late_fee_to' => 'agency',
+            'deposit_held_by' => 'agency', 'late_fee_type' => 'percent', 'late_fee_bp' => 500, 'late_fee_to' => 'agency', 'withholding_on' => true,
             'payment_instructions' => "Pay rent to Ntinda Property Managers (Demo):\n- MTN MoMo Pay, merchant code 000 000 (a demo code: not a real one)\n"
                 ."- Bank: Demo Bank Uganda, Ntinda branch, account 0000 0000 0001 (fictional)\nWrite your unit and property as the reference, for example \"A2 Kisaasi Court\".",
             'receipt_footer' => 'Ntinda Property Managers (Demo): a sample account. Every name and number in it is made up.'],
@@ -134,6 +134,10 @@ return [
     | in N days), ended_days_ago (the term ran out and the tenant stayed), renew (a term that ended and was renewed).
     */
     'tenancies' => [
+        // Tenants who pay the landlord at the gate: the agency records it, and only its commission moves.
+        'kyanja:H11' => ['since' => 16, 'day' => 1, 'pay' => 'direct', 'm' => 'cash'],
+        'kiwatule:F11' => ['since' => 14, 'day' => 1, 'pay' => 'direct', 'm' => 'cash'],
+
         // The tenant sign-ins: one who pays days ahead of time, one kept two months behind.
         'kisaasi:A2' => ['since' => 20, 'day' => 5, 'pay' => 'regular', 'm' => 'momo', 'early' => true],
         'kyanja:H6' => ['since' => 30, 'day' => 1, 'pay' => 'behind:2', 'm' => 'momo', 'owed' => 800_000],
@@ -288,6 +292,32 @@ return [
         'kireka:K14' => ['status' => 'reserved', 'notes' => 'Held for a nurse starting at the clinic next month'],
         'kyanja:H8' => ['status' => 'maintenance', 'notes' => 'Bathroom being redone after the last tenant left'],
         'lubowa:O9' => ['status' => 'maintenance', 'notes' => 'Glass partition being replaced'],
+        'kiwatule:F14' => ['status' => 'in_use', 'in_use_by' => 'Joseph Ouma, the caretaker', 'notes' => 'Lives on site'],
+        'ntinda:S14' => ['status' => 'in_use', 'in_use_by' => 'Lubowa Holdings, as a store', 'notes' => 'The landlord keeps stock here'],
+    ],
+
+    /*
+    | The landlord and commission work, as an agency really lives it. Every name, figure and reason is made up. `close_months`: months are closed by the 25th of the next
+    | month, from this many months back, so the month just ended is usually still there to close by hand and the older ones have frozen statements. Dates are `ago` [months, day].
+    */
+    'landlord_work' => [
+        'close_months' => 4,
+        'reissue' => ['ago' => [2, 26], 'month_ago' => 3, 'property' => 'kisaasi', 'reason' => 'A bill for this month was found after it closed', 'category' => 'Cleaning', 'vendor' => 'cleaning', 'what' => 'Water tank cleaned, bill found late', 'amount' => 85_000],
+        'late_receipt' => ['lease' => 'kyanja:H6', 'ago' => [1, 26], 'month_ago' => 2, 'amount' => 100_000],
+        'handover' => ['property' => 'kireka', 'to' => 'atim', 'ago' => [4, 1], 'reason' => 'Sold by Ssenoga Investments to Grace Atim'],
+        'unit_rule' => ['property' => 'ntinda', 'unit' => 'S13', 'percent' => 12, 'ago' => [7, 15]],
+        'lease_rate' => ['lease' => 'kisaasi:A7', 'percent' => 8, 'ago' => [5, 20], 'from' => [3, 1], 'reason' => 'Agreed with the landlord: this tenant pays for the whole year'],
+        'landlord_rate' => ['landlord' => 'atim', 'percent' => 7, 'ago' => [4, 20], 'from' => [3, 1], 'reason' => 'New rate agreed for all her buildings'],
+        'bill_ahead' => [['lease' => 'kisaasi:A8', 'periods' => 3, 'ago' => [2, 3]], ['lease' => 'kiwatule:F7', 'periods' => 2, 'ago' => [1, 2]]],
+        'repair_limit' => ['landlord' => 'nakimuli', 'limit' => 1_000_000, 'ago' => [3, 1]],
+        'repairs' => [
+            ['unit' => 'kisaasi:A9', 'title' => 'Water pump replaced', 'ago' => [2, 8], 'quote' => 1_200_000, 'yes' => 'Margaret Nakimuli', 'done' => 3, 'by' => 'Kato Plumbing Works (demo)'],
+            ['unit' => 'kisaasi:B5', 'title' => 'Burst pipe in the ceiling', 'ago' => [1, 12], 'quote' => 1_100_000, 'done' => 1, 'by' => 'Kato Plumbing Works (demo)', 'reason' => 'Water was coming through the ceiling and the landlord could not be reached'],
+            ['unit' => 'kyanja:H9', 'title' => 'Roof over the stairs leaking', 'days_ago' => 5, 'quote' => 1_400_000, 'ask' => true],
+        ],
+        'hold_back' => ['landlord' => 'lubowa', 'percent' => 5, 'ago' => [6, 2], 'paid' => [['for_ago' => 3, 'ago' => [2, 10]], ['for_ago' => 2, 'ago' => [1, 10]]]],
+        'advance' => ['landlord' => 'wasswa', 'over' => 150_000, 'ago' => [1, 18], 'reason' => 'Asked for school fees ahead of the next payout'],
+        'pays_twice' => 'nakimuli', // a second payout around the 20th, when enough has come in since the 5th
     ],
 
     // Repairs: where, what, priority, who reported it, when, and how it ended (done after N days with a cost, open,
@@ -411,6 +441,7 @@ return [
             'bweyogerere:S2' => ['since' => 12, 'day' => 15, 'pay' => 'parts', 'm' => 'momo'],
         ],
         'opening_cash' => ['cash' => 600_000, 'mobile_money' => 900_000, 'bank' => 2_500_000],
+        'landlord_work' => ['close_months' => 3],
         'move_outs' => [
             'bweyogerere:R6' => ['ago' => [4, 15], 'refund_deposit' => 'cash', 'water' => 2.6, 'damages' => [['Window pane replaced', 40_000]], 'reason' => 'Moved back to Mbale'],
         ],

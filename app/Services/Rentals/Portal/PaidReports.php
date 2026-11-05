@@ -86,7 +86,15 @@ final class PaidReports
             $this->assertPending($r);
             $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->findOrFail($r->lease_id);
             $notes = trim('Reported by the tenant.'.($r->note ? ' '.$r->note : ''));
-            $p = app(Payments::class)->receive($by, $lease, ['amount_minor' => (int) $r->amount_minor, 'method' => (string) $r->method, 'paid_on' => $r->paid_on->toDateString(),
+            // Its month has closed since the tenant reported it: a late receipt, dated today and marked for that month (D7).
+            $paidOn = $r->paid_on->toDateString();
+            $through = RentalLedger::closedThrough($cid);
+            if ($through !== null && $paidOn <= $through) {
+                $today = LocalDate::today($cid);
+                $notes = RentalLedger::lateMark($paidOn, $today).'. '.$notes;
+                $paidOn = $today->toDateString();
+            }
+            $p = app(Payments::class)->receive($by, $lease, ['amount_minor' => (int) $r->amount_minor, 'method' => (string) $r->method, 'paid_on' => $paidOn,
                 'reference' => $r->reference, 'notes' => $notes, 'uuid' => (string) $r->uuid], 'portal');
             $r->forceFill(['status' => 'confirmed', 'payment_id' => $p->id, 'decided_by_id' => $by->id, 'decided_at' => now()])->save();
             RentalAudit::record($cid, 'paid_report.confirmed', $r, "Confirmed a tenant's payment as {$p->number}", ['amount_minor' => (int) $r->amount_minor], 'staff', (int) $by->id);

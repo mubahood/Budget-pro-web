@@ -12,7 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 /**
  * One payment received against a pledge (roadmap 02 §6). Append-only: written only by
  * App\Services\Budget\ContributionPayments, never edited or deleted; a mistake gets a reversal row
- * (negative amount, reverses_id, reason). The pledge's paid_amount is the sum of its rows.
+ * (negative amount, reverses_id, reason). The pledge's paid_amount is the sum of its rows. received_by_id is who took
+ * the money and holds it; created_by_id is who recorded it (OB-06).
  */
 class ContributionPayment extends Model
 {
@@ -54,6 +55,11 @@ class ContributionPayment extends Model
     public function receivedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'received_by_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
     }
 
     public function reverses(): BelongsTo

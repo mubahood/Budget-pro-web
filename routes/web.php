@@ -186,6 +186,9 @@ Route::get('data-exports-print', function () {
         $companyId = (int) request('company_id');
         $categoryId = $rawId;
         $treasurerId = null;
+        // One event's list, named by the link (PB-10). An older app's link names none: it gets the group's most recent
+        // open event and is told so, never the group across every event.
+        $programId = (int) request('program');
 
         if ($companyId <= 0 || $categoryId === null || $categoryId === '') {
             abort(404);
@@ -199,17 +202,38 @@ Route::get('data-exports-print', function () {
 
     $treasurer = $treasurerId ? \App\Models\User::find($treasurerId) : null;
 
+    $eventNote = null;
+    $program = null;
+    if (isset($programId)) {
+        $alive = BudgetProgram::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0);
+        if ($programId > 0) {
+            $program = $alive->find($programId);
+            abort_if($program === null, 404);
+            // The older app's link (`older`, signed with the rest) names the event the server chose for it, and says so.
+            $eventNote = request()->boolean('older') ? 'This list is for '.$program->name.' only. Update the app to choose the event.' : null;
+        } else {
+            $withGroup = ContributionRecord::withoutGlobalScopes()->where('company_id', $companyId)->where('category_id', $categoryId)->where('is_deleted', 0)->pluck('budget_program_id')->unique();
+            $program = (clone $alive)->whereIn('id', $withGroup)->get()->filter(fn ($p) => \App\Services\Budget\EventBook::isOpen($p->status))->sortByDesc('id')->first()
+                ?? (clone $alive)->whereIn('id', $withGroup)->orderByDesc('id')->first();
+            $eventNote = $program ? 'This list is for '.$program->name.' only. Update the app to choose the event.' : null;
+        }
+    }
+
     $records = ContributionRecord::where('company_id', $companyId)
         ->where('category_id', $categoryId)
+        ->when(isset($programId), fn ($q) => $q->where('budget_program_id', $program?->id ?? 0))
+        ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', \App\Services\Budget\EventBook::KIND_IN_KIND))
         ->when($treasurerId, fn ($q) => $q->where('treasurer_id', $treasurerId))
+        ->without(['budgetProgram', 'treasurer', 'changedBy'])
         ->orderBy('name')
         ->get();
 
     return view('reports.data-export', [
-        'export' => (object) ['category_id' => $categoryId, 'treasurer_id' => $treasurerId],
+        'export' => (object) ['category_id' => $program ? $program->name.' · '.\App\Services\Budget\EventBook::groupLabel((string) $categoryId) : $categoryId, 'treasurer_id' => $treasurerId],
         'company' => $company,
         'treasurer' => $treasurer,
         'records' => $records,
+        'eventNote' => $eventNote,
     ]);
 })->name('data-exports.print');
 
@@ -226,5 +250,9 @@ Route::get('budget-program-pdf', function () {
     $rep = BudgetProgram::withoutGlobalScopes()->where('company_id', (int) request('company_id'))->find((int) request('id'));
     abort_if($rep === null, 404);
 
-    return $rep->reportPdf();
+    return app(\App\Services\Budget\EventExport::class)->budgetResponse($rep);
 })->name('budget-program.pdf');
+
+// One payment's receipt behind the link in the confirmation message: signed, 30 days, that payment alone (EventExport::receiptLink).
+Route::get('event-receipt/{uuid}', fn (string $uuid) => app(\App\Services\Budget\EventExport::class)->receiptResponse($uuid))
+    ->where('uuid', '[0-9a-fA-F-]{36}')->middleware('throttle:60,1')->name(\App\Services\Budget\EventExport::RECEIPT_ROUTE);

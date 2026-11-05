@@ -40,7 +40,7 @@ class ReportsController extends RentalsController
                 return $this->success((new RentalReports())->run($key, $cid, $by, $params));
             }
             RentalAccess::authorize($by, 'rentals_reports');
-            $def = RentalReports::REPORTS[$key] ?? throw BusinessRuleException::make('unknown_report', "There is no report called \"{$key}\".");
+            $def = RentalReports::open($key) ? RentalReports::REPORTS[$key] : throw BusinessRuleException::make('unknown_report', "There is no report called \"{$key}\".");
             if ($def[3] === 'account' && RentalAccess::propertyIds($by) !== null) {
                 throw BusinessRuleException::make('forbidden', 'This report covers the whole account\'s money. Ask your property manager for it.');
             }

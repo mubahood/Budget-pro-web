@@ -137,6 +137,9 @@ class PledgePaymentsTest extends ApiTestCase
 
     public function test_money_is_exact_decimals_end_to_end(): void
     {
+        // In a currency with cents: shillings take whole figures only on the API (PB-07, PledgeMoneyRulesTest).
+        $this->t = $this->registerTenant(['currency' => 'USD']);
+        $this->h = $this->auth($this->t['token']);
         $program = $this->program();
         $p = $this->pledge($program, ['amount' => '1000.50']);
         $this->pay($p['id'], ['amount' => '0.10'])->assertStatus(201);

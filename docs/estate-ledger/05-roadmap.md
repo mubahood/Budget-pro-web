@@ -42,6 +42,15 @@ suites once); no push or deploy without the owner's word.
 - [x] Site `estate-ledger` (content, page, pricing, icons, OG image), demo page, independence guard test, `site:check`
 - [x] One browser pass (page errors, 390 and 1366, light only)
 
+## WP4a Landlord and commission work (`budget-pro-new/docs/estate-ledger/04-landlord-and-commission-tasks.md`, private)
+
+- [x] A: handover, bill ahead, a rule on a unit, commission from a date, commission report, sitting or new tenant
+- [x] B: month close, issued statements, the month-end screen, statement proof in `rentals:check`, the statement a landlord reads
+- [x] C: rent sheet and landlord filter, payout run, payout advice, advances, the landlord's record and list
+- [x] D: whose money this is, what the agency takes out, the landlord's limit on repairs, year summary, the accountant's file
+- [x] E: paid to the landlord (`collected_direct`), a room the landlord or caretaker uses, money held back (off by default)
+- [x] F: the demo lives all of it, docs, site, every gate and stub removed, full suites
+
 ## WP5 App
 
 - [ ] Flavor `estate-ledger` (Gradle, res, icons, splash, `AppFlavor`, square theme flag, strings EN/SW)

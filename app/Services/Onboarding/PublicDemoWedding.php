@@ -9,7 +9,10 @@ use App\Models\Company;
 use App\Models\ContributionRecord;
 use App\Models\User;
 use App\Services\Budget\BudgetTemplates;
+use App\Services\Budget\CardTemplates;
 use App\Services\Budget\ContributionPayments;
+use App\Services\Budget\EventBook;
+use App\Services\Budget\EventInvitations;
 use App\Services\Budget\EventSettings;
 use App\Services\Budget\TemplateApplier;
 use App\Support\Decimal;
@@ -91,7 +94,7 @@ class PublicDemoWedding
                     mt_srand(crc32('demo-pledges-'.$key)); // the same people and amounts on every build
                     $events[$key] = $this->event($key, $event);
                     if ($events[$key] > 0 && $committee !== []) {
-                        $this->skipped = array_merge($this->skipped, (new DemoPledgeExtras())->apply($events[$key], (int) $this->by->id, $committee, false));
+                        $this->skipped = array_merge($this->skipped, (new DemoPledgeExtras)->apply($events[$key], (int) $this->by->id, $committee, false));
                     }
                 }
             });
@@ -100,6 +103,8 @@ class PublicDemoWedding
             Carbon::setTestNow($clock);
             $this->restore($guards);
         }
+
+        $this->cards($events);
 
         return ['events' => $events, 'wedding' => (int) ($events[self::WEDDING] ?? 0)];
     }
@@ -118,6 +123,7 @@ class PublicDemoWedding
         $this->tz = (string) ($tz ?: $co->timezone ?: 'Africa/Kampala');
         $this->now = ($now ?? now())->copy();
         $this->today = $this->now->copy()->setTimezone($this->tz)->startOfDay();
+        $this->cards($events);
         $open = array_values(array_filter(array_map(fn ($key) => isset($events[$key]) && ! empty($this->data['events'][$key]['open']) ? (int) $events[$key] : 0, array_keys($this->data['events']))));
         if ($open === []) {
             return ['pledges' => 0, 'payments' => 0];
@@ -153,12 +159,12 @@ class PublicDemoWedding
         $name = $this->name($taken);
         $amounts = [100000, 150000, 200000, 300000];
         Carbon::setTestNow($this->now->copy());
-        $p = new ContributionRecord();
+        $p = new ContributionRecord;
         $p->budget_program_id = $pid;
         $p->company_id = (int) $this->co->id;
         $p->treasurer_id = $this->by->id;
         $p->name = $name;
-        $p->category_id = \App\Services\Budget\EventBook::groupKey('Friends');
+        $p->category_id = EventBook::groupKey('Friends');
         $p->amount = $amounts[mt_rand(0, count($amounts) - 1)];
         $p->paid_amount = 0;
         $p->fully_paid = 'No';
@@ -175,7 +181,7 @@ class PublicDemoWedding
         $due = max(1, count(array_filter([8, 11, 14, 17, 20], fn ($h) => $h <= $hour)));
         $date = $this->today->toDateString();
         $have = DB::table('contribution_payments')->whereIn('budget_program_id', $open)->where('paid_on', $date)->where('is_deleted', 0)->where('source', '!=', 'reversal')->count();
-        $payments = new ContributionPayments();
+        $payments = new ContributionPayments;
         $added = 0;
         for ($n = $have; $n < $due; $n++) {
             $pid = $open[$n % count($open)];
@@ -197,6 +203,28 @@ class PublicDemoWedding
     }
 
     /** @return int the event's id (0 when it could not be made) */
+    /**
+     * Each event's invitation cards and a guest list under way, so a visitor can try it all on whichever event opens first (the
+     * shared pictures: nothing is written per demo).
+     *
+     * @param  array<string, int>  $events  event key => id
+     */
+    private function cards(array $events): void
+    {
+        $cards = new CardTemplates;
+        foreach ($events as $eventId) {
+            $program = $eventId > 0 ? BudgetProgram::withoutGlobalScopes()->where('company_id', $this->co->id)->find($eventId) : null;
+            if ($program === null) {
+                continue;
+            }
+            $cards->ensureDemo($program, (int) $this->by->id);
+            $first = $cards->forEvent((int) $this->co->id, (int) $eventId)->first();
+            if ($first !== null) {
+                (new EventInvitations)->seedDemo((int) $this->co->id, (int) $eventId, (int) $this->by->id, (int) $first->id);
+            }
+        }
+    }
+
     private function event(string $key, array $e): int
     {
         $cid = (int) $this->co->id;
@@ -204,7 +232,7 @@ class PublicDemoWedding
         $day = $this->today->copy()->addDays((int) $e['day']);
         $this->at((int) $e['recorded_from'] + 2, 20);
 
-        $program = new BudgetProgram();
+        $program = new BudgetProgram;
         $program->company_id = $cid;
         $program->name = $e['name'];
         $program->title = $e['name'];
@@ -223,7 +251,7 @@ class PublicDemoWedding
         // The budget, from its template, then what has been paid out so far.
         if ($template !== null) {
             $this->at((int) $e['recorded_from'] + 1, 20);
-            $this->quietly(fn () => (new TemplateApplier())->applyTemplate($this->by, $program, $template['key'], (int) $e['guests'], false));
+            $this->quietly(fn () => (new TemplateApplier)->applyTemplate($this->by, $program, $template['key'], (int) $e['guests'], false));
             $this->spend($pid, (array) ($e['spent'] ?? []));
         }
 
@@ -281,16 +309,16 @@ class PublicDemoWedding
         $n = count($people);
         $from = (int) $e['recorded_from'];
         $to = (int) $e['recorded_to'];
-        $payments = new ContributionPayments();
+        $payments = new ContributionPayments;
         foreach ($people as $k => [$group, $name, $amount]) {
             $daysAgo = $from - intdiv($k * max(0, $from - $to), max(1, $n - 1));
             $this->at($daysAgo, 19 + $k % 3, ($k * 13) % 60);
-            $p = new ContributionRecord();
+            $p = new ContributionRecord;
             $p->budget_program_id = $pid;
             $p->company_id = $cid;
             $p->treasurer_id = $this->by->id;
             $p->name = $name;
-            $p->category_id = \App\Services\Budget\EventBook::groupKey($group);
+            $p->category_id = EventBook::groupKey($group);
             $p->amount = $amount;
             $p->paid_amount = 0;
             $p->fully_paid = 'No';
@@ -346,7 +374,7 @@ class PublicDemoWedding
         }
         [$wrong, $right] = [$owing[3] ?? $owing[0], $owing[8] ?? $owing[1]];
         $cid = (int) $this->co->id;
-        $payments = new ContributionPayments();
+        $payments = new ContributionPayments;
         $this->at(9, 18, 10);
         $made = $this->quietly(fn () => $payments->record($cid, (int) $wrong->id, ['amount' => 100000, 'paid_on' => $this->today->copy()->subDays(9)->toDateString(),
             'method' => 'mobile_money', 'reference' => 'MTN MoMo 7712045531'], (int) $this->by->id));

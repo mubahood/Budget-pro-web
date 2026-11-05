@@ -158,7 +158,8 @@ class AppDemosTest extends TestCase
             $role = array_search($other, $staff, true);
             $owner->forceFill(['password' => Hash::make('someone-elses')])->save();
             DB::table('companies')->where('id', $company->id)->update(['name' => 'Renamed by a visitor', 'enabled_modules' => json_encode(['shop', 'poultry', 'budget', 'finance'])]);
-            DB::table('company_members')->where('company_id', $company->id)->where('user_id', $other['user_id'])->update(['role' => 'viewer' === $role ? 'cashier' : 'viewer']);
+            $accountRole = (string) DB::table('company_members')->where('company_id', $company->id)->where('user_id', $other['user_id'])->value('role');
+            DB::table('company_members')->where('company_id', $company->id)->where('user_id', $other['user_id'])->update(['role' => 'viewer' === $accountRole ? 'cashier' : 'viewer']);
 
             $result = app(PublicDemo::class)->run(false, $account);
 
@@ -167,7 +168,7 @@ class AppDemosTest extends TestCase
             $this->assertSame($company->name, $fresh->name);
             $this->assertSame(self::MODULES[$account], $fresh->enabled_modules);
             $this->assertTrue(Hash::check(PublicDemo::spec($account)['password'], $owner->fresh()->password));
-            $this->assertSame($role, DB::table('company_members')->where('company_id', $company->id)->where('user_id', $other['user_id'])->value('role'));
+            $this->assertSame($accountRole, DB::table('company_members')->where('company_id', $company->id)->where('user_id', $other['user_id'])->value('role'));
         }
     }
 

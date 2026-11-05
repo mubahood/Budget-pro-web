@@ -43,8 +43,13 @@ class BudgetItemCategory extends Model
     {
         parent::boot();
 
+        static::deleting(function ($model) {
+            \App\Services\Budget\EventClosure::assertOpen($model->budget_program_id);
+        });
+
         static::creating(function ($model) {
             $model->name = trim($model->name);
+            \App\Services\Budget\EventClosure::assertOpen($model->budget_program_id);
             // Prevent duplicate names within the same program
             $existing = BudgetItemCategory::where([
                 'name' => $model->name,
@@ -76,6 +81,7 @@ class BudgetItemCategory extends Model
 
         static::updating(function ($model) {
             $model->name = trim($model->name);
+            \App\Services\Budget\EventClosure::assertOpen($model->budget_program_id);
             // Prevent duplicate names within the same program (excluding self)
             $existing = BudgetItemCategory::where([
                 'name' => $model->name,
@@ -87,6 +93,22 @@ class BudgetItemCategory extends Model
 
             return $model;
         });
+    }
+
+    /**
+     * Put an event's categories in the order given: phones get it with their next pull.
+     *
+     * @param  list<int>  $ids
+     */
+    public static function arrange(int $companyId, array $ids): void
+    {
+        foreach (array_values($ids) as $i => $id) {
+            $category = self::withoutGlobalScopes()->where('company_id', $companyId)->find($id);
+            if ($category !== null && (int) $category->sort_order !== $i + 1) {
+                $category->sort_order = $i + 1;
+                $category->saveQuietlySynced();
+            }
+        }
     }
 
     //update self

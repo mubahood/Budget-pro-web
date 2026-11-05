@@ -153,6 +153,8 @@ class PublicDemoFamilyTest extends TestCase
         // A visitor switches the laying house off and deletes the wedding outright.
         DB::table('poultry_batches')->where('company_id', $cid)->where('name', PublicDemoBuilder::LAYERS)->update(['is_deleted' => 1]);
         DB::table('contribution_records')->where('company_id', $cid)->delete();
+        DB::table('event_invitations')->where('company_id', $cid)->delete();
+        DB::table('event_card_templates')->where('company_id', $cid)->delete();
         DB::table('budget_programs')->where('company_id', $cid)->delete();
 
         $result = app(PublicDemo::class)->run();
@@ -171,7 +173,7 @@ class PublicDemoFamilyTest extends TestCase
         $company = PublicDemo::company();
         $cid = (int) $company->id;
         $before = $this->counts($cid);
-        foreach (array_merge(self::WEDDING_TABLES, array_reverse(self::FARM_TABLES)) as $t) {
+        foreach (array_merge(['event_invitations', 'event_card_templates'], self::WEDDING_TABLES, array_reverse(self::FARM_TABLES)) as $t) {
             DB::table($t)->where('company_id', $cid)->delete();
         }
         $state = $company->onboarding_state;

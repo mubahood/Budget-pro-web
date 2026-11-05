@@ -223,7 +223,7 @@ class RegistrationService
             } else {
                 // The trial of the account's plan line (PlanLine, AK-15): Akiba Ledger's and Estate Ledger's run 30 days (AK-16, KR-20).
                 $line = \App\Services\Billing\PlanLine::for($company);
-                $plan = Plan::where('slug', \App\Services\Billing\PlanLine::trialSlug($line))->first();
+                $plan = Plan::where('slug', \App\Services\Billing\PlanLine::trialSlugFor($company))->first();
                 if ($line !== \App\Services\Billing\PlanLine::FAMILY) {
                     $trialDays = (int) ($plan?->trial_days ?: 30);
                     $company->license_expire = now()->addDays($trialDays);

@@ -54,8 +54,21 @@ nothing is edited) with far less machinery, and keeps the two modules independen
 
 - Every balance on every screen is a sum: a landlord's balance is Σ `landlord_minor` for that landlord; deposits held
   are Σ `deposit_minor`; the cash book is Σ `cash_minor` by method; what a tenant owes is Σ charges − Σ allocations.
-- A landlord statement for any period is reproducible from the rows, and two statements for the same period always
-  agree: its occupancy and arrears are worked out as of the period's last day, and the names on its lines come from the
-  payments' receipts. A receipt keeps a snapshot of itself on the payment; a reprint reads that, and only a reversal adds to it.
+- A landlord statement for an open period is reproducible from the rows: its occupancy and arrears are worked out as of the
+  period's last day, and the names on its lines come from the payments' receipts. A receipt keeps a snapshot of itself on the
+  payment; a reprint reads that, and only a reversal adds to it.
+- **A closed month's statement is not recomputed: it is issued, once, and read from then on.** Reproducing a statement from today's
+  rows cannot keep a promise to a landlord who already holds a paper, because a unit switched off or a name corrected changes what
+  a recomputation says. So closing a month (`rental_closes`) writes each landlord's statement (`rental_statements`) with a
+  number and a proof (a hash of its body), and that copy is what the landlord's page, the portal, the link and the bulk PDF read.
+  `rentals:check` still proves each copy against the journal: opening, closing, each line, the chain to the month before, and that
+  nothing was posted into the month after it closed. A correction after a reopen makes a new version that says which it replaces.
+- **A closed month is locked at the one place money passes.** `RentalLedger` reads the account's `closed_through` under the account's
+  lock and refuses a row or a reversal dated on or before it (`period_closed`). Late money is dated today and marked for its month.
+  Only the account owner reopens the latest month, with a reason.
+- **Two posting types were added later, and neither needed a new account:** `agency_drawing` (cash −, equity −:
+  the agency takes its own money out; never income, never an expense) and `collected_direct` (landlord −, income +: a tenant paid the
+  landlord directly, so no cash moves and only what the agency earns comes off the landlord's balance; no row when it earns nothing).
+  Money held back for a landlord is an expense charged to them when it is actually paid over, so nothing new is held in the books.
 - Commission on a part payment is proportional and exact once the charge is fully paid (04 §5.3).
 - Adding an account means a new column and a new posting rule, with the invariant updated in one place.

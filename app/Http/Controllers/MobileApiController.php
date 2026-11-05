@@ -51,7 +51,7 @@ class MobileApiController extends BaseController
     {
         $u = $this->auth($r);
 
-        $programs = DB::table('budget_programs')
+        $programs = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('budget_programs'), $u, 'budget_programs.id')
             ->where('budget_programs.company_id', $u->company_id)
             ->select([
                 'budget_programs.id',
@@ -131,7 +131,7 @@ class MobileApiController extends BaseController
             ->where('company_id', $u->company_id)
             ->first();
 
-        if (! $program) {
+        if (! $program || ! \App\Services\Budget\BudgetAccess::canOpen($u, (int) $program->id)) {
             Utils::error('Budget program not found.');
         }
 
@@ -257,7 +257,7 @@ class MobileApiController extends BaseController
     {
         $u = $this->auth($r);
 
-        $query = DB::table('budget_item_categories')
+        $query = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('budget_item_categories'), $u)
             ->where('company_id', $u->company_id);
 
         $programId = $r->get('budget_program_id');
@@ -369,7 +369,7 @@ class MobileApiController extends BaseController
     {
         $u = $this->auth($r);
 
-        $query = DB::table('budget_items')
+        $query = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('budget_items'), $u, 'budget_items.budget_program_id')
             ->where('budget_items.company_id', $u->company_id);
 
         if ($r->get('budget_item_category_id')) {
@@ -474,7 +474,8 @@ class MobileApiController extends BaseController
         $object->unit_price = $unitPrice;
         $object->quantity = $quantity;
         $object->target_amount = $unitPrice * $quantity;
-        $object->invested_amount = max(0, (int) $r->get('invested_amount', $object->invested_amount ?? 0));
+        // An older phone's figure, exactly: BudgetPayments posts the difference below. Left out, it stays what the history says.
+        $object->invested_amount = \App\Support\Decimal::valid($r->get('invested_amount')) ? \App\Support\Decimal::max(\App\Support\Decimal::of((string) $r->get('invested_amount')), '0') : ($object->invested_amount ?? 0);
         $object->details = $r->get('details', $object->details ?? '');
         $object->created_by_id = $object->created_by_id ?? $u->id;
         $object->changed_by_id = $u->id;
@@ -494,6 +495,7 @@ class MobileApiController extends BaseController
 
         // Trigger cascade: category → program recalculation
         try {
+            (new \App\Services\Budget\BudgetPayments())->afterQuietSave($object, (int) $u->id);
             $cat->updateSelf();
         } catch (\Throwable $th) {
             // Log but don't fail the response
@@ -535,15 +537,24 @@ class MobileApiController extends BaseController
         $u = $this->auth($r);
 
         $query = DB::table('contribution_records')
-            ->where('contribution_records.company_id', $u->company_id);
+            ->where('contribution_records.company_id', $u->company_id)
+            ->where('contribution_records.is_deleted', 0) // a withdrawn pledge (PB-04) is a tombstone
+            ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', \App\Services\Budget\EventBook::KIND_IN_KIND));
+        \App\Services\Budget\BudgetAccess::limitToSeats($query, $u, 'contribution_records.budget_program_id');
 
         if ($r->get('budget_program_id')) {
             $query->where('budget_program_id', $r->get('budget_program_id'));
         }
 
         $records = $query->orderBy('id', 'desc')->get();
+        $phones = [];
 
         foreach ($records as $rec) {
+            // A viewer sees names and amounts, not phone numbers (PB-09).
+            $phones[$rec->budget_program_id] ??= \App\Services\Budget\BudgetAccess::canSeePhones($u, (int) $rec->budget_program_id);
+            if (! $phones[$rec->budget_program_id]) {
+                $rec->phone = null;
+            }
             $rec->budget_program_text = '';
             $rec->company_text = '';
             $rec->treasurer_text = '';
@@ -738,20 +749,20 @@ class MobileApiController extends BaseController
         $u = $this->auth($r);
         $companyId = $u->company_id;
 
-        // Budget summary
-        $budgetSummary = DB::table('budget_programs')
+        // Budget summary (only the events this person has a seat on: PB-09)
+        $budgetSummary = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('budget_programs'), $u, 'id')
             ->where('company_id', $companyId)
             ->selectRaw('COUNT(*) as program_count, COALESCE(SUM(budget_total),0) as total_budget, COALESCE(SUM(budget_spent),0) as total_spent, COALESCE(SUM(budget_balance),0) as total_balance')
             ->first();
 
         // Contribution summary
-        $contribSummary = DB::table('contribution_records')
-            ->where('company_id', $companyId)
+        $contribSummary = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('contribution_records'), $u)
+            ->where('company_id', $companyId)->where('is_deleted', 0)
             ->selectRaw('COUNT(*) as count, COALESCE(SUM(amount),0) as total_pledged, COALESCE(SUM(paid_amount),0) as total_collected, COALESCE(SUM(not_paid_amount),0) as total_unpaid')
             ->first();
 
         // Active programs
-        $activePrograms = DB::table('budget_programs')
+        $activePrograms = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('budget_programs'), $u, 'id')
             ->where('company_id', $companyId)
             ->where('status', 'Active')
             ->select(['id', 'name', 'budget_total', 'budget_spent', 'budget_balance', 'total_expected', 'total_collected', 'total_in_pledge'])
@@ -760,8 +771,8 @@ class MobileApiController extends BaseController
             ->get();
 
         // Recent contributions
-        $recentContributions = DB::table('contribution_records')
-            ->where('company_id', $companyId)
+        $recentContributions = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('contribution_records'), $u)
+            ->where('company_id', $companyId)->where('is_deleted', 0)
             ->select(['id', 'name', 'amount', 'paid_amount', 'not_paid_amount', 'fully_paid', 'category_id', 'created_at'])
             ->orderBy('id', 'desc')
             ->limit(10)
@@ -815,11 +826,13 @@ class MobileApiController extends BaseController
         }
 
         $modelClass = $allowed[$model];
-        $data = $modelClass::withoutGlobalScopes()
-            ->where('company_id', $u->company_id)
+        $data = \App\Services\Budget\BudgetAccess::narrowLegacyList($modelClass::withoutGlobalScopes()->where('company_id', $u->company_id), $u, $modelClass)
             ->orderBy('id', 'desc')
             ->limit(10000)
             ->get();
+        if ($modelClass === ContributionRecord::class) {
+            \App\Services\Budget\BudgetAccess::hidePhones($data, $u);
+        }
 
         Utils::success($data, 'Listed successfully.');
     }
@@ -885,6 +898,10 @@ class MobileApiController extends BaseController
             $object->saveQuietly();
         } catch (\Exception $e) {
             Utils::error('Failed to save: '.$e->getMessage());
+        }
+
+        if ($object instanceof BudgetItem) {
+            (new \App\Services\Budget\BudgetPayments())->afterQuietSave($object, (int) $u->id);
         }
 
         $saved = $modelClass::withoutGlobalScopes()->find($object->id);

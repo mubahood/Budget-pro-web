@@ -30,6 +30,9 @@ final class PlanLine
 
     public const LINES = [self::FAMILY, self::AKIBA, self::ESTATE_LEDGER];
 
+    /** The family line's trial for an account that is only about events (Pledge & Budget): more logins, nothing else changed (D11). */
+    public const EVENTS_TRIAL = 'pledge-budget-trial';
+
     /** The module that puts an account on each line other than the family's. */
     private const MODULE_LINES = ['sacco' => self::AKIBA, 'rentals' => self::ESTATE_LEDGER];
 
@@ -102,6 +105,18 @@ final class PlanLine
         };
     }
 
+    /** The trial this account starts on: its line's, or the events trial for a family account with no module but events, once it is seeded. */
+    public static function trialSlugFor(Company $company): string
+    {
+        $line = self::for($company);
+        $core = array_values(array_intersect(\App\Support\Rules\CompanyRules::CORE_MODULES, $company->modules()));
+        if ($line === self::FAMILY && $core === ['budget'] && Plan::where('slug', self::EVENTS_TRIAL)->exists()) {
+            return self::EVENTS_TRIAL;
+        }
+
+        return self::trialSlug($line);
+    }
+
     /** The slug of the plan a lapsed account of this line falls back to (ADR 0005). */
     public static function freeSlug(string $line): string
     {
@@ -124,9 +139,10 @@ final class PlanLine
     public static function scope(Builder $query, string $line): Builder
     {
         if ($line === self::FAMILY) {
+            // A plan naming a line nobody sells any more (a stale `keyroll-*` row) belongs to no line: it is never offered.
             return $query->where(fn (Builder $q) => $q->whereNull('features')
                 ->orWhereNull('features->line')
-                ->orWhereNotIn('features->line', array_values(array_diff(self::LINES, [self::FAMILY]))));
+                ->orWhere('features->line', self::FAMILY));
         }
 
         return $query->where('features->line', $line);

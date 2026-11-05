@@ -17,6 +17,7 @@ use App\Models\RentalUnit;
 use App\Models\User;
 use App\Services\Rentals\Billing\Billing;
 use App\Services\Rentals\Directory\Tenants;
+use App\Services\Rentals\Landlords\LandlordAccounts;
 use App\Services\Rentals\Ledger\RentalLedger;
 use App\Services\Rentals\Meters;
 use App\Services\Rentals\Payments\CashGuard;
@@ -45,7 +46,7 @@ final class Leases
      * cycle_months, anchor, end_date, deposit_minor, deposit_held_by, commission (type, bp, minor), late_fee, items
      * [name, amount_minor, goes_to, commissionable], notes, first_payment (amount_minor, method, reference, paid_on),
      * part_rent_minor (the part-month rent typed by hand when the first period is a part month, EL-04: 0 charges none;
-     * left out, it is calculated, moveInPreview's suggestion).
+     * left out, it is calculated, moveInPreview's suggestion), origin (new, the default, or sitting: already living there when the agency took over, LC-22).
      */
     public function moveIn(User $by, array $data): RentalLease
     {
@@ -54,6 +55,9 @@ final class Leases
         $unit = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->find((int) ($data['unit_id'] ?? 0))
             ?? throw BusinessRuleException::make('not_found', 'Choose the unit the tenant moves into.');
         RentalAccess::assertInScope($by, (int) $unit->property_id, 'unit');
+        if ($unit->status === 'in_use') {
+            throw BusinessRuleException::make('unit_unavailable', 'This unit is used by '.$unit->in_use_by.'. Mark it available first.');
+        }
         if (in_array($unit->status, ['inactive', 'maintenance'], true)) {
             throw BusinessRuleException::make('unit_unavailable', $unit->status === 'maintenance' ? 'This unit is marked under repair. Mark it available first.' : 'This unit is switched off.');
         }
@@ -76,7 +80,7 @@ final class Leases
         if ($s->mode === 'owner') {
             $heldBy = 'agency'; // the owner holds it: one set of books
         }
-        $commission = Billing::commissionFor($property, $property->landlord_id ? RentalLandlord::withoutGlobalScopes()->find($property->landlord_id) : null);
+        $commission = Billing::commissionFor($property, $property->landlord_id ? RentalLandlord::withoutGlobalScopes()->find($property->landlord_id) : null, $unit);
         if (isset($data['commission']['type']) && $s->mode !== 'owner') {
             $commission = ['commission_type' => (string) $data['commission']['type'], 'commission_bp' => Minor::nonNegative($data['commission']['bp'] ?? 0, 'commission rate'),
                 'commission_minor' => Minor::nonNegative($data['commission']['minor'] ?? 0, 'commission')];
@@ -84,8 +88,12 @@ final class Leases
                 throw BusinessRuleException::make('commission_invalid', 'Commission is a percent up to 100, a flat amount, or none.');
             }
         }
+        $origin = (string) ($data['origin'] ?? 'new');
+        if (! in_array($origin, RentalLease::ORIGINS, true)) {
+            throw BusinessRuleException::make('origin_invalid', 'A tenant is new, or was already living there.');
+        }
 
-        return RentalLedger::locked($cid, function () use ($by, $data, $cid, $unit, $property, $start, $rent, $cycle, $anchor, $end, $deposit, $heldBy, $commission) {
+        return RentalLedger::locked($cid, function () use ($by, $data, $cid, $unit, $property, $start, $rent, $cycle, $anchor, $end, $deposit, $heldBy, $commission, $origin) {
             $unit = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->lockForUpdate()->findOrFail($unit->id);
             if (RentalLease::withoutGlobalScopes()->where('company_id', $cid)->where('unit_id', $unit->id)->whereIn('status', RentalLease::LIVE)->exists()) {
                 throw BusinessRuleException::make('unit_taken', "Unit {$unit->code} already has a tenant. Move them out first.");
@@ -97,7 +105,7 @@ final class Leases
                 'company_id' => $cid, 'number' => RentalsModule::nextNumber($cid, 'lease'), 'unit_id' => $unit->id, 'property_id' => $property->id,
                 'landlord_id' => $property->landlord_id, 'tenant_id' => $tenant->id, 'start_date' => $start->toDateString(), 'end_date' => $end?->toDateString(),
                 'cycle_months' => $cycle, 'anchor' => $anchor, 'rent_minor' => $rent, 'deposit_minor' => $deposit, 'deposit_held_by' => $heldBy,
-                'late_fee' => ($data['late_fee'] ?? 'default') === 'off' ? 'off' : 'default', 'status' => 'active',
+                'late_fee' => ($data['late_fee'] ?? 'default') === 'off' ? 'off' : 'default', 'status' => 'active', 'origin' => $origin,
                 'notes' => isset($data['notes']) ? mb_substr((string) $data['notes'], 0, 2000) : null, 'created_by_id' => $by->id,
             ] + $commission);
             RentalRentChange::create(['company_id' => $cid, 'lease_id' => $lease->id, 'rent_minor' => $rent, 'effective_from' => $start->toDateString(),
@@ -297,6 +305,7 @@ final class Leases
         }
 
         return RentalLedger::locked($cid, function () use ($by, $lease, $data, $cid, $day, $today) {
+            RentalLedger::assertOpen($cid, $day->toDateString()); // its money posts today; the day the tenant left must not land in a closed month
             $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->lockForUpdate()->findOrFail($lease->id);
             $this->assertRefundsCovered($lease, $data, $cid);
             $why = 'Moved out on '.$day->format('j M Y');
@@ -424,11 +433,14 @@ final class Leases
         $cancelled = 0;
         $takenBack = 0;
         $bills = [];
+        $back = ['landlords' => [], 'commission' => 0, 'agency' => 0, 'direct' => null];
         foreach ($charges as $c) {
             if (in_array($c->kind, ['rent', 'item'], true) && $c->period_start !== null && $c->period_start->gte($day)) {
                 $cancelled += (int) $c->amount_minor;
                 // A forgiven part of it just goes with the bill: only money comes back.
-                $takenBack += (int) $c->paid_minor - (int) RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->where('waived_charge_id', $c->id)->where('method', 'waiver')->whereNull('reversed_at')->sum('amount_minor');
+                $money = (int) $c->paid_minor - (int) RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->where('waived_charge_id', $c->id)->where('method', 'waiver')->whereNull('reversed_at')->sum('amount_minor');
+                $takenBack += $money;
+                $this->takesBack($c, $money, $back);
 
                 continue;
             }
@@ -444,6 +456,7 @@ final class Leases
                 $b = &$bills[(int) $c->id];
                 $paidPart = max(0, $unused - $b['left']);
                 $credit += $paidPart;
+                $this->takesBack($c, $paidPart, $back);
                 $b['left'] = $b['left'] + $paidPart - $unused;
                 $b['paid'] += $unused - $paidPart;
                 $forgiven += $unused;
@@ -471,10 +484,12 @@ final class Leases
             }
         }
         // Credit settles the open bills, oldest first (a deposit bill too, as applyCredit does).
+        $settles = false;
         uasort($bills, fn ($a, $b) => [$a['due'], $a['pri']] <=> [$b['due'], $b['pri']]);
         foreach ($bills as $k => $b) {
             $a = min($credit, $b['left']);
             if ($a > 0) {
+                $settles = $settles || $b['kind'] !== 'deposit';
                 $bills[$k]['left'] -= $a;
                 $bills[$k]['paid'] += $a;
                 $credit -= $a;
@@ -489,13 +504,65 @@ final class Leases
         $left = $held - $used;
         $depositBack = ! empty($data['refund_deposit']) ? $left : 0;
         $creditBack = ! empty($data['refund_credit']) ? $credit : 0;
+        $names = RentalLandlord::withoutGlobalScopes()->where('company_id', $cid)->whereIn('id', array_keys($back['landlords']) ?: [0])->get();
+        $landlords = [];
+        foreach ($names as $l) {
+            $minor = (int) $back['landlords'][(int) $l->id];
+            if ($minor !== 0) {
+                $landlords[] = ['landlord_id' => (int) $l->id, 'name' => (string) $l->name, 'is_self' => (bool) $l->is_self, 'taken_back_minor' => $minor, 'balance_after_minor' => LandlordAccounts::balance($l) - $minor];
+            }
+        }
 
         return [
+            'landlords_back' => $landlords, 'commission_back_minor' => $back['commission'], 'agency_back_minor' => $back['agency'], 'settles_more' => $settles || $used > 0,
+            'blocked' => $back['direct'] !== null ? Payments::directSettledWords((string) $back['direct']) : null,
             'cancelled_minor' => $cancelled, 'taken_back_minor' => $takenBack, 'unused_suggested_minor' => $suggested, 'readings' => $readings,
             'readings_minor' => array_sum($readings), 'damages_minor' => $damages, 'owed_minor' => $owed, 'deposit_held_minor' => $held,
             'forgiven_minor' => $forgiven, 'deposit_used_minor' => $used, 'deposit_refunded_minor' => $depositBack, 'deposit_kept_minor' => $left - $depositBack,
             'credit_refunded_minor' => $creditBack, 'credit_kept_minor' => $credit - $creditBack, 'still_owed_minor' => $owed - $used,
         ];
+    }
+
+    /**
+     * What Payments::unapply would take back off a bill, without doing it: the same walk, newest allocation first, so the words at move-out are the
+     * amounts the journal will show. Waivers and deposit uses are never turned into credit.
+     *
+     * @param  array{landlords: array<int, int>, commission: int, agency: int, direct: ?string}  $back
+     */
+    private function takesBack(RentalCharge $c, int $amount, array &$back): void
+    {
+        $todo = min($amount, (int) $c->paid_minor);
+        if ($todo <= 0) {
+            return;
+        }
+        $cid = (int) $c->company_id;
+        $allocs = RentalAllocation::withoutGlobalScopes()->where('company_id', $cid)->where('charge_id', $c->id)->whereNull('reverses_id')->whereNull('reversed_at')->where('amount_minor', '>', 0)->orderByDesc('id')->get();
+        $methods = RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->whereIn('id', $allocs->pluck('payment_id')->all() ?: [0])->pluck('method', 'id');
+        $direct = null;
+        foreach ($allocs as $a) {
+            if ($todo <= 0) {
+                break;
+            }
+            if (($methods[$a->payment_id] ?? null) === RentalPayment::DIRECT) {
+                $direct = (int) $a->payment_id;
+
+                continue;
+            }
+            if (in_array($methods[$a->payment_id] ?? 'waiver', ['waiver', 'deposit'], true)) {
+                continue;
+            }
+            $x = min($todo, (int) $a->amount_minor);
+            $part = fn (int $v) => $x === (int) $a->amount_minor ? $v : Minor::share($v, $x, (int) $a->amount_minor);
+            $commission = $part((int) $a->commission_minor);
+            $agency = $part((int) $a->agency_minor);
+            $back['commission'] += $commission;
+            $back['agency'] += $agency;
+            $back['landlords'][(int) $c->landlord_id] = ($back['landlords'][(int) $c->landlord_id] ?? 0) + $x - $commission - $agency - $part((int) $a->deposit_minor);
+            $todo -= $x;
+        }
+        if ($todo > 0 && $direct !== null) {
+            $back['direct'] = (string) RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->whereKey($direct)->value('number'); // what moveOut() would refuse (Payments::unapply)
+        }
     }
 
     /**

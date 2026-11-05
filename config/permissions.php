@@ -52,6 +52,8 @@ return [
         'rentals_maintenance' => 'Maintenance requests and meter readings',
         'rentals_reports' => 'Reports and exports',
         'rentals_settings' => 'Settings, staff property assignments, tenant and landlord sign-ins',
+        'rentals_close' => 'Close a month and issue its statements',
+        'rentals_reopen' => 'Reopen a closed month, with a written reason',
     ],
 
     // Permissions that belong to one module: a company is offered (and its owner holds) only its own modules'
@@ -60,7 +62,7 @@ return [
         'sacco' => ['sacco_view', 'sacco_members', 'sacco_kyc', 'sacco_teller', 'sacco_withdraw', 'sacco_approve', 'sacco_loans', 'sacco_loans_vote',
             'sacco_disburse', 'sacco_accounts', 'sacco_reports', 'sacco_settings', 'sacco_officers', 'sacco_audit_view', 'sacco_meetings'],
         'rentals' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses',
-            'rentals_maintenance', 'rentals_reports', 'rentals_settings'],
+            'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close', 'rentals_reopen'],
     ],
 
     // What an account built around an exclusive module keeps of the family's permissions (the account itself).
@@ -89,9 +91,9 @@ return [
         // A rentals account's viewer also gets rentals_view and rentals_reports (Permissions::forRole). A caretaker sees
         // only the properties they are assigned to (RentalAccess::propertyIds, KR-17).
         'rentals_manager' => ['label' => 'Property manager', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill',
-            'rentals_reverse', 'rentals_landlords', 'rentals_expenses', 'rentals_maintenance', 'rentals_reports', 'rentals_settings']],
+            'rentals_reverse', 'rentals_landlords', 'rentals_expenses', 'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close']],
         'rentals_accountant' => ['label' => 'Accountant', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_collect', 'rentals_bill', 'rentals_reverse',
-            'rentals_landlords', 'rentals_expenses', 'rentals_reports']],
+            'rentals_landlords', 'rentals_expenses', 'rentals_reports', 'rentals_close']],
         'rentals_caretaker' => ['label' => 'Caretaker', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_collect', 'rentals_maintenance']],
     ],
 

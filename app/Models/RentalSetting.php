@@ -17,7 +17,7 @@ class RentalSetting extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['bill_days_before' => 'integer', 'grace_days' => 'integer', 'prorate_first' => 'boolean', 'commission_bp' => 'integer', 'commission_minor' => 'integer', 'commission_on_items' => 'boolean', 'deposit_months' => 'integer', 'late_fee_minor' => 'integer', 'late_fee_bp' => 'integer', 'messages' => 'array', 'setup_at' => 'datetime'];
+    protected $casts = ['withholding_on' => 'boolean', 'bill_days_before' => 'integer', 'grace_days' => 'integer', 'prorate_first' => 'boolean', 'commission_bp' => 'integer', 'commission_minor' => 'integer', 'commission_on_items' => 'boolean', 'commission_gap_bp' => 'integer', 'deposit_months' => 'integer', 'late_fee_minor' => 'integer', 'late_fee_bp' => 'integer', 'messages' => 'array', 'export_accounts' => 'array', 'setup_at' => 'datetime'];
 
     public const MODES = ['agency', 'owner'];
 

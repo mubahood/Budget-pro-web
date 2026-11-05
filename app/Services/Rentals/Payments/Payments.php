@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
 final class Payments
 {
     /** Funding of an allocation: what the money is, and so which journal row it makes. */
-    private const ROW = ['cash' => 'collected', 'credit' => 'credit_applied', 'deposit' => 'deposit_applied'];
+    private const ROW = ['cash' => 'collected', 'credit' => 'credit_applied', 'deposit' => 'deposit_applied', 'direct' => 'collected_direct'];
 
     /**
      * Receive money for a lease. $data: amount_minor, method, paid_on, reference, notes, uuid, device_id.
@@ -100,6 +100,82 @@ final class Payments
         });
     }
 
+    /**
+     * A tenant paid the landlord at the gate (LC-20, rentals_collect): the bills are settled, no money comes into the agency's accounts, and the landlord's balance falls by
+     * what the agency earns on it (journal `collected_direct`: landlord −, income +; nothing moves when it earns nothing, and no row is posted, as with a waiver). It settles
+     * this landlord's bills only: never a deposit, never credit, and nothing above what is open. A phone working offline cannot post it: receive() takes cash methods only.
+     * $data: amount_minor, paid_on, reference, notes, uuid, split (as in receive).
+     */
+    public function receiveDirect(?User $by, RentalLease $lease, array $data, string $channel = 'web'): RentalPayment
+    {
+        $cid = (int) $lease->company_id;
+        if ($by !== null) {
+            RentalAccess::authorize($by, 'rentals_collect');
+            RentalAccess::assertInScope($by, (int) $lease->property_id, 'lease');
+        }
+        if (RentalsModule::isOwnerMode($cid)) {
+            throw BusinessRuleException::make('owner_mode', 'This account manages its own property: there is no landlord to pay.');
+        }
+        $amount = Minor::positive($data['amount_minor'] ?? null);
+        $today = LocalDate::today($cid);
+        $paidOn = LocalDate::date($cid, $data['paid_on'] ?? null);
+        if ($paidOn->gt($today)) {
+            throw BusinessRuleException::make('date_in_future', 'A payment cannot be dated after today.');
+        }
+        $uuid = (string) ($data['uuid'] ?? Str::uuid());
+        if (! Str::isUuid($uuid)) {
+            throw BusinessRuleException::make('uuid_invalid', 'The payment id is not valid.');
+        }
+        $split = array_key_exists('split', $data) && $data['split'] !== null ? self::splitMap((array) $data['split']) : null;
+        $payload = ['lease_id' => (int) $lease->id, 'amount_minor' => $amount, 'method' => RentalPayment::DIRECT, 'split' => $split];
+        if (($same = $this->byUuid($cid, $uuid, $payload)) !== null) {
+            return $same;
+        }
+
+        return RentalLedger::locked($cid, function () use ($by, $lease, $data, $channel, $cid, $amount, $paidOn, $uuid, $payload, $split) {
+            if (($same = $this->byUuid($cid, $uuid, $payload)) !== null) {
+                return $same;
+            }
+            RentalLedger::assertOpen($cid, $paidOn->toDateString()); // with no commission no row is posted, so the ledger would not see the day
+            $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->lockForUpdate()->findOrFail($lease->id);
+            if ($lease->status === 'cancelled') {
+                throw BusinessRuleException::make('lease_not_live', 'This lease was cancelled: record the payment on the tenant\'s current lease.');
+            }
+            $bills = self::directBills($lease);
+            if ($bills->isEmpty()) {
+                throw BusinessRuleException::make('direct_nothing_open', 'No bill of this landlord is open. Paid to the landlord settles bills only: not a deposit, and nothing paid ahead.');
+            }
+            $open = (int) $bills->sum(fn (RentalCharge $c) => $c->left());
+            if ($amount > $open) {
+                throw BusinessRuleException::make('direct_too_much', 'Paid to the landlord settles bills only, and '.Minor::format($open, $cid).' is open. Nothing can stay paid ahead this way.');
+            }
+            if ($split !== null) {
+                $this->assertDirectSplit($lease, $bills, $split, $amount);
+            }
+            $p = RentalPayment::create([
+                'company_id' => $cid, 'uuid' => $uuid, 'number' => RentalsModule::nextNumber($cid, 'receipt'),
+                'lease_id' => $lease->id, 'tenant_id' => $lease->tenant_id, 'unit_id' => $lease->unit_id, 'property_id' => $lease->property_id,
+                'landlord_id' => $lease->landlord_id, 'amount_minor' => $amount, 'method' => RentalPayment::DIRECT,
+                'reference' => self::text($data['reference'] ?? null, 100), 'paid_on' => $paidOn->toDateString(),
+                'received_by_id' => $by?->id, 'channel' => $channel, 'notes' => self::text($data['notes'] ?? null, 255), 'unallocated_minor' => 0,
+            ]);
+            $ids = $bills->map(fn (RentalCharge $c) => (int) $c->id)->all();
+            $left = $this->allocate($p, $lease, $amount, 'direct', 'direct', $paidOn, $by?->id, RentalLedger::group(), $ids, $split);
+            if ($left !== 0) {
+                throw BusinessRuleException::make('direct_too_much', 'Paid to the landlord settles bills only: '.Minor::format($left, $cid).' is on no bill.');
+            }
+            RentalAudit::record($cid, 'payment.paid_landlord', $p, "Recorded {$p->number}: the tenant on lease {$lease->number} paid the landlord directly", ['amount_minor' => $amount], $by ? 'staff' : 'system', $by?->id);
+
+            return Receipt::stamp($p);
+        });
+    }
+
+    /** What a tenant paying the landlord directly can settle: this landlord's open bills, oldest first (KR-10), with no deposit among them. @return Collection<int, RentalCharge> */
+    public static function directBills(RentalLease $lease, bool $lock = true): Collection
+    {
+        return self::openCharges($lease, $lock)->filter(fn (RentalCharge $c) => $c->kind !== 'deposit' && $c->goes_to !== 'deposit' && (int) $c->landlord_id === (int) $lease->landlord_id)->values();
+    }
+
     /** Forgive part or all of one bill (rentals_bill): no money moves, the bill is settled by that much (§5.4). */
     public function waive(User $by, RentalCharge $charge, int $amount, string $reason, ?Carbon $on = null): RentalPayment
     {
@@ -129,6 +205,7 @@ final class Payments
             }
             $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->findOrFail($charge->lease_id);
             $on ??= LocalDate::today($cid);
+            RentalLedger::assertOpen($cid, $on->toDateString()); // a waiver posts no journal row, so the ledger would not see it
             $p = RentalPayment::create([
                 'company_id' => $cid, 'uuid' => (string) Str::uuid(), 'number' => RentalsModule::nextNumber($cid, 'receipt'),
                 'lease_id' => $lease->id, 'tenant_id' => $lease->tenant_id, 'unit_id' => $lease->unit_id, 'property_id' => $lease->property_id,
@@ -280,6 +357,7 @@ final class Payments
             $lease = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->findOrFail($charge->lease_id);
             $todo = min($amount, (int) $charge->paid_minor);
             $done = 0;
+            $direct = null;
             $allocs = RentalAllocation::withoutGlobalScopes()->where('company_id', $cid)->where('charge_id', $charge->id)
                 ->whereNull('reverses_id')->whereNull('reversed_at')->where('amount_minor', '>', 0)->orderByDesc('id')->lockForUpdate()->get();
             foreach ($allocs as $a) {
@@ -287,6 +365,11 @@ final class Payments
                     break;
                 }
                 $p = RentalPayment::withoutGlobalScopes()->where('company_id', $cid)->lockForUpdate()->find($a->payment_id);
+                if ($p !== null && $p->method === RentalPayment::DIRECT) {
+                    $direct = $p; // the agency never held this money, so it cannot become credit
+
+                    continue;
+                }
                 if ($p === null || in_array($p->method, ['waiver', 'deposit'], true)) {
                     continue; // a waiver or deposit use is reversed, never turned into credit
                 }
@@ -310,9 +393,18 @@ final class Payments
                 $todo -= $x;
                 $done += $x;
             }
+            if ($todo > 0 && $direct !== null) {
+                throw BusinessRuleException::make('direct_settled', self::directSettledWords((string) $direct->number));
+            }
 
             return $done;
         });
+    }
+
+    /** Why money paid to the landlord cannot go back to the tenant's credit, and what to do. */
+    public static function directSettledWords(string $number): string
+    {
+        return "Receipt {$number} says the tenant paid the landlord directly, so this money cannot come back as credit. Reverse that receipt first, then try again.";
     }
 
     /** Pay a tenant's credit back to them (move-out, or on request): a `refund` bill settled from credit at once. */
@@ -481,16 +573,17 @@ final class Payments
      * goes on it. Lines the cashier typed ($fixed: charge id => amount) stay as typed and the rest of the money flows
      * over the others. `credit_minor` is what would stay as credit; `unplaced_minor` is money on no bill while a bill
      * they cut short stays open; `over_minor` is how far the typed lines pass the payment. `ok` says receive() would take
-     * it. No writes.
+     * it. No writes. $direct: for receiveDirect, which settles only its own bills and leaves no credit, so money beyond them makes `ok` false. `commission_minor` is what
+     * those lines would take off the landlord's balance.
      *
      * @param  array<int, int>  $fixed
      * @return array{lines: list<array{charge_id: int, kind: string, description: string, due_date: string, left_minor: int, amount_minor: int, fixed: bool, too_much: bool}>,
-     *               credit_minor: int, unplaced_minor: int, over_minor: int, ok: bool}
+     *               credit_minor: int, unplaced_minor: int, over_minor: int, ok: bool, commission_minor: int}
      */
-    public function suggestSplit(RentalLease $lease, int $amount, array $fixed = []): array
+    public function suggestSplit(RentalLease $lease, int $amount, array $fixed = [], bool $direct = false): array
     {
         $amount = max(0, $amount);
-        $open = self::openCharges($lease, false);
+        $open = $direct ? self::directBills($lease, false) : self::openCharges($lease, false);
         $typed = 0;
         foreach ($open as $c) {
             if (array_key_exists((int) $c->id, $fixed)) {
@@ -514,9 +607,20 @@ final class Payments
         }
         $over = max(0, $typed - $amount);
         $unplaced = $short ? $rest : 0;
+        $credit = $short ? 0 : $rest;
+        $cut = 0;
+        if ($direct) {
+            foreach ($open as $c) {
+                $line = collect($lines)->firstWhere('charge_id', (int) $c->id);
+                if ($line !== null && $line['amount_minor'] > 0 && ! $line['too_much']) {
+                    $s = Splits::split($c->only(['amount_minor', 'goes_to', 'commission_type', 'commission_bp', 'commission_minor']), $line['amount_minor'], (int) $c->paid_minor, (string) $lease->deposit_held_by, ...self::commissionSoFar($c));
+                    $cut += $s['commission'] + $s['agency'];
+                }
+            }
+        }
 
-        return ['lines' => $lines, 'credit_minor' => $short ? 0 : $rest, 'unplaced_minor' => $unplaced, 'over_minor' => $over,
-            'ok' => $over === 0 && $unplaced === 0 && ! collect($lines)->contains('too_much', true)];
+        return ['lines' => $lines, 'credit_minor' => $credit, 'unplaced_minor' => $unplaced, 'over_minor' => $over, 'commission_minor' => $cut,
+            'ok' => $over === 0 && $unplaced === 0 && ! collect($lines)->contains('too_much', true) && (! $direct || $credit === 0)];
     }
 
     /** A lease's open bills in the order money settles them (KR-10). @return Collection<int, RentalCharge> */
@@ -542,7 +646,7 @@ final class Payments
 
     /**
      * Spread $amount of payment $p over the lease's open bills (or only $only), oldest first. Returns what is left.
-     * $funding: cash | credit | deposit | waiver (a waiver's split is zero and posts no journal row).
+     * $funding: cash | credit | deposit | waiver | direct (a waiver's split is zero and posts no journal row; a direct payment's split is real, and only what the agency earns moves).
      */
     private function allocate(RentalPayment $p, RentalLease $lease, int $amount, string $funding, string $source, Carbon $on, ?int $userId, string $group, ?array $only = null, ?array $plan = null): int
     {
@@ -575,7 +679,11 @@ final class Payments
                 'agency_minor' => $split['agency'], 'deposit_minor' => $split['deposit'], 'applied_on' => $on->toDateString(), 'created_at' => now()]);
             $paid = (int) $c->paid_minor + $a;
             $c->forceFill(['paid_minor' => $paid, 'status' => $paid >= (int) $c->amount_minor ? 'paid' : 'open'])->save();
-            if ($funding !== 'waiver') {
+            if ($funding === 'direct') {
+                // The landlord already holds the money: what the agency earns comes off their balance. Nothing to post when it earns nothing.
+                $cut = $split['commission'] + $split['agency'];
+                RentalLedger::post($cid, $group, [self::row($lease, $p, self::ROW[$funding], $on, ['landlord_minor' => -$cut, 'income_minor' => $cut], null, (string) $c->description, $c, $alloc)], $userId);
+            } elseif ($funding !== 'waiver') {
                 $effects = ['landlord_minor' => $split['landlord'], 'deposit_minor' => $split['deposit'], 'income_minor' => $split['commission'] + $split['agency']];
                 $method = null;
                 if ($funding === 'cash') {
@@ -692,6 +800,31 @@ final class Payments
         }
         if ($placed < $amount && $open->sum(fn ($c) => $c->left()) > $placed) {
             throw BusinessRuleException::make('split_total', Minor::format($amount - $placed, $cid).' is on no bill while bills are still open. Put it on a bill.');
+        }
+    }
+
+    /**
+     * Refuse a split on a bill this method cannot settle, more than a bill owes, or lines that are not the whole payment: nothing may stay as credit.
+     *
+     * @param  Collection<int, RentalCharge>  $bills
+     * @param  array<int, int>  $split
+     */
+    private function assertDirectSplit(RentalLease $lease, Collection $bills, array $split, int $amount): void
+    {
+        $cid = (int) $lease->company_id;
+        $open = $bills->keyBy(fn (RentalCharge $c) => (int) $c->id);
+        foreach ($split as $id => $a) {
+            $c = $open->get($id);
+            if ($c === null) {
+                throw BusinessRuleException::make('direct_wrong_bill', 'Paid to the landlord settles this landlord\'s open bills only: not a deposit.');
+            }
+            if ($a > $c->left()) {
+                throw BusinessRuleException::make('split_too_much', 'You can put at most '.Minor::format($c->left(), $cid)." on {$c->description}.");
+            }
+        }
+        $placed = array_sum($split);
+        if ($placed !== $amount) {
+            throw BusinessRuleException::make('split_total', 'The split adds up to '.Minor::format($placed, $cid).' but the payment is '.Minor::format($amount, $cid).'.');
         }
     }
 

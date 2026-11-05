@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
  */
 class UnitsController extends RentalsController
 {
-    public const STATES = ['vacant', 'occupied', 'overdue', 'notice', 'reserved', 'maintenance', 'inactive'];
+    public const STATES = ['vacant', 'occupied', 'overdue', 'notice', 'reserved', 'maintenance', 'inactive', 'in_use'];
 
     /** GET rentals/units?property_id&state=vacant|occupied|overdue|notice&status&kind&q */
     public function index(Request $request): JsonResponse
@@ -26,7 +26,7 @@ class UnitsController extends RentalsController
             if ($request->filled('property_id')) {
                 $q->where('property_id', (int) $request->query('property_id'));
             }
-            if (in_array($request->query('status'), ['available', 'reserved', 'maintenance', 'inactive'], true)) {
+            if (in_array($request->query('status'), ['available', 'reserved', 'maintenance', 'inactive', 'in_use'], true)) {
                 $q->where('status', $request->query('status'));
             }
             if ($request->filled('kind')) {
@@ -84,7 +84,7 @@ class UnitsController extends RentalsController
             'notice' => $q->whereExists($live(['notice'])),
             'overdue' => $q->whereExists($overdue),
             'occupied' => $q->whereExists($live(['active']))->whereNotExists($overdue),
-            'vacant' => $q->whereNotExists($live(RentalLease::LIVE))->whereNotIn('status', ['reserved', 'maintenance', 'inactive']),
+            'vacant' => $q->whereNotExists($live(RentalLease::LIVE))->whereNotIn('status', ['reserved', 'maintenance', 'inactive', 'in_use']),
             default => $q->whereNotExists($live(RentalLease::LIVE))->where('status', $state),
         };
     }

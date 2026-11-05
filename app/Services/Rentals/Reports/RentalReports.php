@@ -16,7 +16,6 @@ use App\Services\Rentals\CashBook;
 use App\Services\Rentals\Collections\Arrears;
 use App\Services\Rentals\Collections\FollowUps;
 use App\Services\Rentals\Directory\Units;
-use App\Services\Rentals\Landlords\LandlordAccounts;
 use App\Services\Rentals\Leases\Leases;
 use App\Services\Rentals\Maintenance;
 use App\Services\Rentals\Payments\CashGuard;
@@ -40,6 +39,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Filters a report takes (`registry()` lists them per report; `run()` reads them from $params):
  *  - month:    month (Y-m; this month by default): the whole calendar month, its last day included
+ *  - year:     year (Y; this year by default): the whole calendar year
  *  - period:   from, to (Y-m-d; the month so far by default)
  *  - property: property_id
  *  - landlord: landlord_id
@@ -55,10 +55,15 @@ use Illuminate\Support\Facades\DB;
  * A caretaker (RentalAccess::propertyIds) sees only their properties' rows; the reports that cover the whole
  * account's money (landlord statement, commission, cash book, income statement) are refused to them. Reports need
  * rentals_reports when a person asks; the system (null) may run any.
+ *
+ * A report may live in its own class (HANDLERS): the same method name, taking the same context, public. A new report's page setup
+ * goes in its own `paper` key (RentalExport).
  */
 final class RentalReports
 {
-    /** key => [title, description, filters, scope: property (narrowed for a caretaker) | account (refused to one), agency only] */
+    use ReportTable;
+
+    /** key => [title, description, filters, scope: property (narrowed for a caretaker) | account (refused to one), agency only, gate if any] */
     public const REPORTS = [
         'monthly_building' => ['Monthly building report', 'One page for a month: income by kind, deposits kept apart, the expenses and the final balance.', ['month', 'property'], 'property', false],
         'rent_roll' => ['Rent roll', 'Every unit with its tenant, rent, deposit held, paid-up-to date and what is owed today.', ['property', 'landlord'], 'property', false],
@@ -78,7 +83,18 @@ final class RentalReports
         'tenant_list' => ['Tenants', 'Everyone who rents or rented: their phone, the units they hold and what they owe.', ['property', 'landlord'], 'property', false],
         'lease_list' => ['Leases', 'Who rents which unit, from when, at what rent, with what is owed and the paid-up-to date.', ['property', 'landlord'], 'property', false],
         'receipts' => ['Receipts', 'Every receipt in the period: who paid, for which unit, how, and anything paid ahead.', ['period', 'property', 'landlord'], 'property', false],
+        'landlord_rent_sheet' => ['Landlord rent sheet', 'One landlord\'s units for a month: tenant, rent, billed, paid, owed at the end, months behind and paid up to.', ['month', 'landlord'], 'account', true],
+        'landlord_advances' => ['Landlord advances', 'Landlords below zero now: since when, how much, last collected and about how long it takes to clear.', [], 'account', true],
+        'money_position' => ['Whose money this is', 'Cash in all accounts against what is owed to landlords, deposits, rent paid ahead and the agency\'s own money, on any day.', ['as_of'], 'account', true],
+        'landlord_year' => ['Year summary', 'A landlord\'s year: collected by month and property, commission, expenses, deposits, payouts, opening and closing. A summary of money handled, not tax advice.', ['year', 'landlord'], 'account', false],
+        'journal_export' => ['Journal for the accountant', 'One line per posting per account for the period, with debits and credits.', ['period'], 'account', false],
+        'trial_balance' => ['Trial balance', 'Opening, movement and closing per account for the period, with a subtotal per landlord.', ['period'], 'account', false],
     ];
+
+    /** Reports whose method lives in a class of its own: key => class. */
+    private const HANDLERS = ['landlord_statement' => StatementReport::class, 'commission' => CommissionReport::class,
+        'landlord_rent_sheet' => LandlordWorkReports::class, 'landlord_advances' => LandlordWorkReports::class,
+        'money_position' => LandlordReports::class, 'landlord_year' => LandlordReports::class, 'journal_export' => LandlordReports::class, 'trial_balance' => LandlordReports::class];
 
     /** Journal row types as people read them. */
     public const ENTRY_LABELS = [
@@ -87,10 +103,11 @@ final class RentalReports
         'credit_refund' => 'Credit refunded', 'opening_credit' => 'Credit brought forward', 'opening_deposit' => 'Deposit brought forward',
         'opening_cash' => 'Opening balance', 'opening_landlord' => 'Opening balance', 'payout' => 'Payout', 'expense_landlord' => 'Expense',
         'expense_agency' => 'Agency expense', 'transfer' => 'Moved between accounts', 'reversal' => 'Correction',
+        'agency_drawing' => 'Taken out by the agency', 'collected_direct' => 'Paid to the landlord directly',
     ];
 
     private const METHOD_LABELS = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_money' => 'Mobile money', 'cheque' => 'Cheque', 'deposit' => 'Deposit',
-        'waiver' => 'Forgiven', 'opening' => 'Brought forward'];
+        'waiver' => 'Forgiven', 'opening' => 'Brought forward', RentalPayment::DIRECT => 'Paid to the landlord'];
 
     /** Journal rows in an owner's words (KR-06): no payouts, no agency. */
     private const OWNER_ENTRY_LABELS = ['payout' => 'Owner drawing', 'expense_agency' => 'Expense', 'deposit_refund_landlord' => 'Deposit refunded'];
@@ -116,7 +133,7 @@ final class RentalReports
         $owner = $companyId !== null && RentalsModule::isOwnerMode($companyId);
         $out = [];
         foreach (self::REPORTS as $key => [$title, $description, $filters, , $agencyOnly]) {
-            if ($owner && $agencyOnly) {
+            if (($owner && $agencyOnly) || ! self::open($key)) {
                 continue;
             }
             if ($owner) {
@@ -134,15 +151,21 @@ final class RentalReports
         return array_keys(self::REPORTS);
     }
 
+    /** Whether a report exists. */
+    public static function open(string $key): bool
+    {
+        return isset(self::REPORTS[$key]);
+    }
+
     /**
      * Run a report.
      *
      * @param  array<string, mixed>  $params  see the filters above
-     * @return array{key: string, title: string, subtitle: string, columns: list<array{key: string, label: string, type: string}>, rows: list<array<string, mixed>>, totals: array<string, mixed>, sections: list<array<string, mixed>>, currency: string, decimals: int, from: ?string, to: ?string, account: array{id: int, name: string}, generated_at: string, landlord?: array<string, mixed>, lease?: array<string, mixed>, figures?: array<string, mixed>, one_page?: bool, total_label?: string}
+     * @return array{key: string, title: string, subtitle: string, columns: list<array{key: string, label: string, type: string}>, rows: list<array<string, mixed>>, totals: array<string, mixed>, sections: list<array<string, mixed>>, currency: string, decimals: int, from: ?string, to: ?string, account: array{id: int, name: string}, generated_at: string, landlord?: array<string, mixed>, lease?: array<string, mixed>, figures?: array<string, mixed>, one_page?: bool, total_label?: string, paper?: array<string, mixed>}
      */
     public function run(string $key, int $companyId, ?User $by, array $params = []): array
     {
-        if (! isset(self::REPORTS[$key])) {
+        if (! self::open($key)) {
             throw BusinessRuleException::make('unknown_report', "There is no report called \"{$key}\".");
         }
         [$title, , , $scope, $agencyOnly] = self::REPORTS[$key];
@@ -165,7 +188,8 @@ final class RentalReports
         }
         $ctx = $this->context($companyId, $by, $params, $key, $owner);
         $method = lcfirst(str_replace('_', '', ucwords($key, '_')));
-        $body = $this->{$method}($ctx);
+        $handler = self::HANDLERS[$key] ?? null;
+        $body = ($handler !== null ? new $handler : $this)->{$method}($ctx);
         if ($owner) {
             $body = self::ownerBody($body);
         }
@@ -176,7 +200,7 @@ final class RentalReports
             'columns' => $body['columns'], 'rows' => array_values($body['rows']), 'totals' => $body['totals'] ?? [], 'sections' => $body['sections'] ?? [],
             'currency' => (string) $settings->currency, 'decimals' => Minor::decimals($companyId), 'from' => $body['from'] ?? $ctx->from, 'to' => $body['to'] ?? $ctx->to,
             'account' => ['id' => $companyId, 'name' => (string) ($company?->name ?? '')], 'generated_at' => now()->toIso8601String(),
-        ] + array_intersect_key($body, array_flip(['landlord', 'lease', 'figures', 'one_page', 'total_label']));
+        ] + array_intersect_key($body, array_flip(['landlord', 'lease', 'figures', 'one_page', 'total_label', 'paper']));
     }
 
     // ── The reports ───────────────────────────────────────────────────────
@@ -203,14 +227,14 @@ final class RentalReports
                 'occupied' => $lease !== null,
                 'overdue' => $lease !== null && ($pos['overdue_minor'] ?? 0) > 0,
                 'notice' => $lease !== null && $lease->status === 'notice',
-                'unavailable' => $lease === null && in_array($u->status, ['reserved', 'maintenance'], true),
+                'unavailable' => $lease === null && in_array($u->status, ['reserved', 'maintenance', 'in_use'], true),
                 default => true,
             };
             if (! $keep || ! self::matches($x, [(string) $u->code, $props[$u->property_id] ?? '', (string) $t?->name])) {
                 continue;
             }
             $rows[] = ['property' => $props[$u->property_id] ?? '', 'unit' => (string) $u->code, 'kind' => $kinds[$u->kind] ?? (string) $u->kind,
-                'state' => ucfirst(Units::state($u, $lease, $pos)), 'tenant' => $t?->name, 'phone' => $t?->phone, 'lease' => $lease?->number,
+                'state' => $lease === null && $u->status === 'in_use' ? 'Used by '.$u->in_use_by : ucfirst(Units::state($u, $lease, $pos)), 'tenant' => $t?->name, 'phone' => $t?->phone, 'lease' => $lease?->number,
                 'since' => $lease?->start_date?->toDateString(), 'cycle_months' => $lease !== null ? (int) $lease->cycle_months : null,
                 'asking_minor' => (int) $u->rent_minor, 'rent_minor' => $lease !== null ? (int) $lease->rent_minor : null,
                 'deposit_held_minor' => $pos['deposit_held_minor'] ?? null, 'paid_up_to' => $pos['paid_up_to'] ?? null,
@@ -219,6 +243,7 @@ final class RentalReports
         }
         usort($rows, fn ($a, $b) => [$a['property'], 0] <=> [$b['property'], 0] ?: strnatcasecmp($a['unit'], $b['unit']));
         $let = array_filter($rows, fn ($r) => $r['lease'] !== null);
+        $inUse = count(array_filter($rows, fn ($r) => str_starts_with((string) $r['state'], 'Used by ')));
 
         return [
             'subtitle' => $this->asAt($x),
@@ -229,7 +254,7 @@ final class RentalReports
             'rows' => $rows,
             'totals' => ['rent_minor' => array_sum(array_column($let, 'rent_minor')), 'deposit_held_minor' => array_sum(array_column($let, 'deposit_held_minor')),
                 'owed_minor' => array_sum(array_column($let, 'owed_minor')), 'overdue_minor' => array_sum(array_column($let, 'overdue_minor')),
-                'units' => count($rows), 'occupied' => count($let), 'vacant' => count($rows) - count($let)],
+                'units' => count($rows), 'occupied' => count($let), 'vacant' => count($rows) - count($let) - $inUse] + ($inUse > 0 ? ['in_use' => $inUse] : []),
         ];
     }
 
@@ -351,8 +376,10 @@ final class RentalReports
         $from = $x->from;
         $props = RentalProperty::withoutGlobalScopes()->where('company_id', $x->cid)->where('status', 'active')
             ->when($x->ids !== null, fn ($q) => $q->whereIn('id', $x->ids ?: [0]))->orderBy('name')->get(['id', 'name']);
-        $units = RentalUnit::withoutGlobalScopes()->where('company_id', $x->cid)->where('status', '!=', 'inactive')->whereIn('property_id', $props->pluck('id')->all() ?: [0])
+        $units = RentalUnit::withoutGlobalScopes()->where('company_id', $x->cid)->whereNotIn('status', ['inactive', 'in_use'])->whereIn('property_id', $props->pluck('id')->all() ?: [0])
             ->get(['id', 'property_id', 'rent_minor', 'created_at']);
+        // A room the landlord or caretaker uses (LC-21) is not for letting: not a unit here, not vacant, and no rent lost.
+        $inUse = (int) RentalUnit::withoutGlobalScopes()->where('company_id', $x->cid)->where('status', 'in_use')->whereIn('property_id', $props->pluck('id')->all() ?: [0])->count();
         $leases = RentalLease::withoutGlobalScopes()->where('company_id', $x->cid)->where('status', '!=', 'cancelled')->whereIn('unit_id', $units->pluck('id')->all() ?: [0])
             ->where('start_date', '<=', $end)->where(fn ($q) => $q->whereNull('ended_on')->orWhere('ended_on', '>=', $from))
             ->get(['unit_id', 'start_date', 'ended_on'])->groupBy('unit_id');
@@ -390,70 +417,8 @@ final class RentalReports
             'rows' => $rows,
             'totals' => ['units' => $units, 'occupied' => $sum('occupied'), 'vacant' => $sum('vacant'),
                 'occupancy_bp' => $units > 0 ? intdiv($sum('occupied') * 10000 + intdiv($units, 2), $units) : 0,
-                'vacancy_days' => $sum('vacancy_days'), 'rent_lost_minor' => $sum('rent_lost_minor')],
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function landlordStatement(object $x): array
-    {
-        $landlord = $x->landlord ?? ($x->owner ? RentalsModule::selfLandlord($x->cid) : null)
-            ?? throw BusinessRuleException::make('landlord_required', 'Choose the landlord.');
-        $st = LandlordAccounts::statement($landlord, $x->from, $x->to);
-        $run = (int) $st['opening_minor'];
-        $rows = [['date' => $x->from, 'type' => '', 'description' => 'Opening balance', 'property' => null, 'unit' => null, 'tenant' => null,
-            'gross_minor' => null, 'commission_minor' => null, 'amount_minor' => null, 'balance_minor' => $run]];
-        foreach ($st['lines'] as $l) {
-            $run += (int) $l['amount_minor'];
-            $rows[] = ['date' => $l['date'], 'type' => LandlordAccounts::LABELS[$l['type']] ?? self::ENTRY_LABELS[$l['type']] ?? (string) $l['type'],
-                'description' => $l['description'], 'property' => $l['property'], 'unit' => $l['unit'], 'tenant' => $l['tenant'],
-                'gross_minor' => (int) $l['gross_minor'], 'commission_minor' => (int) $l['commission_minor'], 'amount_minor' => (int) $l['amount_minor'], 'balance_minor' => $run];
-        }
-        $arrears = array_map(fn ($a) => ['unit' => $a['unit'], 'tenant' => $a['tenant'], 'owed_minor' => (int) $a['owed_minor'], 'days' => (int) $a['days']], $st['arrears']);
-
-        return [
-            'subtitle' => $landlord->name.' · '.$this->period($x),
-            'columns' => [self::c('date', 'Date', 'date'), self::c('type', 'Kind'), self::c('description', 'Description'), self::c('property', 'Property'),
-                self::c('unit', 'Unit'), self::c('tenant', 'Tenant'), self::c('gross_minor', 'Collected', 'money'), self::c('commission_minor', 'Commission', 'money'),
-                self::c('amount_minor', $x->owner ? 'Net' : 'To landlord', 'money'), self::c('balance_minor', 'Balance', 'money')],
-            'rows' => $rows,
-            'totals' => ['gross_minor' => array_sum(array_column($st['lines'], 'gross_minor')), 'commission_minor' => (int) $st['totals']['commission_minor'],
-                'amount_minor' => array_sum(array_column($st['lines'], 'amount_minor')), 'balance_minor' => (int) $st['closing_minor'],
-                'opening_minor' => (int) $st['opening_minor'], 'collected_minor' => (int) $st['totals']['collected_minor'], 'expenses_minor' => (int) $st['totals']['expenses_minor'],
-                'payouts_minor' => (int) $st['totals']['payouts_minor'], 'deposits_minor' => (int) $st['totals']['deposits_minor'], 'other_minor' => (int) $st['totals']['other_minor'],
-                'closing_minor' => (int) $st['closing_minor'], 'units' => (int) $st['occupancy']['units'], 'occupied' => (int) $st['occupancy']['occupied'],
-                'vacant' => (int) $st['occupancy']['vacant']],
-            'sections' => [['title' => 'What tenants still owe', 'columns' => [self::c('unit', 'Unit'), self::c('tenant', 'Tenant'), self::c('owed_minor', 'Owed', 'money'),
-                self::c('days', 'Days', 'int')], 'rows' => $arrears, 'totals' => ['owed_minor' => array_sum(array_column($arrears, 'owed_minor'))]]],
-            'landlord' => ['id' => (int) $landlord->id, 'name' => (string) $landlord->name],
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function commission(object $x): array
-    {
-        $list = DB::table('rental_allocations as a')->join('rental_charges as c', 'c.id', '=', 'a.charge_id')->join('rental_payments as p', 'p.id', '=', 'a.payment_id')
-            ->where('a.company_id', $x->cid)->whereBetween('a.applied_on', [$x->from, $x->to])->where('c.commission_type', '!=', 'none')->where('p.method', '!=', 'waiver')
-            ->when($x->ids !== null, fn ($q) => $q->whereIn('c.property_id', $x->ids ?: [0]))
-            ->groupBy('c.landlord_id', 'c.property_id')->selectRaw('c.landlord_id, c.property_id, SUM(a.amount_minor) AS gross, SUM(a.commission_minor) AS commission')->get();
-        $landlords = $this->names('rental_landlords', 'name', $list->pluck('landlord_id')->all(), $x->cid);
-        $props = $this->names('rental_properties', 'name', $list->pluck('property_id')->all(), $x->cid);
-        $rows = [];
-        foreach ($list as $r) {
-            $gross = (int) $r->gross;
-            $c = (int) $r->commission;
-            $rows[] = ['landlord' => $landlords[$r->landlord_id] ?? '', 'property' => $props[$r->property_id] ?? '', 'gross_minor' => $gross, 'commission_minor' => $c,
-                'rate_bp' => $gross > 0 ? Minor::share(10000, $c, $gross) : 0];
-        }
-        usort($rows, fn ($a, $b) => [$a['landlord'], $a['property']] <=> [$b['landlord'], $b['property']]);
-        $gross = array_sum(array_column($rows, 'gross_minor'));
-        $c = array_sum(array_column($rows, 'commission_minor'));
-
-        return [
-            'columns' => [self::c('landlord', 'Landlord'), self::c('property', 'Property'), self::c('gross_minor', 'Rent collected', 'money'),
-                self::c('commission_minor', 'Commission', 'money'), self::c('rate_bp', 'Rate %', 'pct')],
-            'rows' => $rows,
-            'totals' => ['gross_minor' => $gross, 'commission_minor' => $c, 'rate_bp' => $gross > 0 ? Minor::share(10000, $c, $gross) : 0],
+                'vacancy_days' => $sum('vacancy_days'), 'rent_lost_minor' => $sum('rent_lost_minor')] + ($inUse > 0 ? ['in_use' => $inUse] : []),
+            'sections' => $inUse === 0 ? [] : [['title' => 'Left out', 'columns' => [self::c('line', 'Note')], 'rows' => [['line' => $inUse.' '.($inUse === 1 ? 'room' : 'rooms').' used by the landlord or a caretaker: neither let, nor vacant, nor rent lost.']], 'totals' => []]],
         ];
     }
 
@@ -463,7 +428,10 @@ final class RentalReports
         $list = DB::table('rental_entries as e')->leftJoin('rental_entries as o', 'o.id', '=', 'e.reverses_id')
             ->where('e.company_id', $x->cid)->whereBetween('e.occurred_on', [$x->from, $x->to])
             ->where(fn ($q) => $q->whereIn('e.type', self::EXPENSE_TYPES)->orWhere(fn ($q) => $q->where('e.type', 'reversal')->whereIn('o.type', self::EXPENSE_TYPES)))
-            ->when($x->ids !== null, fn ($q) => $q->whereIn('e.property_id', $x->ids ?: [0]))
+            // A landlord chosen also finds what is charged to them with no property to name (money held back).
+            ->when($x->ids !== null, fn ($q) => $x->landlord !== null && $x->property === null
+                ? $q->where(fn ($w) => $w->whereIn('e.property_id', $x->ids ?: [0])->orWhere(fn ($n) => $n->whereNull('e.property_id')->where('e.landlord_id', (int) $x->landlord->id)))
+                : $q->whereIn('e.property_id', $x->ids ?: [0]))
             ->orderBy('e.occurred_on')->orderBy('e.id')
             ->get(['e.id', 'e.occurred_on', 'e.type', 'o.type as original_type', 'e.method', 'e.cash_minor', 'e.expense_id', 'e.property_id', 'e.landlord_id']);
         $expenses = DB::table('rental_expenses')->where('company_id', $x->cid)->whereIn('id', $list->pluck('expense_id')->filter()->all() ?: [0])
@@ -610,6 +578,7 @@ final class RentalReports
                 'waiver' => 'Forgiven'.($p->notes ? ': '.$p->notes : ''),
                 'deposit' => 'Paid from the deposit',
                 'opening' => (string) ($p->notes ?: 'Brought forward'),
+                RentalPayment::DIRECT => 'Paid to the landlord directly'.($p->reference ? ' '.$p->reference : ''),
                 default => 'Payment, '.mb_strtolower(self::METHOD_LABELS[$p->method] ?? (string) $p->method).($p->reference ? ' '.$p->reference : ''),
             };
             $lines[] = ['date' => $p->paid_on->toDateString(), 'o' => 1, 'id' => (int) $p->id, 'description' => $what, 'reference' => $p->number,
@@ -803,8 +772,27 @@ final class RentalReports
 
         return [
             'columns' => [self::c('section', 'Section'), self::c('line', 'Line'), self::c('amount_minor', 'Amount', 'money')],
-            'rows' => $rows, 'totals' => $totals,
+            'rows' => $rows, 'totals' => $totals, 'sections' => $x->owner ? [] : $this->takenOut($x),
         ];
+    }
+
+    /**
+     * The line under an agency's income statement: what it took out of its own money in the period. Never part of its income, and left
+     * out when there is none.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function takenOut(object $x): array
+    {
+        $taken = -(int) DB::table('rental_entries as e')->leftJoin('rental_entries as o', 'o.id', '=', 'e.reverses_id')->where('e.company_id', $x->cid)
+            ->whereBetween('e.occurred_on', [$x->from, $x->to])->where(fn ($q) => $q->where('e.type', 'agency_drawing')->orWhere(fn ($q) => $q->where('e.type', 'reversal')->where('o.type', 'agency_drawing')))
+            ->sum('e.equity_minor');
+        if ($taken === 0) {
+            return [];
+        }
+
+        return [['title' => self::ENTRY_LABELS['agency_drawing'], 'columns' => [self::c('line', 'Line'), self::c('amount_minor', 'Amount', 'money')],
+            'rows' => [['line' => 'The agency\'s own money, taken out in the period. It is not an expense.', 'amount_minor' => $taken]], 'totals' => []]];
     }
 
     /**
@@ -821,10 +809,11 @@ final class RentalReports
             ->where('a.company_id', $x->cid)->where('p.method', '!=', 'waiver')
             ->when($x->ids !== null, fn ($q) => $q->whereIn('c.property_id', $x->ids ?: [0]));
 
-        // Income: what settled a bill in the month, whoever's share it is.
+        // Income: what settled a bill in the month, whoever's share it is. Money a tenant paid the landlord directly never came in, though what the agency earns on it did (LC-20).
         $bills = $allocations()->leftJoin('rental_lease_items as i', 'i.id', '=', 'c.item_id')->whereBetween('a.applied_on', [$x->from, $x->to])
             ->whereNotIn('c.kind', ['deposit', 'refund'])->groupBy('c.kind', 'i.name', 'c.description', 'c.period_start', 'c.period_end')
-            ->selectRaw('c.kind, i.name AS item, c.description, c.period_start, c.period_end, SUM(a.amount_minor) AS amount, SUM(a.commission_minor) AS commission, SUM(a.agency_minor) AS agency')->get();
+            ->selectRaw('c.kind, i.name AS item, c.description, c.period_start, c.period_end, SUM(CASE WHEN p.method = ? THEN 0 ELSE a.amount_minor END) AS amount, SUM(a.commission_minor) AS commission, SUM(a.agency_minor) AS agency, SUM(CASE WHEN p.method = ? THEN a.amount_minor ELSE 0 END) AS direct', [RentalPayment::DIRECT, RentalPayment::DIRECT])->get();
+        $direct = 0;
         $income = [];
         $commission = 0;
         $kept = 0;
@@ -838,6 +827,7 @@ final class RentalReports
             $income[$line] = ($income[$line] ?? 0) + (int) $b->amount;
             $commission += (int) $b->commission;
             $kept += (int) $b->agency;
+            $direct += (int) $b->direct;
         }
         $first = array_intersect_key(['Rent' => 0, 'Part-month rent' => 0], $income);
         $rest = array_diff_key($income, $first);
@@ -927,6 +917,9 @@ final class RentalReports
         if ($paidOut !== null) {
             $also[] = ['line' => $paidOutLabel, 'count' => null, 'amount_minor' => $paidOut];
         }
+        if ($direct !== 0) {
+            $also[] = ['line' => 'Tenants paid landlords directly (not income above)', 'count' => null, 'amount_minor' => $direct];
+        }
         array_push($also, ['line' => 'Units occupied on '.Carbon::parse($occupiedOn)->format('j M Y'), 'count' => (int) $occupancy['totals']['occupied'], 'amount_minor' => null],
             ['line' => 'Units in all', 'count' => (int) $occupancy['totals']['units'], 'amount_minor' => null],
             ['line' => 'Tenants overdue on '.$x->today->format('j M Y'), 'count' => $overdueTenants, 'amount_minor' => $overdueMinor]);
@@ -952,7 +945,7 @@ final class RentalReports
                 'final_balance_minor' => $final, 'deposits_received_minor' => $received, 'deposits_brought_minor' => $brought, 'deposits_used_minor' => $used,
                 'deposits_refunded_minor' => $refunded, 'deposits_held_minor' => $held, 'paid_ahead_minor' => $paidAhead,
                 'units' => (int) $occupancy['totals']['units'], 'occupied' => (int) $occupancy['totals']['occupied'], 'occupied_on' => $occupiedOn,
-                'overdue_minor' => $overdueMinor, 'overdue_tenants' => $overdueTenants, 'as_at' => $x->today->toDateString()]
+                'overdue_minor' => $overdueMinor, 'overdue_tenants' => $overdueTenants, 'as_at' => $x->today->toDateString(), 'direct_minor' => $direct]
                 + ($paidOut !== null ? ['paid_out_minor' => $paidOut, 'paid_out_label' => $paidOutLabel] : []),
         ];
     }
@@ -1138,14 +1131,6 @@ final class RentalReports
         ];
     }
 
-    /** Whether a row passes the list's search (`q`): any of its words, ignoring case; no search passes everything. @param list<string> $haystack */
-    private static function matches(object $x, array $haystack): bool
-    {
-        $q = trim((string) ($x->params['q'] ?? ''));
-
-        return $q === '' || mb_stripos(implode(' ', $haystack), $q) !== false;
-    }
-
     /** @return list<string> the filters a report takes */
     private static function filtersOf(string $key): array
     {
@@ -1187,6 +1172,14 @@ final class RentalReports
             $from = $month.'-01';
             $to = Carbon::parse($from)->endOfMonth()->toDateString(); // the whole of the last day: every period is by business date
         }
+        if (in_array('year', $filters, true)) {
+            $year = trim((string) ($params['year'] ?? '')) ?: $today->format('Y');
+            if (! preg_match('/^\d{4}$/', $year)) {
+                throw BusinessRuleException::make('invalid_date', 'Choose a year, for example 2026.');
+            }
+            $from = $year.'-01-01';
+            $to = $year.'-12-31';
+        }
         if ($from !== null && $to !== null && $from > $to) {
             throw BusinessRuleException::make('invalid_dates', 'The start date is after the end date.');
         }
@@ -1219,21 +1212,6 @@ final class RentalReports
         return ($x->from !== null ? $this->period($x) : $this->asAt($x)).$this->filterWords($x);
     }
 
-    private function period(object $x): string
-    {
-        return Carbon::parse($x->from)->format('j M Y').' to '.Carbon::parse($x->to)->format('j M Y');
-    }
-
-    private function asAt(object $x): string
-    {
-        return 'As at '.$x->today->format('j M Y').$this->filterWords($x);
-    }
-
-    private function filterWords(object $x): string
-    {
-        return ($x->property !== null ? ' · '.$x->property->name : '').($x->landlord !== null ? ' · landlord '.$x->landlord->name : '');
-    }
-
     /** @return array{0: string, 1: string, 2: list<string>} */
     private static function ownerWords(string $key, string $title, string $description, array $filters): array
     {
@@ -1242,6 +1220,8 @@ final class RentalReports
             'income_statement' => ['Income statement', 'Rent and fees collected less the expenses paid in the period.', $filters],
             'expenses' => [$title, 'Money paid out for the property in the period.', $filters],
             'deposits_held' => [$title, 'Security deposits held for tenants today, per lease.', $filters],
+            'landlord_year' => [$title, 'The property\'s year: collected by month, expenses, owner drawings, opening and closing. A summary of money handled, not tax advice.', ['year']],
+            'trial_balance' => [$title, 'Opening, movement and closing per account for the period.', $filters],
             default => [$title, $description, $filters],
         };
     }
@@ -1265,20 +1245,6 @@ final class RentalReports
         $body['sections'] = array_map($strip, $body['sections'] ?? []);
 
         return $body;
-    }
-
-    /** @return array{key: string, label: string, type: string} */
-    private static function c(string $key, string $label, string $type = 'text'): array
-    {
-        return ['key' => $key, 'label' => $label, 'type' => $type];
-    }
-
-    /** id => a name column, for ids of one account's table. @return array<int, string> */
-    private function names(string $table, string $column, array $ids, int $cid): array
-    {
-        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
-
-        return $ids === [] ? [] : DB::table($table)->where('company_id', $cid)->whereIn('id', $ids)->pluck($column, 'id')->all();
     }
 
     /**

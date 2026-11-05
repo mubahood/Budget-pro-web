@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             AdminRolesSeeder::class,       // roles, permissions, platform + tenant menus
             PlanSeeder::class,             // paid plans (the Free plan comes with its migration)
+            PledgeBudgetPlanSeeder::class, // Pledge & Budget's trial, on the family's line: 10 logins (PB-33)
             AkibaPlanSeeder::class,        // Akiba Ledger's own plan line (akiba-*, AK-15)
             EstateLedgerPlanSeeder::class,      // Estate Ledger's own plan line (estate-ledger-*, KR-20)
             PingPinPlanSeeder::class,

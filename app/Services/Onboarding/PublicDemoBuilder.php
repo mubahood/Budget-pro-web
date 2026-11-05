@@ -261,7 +261,7 @@ class PublicDemoBuilder
             $names = PublicDemoWedding::names();
             $found = DB::table('budget_programs')->where('company_id', $this->cid)->whereIn('name', array_values($names))->orderBy('id')->get(['id', 'name', 'status', 'is_deleted'])->keyBy('name');
             if (count(array_filter($names, fn ($n) => $found->has($n))) < count($names)) {
-                $this->wipe(['contribution_payments', 'budget_program_members', 'contribution_records', 'budget_items', 'budget_item_categories', 'budget_programs']);
+                $this->wipe(['event_invitations', 'event_card_templates', 'budget_payments', 'contribution_payments', 'budget_program_members', 'contribution_records', 'budget_items', 'budget_item_categories', 'budget_programs']);
                 $this->family = $this->seedPledges() + $this->family;
                 $repairs[] = 'wedding';
             } else {

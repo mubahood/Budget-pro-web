@@ -49,11 +49,11 @@ class ExpensesController extends RentalsController
         });
     }
 
-    /** POST rentals/expenses {property_id, unit_id, category, description, vendor, amount_minor, method, paid_on, charged_to, receipt_uuid, maintenance_id} */
+    /** POST rentals/expenses {property_id, unit_id, category, description, vendor, amount_minor, method, paid_on, charged_to, receipt_uuid, maintenance_id, over_limit_reason} */
     public function store(Request $request): JsonResponse
     {
         return $this->attempt(function () use ($request) {
-            $data = $request->only(['property_id', 'unit_id', 'category', 'description', 'vendor', 'method', 'charged_to', 'receipt_uuid', 'maintenance_id'])
+            $data = $request->only(['property_id', 'unit_id', 'category', 'description', 'vendor', 'method', 'charged_to', 'receipt_uuid', 'maintenance_id', 'over_limit_reason'])
                 + ['amount_minor' => $this->minor($request, 'amount_minor'), 'paid_on' => $this->day($request, 'paid_on')];
 
             return $this->created($this->present($request)->expense(app(Expenses::class)->record($this->user($request), $data)), 'Expense recorded.');

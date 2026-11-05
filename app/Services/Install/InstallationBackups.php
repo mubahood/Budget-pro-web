@@ -146,6 +146,7 @@ final class InstallationBackups
     {
         $this->addFolder($zip, $this->mediaRoot(), 'files/');
         $this->addFolder($zip, (string) config('rentals.private_root'), 'rental-private/');
+        $this->addFolder($zip, \App\Services\Budget\CardFiles::root(), 'event-cards/');
     }
 
     private function addFolder(ZipArchive $zip, string $root, string $prefix): void
@@ -188,6 +189,8 @@ Budget Pro backup
                           web folder's storage/ (beside index.php)
   rental-private/         tenants' photos and documents; copy into
                           budget_pro/storage/app/rental-private/
+  event-cards/            events' invitation card designs; copy into
+                          budget_pro/storage/app/event-cards/
 
 Keep this file somewhere other than the server it came from.
 TXT;

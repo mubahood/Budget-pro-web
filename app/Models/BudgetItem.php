@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use App\Exceptions\BusinessRuleException;
-use App\Jobs\SendBudgetItemNotification;
 use App\Scopes\CompanyScope;
+use App\Services\Budget\BudgetPayments;
 use App\Support\Decimal;
 use App\Traits\AuditLogger;
 use App\Traits\Syncable;
@@ -46,8 +46,11 @@ class BudgetItem extends Model
         'date' => 'date',
     ];
 
-    /** Off while a whole budget is written at once (a template applied, the demo built): one email per item would flood the team. */
+    /** Kept for its callers. Nothing emails on a save any more (the review's PB-12): the committee report is the summary. */
     public static bool $notify = true;
+
+    /** A paid-out figure sent with this save, posted as a row of the difference after it (prepare → finalizer): BudgetPayments. */
+    public ?string $pendingSpent = null;
 
     //boot
     protected static function boot()
@@ -57,6 +60,14 @@ class BudgetItem extends Model
         //disable deleting
         static::deleting(function ($model) {
             //throw new BusinessRuleException('Deleting is not allowed');
+            \App\Services\Budget\EventClosure::assertOpen($model->budget_program_id);
+        });
+
+        static::deleted(function ($model) {
+            if (BudgetPayments::ready()) {
+                (new BudgetPayments())->moveOff($model, $model->changed_by_id ? (int) $model->changed_by_id : null); // money paid out never leaves the totals with its line
+            }
+            self::categoryOf($model)?->updateSelf(); // the totals follow, whoever removed it
         });
 
         static::creating(function ($model) {
@@ -131,25 +142,63 @@ class BudgetItem extends Model
             $data->created_by_id = $loggedUser->id;
         }
 
-        $cat = BudgetItemCategory::find($data->budget_item_category_id);
+        $cat = self::categoryOf($data);
         if ($cat == null) {
             throw new BusinessRuleException('Category not found');
         }
 
         // Always sync budget_program_id from the category to prevent mismatch
         $data->budget_program_id = $cat->budget_program_id;
+        \App\Services\Budget\EventClosure::assertOpen($data->budget_program_id);
+        if ($data->exists && $data->isDirty('budget_program_id')) {
+            \App\Services\Budget\EventClosure::assertOpen($data->getOriginal('budget_program_id'));
+        }
 
-        // Ensure invested_amount defaults to 0 if null
-        if ($data->invested_amount === null) {
+        // invested_amount is the sum of the line's budget_payments and is never set by hand. A figure sent with the save (an older phone, the
+        // classic form) becomes a row of the difference once the line is saved (finalizer).
+        if (BudgetPayments::ready()) {
+            $payments = new BudgetPayments();
+            $wanted = $data->isDirty('invested_amount') && Decimal::valid($data->invested_amount) ? Decimal::max(Decimal::of((string) $data->invested_amount), '0') : null;
+            if ($data->exists) {
+                $payments->adopt((int) $data->id);
+            }
+            $paid = $data->exists ? $payments->sum((int) $data->id) : '0.00';
+            $data->pendingSpent = $wanted !== null && Decimal::cmp($wanted, $paid) !== 0 ? $wanted : null;
+            $data->invested_amount = $paid;
+        } elseif ($data->invested_amount === null) {
             $data->invested_amount = 0;
         }
 
         return $data;
     }
 
+    /** A line's category, even one removed since: a line that outlives its category still counts, and can be edited and moved. */
+    private static function categoryOf($item): ?BudgetItemCategory
+    {
+        return BudgetItemCategory::withoutGlobalScope(\App\Scopes\TombstoneScope::class)->find($item->budget_item_category_id);
+    }
+
     //public static function finalizer
     public static function finalizer($data)
     {
+        if (BudgetPayments::ready()) {
+            $wanted = $data->pendingSpent;
+            $data->pendingSpent = null;
+            $payments = new BudgetPayments();
+            if ($wanted !== null) {
+                $payments->settleTo((int) $data->company_id, (int) $data->id, $wanted, $data->changed_by_id ? (int) $data->changed_by_id : null);
+            } elseif (! $data->wasRecentlyCreated) {
+                $payments->recalculateById((int) $data->company_id, (int) $data->id);
+            }
+            // The caller's model shows what was stored (the figure, sync version).
+            $stored = DB::table($data->getTable())->where('id', $data->id)->first(['invested_amount', 'version', 'server_seq', 'client_updated_at']);
+            if ($stored !== null) {
+                foreach ((array) $stored as $k => $v) {
+                    $data->setAttribute($k, $v);
+                }
+            }
+        }
+
         $target = Decimal::valid($data->target_amount) ? (string) $data->target_amount : '0';
         $invested = Decimal::valid($data->invested_amount) ? (string) $data->invested_amount : '0';
         $balance = Decimal::sub($target, $invested);
@@ -164,7 +213,7 @@ class BudgetItem extends Model
                 'is_complete' => $is_complete,
             ]);
 
-        $cat = BudgetItemCategory::find($data->budget_item_category_id);
+        $cat = self::categoryOf($data);
 
         if ($cat) {
             try {
@@ -175,19 +224,21 @@ class BudgetItem extends Model
         } else {
             Log::warning('BudgetItem::finalizer - orphaned item #'.$data->id.' has no valid category #'.$data->budget_item_category_id);
         }
+    }
 
-        // Dispatch email notification job (async)
-        if (! self::$notify) {
-            return;
-        }
-        try {
-            SendBudgetItemNotification::dispatch(
-                $data->id,
-                $data->company_id,
-                $data->budget_program_id
-            );
-        } catch (\Throwable $th) {
-            Log::error('Failed to dispatch budget item notification: '.$th->getMessage());
+    /**
+     * Put an event's lines (or one category's) in the order given: phones get it with their next pull.
+     *
+     * @param  list<int>  $ids
+     */
+    public static function arrange(int $companyId, array $ids): void
+    {
+        foreach (array_values($ids) as $i => $id) {
+            $line = self::withoutGlobalScopes()->without(['budgetItemCategory', 'createdBy'])->where('company_id', $companyId)->find($id);
+            if ($line !== null && (int) $line->sort_order !== $i + 1) {
+                $line->sort_order = $i + 1;
+                $line->saveQuietlySynced();
+            }
         }
     }
 

@@ -76,6 +76,14 @@ final class Decimal
         return self::cmp($a, '0') === 0;
     }
 
+    /** True when the amount has no fraction ("1000.00" yes, "1000.75" no). */
+    public static function isWhole(int|string|null $a): bool
+    {
+        $exact = self::of($a, 6);
+
+        return bccomp($exact, bcadd($exact, '0', 0), 6) === 0;
+    }
+
     /** part / whole × 100, to 2 places; 0 when whole is 0. */
     public static function percent(int|string|null $part, int|string|null $whole): string
     {

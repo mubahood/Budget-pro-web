@@ -50,6 +50,10 @@ class SyncPuller
         if ($config['kind'] !== SyncRegistry::KIND_REFERENCE) {
             $query->where('company_id', $companyId);
         }
+        if ($table === 'contribution_records') {
+            // An in-kind pledge (PB-39) has no money in it and no meaning on a phone yet: web only until PB-32.
+            $query->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', \App\Services\Budget\EventBook::KIND_IN_KIND));
+        }
         $rows = $query->get();
         $hasMore = $rows->count() > $limit;
         $rows = $rows->take($limit);

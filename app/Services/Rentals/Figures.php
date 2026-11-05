@@ -67,11 +67,11 @@ final class Figures
         ];
     }
 
-    /** Units (not switched off, in active properties), occupied (a live lease), vacant and the occupancy rate. @param list<int>|null $ids */
+    /** Units for letting (not switched off, not used by the landlord or a caretaker, in active properties), occupied (a live lease), vacant and the occupancy rate. @param list<int>|null $ids */
     public static function units(int $companyId, ?array $ids): array
     {
         $units = DB::table('rental_units as u')->join('rental_properties as p', 'p.id', '=', 'u.property_id')->where('u.company_id', $companyId)
-            ->where('u.status', '!=', 'inactive')->where('p.status', 'active');
+            ->whereNotIn('u.status', ['inactive', 'in_use'])->where('p.status', 'active');
         if ($ids !== null) {
             $units->whereIn('u.property_id', $ids ?: [0]);
         }
@@ -115,7 +115,7 @@ final class Figures
         if ($propertyIds === []) {
             return [];
         }
-        $units = DB::table('rental_units')->where('company_id', $companyId)->whereIn('property_id', $propertyIds)->where('status', '!=', 'inactive')
+        $units = DB::table('rental_units')->where('company_id', $companyId)->whereIn('property_id', $propertyIds)->whereNotIn('status', ['inactive', 'in_use'])
             ->groupBy('property_id')->selectRaw('property_id, COUNT(*) AS n')->pluck('n', 'property_id');
         $occupied = DB::table('rental_leases')->where('company_id', $companyId)->whereIn('property_id', $propertyIds)->whereIn('status', RentalLease::LIVE)
             ->groupBy('property_id')->selectRaw('property_id, COUNT(DISTINCT unit_id) AS n')->pluck('n', 'property_id');

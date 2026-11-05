@@ -147,6 +147,8 @@ status). A unit has at most one `active`/`notice` lease (checked under the lock)
 charge…), `amount_minor` (a month), `goes_to` (`landlord`\|`agency`), `commissionable` (bool), `starts_on`, `ends_on`
 (nullable), `active`, timestamps.
 
+**Added by the landlord and commission work** (migrations `2026_11_05_729001` to `734001`, all additive): `rental_closes` (a month closed, version, status, totals, proof, who reopened it and why) and `rental_statements` (one landlord's month: number, version, body, proof, sent words); `rental_payout_runs` and `rental_payout_run_lines`; `rental_property_owners` (who owned a property from when); `rental_commission_changes`. New columns: `rental_settings.closed_through`, `ahead_default`, `export_accounts`, `commission_gap_bp`, `withholding_on`, `seq_statement`, `seq_payout_run`; `rental_units.commission_*`, `in_use_by`, and status `in_use`; `rental_landlords.expense_limit_minor`, `withholding_bp`; `rental_leases.origin`; `rental_maintenance.quote_minor`, `approval_*`; `rental_expenses.over_limit_reason`, `for_month`; `rental_payouts.run_id`, `paid_to_snapshot`, `balance_before_minor`, `balance_after_minor`, `advance_minor`, `advance_reason`. `rental_payments.method` gains `paid_landlord`. Both new values widen their `SchemaIntegrity` lists, and `734001` swaps the CHECK where the database enforces one.
+
 **`rental_rent_changes`**: company_id, lease_id, `rent_minor`, `effective_from` (DATE, a period start), `reason`,
 `created_by_id`, timestamps. A period is billed at the rent effective on its start.
 
@@ -241,6 +243,8 @@ part (fees the agency keeps), D = deposit part (ADR 0010 table).
 | `payout` | money paid to a landlord | −p | −p | | | | | |
 | `expense_landlord` | an expense charged to a landlord | −e | −e | | | | | |
 | `expense_agency` | the agency's own expense | −e | | | | | +e | |
+| `collected_direct` | an allocation of a payment the tenant made to the landlord directly (§5.3); no row when C+G is 0 | | −(C+G) | | | +C+G | | |
+| `agency_drawing` | the agency takes its own money out (owner or manager); never income, never an expense | −d | | | | | | −d |
 | `transfer` | cash between methods (two rows, one group) | −t / +t | | | | | | |
 | `opening_cash` | opening cash or bank | +o | | | | | | +o |
 | `opening_landlord` | an opening balance owed to a landlord | | +o | | | | | −o |
@@ -250,6 +254,11 @@ part (fees the agency keeps), D = deposit part (ADR 0010 table).
 A deposit collected while the landlord holds deposits is an ordinary `collected` row with the deposit part in
 `landlord_minor` (§5.3). Charges, waivers and voids post no journal row (a waiver's allocation has a zero split).
 The cash book is the rows with `cash_minor ≠ 0`.
+
+**A closed month is locked here (KR-28).** `RentalLedger::post` and `reverse` refuse a row dated on or before the account's
+`closed_through` (`period_closed`, with `use_date` and `mark` for a phone), read under the account's lock so a close and a posting
+cannot cross. What posts nothing of its own in the month asks the ledger itself (`assertOpen`): a waiver, a direct payment, a
+move-out's day and `rentals:daily --date`. Late money is dated today with a note "For October", which a statement line reads.
 
 **Deposit held for a lease** (either holder) = deposits collected (allocations to its `deposit` charges, net of
 reversals) − `deposit` payments − deposit refunds. For an agency-held deposit it also equals Σ `deposit_minor` of the
@@ -304,6 +313,13 @@ a different payload (`idempotency_conflict`; the same payload returns the first 
    open bill of this lease, at most what is left on it, adding up to the amount. Money stays as credit only once every
    open bill is covered. `Payments::suggestSplit` shows the split on screen and flows the rest around typed lines.
 5. Charges' `paid_minor` and `status` update; the receipt is ready (§10.4).
+
+**Paid to the landlord (`Payments::receiveDirect`, rentals_collect, agency only, KR-31).** A tenant paid the landlord at the gate. The
+payment's method is `paid_landlord`; its allocation splits as usual (amount a, commission C, landlord a−C), and the journal moves only
+C+G, off the landlord (§4). It settles this landlord's open bills only: never a deposit, never another landlord's old bill after a
+handover, and nothing above what is open (`direct_too_much`), so it leaves no credit. It is out of the cash book, of Collections and of
+every "collected" cash total, while its commission is in the commission report and the income statement. Its bills cannot come back
+as credit (`direct_settled`): the receipt is reversed first. A phone cannot post it: `Payments::receive` takes cash methods only.
 
 ### 5.4 Deposit and waiver payments
 
@@ -365,14 +381,40 @@ for a vacant unit stores the value (the next tenant's start) and charges nothing
 ### 5.10 Payouts, expenses, transfers, opening balances
 
 - **Payout** (`Payouts::record`, rentals_landlords): amount ≤ the landlord's balance unless "pay ahead" is ticked
-  (an advance to the landlord); cash must cover it per method (refused `insufficient_cash`).
+  (an advance to the landlord, with a reason, KR-30, and a second tick if the agency's own money does not cover it); cash must
+  cover it per method (refused `insufficient_cash`). A payout keeps what it was: the landlord's payment details then, the balance
+  before and after, and the part paid ahead. Its advice is a paper of its own (`Landlords\PayoutAdvice`).
+- **Payout run** (`Landlords\PayoutRuns`, rentals_landlords): many landlords in one draft, then posted as one write, every line or
+  none, refused if a balance changed since the draft.
 - **Expense** (`Expenses::record`, rentals_expenses): `charged_to = landlord` needs a property (its landlord is
   charged); else the agency's own expense. Paid by a method (cash must cover it). From a maintenance request when it
-  is done with a cost.
+  is done with a cost. Above the limit a landlord set (`expense_limit_minor`), with no answer from them, it asks for the office's reason
+  and never blocks (`Portal\LandlordApprovals`).
+- **Money held back** (`Landlords\Withholding`, off until `withholding_on`, agency only, KR-32): the agency types its own percent per landlord
+  (`withholding_bp`). Month end shows that percent of the rent the agency collected. Recording it is an `expense_landlord` in
+  category "Withholding tax" with `for_month`, on the day it is actually paid over. It needs no property. It states no law and works
+  out no tax of its own.
+- **The agency's own money** (`CashBook::agencyDrawing`, rentals_settings): `agency_drawing`. `Reports\MoneyPosition` says whose the cash is:
+  cash = owed to landlords − owed back by landlords + deposits + credit + the agency's own.
+- **Handover** (`Landlords\Handover`, rentals_manage): a property goes to another landlord from a date. History is in `rental_property_owners`;
+  live leases follow, and bills already raised stay with the landlord who earned them.
+- **Commission from a date** (`Leases\CommissionChanges`, rentals_manage): one lease, or every live lease of a property or landlord, on a date after what
+  is billed. Bills raised keep the rule they carry. A unit may have its own rule for new leases (`Units::setCommission`).
+- **Bill ahead** (`Billing::receiveAhead`, KR-29): money above what is owed bills the next periods now, as one write. Holding it as credit stays the default.
 - **Transfer** (`CashBook::transfer`): between methods (banking cash, withdrawing from mobile money).
 - **Opening balances** (`Import::opening`): cash per method, what is owed to each landlord, deposits held per lease,
   tenants' arrears (as `opening` charges) and credit (as an `import` payment) — for an account moving from another
   system (KR-22).
+
+### 5.10a Month close (`Landlords\MonthClose`, `StatementBook`, `StatementProof`, `MonthEndFigures`, KR-28)
+
+`close(by, 'Y-m')` (rentals_close, never a caretaker) runs in one transaction under the account's lock: it refuses a month not over, out of
+order or already closed, and books that do not agree (§5.12); it writes a `rental_closes` row, one statement per landlord with any balance, line
+or unit that month (each with a number, a body and its proof), and moves `closed_through`. Months before a first close lock with no
+statements. `reopen` is the account owner's alone (`TeamRules::OWNER_ONLY`), with a reason, and only the latest month. Closing again keeps a
+copy whose figures did not change and gives the others a new version that says which it replaces and what differs. A month not closed reads live
+and is stamped. Sending prepares links on someone's own phone (KR-18): "Link prepared" or "Opened by landlord", never "delivered". Measured: 200
+landlords and 1,600 leases close in about 6.5 s in the request, so no chunking is needed.
 
 ### 5.11 Owner mode (KR-06)
 
@@ -390,7 +432,14 @@ Per account, it fails (and lists the ids) when:
 4. Σ `credit_minor` for a lease ≠ Σ unallocated of its payments;
 5. Σ split of an allocation ≠ its amount (except waivers and `refund` charges, whose split is zero);
 6. a unit has two live leases;
-7. a reversed row's reversal is missing, or a reversal reverses a reversal.
+7. a reversed row's reversal is missing, or a reversal reverses a reversal;
+8. an agency-held deposit in the journal differs from collected − used − refunded;
+9. a live lease's landlord is not its property's;
+10. an allocation's landlord, commission or deposit part differs from its journal row;
+11. a direct payment's journal row differs from what the agency earned on it (`direct_journal`), or it moved cash, credit or a deposit;
+12. for closed months: a statement's opening, closing or lines differ from the journal, its chain to the month before breaks, or its body no
+    longer matches its proof; a close's total differs from its statements or the journal; a row dated in a closed month was written after it
+    closed; the latest closed month's commission differs between the allocations and the commission report. A reopened month waits until it closes again.
 
 ---
 
@@ -518,6 +567,7 @@ meter readings and maintenance requests also take a body `uuid`.
 | `GET/POST rentals/meter-readings` | maintenance | |
 | `GET rentals/reports`, `GET rentals/reports/{key}?…&format=json\|csv\|xlsx\|pdf` | reports | downloads → signed link; list filters in §17 |
 | `GET rentals/activity` | settings | |
+| `POST rentals/properties/{id}/handover` | manage | §5.10 |
 | `GET rentals/me` | person | tenant: profile, leases with `position`; landlord: profile, totals |
 | tenant: `GET rentals/me/charges`, `GET rentals/me/payments`, `GET rentals/me/payments/{id}/receipt`, `GET rentals/me/lease/{id}`, `GET/POST rentals/me/maintenance`, `POST rentals/me/notice` | person | own leases only |
 | landlord: `GET rentals/me/properties`, `GET rentals/me/statement?month`, `GET rentals/me/payouts`, `GET rentals/me/arrears` | person | own properties only |
@@ -604,9 +654,15 @@ Refusal codes: `unit_taken`, `unit_unavailable`, `lease_not_live`, `amount_inval
 | `rentals.settings` | `Settings` | Account, billing, commission, deposits, late fees, payment instructions, messages, staff assignments |
 | `rentals.activity` | `Activity` | The audit trail (`rental_activities`, rentals_settings as on the API): who did what and when, by person, kind and date, searchable |
 | `rentals.import` | `Import` | CSV templates, dry run, import |
+| `rentals.month-end` | `MonthEnd` | The month before it is final: what to look at, figures beside last month's, by landlord; Close once; the send list; Reopen (owner); held back for landlords when on |
+| `rentals.landlords.sheet` | `Landlords\RentSheet` | (agency) One landlord's units for a month, unit by unit |
+| `rentals.payouts.run` | `PayoutRun` | (agency) Pay many: tick, draft, the sheet for the bank, mark paid |
+| `rentals.commission-change` | `Leases\CommissionChange` | (agency) Change commission from a date, for one lease or many, with what it does shown first |
 
 PDF/print controllers: receipt, landlord statement, tenant statement, lease summary (agreement), report exports,
-all on signed or session-authorised routes with `throttle`.
+payout advice, the bulk statement PDF and the payout sheet, all on signed or session-authorised routes with `throttle`.
+
+Receive payment offers **Paid to the landlord** to an agency (§5.3) and, when money is above what is owed, **Bill ahead** beside holding it. A unit's status has **Used by the landlord or caretaker**, with who (`in_use`, `in_use_by`): not vacant, not let, no rent lost, on the rent roll and the sheet and its own tile; a tenant moves in once it is cleared (KR-33). Nothing is gated: every screen here is reachable by its permission alone.
 
 ### 10.2 Look
 
@@ -694,7 +750,12 @@ landlord expenses and payouts, move-outs with damage and water deductions, a dep
 still owes, vacant units, meter readings and reversed payments with their reasons; and **Mukasa Rentals (Demo)**, a landlord
 on his own in owner mode with his own sign-in. Logins `<role>@ntindaproperty.example` (owner, manager, accountant,
 caretaker, viewer) plus a landlord and tenants on the portal; password `rentals.demo.password`. Hourly heal, rebuild every
-72 h; visitors cannot change the logins, settings or plan. The portal's `/demo` on the Estate Ledger host lists the sign-ins
+72 h; visitors cannot change the logins, settings or plan. The agency also lives the landlord work (`landlord_work` in the data file, made up like the rest):
+months closed on the 25th of the next month with frozen statements (the month just ended is usually still there to close by hand), one month reopened and issued
+again, a late receipt marked for its month, a property handed over, commission changed from a date for a lease and for a landlord, a rule on one unit, rent billed
+ahead, tenants paying the landlord at the gate, rooms in use, payout runs on the 5th, a landlord paid twice a month, an advance with its reason, a repair agreed, one paid above
+the limit with the office's reason and one waiting on the landlord's own page, and money held back at a made-up percent. The upkeep never runs a closed day, and a close it
+cannot make is passed over, so a visitor closing or reopening a month cannot stop it. A rebuild takes about 3 minutes on the development machine. The portal's `/demo` on the Estate Ledger host lists the sign-ins
 (`AppSite::ownDemo`).
 
 ## 15. Plans (line `estate-ledger`, `EstateLedgerPlanSeeder`)
@@ -725,7 +786,7 @@ channel's `log` driver (development and tests) the line a simulated message writ
 `arrears_aging` (0–30, 31–60, 61–90, 90+), `occupancy` (occupied, vacant, vacancy days, rent lost), `landlord_statement`,
 `commission` (agency), `expenses`, `deposits_held`, `cash_book`, `tenant_statement`, `lease_expiries`,
 `maintenance`, `income_statement` (agency: commission + fees − own expenses; owner: rent − expenses), `tenant_list`,
-`lease_list`, `receipts`. Each runs as json, CSV (BOM, formula-safe cells), XLSX (`XlsxWriter`) and PDF (dompdf), filtered
+`lease_list`, `receipts`, `landlord_rent_sheet` and `landlord_advances` (`Reports\LandlordWorkReports`), `money_position`, `landlord_year`, `journal_export` and `trial_balance` (`Reports\LandlordReports`, `JournalExport`). The commission report (`Reports\CommissionReport`) lists what deserves a look; the landlord statement (`Reports\StatementReport`) reads an issued copy for a closed month and says so otherwise. Each runs as json, CSV (BOM, formula-safe cells), XLSX (`XlsxWriter`) and PDF (dompdf), filtered
 by period and property.
 
 Caretakers have no reports: `rentals_reports` is not in their role (§7). Only if an owner grants it by a role override is a

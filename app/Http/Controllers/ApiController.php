@@ -89,7 +89,10 @@ class ApiController extends BaseController
             Utils::error('Invalid model: '.$model);
         }
         $modelClass = self::LEGACY_MODEL_WHITELIST[$model];
-        $data = $modelClass::where('company_id', $u->company_id)->limit(100000)->get();
+        $data = \App\Services\Budget\BudgetAccess::narrowLegacyList($modelClass::where('company_id', $u->company_id), $u, $modelClass)->limit(100000)->get();
+        if ($modelClass === \App\Models\ContributionRecord::class) {
+            \App\Services\Budget\BudgetAccess::hidePhones($data, $u);
+        }
         Utils::success($data, 'Listed successfully.');
     }
 
@@ -145,6 +148,7 @@ class ApiController extends BaseController
         // MobileApiController::budgetItemSave already does after its own
         // saveQuietly() call.
         try {
+            (new \App\Services\Budget\BudgetPayments())->afterQuietSave($object, (int) $u->id); // the figure it was sent becomes a row of the history
             $cat = BudgetItemCategory::withoutGlobalScopes()->find($object->budget_item_category_id);
             if ($cat) {
                 $cat->updateSelf();

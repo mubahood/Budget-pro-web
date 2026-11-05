@@ -21,8 +21,8 @@ use Illuminate\Support\Facades\DB;
  *  1. A category whose name matches one the event has (trimmed, any case) is reused, never made twice.
  *  2. An item whose name matches one already in that category (trimmed, any case) is left as it is and reported
  *     as skipped: never overwritten, never duplicated. A line repeated in the plan is skipped the second time.
- *  3. New items get the plan's quantity and unit price, nothing spent yet, not approved, and "unit: <unit>, from
- *     template <key>" as their details.
+ *  3. New items get the plan's quantity, unit and unit price, nothing spent yet, not approved, and "unit: <unit>, from
+ *     template <key>" as their details, which the web never shows as a note (BudgetPayments::readDetails, PB-35).
  *  4. The event's type is set from the template when it has none, the template key always; its pledge groups are
  *     the template's only when it has none of its own yet; settings.guests keeps the guest count.
  *
@@ -94,6 +94,10 @@ class TemplateApplier
                         $item->invested_amount = 0;
                         $item->approved = 'No';
                         $item->priority = 'Normal';
+                        if (in_array('unit', \App\Services\Sync\SyncRegistry::columns('budget_items'), true)) {
+                            $item->unit = $it['unit'] !== '' ? $it['unit'] : null;
+                        }
+                        // Older phones and API readers keep the same details; the web reads them apart (BudgetPayments::readDetails), so these words never reach a screen.
                         $item->details = trim(implode(', ', array_filter([$it['unit'] !== '' ? 'unit: '.$it['unit'] : '', $template ? 'from template '.$template['key'] : ''])));
                         $item->save();
                         $report['items_added']++;

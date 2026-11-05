@@ -5,24 +5,30 @@ namespace App\Services\Rentals;
 use App\Exceptions\BusinessRuleException;
 use App\Models\RentalEntry;
 use App\Models\RentalExpense;
+use App\Models\RentalLandlord;
 use App\Models\RentalProperty;
 use App\Models\RentalUnit;
 use App\Models\User;
 use App\Services\Rentals\Ledger\RentalLedger;
 use App\Services\Rentals\Payments\CashGuard;
+use App\Services\Rentals\Portal\LandlordApprovals;
 use App\Support\LocalDate;
 use App\Support\Rentals\Minor;
 
 /**
  * Money paid out (rentals_expenses): for a property and charged to its landlord (cash −, landlord −), or the agency's
- * own cost (cash −, expense +). In owner mode every expense is the owner's.
+ * own cost (cash −, expense +). In owner mode every expense is the owner's. Above the limit a landlord set, with no answer from them, it asks for
+ * the office's reason and never blocks (LC-17, EL-28): emergencies happen, and the landlord reads the reason.
  */
 final class Expenses
 {
     public const METHODS = ['cash', 'bank', 'mobile_money', 'cheque'];
 
-    /** $data: property_id, unit_id, category, description, vendor, amount_minor, method, paid_on, charged_to, receipt_uuid, maintenance_id. */
-    public function record(User $by, array $data): RentalExpense
+    /**
+     * $data: property_id, unit_id, category, description, vendor, amount_minor, method, paid_on, charged_to, receipt_uuid, maintenance_id, over_limit_reason, for_month.
+     * $landlord: charged to this landlord with no property to name (Landlords\Withholding).
+     */
+    public function record(User $by, array $data, ?RentalLandlord $landlord = null): RentalExpense
     {
         RentalAccess::authorize($by, 'rentals_expenses');
         $cid = (int) $by->company_id;
@@ -47,7 +53,7 @@ final class Expenses
                 ?? throw BusinessRuleException::make('not_found', 'That property was not found.');
             RentalAccess::assertInScope($by, (int) $property->id, 'property');
         }
-        if ($chargedTo === 'landlord' && $property === null) {
+        if ($chargedTo === 'landlord' && $property === null && $landlord === null) {
             if (! $owner) {
                 throw BusinessRuleException::make('property_required', 'Choose the property: its landlord pays this expense.');
             }
@@ -63,21 +69,28 @@ final class Expenses
         if (! empty($data['maintenance_id']) && ! \App\Models\RentalMaintenance::withoutGlobalScopes()->where('company_id', $cid)->whereKey((int) $data['maintenance_id'])->exists()) {
             throw BusinessRuleException::make('not_found', 'That repair request was not found.');
         }
-        $landlordId = $chargedTo === 'landlord' ? ($property?->landlord_id ?? RentalsModule::selfLandlord($cid)->id) : null;
+        $landlordId = $chargedTo === 'landlord' ? ($landlord?->id ?? $property?->landlord_id ?? RentalsModule::selfLandlord($cid)->id) : null;
 
-        return RentalLedger::locked($cid, function () use ($by, $data, $cid, $amount, $method, $category, $on, $chargedTo, $property, $unitId, $landlordId) {
+        $reason = trim((string) ($data['over_limit_reason'] ?? ''));
+
+        return RentalLedger::locked($cid, function () use ($by, $data, $cid, $amount, $method, $category, $on, $chargedTo, $property, $unitId, $landlordId, $reason) {
             CashGuard::assertCovers($cid, $method, $amount);
+            $overLimit = $chargedTo === 'landlord' && $property !== null
+                && LandlordApprovals::check($cid, (int) $property->id, $amount, isset($data['maintenance_id']) ? (int) $data['maintenance_id'] : null)['needs_reason'];
+            if ($overLimit && $reason === '') {
+                throw BusinessRuleException::make('over_limit_reason_required', 'This is above the limit the landlord set, and they have not agreed to it. Say why it is being paid.');
+            }
             $e = RentalExpense::create(['company_id' => $cid, 'number' => RentalsModule::nextNumber($cid, 'expense'), 'property_id' => $property?->id,
                 'unit_id' => $unitId, 'landlord_id' => $landlordId, 'category' => mb_substr($category, 0, 60),
                 'description' => isset($data['description']) ? mb_substr((string) $data['description'], 0, 255) : null,
                 'vendor' => isset($data['vendor']) ? mb_substr((string) $data['vendor'], 0, 150) : null, 'amount_minor' => $amount, 'method' => $method,
                 'paid_on' => $on->toDateString(), 'charged_to' => $chargedTo, 'receipt_uuid' => $data['receipt_uuid'] ?? null,
-                'maintenance_id' => $data['maintenance_id'] ?? null, 'created_by_id' => $by->id]);
+                'maintenance_id' => $data['maintenance_id'] ?? null, 'over_limit_reason' => $overLimit ? mb_substr($reason, 0, 255) : null, 'for_month' => $data['for_month'] ?? null, 'created_by_id' => $by->id]);
             $row = ['occurred_on' => $on->toDateString(), 'method' => $method, 'cash_minor' => -$amount, 'expense_id' => $e->id, 'property_id' => $property?->id,
                 'unit_id' => $unitId, 'description' => trim($category.($e->description ? ': '.$e->description : ''))];
             $row += $chargedTo === 'landlord' ? ['type' => 'expense_landlord', 'landlord_minor' => -$amount, 'landlord_id' => $landlordId] : ['type' => 'expense_agency', 'expense_minor' => $amount];
             RentalLedger::post($cid, RentalLedger::group(), [$row], $by->id);
-            RentalAudit::record($cid, 'expense.recorded', $e, "Recorded expense {$e->number}: {$category}", ['amount_minor' => $amount, 'charged_to' => $chargedTo], 'staff', $by->id);
+            RentalAudit::record($cid, 'expense.recorded', $e, "Recorded expense {$e->number}: {$category}", ['amount_minor' => $amount, 'charged_to' => $chargedTo] + ($overLimit ? ['over_limit' => true] : []), 'staff', $by->id);
 
             return $e->fresh();
         });

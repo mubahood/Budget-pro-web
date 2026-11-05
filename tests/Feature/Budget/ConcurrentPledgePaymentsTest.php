@@ -39,7 +39,7 @@ class ConcurrentPledgePaymentsTest extends TestCase
     /** @return array{0: Company, 1: User, 2: ContributionRecord} */
     private function pledge(string $amount): array
     {
-        $company = Company::factory()->create(['name' => 'Pledge Concurrency Co', 'status' => 'Active']);
+        $company = Company::factory()->create(['name' => 'Pledge Concurrency Co', 'status' => 'Active', 'currency' => 'USD']); // cents, so the figures below are real
         $this->companyId = $company->id;
         $user = User::factory()->create(['company_id' => $company->id, 'email' => 'plg_'.uniqid().'@example.com', 'password' => bcrypt('secret123')]);
         $company->owner_id = $user->id;
@@ -99,13 +99,13 @@ class ConcurrentPledgePaymentsTest extends TestCase
         }
         [$company, $user, $record] = $this->pledge('100000.00');
 
-        // Ten payments of 1,000.10 at once: every one counts, to the cent.
-        $r = $this->race(10, fn () => (new ContributionPayments())->record($company->id, $record->id, ['amount' => '1000.10'], $user->id));
+        // Ten payments of 1,000.10 at once, each said to be its own payment: every one counts, to the cent.
+        $r = $this->race(10, fn () => (new ContributionPayments())->record($company->id, $record->id, ['amount' => '1000.10', 'confirm_duplicate' => true], $user->id));
         $this->assertSame(['ok' => 10, 'refused' => 0, 'errors' => 0], $r);
         $this->assertSame('10001.00', (string) DB::table('contribution_records')->where('id', $record->id)->value('paid_amount'));
 
         // Twelve payments of 30,000 against the 89,999.00 still owed: exactly two fit.
-        $r = $this->race(12, fn () => (new ContributionPayments())->record($company->id, $record->id, ['amount' => '30000'], $user->id));
+        $r = $this->race(12, fn () => (new ContributionPayments())->record($company->id, $record->id, ['amount' => '30000', 'confirm_duplicate' => true], $user->id));
         $this->assertSame(['ok' => 2, 'refused' => 10, 'errors' => 0], $r);
 
         $sum = (string) DB::table('contribution_payments')->where('contribution_record_id', $record->id)->sum('amount');

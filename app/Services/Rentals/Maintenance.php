@@ -16,7 +16,8 @@ use Illuminate\Support\Str;
 /**
  * Repairs and problems (rentals_maintenance): reported by staff, a tenant (portal) or a landlord, followed from open
  * to done. A cost at "done" becomes an expense charged to the landlord or the agency. A phone's retry (same uuid) is
- * one request.
+ * one request. A quote can be noted on the way: above the landlord's limit it needs their answer (Portal\LandlordApprovals, LC-17). Nothing posts
+ * until the expense does.
  */
 final class Maintenance
 {
@@ -101,6 +102,31 @@ final class Maintenance
         return $m->fresh();
     }
 
+    /**
+     * The quote for a repair still open, or none. A new figure is a new question, so an answer about the old one no longer stands.
+     */
+    public function quote(User $by, RentalMaintenance $m, ?int $quoteMinor): RentalMaintenance
+    {
+        RentalAccess::authorize($by, 'rentals_maintenance');
+        RentalAccess::assertInScope($by, (int) $m->property_id, 'request');
+        $cid = (int) $m->company_id;
+        $quote = $quoteMinor === null ? null : Minor::positive($quoteMinor, 'quote');
+
+        return RentalLedger::locked($cid, function () use ($by, $m, $cid, $quote) {
+            $t = RentalMaintenance::withoutGlobalScopes()->where('company_id', $cid)->lockForUpdate()->findOrFail($m->id);
+            if (in_array($t->status, ['done', 'cancelled'], true)) {
+                throw BusinessRuleException::make('ticket_closed', 'This request is closed.');
+            }
+            if ($t->quote_minor === $quote) {
+                return $t;
+            }
+            $t->forceFill(['quote_minor' => $quote, 'approval_status' => 'none', 'approval_via' => null, 'approval_note' => null, 'approval_at' => null, 'approval_by_id' => null, 'approval_landlord_id' => null])->save();
+            RentalAudit::record($cid, 'maintenance.quoted', $t, $quote === null ? "Took the quote off {$t->number}" : "Quote on {$t->number}: ".Minor::format($quote, $cid), ['quote_minor' => $quote], 'staff', $by->id);
+
+            return $t->fresh();
+        });
+    }
+
     /** Done: with a cost, the expense is recorded (charged to the landlord by default) and linked. */
     public function complete(User $by, RentalMaintenance $m, array $data): RentalMaintenance
     {
@@ -118,7 +144,7 @@ final class Maintenance
                 $e = app(Expenses::class)->record($by, ['property_id' => $m->property_id, 'unit_id' => $m->unit_id, 'category' => (string) ($data['category'] ?? 'Repairs'),
                     'description' => "{$m->number}: {$m->title}", 'vendor' => $data['vendor'] ?? $m->assignee_name, 'amount_minor' => $cost,
                     'method' => $data['method'] ?? 'cash', 'paid_on' => $data['paid_on'] ?? null, 'charged_to' => $data['charged_to'] ?? 'landlord',
-                    'receipt_uuid' => $data['receipt_uuid'] ?? null, 'maintenance_id' => $m->id]);
+                    'receipt_uuid' => $data['receipt_uuid'] ?? null, 'maintenance_id' => $m->id, 'over_limit_reason' => $data['over_limit_reason'] ?? null]);
                 $expenseId = $e->id;
             }
             $m->forceFill(['status' => 'done', 'cost_minor' => $cost ?: null, 'expense_id' => $expenseId, 'resolved_on' => LocalDate::date($cid, $data['resolved_on'] ?? null)->toDateString(),

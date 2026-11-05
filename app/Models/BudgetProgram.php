@@ -24,7 +24,10 @@ class BudgetProgram extends Model
         static::addGlobalScope(new CompanyScope);
         // The event's settings columns (type, venue, groups, settings, payment details) arrive from the API, the web
         // and phones of every version: cleaned here, never refused (App\Services\Budget\EventSettings).
-        static::saving(fn (self $program) => \App\Services\Budget\EventSettings::normalize($program));
+        static::saving(function (self $program) {
+            \App\Services\Budget\EventSettings::normalize($program);
+            \App\Services\Budget\EventClosure::stamp($program);
+        });
     }
 
     /**
@@ -49,6 +52,7 @@ class BudgetProgram extends Model
         'total_in_pledge' => 'decimal:2',
         'start_date' => 'date',
         'end_date' => 'date',
+        'closed_at' => 'datetime',
     ];
 
     //boot
@@ -71,6 +75,7 @@ class BudgetProgram extends Model
             if (BudgetProgram::where('name', $model->name)->where('id', '!=', $model->id)->where('company_id', $model->company_id)->exists()) {
                 throw new BusinessRuleException('Name already exists');
             }
+            \App\Services\Budget\EventClosure::assertEditable($model);
             $model = self::prepare($model);
 
             return $model;
@@ -199,15 +204,15 @@ budget_total
     public static function recalculateFromChildren(int $programId): void
     {
         try {
-            // Budget totals from categories
-            $budgetAggregates = DB::table('budget_item_categories')
-                ->where('budget_program_id', $programId)
+            // Budget totals from the live lines, as EventBook reads them: a line counts even if its category was removed.
+            $budgetAggregates = DB::table('budget_items')
+                ->where('budget_program_id', $programId)->where(fn ($q) => $q->where('is_deleted', 0)->orWhereNull('is_deleted'))
                 ->selectRaw('COALESCE(SUM(target_amount), 0) as budget_total, COALESCE(SUM(invested_amount), 0) as budget_spent')
                 ->first();
 
-            // Contribution totals
+            // Contribution totals of the live pledges (a withdrawn pledge is a tombstone).
             $contributionAggregates = DB::table('contribution_records')
-                ->where('budget_program_id', $programId)
+                ->where('budget_program_id', $programId)->where(fn ($q) => $q->where('is_deleted', 0)->orWhereNull('is_deleted'))
                 ->selectRaw('COALESCE(SUM(amount), 0) as total_expected, COALESCE(SUM(paid_amount), 0) as total_collected, COALESCE(SUM(not_paid_amount), 0) as total_in_pledge')
                 ->first();
 

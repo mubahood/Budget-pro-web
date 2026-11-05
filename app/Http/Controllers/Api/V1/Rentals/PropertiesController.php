@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Rentals;
 use App\Models\RentalProperty;
 use App\Services\Rentals\Directory\Properties;
 use App\Services\Rentals\Figures;
+use App\Services\Rentals\Landlords\Handover;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -51,6 +52,21 @@ class PropertiesController extends RentalsController
             $property = app(Properties::class)->find($this->user($request), $id);
 
             return $this->success($this->shape($request, app(Properties::class)->update($this->user($request), $property, $request->only(Properties::WRITABLE))), 'Saved.');
+        });
+    }
+
+    /**
+     * POST rentals/properties/{id}/handover {landlord_id, from, reason}: give it to another landlord (LC-01). No money moves: live leases and unpaid bills from
+     * that day go to the new landlord, the rest stays. A day ahead waits for its day. A plain PUT refuses a new landlord once money or a tenant is recorded (use_handover).
+     */
+    public function handover(Request $request, int $id): JsonResponse
+    {
+        return $this->attempt(function () use ($request, $id) {
+            $property = app(Properties::class)->find($this->user($request), $id);
+            $this->day($request, 'from');
+            app(Handover::class)->handOver($this->user($request), $property, $request->only(['landlord_id', 'from', 'reason']));
+
+            return $this->success($this->shape($request, $property->fresh()), 'Handed over.');
         });
     }
 

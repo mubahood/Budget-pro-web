@@ -48,8 +48,7 @@ class Quotas
     public function used(Company $company, string $what): int
     {
         return match ($what) {
-            'users' => (int) DB::table('admin_users')->where('company_id', $company->id)->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'Inactive'))->count()
-                + (int) DB::table('invites')->where('company_id', $company->id)->where('status', 'pending')->where('expires_at', '>', now())->count(),
+            'users' => $this->logins($company),
             'products' => (int) DB::table('stock_items')->where('company_id', $company->id)->where('is_deleted', false)->count(),
             'sales' => (int) DB::table('sale_records')->where('company_id', $company->id)->where('created_at', '>=', now()->startOfMonth())->count(),
             'storage' => (int) ceil($this->storageBytes($company) / 1048576),
@@ -60,6 +59,35 @@ class Quotas
             'units' => (int) DB::table('rental_units')->where('company_id', $company->id)->where('status', '!=', self::UNIT_NOT_COUNTED)->count(),
             default => 0,
         };
+    }
+
+    /**
+     * Who counts against max_users: everyone who can sign in and every open invite, less viewer seats (the review's PB-33, decision D11, on
+     * every plan). A viewer's seat is free: the account role is viewer, they sit on at least one event as a viewer, and on none as anything more.
+     */
+    private function logins(Company $company): int
+    {
+        $id = (int) $company->id;
+        $live = fn ($q) => $q->whereNull('u.status')->orWhere('u.status', '!=', 'Inactive');
+        $people = (int) DB::table('admin_users as u')->where('u.company_id', $id)->where($live)->count();
+        $seat = fn ($column, bool $viewer) => fn ($q) => $q->select(DB::raw(1))->from('budget_program_members as s')->whereColumn('s.'.$column[0], $column[1])->where('s.company_id', $id)->where('s.is_deleted', 0)
+            ->where('s.role', $viewer ? '=' : '!=', 'viewer');
+        $freeViewers = (int) DB::table('admin_users as u')->join('company_members as m', fn ($j) => $j->on('m.user_id', '=', 'u.id')->where('m.company_id', $id))
+            ->where('u.company_id', $id)->where($live)->where('m.role', 'viewer')
+            ->whereExists($seat(['user_id', 'u.id'], true))->whereNotExists($seat(['user_id', 'u.id'], false))->count();
+        $invites = (int) DB::table('invites as i')->where('i.company_id', $id)->where('i.status', 'pending')->where('i.expires_at', '>', now())
+            ->whereNot(fn ($q) => $q->where('i.role', 'viewer')->whereExists($seat(['invite_id', 'i.id'], true))->whereNotExists($seat(['invite_id', 'i.id'], false)))->count();
+
+        return $people - $freeViewers + $invites;
+    }
+
+    /** Whether this person holds only viewer seats, so the plan does not count them yet. */
+    public function isFreeViewer(Company $company, int $userId): bool
+    {
+        $seats = DB::table('budget_program_members')->where('company_id', $company->id)->where('user_id', $userId)->where('is_deleted', 0)->pluck('role');
+
+        return $seats->isNotEmpty() && $seats->every(fn ($role) => $role === 'viewer')
+            && DB::table('company_members')->where('company_id', $company->id)->where('user_id', $userId)->value('role') === 'viewer';
     }
 
     public function storageBytes(Company $company): int

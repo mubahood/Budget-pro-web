@@ -24,6 +24,30 @@ class Phone
         'ZA' => ['code' => '27', 'len' => 9], 'ZM' => ['code' => '260', 'len' => 9], 'ZW' => ['code' => '263', 'len' => 9],
     ];
 
+    /** The first digit of a mobile number without its 0, where we know it: a run of digits like this is a phone, not an amount. */
+    private const MOBILE_FIRST_DIGIT = ['UG' => ['7'], 'KE' => ['7', '1'], 'TZ' => ['6', '7'], 'RW' => ['7']];
+
+    /**
+     * Digits with no + and no leading 0 that are a phone number all the same, which is what a spreadsheet leaves:
+     * the country's code and a full number (256772123456), or a mobile number on its own (772123456).
+     */
+    public static function isBareNumber(string $digits, string $country = 'UG'): bool
+    {
+        if (! ctype_digit($digits)) {
+            return false;
+        }
+        if (strlen($digits) > 10) {
+            foreach (self::COUNTRIES as $c) {
+                if (str_starts_with($digits, $c['code']) && strlen($digits) === strlen($c['code']) + $c['len']) {
+                    return true;
+                }
+            }
+        }
+        $code = strtoupper($country);
+
+        return isset(self::MOBILE_FIRST_DIGIT[$code]) && strlen($digits) === self::COUNTRIES[$code]['len'] && in_array($digits[0], self::MOBILE_FIRST_DIGIT[$code], true);
+    }
+
     public static function e164(?string $raw, string $defaultCountry = 'UG'): ?string
     {
         $digits = preg_replace('/\D+/', '', (string) $raw);

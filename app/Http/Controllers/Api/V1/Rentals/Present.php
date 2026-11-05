@@ -260,8 +260,9 @@ final class Present
      */
     public function landlord(RentalLandlord $l, ?array $figures = null, bool $own = false, bool $payout = true): array
     {
-        return ['id' => (int) $l->id, 'code' => $l->code, 'name' => (string) $l->name, 'phone' => $l->phone, 'email' => $l->email, 'address' => $l->address,
+        return ['id' => (int) $l->id, 'code' => $l->code, 'name' => (string) $l->name, 'phone' => $l->phone, 'phone_2' => $payout ? $l->phone_2 : null, 'email' => $l->email, 'address' => $l->address,
             'payout_method' => $payout ? (string) $l->payout_method : null, 'payout_details' => $payout ? $l->payout_details : null,
+            'withholding_bp' => $payout && $l->withholding_bp !== null ? (int) $l->withholding_bp : null,
             'commission' => $l->commission_type === null ? null : self::commission($l->commission_type, $l->commission_bp, $l->commission_minor),
             'is_self' => (bool) $l->is_self, 'status' => (string) $l->status, 'properties_count' => (int) ($figures['properties_count'] ?? 0),
             'units_count' => (int) ($figures['units_count'] ?? 0), 'balance_minor' => (int) ($figures['balance_minor'] ?? 0), 'notes' => $own || ! $payout ? null : $l->notes];
@@ -301,7 +302,7 @@ final class Present
 
         return ['id' => (int) $u->id, 'property' => $this->ref('property', $u->property_id), 'code' => (string) $u->code, 'kind' => (string) $u->kind, 'floor' => $u->floor,
             'block' => $u->block, 'bedrooms' => $u->bedrooms, 'bathrooms' => $u->bathrooms, 'size_sqm' => $u->size_sqm, 'rent_minor' => (int) $u->rent_minor,
-            'deposit_minor' => $u->deposit_minor === null ? null : (int) $u->deposit_minor, 'cycle_months' => (int) $u->cycle_months, 'status' => (string) $u->status,
+            'deposit_minor' => $u->deposit_minor === null ? null : (int) $u->deposit_minor, 'cycle_months' => (int) $u->cycle_months, 'status' => (string) $u->status, 'in_use_by' => $u->in_use_by,
             'state' => Units::state($u, $lease, $position), 'water_meter' => $u->water_meter, 'power_meter' => $u->power_meter, 'notes' => $u->notes,
             'photo_url' => $this->fileUrl($u->photo_uuid), 'lease' => $lease !== null ? $this->leaseBrief($lease, $position, $phones) : null];
     }
@@ -328,7 +329,7 @@ final class Present
     {
         return ['id' => (int) $p->id, 'number' => (string) $p->number, 'landlord' => $this->ref('landlord', $p->landlord_id), 'amount_minor' => (int) $p->amount_minor,
             'method' => (string) $p->method, 'reference' => $p->reference, 'paid_on' => self::day($p->paid_on), 'period_from' => self::day($p->period_from),
-            'period_to' => self::day($p->period_to), 'notes' => $p->notes, 'reversed' => $p->reversed_at !== null];
+            'period_to' => self::day($p->period_to), 'notes' => $p->notes, 'advance_minor' => (int) $p->advance_minor, 'advance_reason' => $p->advance_reason, 'reversed' => $p->reversed_at !== null];
     }
 
     public function expense(RentalExpense $e): array

@@ -88,7 +88,7 @@ class MaintenanceController extends RentalsController
 
     /**
      * PUT rentals/maintenance/{id} {status, priority, title, details, assigned_to_id, assignee_name, photos[]}; with
-     * status `done`: {cost_minor, category, vendor, method, paid_on, charged_to, receipt_uuid, resolved_on, resolution} (a cost becomes an
+     * status `done`: {cost_minor, category, vendor, method, paid_on, charged_to, receipt_uuid, resolved_on, resolution, over_limit_reason} (a cost becomes an
      * expense); with status `cancelled`: {reason}.
      */
     public function update(Request $request, int $id): JsonResponse
@@ -100,7 +100,7 @@ class MaintenanceController extends RentalsController
             $m = match ($request->input('status')) {
                 'done' => $svc->complete($by, $m, ['cost_minor' => $request->filled('cost_minor') ? Minor::nonNegative($request->input('cost_minor'), 'cost') : 0,
                     'paid_on' => $this->day($request, 'paid_on'), 'resolved_on' => $this->day($request, 'resolved_on')]
-                    + $request->only(['category', 'vendor', 'method', 'charged_to', 'receipt_uuid', 'resolution'])),
+                    + $request->only(['category', 'vendor', 'method', 'charged_to', 'receipt_uuid', 'resolution', 'over_limit_reason'])),
                 'cancelled' => $svc->cancel($by, $m, (string) ($request->input('reason') ?? $request->input('resolution') ?? '')),
                 default => $svc->update($by, $m, $request->only(['status', 'priority', 'title', 'details', 'assigned_to_id', 'assignee_name', 'photos'])),
             };

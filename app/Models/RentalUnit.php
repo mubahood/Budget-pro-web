@@ -16,7 +16,7 @@ class RentalUnit extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['rent_minor' => 'integer', 'deposit_minor' => 'integer', 'cycle_months' => 'integer', 'bedrooms' => 'integer', 'bathrooms' => 'integer', 'size_sqm' => 'integer'];
+    protected $casts = ['rent_minor' => 'integer', 'deposit_minor' => 'integer', 'cycle_months' => 'integer', 'bedrooms' => 'integer', 'bathrooms' => 'integer', 'size_sqm' => 'integer', 'commission_bp' => 'integer', 'commission_minor' => 'integer'];
 
     public const KINDS = ['single_room', 'double_room', 'self_contained', 'studio', 'apartment', 'house', 'shop', 'office', 'stall', 'warehouse', 'other'];
 

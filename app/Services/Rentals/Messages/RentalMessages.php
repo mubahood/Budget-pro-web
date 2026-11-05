@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class RentalMessages
 {
-    public const KINDS = ['bill', 'due', 'overdue', 'final', 'receipt', 'statement', 'notice'];
+    public const KINDS = ['bill', 'due', 'overdue', 'final', 'receipt', 'statement', 'notice', 'approval', 'year_summary'];
 
     public const DEFAULTS = [
         'bill' => 'Hello {tenant}, your bill for {unit}, {property} is {amount}, due {due_date}. Balance: {balance}. Pay to: {pay_to}. Thank you. {account}',
@@ -35,9 +35,11 @@ final class RentalMessages
         'receipt' => 'Thank you {tenant}. We received {amount} for {unit}, {property} (receipt {receipt}). Balance: {balance}. Paid up to {paid_up_to}. {account}',
         'statement' => 'Hello {landlord}, your statement for {period} is ready. Balance owed to you: {balance}. {link} {account}',
         'notice' => 'Hello {tenant}, we have your notice to leave {unit}, {property} on {due_date}. Please clear any balance before then. {account}',
+        'approval' => 'Hello {landlord}, a repair at {unit}, {property} needs your answer: {what}. The quote is {amount}. May we go ahead? {link} {photo} {account}',
+        'year_summary' => 'Hello {landlord}, your year summary for {period} is ready. It is a summary of money handled, not tax advice. {link} {account}',
     ];
 
-    public const PLACEHOLDERS = ['tenant', 'landlord', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'receipt', 'period', 'account', 'pay_to', 'link'];
+    public const PLACEHOLDERS = ['tenant', 'landlord', 'unit', 'property', 'amount', 'balance', 'due_date', 'paid_up_to', 'receipt', 'period', 'account', 'pay_to', 'link', 'what', 'photo'];
 
     /** The account's text for a kind (its own, or the default). */
     public static function template(int $companyId, string $kind): string
@@ -88,6 +90,32 @@ final class RentalMessages
 
         return self::fill($template, ['landlord' => $landlord, 'period' => $period, 'balance' => Minor::format(max(0, $balanceMinor), $companyId), 'link' => (string) $link,
             'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
+    }
+
+    /**
+     * The message asking a landlord about a repair above their limit (LC-17). $link: the words and address of where they answer, or what to do when
+     * they have no sign-in; $photo: the repair's photo, when there is one.
+     */
+    public static function forApproval(int $companyId, string $landlord, string $unit, string $property, string $what, int $quoteMinor, string $link, ?string $photo = null): string
+    {
+        $template = self::template($companyId, 'approval');
+        if (! str_contains($template, '{link}')) {
+            $template .= ' {link}';
+        }
+
+        return self::fill($template, ['landlord' => $landlord, 'unit' => $unit, 'property' => $property, 'what' => $what, 'amount' => Minor::format($quoteMinor, $companyId), 'link' => $link,
+            'photo' => $photo !== null ? 'Photo: '.$photo : '', 'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
+    }
+
+    /** The message that sends a landlord their year summary (LC-18), with its link wherever the account's own words leave it out. */
+    public static function forYearSummary(int $companyId, string $landlord, string $year, string $link): string
+    {
+        $template = self::template($companyId, 'year_summary');
+        if (! str_contains($template, '{link}')) {
+            $template .= ' {link}';
+        }
+
+        return self::fill($template, ['landlord' => $landlord, 'period' => $year, 'link' => $link, 'account' => (string) Company::withoutGlobalScopes()->whereKey($companyId)->value('name')]);
     }
 
     /**

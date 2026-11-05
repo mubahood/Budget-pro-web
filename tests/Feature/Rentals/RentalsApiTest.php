@@ -46,7 +46,7 @@ class RentalsApiTest extends ApiTestCase
         'GET landlords/{id}/statement' => 'rentals_landlords', 'POST landlords/{id}/login' => 'rentals_settings',
         'GET payouts' => 'rentals_landlords', 'POST payouts' => 'rentals_landlords', 'POST payouts/{id}/reverse' => 'rentals_reverse',
         'GET properties' => 'rentals_view', 'POST properties' => 'rentals_manage', 'GET properties/{id}' => 'rentals_view', 'PUT properties/{id}' => 'rentals_manage',
-        'PUT properties/{id}/staff' => 'rentals_settings',
+        'PUT properties/{id}/staff' => 'rentals_settings', 'POST properties/{id}/handover' => 'rentals_manage',
         'GET units' => 'rentals_view', 'POST units' => 'rentals_manage', 'GET units/{id}' => 'rentals_view', 'PUT units/{id}' => 'rentals_manage',
         'GET tenants' => 'rentals_view', 'POST tenants' => 'rentals_manage', 'GET tenants/{id}' => 'rentals_view', 'PUT tenants/{id}' => 'rentals_manage',
         'POST tenants/{id}/login' => 'rentals_settings',

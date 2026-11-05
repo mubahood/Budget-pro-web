@@ -20,6 +20,7 @@ use App\Models\StoredFile;
 use App\Services\Rentals\Collections\Arrears;
 use App\Services\Rentals\Figures;
 use App\Services\Rentals\Landlords\LandlordAccounts;
+use App\Services\Rentals\Landlords\StatementBook;
 use App\Services\Rentals\Landlords\StatementPdf;
 use App\Services\Rentals\Payments\Receipt;
 use App\Services\Rentals\RentalLinks;
@@ -266,12 +267,21 @@ final class PersonView
             ->map(fn ($u) => $this->unitForLandlord($u, $leases->get($u->id)))->values()->all()]);
     }
 
-    /** The landlord's statement for a month ('Y-m'; the month so far for the current one): LandlordAccounts::statement. */
+    /**
+     * The landlord's statement for a month ('Y-m'; the month so far for the current one): the issued copy of a closed month, else the journal as it
+     * stands, with a stamp that says so (StatementBook::read).
+     */
     public function statement(string $month): array
     {
         [$from, $to] = $this->monthRange($month);
 
-        return LandlordAccounts::statement($this->landlord(), $from, $to);
+        return StatementBook::read($this->landlord(), $from, $to);
+    }
+
+    /** The landlord's closed months with an issued statement: Y-m => its number and day. @return array<string, array{number: string, issued_on: ?string}> */
+    public function issuedMonths(): array
+    {
+        return StatementBook::issuedMonths($this->landlord());
     }
 
     /** A 30-minute link to the statement's PDF. @return array{url: string, expires_in: int} */
@@ -291,6 +301,9 @@ final class PersonView
     {
         [$from, $to] = $this->monthRange($month);
         $landlord = $this->landlord();
+        if (($copy = StatementBook::current($landlord, $month)) !== null) {
+            StatementBook::markOpened($copy); // the landlord, on their own sign-in
+        }
 
         return ['bytes' => StatementPdf::render($landlord, $from, $to), 'filename' => StatementPdf::filename($landlord, $from, $to)];
     }
@@ -345,7 +358,7 @@ final class PersonView
         $last = RentalPayout::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $l->id)->whereNull('reversed_at')->orderByDesc('paid_on')->orderByDesc('id')->first();
         $props = RentalProperty::withoutGlobalScopes()->where('company_id', $cid)->where('landlord_id', $l->id)->where('status', 'active')->pluck('name', 'id');
         $let = RentalLease::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->whereIn('status', RentalLease::LIVE)->select('unit_id');
-        $vacant = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->where('status', '!=', 'inactive')
+        $vacant = RentalUnit::withoutGlobalScopes()->where('company_id', $cid)->whereIn('property_id', $props->keys()->all() ?: [0])->whereNotIn('status', ['inactive', 'in_use'])
             ->whereNotIn('id', $let)->orderBy('property_id')->orderBy('code')->limit($vacantShown)->get();
 
         return ['owed_minor' => LandlordAccounts::balance($l), 'month' => array_map('intval', $month['totals']),

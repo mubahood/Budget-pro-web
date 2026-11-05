@@ -13,8 +13,11 @@ use Illuminate\Support\Carbon;
  * the messages always leave from the person's own phone (WhatsApp or SMS links): the server never sends them.
  *
  * Rendering: known placeholders are replaced, unknown ones stay as typed, a line whose placeholders all came out
- * empty is dropped (so "Pay to: {payment_number}" disappears when there is no number), three or more new lines
- * become two, and the result is trimmed.
+ * empty is dropped (so "Pay to: {payment_number}" disappears when there is no number), and a heading ending in ":" goes
+ * with the line it introduced. A line with {days_left} goes once the day has passed, because it cannot read right without
+ * it. Three or more new lines become two, and the result is trimmed. {paid_so_far} and {still_owed} are empty at
+ * zero, so a line built on them says nothing about money that does not exist (never "paid UGX 0"). {receipt_link} is
+ * the payment's own signed link, when whoever renders it has one; the phone has none, so its line goes.
  */
 final class MessageTemplates
 {
@@ -23,7 +26,7 @@ final class MessageTemplates
     public const LANGS = ['en', 'lg', 'sw'];
 
     public const PLACEHOLDERS = ['name', 'amount', 'pledged', 'paid', 'balance', 'payment', 'how', 'event', 'date', 'days_left', 'venue',
-        'treasurer', 'treasurer_phone', 'payment_number', 'payment_details', 'meeting_when', 'meeting_where'];
+        'treasurer', 'treasurer_phone', 'payment_number', 'payment_details', 'meeting_when', 'meeting_where', 'paid_so_far', 'still_owed', 'receipt_link'];
 
     /** The default text of a kind in a language (English when that language has none). */
     public static function defaultText(string $kind, string $lang = 'en'): string
@@ -48,7 +51,8 @@ final class MessageTemplates
         foreach (explode("\n", str_replace("\r\n", "\n", $text)) as $line) {
             $known = 0;
             $empty = 0;
-            $out = preg_replace_callback('/\{([a-z_]+)\}/', function ($m) use ($values, &$known, &$empty) {
+            $noDay = false;
+            $out = preg_replace_callback('/\{([a-z_]+)\}/', function ($m) use ($values, &$known, &$empty, &$noDay) {
                 if (! array_key_exists($m[1], $values)) {
                     return $m[0];
                 }
@@ -56,11 +60,16 @@ final class MessageTemplates
                 $v = (string) $values[$m[1]];
                 if (trim($v) === '') {
                     $empty++;
+                    $noDay = $noDay || $m[1] === 'days_left';
                 }
 
                 return $v;
             }, $line);
-            if ($known > 0 && $empty === $known) {
+            if (($known > 0 && $empty === $known) || $noDay) {
+                if ($lines !== [] && str_ends_with(rtrim((string) end($lines)), ':')) {
+                    array_pop($lines);
+                }
+
                 continue;
             }
             $lines[] = $out;
@@ -90,6 +99,8 @@ final class MessageTemplates
         $today = ($today ?? now())->copy()->startOfDay();
         $left = $date ? (int) round($today->diffInDays($date, false)) : null;
         $methods = ['cash' => 'Cash', 'mobile_money' => 'Mobile money', 'bank' => 'Bank', 'card' => 'Card', 'cheque' => 'Cheque', 'other' => 'Other'];
+        $paid = (float) ($p->paid_amount ?? 0);
+        $owed = $p ? max(0, (float) ($p->not_paid_amount ?? ((float) ($p->amount ?? 0) - $paid))) : 0;
 
         return [
             'name' => $p ? (trim((string) ($p->name ?? '')) ?: 'friend') : '',
@@ -109,10 +120,13 @@ final class MessageTemplates
             'payment_details' => implode("\n", self::paymentLines($pay)),
             'meeting_when' => (string) ($settings['meeting']['when'] ?? ''),
             'meeting_where' => (string) ($settings['meeting']['where'] ?? ''),
+            'paid_so_far' => $p && $paid > 0 ? $money($paid) : '',
+            'still_owed' => $p && $owed > 0 ? $money($owed) : '',
+            'receipt_link' => $x ? trim((string) ($x->receipt_link ?? '')) : '',
         ];
     }
 
-    /** "MTN MoMo: 0772 123 456 (Doreen)", "Airtel Money: …", "Bank: Stanbic, Mukono, A/C 9030… (Brian T.)". @return list<string> */
+    /** "MTN MoMo: 0772 123 456 (Doreen)", "Airtel Money: …", "Bank: Stanbic, Mukono, A/C 9030… (Brian T.)", then the note. @return list<string> */
     public static function paymentLines(array $d): array
     {
         $named = fn (string $v, string $name) => $name === '' ? $v : "{$v} ({$name})";
@@ -126,6 +140,11 @@ final class MessageTemplates
         }
         if ($s('bank') !== '' || $s('bank_account') !== '') {
             $lines[] = 'Bank: '.$named(implode(', ', array_filter([$s('bank'), $s('bank_account') !== '' ? 'A/C '.$s('bank_account') : ''])), $s('bank_account_name'));
+        }
+
+        // The note closes the block, and has nothing to say without a way to pay.
+        if ($lines !== [] && $s('note') !== '') {
+            $lines[] = $s('note');
         }
 
         return $lines;

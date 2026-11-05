@@ -8,6 +8,7 @@ use App\Models\ContributionPayment;
 use App\Models\ContributionRecord;
 use App\Services\Budget\BudgetAccess;
 use App\Services\Budget\ContributionPayments;
+use App\Support\Decimal;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,21 +31,27 @@ class ContributionPaymentController extends Controller
     public function index(Request $request, $id): JsonResponse
     {
         $record = $this->pledge($request, $id);
-        if ($record === null) {
+        if ($record === null || ! BudgetAccess::canOpen($request->user(), (int) $record->budget_program_id)) {
             return $this->notFound('Pledge not found.');
         }
-        $rows = ContributionPayment::withoutGlobalScopes()->with('receivedBy:id,name')->where('company_id', $record->company_id)
+        $rows = ContributionPayment::withoutGlobalScopes()->with(['receivedBy:id,name', 'createdBy:id,name'])->where('company_id', $record->company_id)
             ->where('contribution_record_id', $record->id)->where('is_deleted', 0)->orderByDesc('id')->get();
         $reversed = $rows->whereNotNull('reverses_id')->pluck('reverses_id')->map(fn ($v) => (int) $v)->all();
 
         return $this->success([
-            'pledge' => $this->figures($record),
+            'pledge' => $this->figures($record, $request),
             'payments' => $rows->map(fn (ContributionPayment $p) => $this->present($p, in_array((int) $p->id, $reversed, true)))->values()->all(),
             'abilities' => BudgetAccess::abilities($request->user(), (int) $record->budget_program_id),
         ], 'Payments listed.');
     }
 
-    /** POST contribution-records/{id}/payments {amount, paid_on?, method?, receipt_no?, reference?, notes?, uuid?} */
+    /**
+     * POST contribution-records/{id}/payments {amount, paid_on?, method?, receipt_no?, reference?, notes?, uuid?, received_by_id?, check_duplicates?, confirm_duplicate?}
+     *
+     * received_by_id: who took the money, someone on the event's team; the caller when left out. check_duplicates: ask
+     * possible_duplicate before a likely double payment, as the web form does. An older app cannot answer that
+     * question, so without it the payment is recorded and shown under Worth a look.
+     */
     public function store(Request $request, $id): JsonResponse
     {
         $record = $this->pledge($request, $id);
@@ -62,8 +69,12 @@ class ContributionPaymentController extends Controller
             'reference' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string', 'max:255'],
             'uuid' => ['nullable', 'uuid'],
+            'received_by_id' => ['nullable', 'integer'],
+            'check_duplicates' => ['nullable', 'boolean'],
+            'confirm_duplicate' => ['nullable', 'boolean'],
         ]);
         $data['amount'] = (string) $request->input('amount'); // as typed, never through a float
+        $data['confirm_duplicate'] = ! $request->boolean('check_duplicates') || $request->boolean('confirm_duplicate');
 
         try {
             $r = $this->payments->record((int) $record->company_id, (int) $record->id, $data, (int) $request->user()->id);
@@ -71,7 +82,7 @@ class ContributionPaymentController extends Controller
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
 
-        $body = ['payment' => $this->present($r['payment']), 'pledge' => $this->figures($r['record']->fresh() ?? $r['record']), 'replayed' => $r['replayed']];
+        $body = ['payment' => $this->present($r['payment']), 'pledge' => $this->figures($r['record']->fresh() ?? $r['record'], $request), 'replayed' => $r['replayed']];
 
         return $r['replayed'] ? $this->success($body, 'Payment already recorded.') : $this->created($body, 'Payment recorded.');
     }
@@ -94,7 +105,7 @@ class ContributionPaymentController extends Controller
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
-        $body = ['payment' => $this->present($r['payment']), 'pledge' => $this->figures($r['record']->fresh() ?? $r['record']), 'replayed' => $r['replayed']];
+        $body = ['payment' => $this->present($r['payment']), 'pledge' => $this->figures($r['record']->fresh() ?? $r['record'], $request), 'replayed' => $r['replayed']];
 
         return $r['replayed'] ? $this->success($body, 'Payment already reversed.') : $this->created($body, 'Payment reversed.');
     }
@@ -105,10 +116,11 @@ class ContributionPaymentController extends Controller
             ->where('company_id', (int) $request->user()->company_id)->where('id', (int) $id)->where('is_deleted', 0)->first();
     }
 
-    private function figures(ContributionRecord $r): array
+    private function figures(ContributionRecord $r, Request $request): array
     {
-        return ['id' => (int) $r->id, 'uuid' => $r->uuid, 'name' => $r->name, 'phone' => $r->phone, 'budget_program_id' => (int) $r->budget_program_id,
+        return ['id' => (int) $r->id, 'uuid' => $r->uuid, 'name' => $r->name, 'phone' => BudgetAccess::canSeePhones($request->user(), (int) $r->budget_program_id) ? $r->phone : null, 'budget_program_id' => (int) $r->budget_program_id,
             'amount' => (string) $r->amount, 'paid_amount' => (string) $r->paid_amount, 'not_paid_amount' => (string) $r->not_paid_amount,
+            'extra_amount' => Decimal::max(Decimal::sub((string) $r->paid_amount, (string) $r->amount), '0'),
             'fully_paid' => $r->fully_paid, 'version' => (int) $r->version, 'server_seq' => (int) $r->server_seq];
     }
 
@@ -120,6 +132,8 @@ class ContributionPaymentController extends Controller
             'reference' => $p->reference, 'notes' => $p->notes, 'source' => $p->source, 'reverses_id' => $p->reverses_id ? (int) $p->reverses_id : null,
             'reason' => $p->reason, 'is_reversed' => $reversed, 'received_by_id' => $p->received_by_id ? (int) $p->received_by_id : null,
             'received_by_text' => $p->relationLoaded('receivedBy') ? $p->receivedBy?->name : \App\Models\User::withoutGlobalScopes()->whereKey($p->received_by_id)->value('name'),
+            'created_by_id' => $p->created_by_id ? (int) $p->created_by_id : null,
+            'created_by_text' => $p->relationLoaded('createdBy') ? $p->createdBy?->name : \App\Models\User::withoutGlobalScopes()->whereKey($p->created_by_id)->value('name'),
             'created_at' => $p->created_at?->toIso8601String(), 'server_seq' => (int) $p->server_seq,
         ];
     }

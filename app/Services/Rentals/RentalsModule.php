@@ -26,11 +26,14 @@ final class RentalsModule
     /** Fields a manager may change in Settings. */
     public const WRITABLE = ['mode', 'currency', 'bill_days_before', 'grace_days', 'anchor', 'prorate_first', 'commission_type', 'commission_bp',
         'commission_minor', 'commission_on_items', 'deposit_months', 'deposit_held_by', 'late_fee_type', 'late_fee_minor', 'late_fee_bp',
-        'late_fee_to', 'payment_instructions', 'receipt_footer', 'messages'];
+        'late_fee_to', 'payment_instructions', 'receipt_footer', 'messages', 'ahead_default', 'export_accounts', 'commission_gap_bp', 'withholding_on'];
+
+    /** The journal's seven accounts (ADR 0010 §3): an account may give each its own code for the accountant's file. */
+    public const JOURNAL_ACCOUNTS = ['cash', 'landlord', 'deposit', 'credit', 'income', 'expense', 'equity'];
 
     /** Numbering: sequence column => [prefix, digits]. */
     public const NUMBERS = ['receipt' => ['R-', 6], 'lease' => ['L-', 4], 'payout' => ['PO-', 4], 'expense' => ['EX-', 4],
-        'ticket' => ['MR-', 4], 'tenant' => ['T-', 4], 'landlord' => ['LL-', 3]];
+        'ticket' => ['MR-', 4], 'tenant' => ['T-', 4], 'landlord' => ['LL-', 3], 'statement' => ['ST-', 4], 'payout_run' => ['PR-', 4]];
 
     /** The account's settings row, created with the defaults the first time it is asked for. */
     public static function settings(int $companyId): RentalSetting
@@ -170,6 +173,11 @@ final class RentalsModule
             'receipt_footer' => ['sometimes', 'nullable', 'string', 'max:255'],
             'messages' => ['sometimes', 'nullable', 'array'],
             'messages.*' => ['nullable', 'string', 'max:1000'],
+            'ahead_default' => ['sometimes', 'in:hold,bill'],
+            'commission_gap_bp' => ['sometimes', 'integer', 'min:0', 'max:10000'],
+            'withholding_on' => ['sometimes', 'boolean'],
+            'export_accounts' => ['sometimes', 'nullable', 'array:'.implode(',', self::JOURNAL_ACCOUNTS)],
+            'export_accounts.*' => ['nullable', 'string', 'max:20'],
         ];
     }
 

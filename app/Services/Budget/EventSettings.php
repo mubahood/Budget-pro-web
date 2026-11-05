@@ -4,6 +4,7 @@ namespace App\Services\Budget;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\BudgetProgram;
+use App\Models\ContributionRecord;
 use App\Models\User;
 use App\Support\Phone;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\DB;
  *   groups           its pledge groups, a JSON list of names (an older value typed as text, one per line or
  *                    comma-separated, is still read); empty = the default list (BudgetTemplates::defaultGroups)
  *   settings         JSON: {v, messages: {kind: text}, message_lang, presets: [amounts], currency_display, guests,
- *                    meeting: {when, where}}; keys this version does not know are kept
+ *                    meeting: {when, where}, closing: {held_by, note}, checklist_off}; keys this version does not know are kept
  *   payment_details  JSON: {mtn, mtn_name, airtel, airtel_name, bank, bank_account, bank_account_name, treasurer,
  *                    treasurer_phone, note}: where pledgers pay, shown in messages
  *
@@ -259,6 +260,34 @@ final class EventSettings
         $program->save();
 
         return $program->fresh() ?? $program;
+    }
+
+    /**
+     * Move a group's pledges to another group, or to none (PB-36), in one transaction and through the model, so phones get the
+     * change with their next sync. Only group keys move, never a figure. @return int how many moved
+     */
+    public function moveGroup(User $by, BudgetProgram $program, string $from, ?string $to): int
+    {
+        if (! BudgetAccess::canEditSettings($by, (int) $program->id)) {
+            throw BusinessRuleException::make('forbidden', "Only the event's chair or the owner can change its settings.", ['permission' => 'event_settings']);
+        }
+        $fromKey = (string) EventBook::groupKey($from);
+        $toKey = EventBook::groupKey($to);
+        if ($fromKey === '' || $fromKey === $toKey) {
+            return 0;
+        }
+
+        return DB::transaction(function () use ($program, $fromKey, $toKey) {
+            $moved = 0;
+            ContributionRecord::withoutGlobalScopes()->where('company_id', $program->company_id)->where('budget_program_id', $program->id)->where('is_deleted', 0)
+                ->where('category_id', $fromKey)->orderBy('id')->get()->each(function (ContributionRecord $r) use ($toKey, &$moved) {
+                    $r->category_id = $toKey;
+                    $r->save();
+                    $moved++;
+                });
+
+            return $moved;
+        });
     }
 
     /** The settings with what this person may change and the default texts (the API's GET …/settings). */

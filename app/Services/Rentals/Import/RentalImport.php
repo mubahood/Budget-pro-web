@@ -45,12 +45,13 @@ use Illuminate\Support\Carbon;
  *                commission_flat
  *  units         property_name, code (unique in the property), kind (single_room, double_room, self_contained,
  *                studio, apartment, house, shop, office, stall, warehouse, other), floor, rent (a month), deposit,
- *                cycle_months (1, 3, 6 or 12; monthly, quarterly, half-yearly, yearly), water_meter, power_meter
+ *                cycle_months (1, 3, 6 or 12; monthly, quarterly, half-yearly, yearly), water_meter, power_meter,
+ *                commission_percent or commission_flat (blank: the unit follows its property)
  *  tenancies     property_name, unit_code, tenant_name, phone, email, id_number, start_date (when they moved in),
  *                rent (blank: the unit's), cycle_months (blank: the unit's), deposit_held (the deposit held today),
  *                owed_now (what they owe on the as-of day), credit_now (what they have paid ahead), items (fees beside
  *                rent: "Garbage:10000;Security:20000", add ":agency" when the agency keeps a fee), end_date (the last
- *                day of a fixed term; blank: month to month)
+ *                day of a fixed term; blank: month to month), origin (sitting | new; blank: sitting, a tenant already living there)
  *  opening_cash  method (cash | bank | mobile_money | cheque), amount (in hand on the as-of day)
  *
  * Amounts are typed in the currency's main unit ("1,250,000"); dates as d/m/Y or Y-m-d. Everything up to the period
@@ -64,9 +65,9 @@ final class RentalImport
         'landlords' => ['name', 'phone', 'email', 'address', 'payout_method', 'payout_details', 'commission_percent', 'opening_balance', 'commission_flat'],
         'properties' => ['name', 'landlord_name', 'kind', 'area', 'district', 'address', 'commission_percent', 'deposit_held_by', 'water_rate', 'power_rate',
             'commission_flat'],
-        'units' => ['property_name', 'code', 'kind', 'floor', 'rent', 'deposit', 'cycle_months', 'water_meter', 'power_meter'],
+        'units' => ['property_name', 'code', 'kind', 'floor', 'rent', 'deposit', 'cycle_months', 'water_meter', 'power_meter', 'commission_percent', 'commission_flat'],
         'tenancies' => ['property_name', 'unit_code', 'tenant_name', 'phone', 'email', 'id_number', 'start_date', 'rent', 'cycle_months', 'deposit_held',
-            'owed_now', 'credit_now', 'items', 'end_date'],
+            'owed_now', 'credit_now', 'items', 'end_date', 'origin'],
         'opening_cash' => ['method', 'amount'],
     ];
 
@@ -282,6 +283,8 @@ final class RentalImport
             $asOf = $today;
         } elseif ($asOf->gt($today)) {
             $err('as_of', 0, 'The as-of date cannot be after today.');
+        } elseif (($closed = RentalLedger::closedThrough($cid)) !== null && $asOf->toDateString() <= $closed) {
+            $err('as_of', 0, 'The as-of date is in a month that is closed. Use a later date, or ask the account owner to reopen that month.');
         }
         foreach (array_keys($sheets) as $name) {
             if (! isset(self::SHEETS[$name])) {
@@ -464,7 +467,7 @@ final class RentalImport
         $unitInfo = [];
         foreach ($existingUnits as $uk => $u) {
             $unitInfo[$uk] = ['rent' => (int) $u->rent_minor, 'cycle' => (int) $u->cycle_months, 'live' => isset($live[(int) $u->id]),
-                'off' => in_array($u->status, ['inactive', 'maintenance'], true)];
+                'off' => in_array($u->status, ['inactive', 'maintenance', 'in_use'], true)];
         }
         foreach ($read['units'] as $r) {
             $row = $r['_row'];
@@ -502,10 +505,15 @@ final class RentalImport
             if ($cycle === null) {
                 $bad('units', $row, 'cycle_months must be 1, 3, 6 or 12.');
             }
+            $unitBp = $this->percent($r['commission_percent'] ?? '', fn ($m) => $bad('units', $row, $m));
+            $unitFlat = $this->amount($r['commission_flat'] ?? '', $decimals, false, fn ($m) => $bad('units', $row, "commission_flat: {$m}"));
+            if ($unitBp !== null && $unitFlat !== null) {
+                $bad('units', $row, 'Give either commission_percent or commission_flat, not both.');
+            }
             $units[$uk] = ['_row' => $row, 'property' => $pk, 'data' => array_filter([
                 'code' => mb_substr($code, 0, 40), 'kind' => $kind ?? 'other', 'floor' => $r['floor'] ?? null, 'rent_minor' => $rent, 'deposit_minor' => $deposit,
                 'cycle_months' => $cycle ?? 1, 'water_meter' => $r['water_meter'] ?? null, 'power_meter' => $r['power_meter'] ?? null,
-            ], fn ($v) => $v !== null && $v !== '')];
+            ], fn ($v) => $v !== null && $v !== '') + ($owner ? [] : self::commission($unitBp, $unitFlat))];
             $unitInfo[$uk] = ['rent' => (int) $rent, 'cycle' => (int) ($cycle ?? 1), 'live' => false, 'off' => false];
         }
         $company = Company::withoutGlobalScopes()->find($cid);
@@ -604,6 +612,11 @@ final class RentalImport
                     $landlordDeposits[$lk] = ($landlordDeposits[$lk] ?? 0) + $deposit;
                 }
             }
+            $origin = mb_strtolower(trim((string) ($r['origin'] ?? ''))) ?: 'sitting'; // what a move to Estate Ledger brings in was already living there (LC-22)
+            if (! in_array($origin, RentalLease::ORIGINS, true)) {
+                $bad('tenancies', $row, 'origin must be sitting or new.');
+                $origin = 'sitting';
+            }
             $money['owed_minor'] += $owed;
             $money['credit_minor'] += $credit;
             $money['deposits_minor'] += $deposit;
@@ -611,7 +624,7 @@ final class RentalImport
                 'tenant' => array_filter(['name' => $name, 'phone' => $phone, 'email' => $r['email'] ?? null, 'id_number' => $r['id_number'] ?? null], fn ($v) => $v !== null && $v !== '')
                     + ($person === null ? ['allow_duplicate' => true] : []),
                 'data' => ['start_date' => $start?->toDateString(), 'end_date' => $end?->toDateString(), 'rent_minor' => (int) $rent, 'cycle_months' => (int) ($cycle ?? 1), 'deposit_minor' => $deposit,
-                    'items' => $items, 'import' => ['as_of' => $asOf->toDateString(), 'owed_minor' => $owed, 'credit_minor' => $credit, 'deposit_held_minor' => $deposit]]];
+                    'items' => $items, 'origin' => $origin, 'import' => ['as_of' => $asOf->toDateString(), 'owed_minor' => $owed, 'credit_minor' => $credit, 'deposit_held_minor' => $deposit]]];
         }
         foreach ($tenancies as $i => $t) {
             if ($t['person'] !== null && isset($existing['tenants'][$t['person']])) {

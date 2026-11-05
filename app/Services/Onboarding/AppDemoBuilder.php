@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
 class AppDemoBuilder
 {
     /** Bumped when a build changes what these accounts hold: a live one built by an older version is rebuilt on the next run. */
-    public const BUILD = 1;
+    public const BUILD = 2;
 
     /** @var list<string> sample entries a rule refused (logged, never fatal) */
     public array $skipped = [];
@@ -90,6 +90,7 @@ class AppDemoBuilder
                     $made = $pledges->seed($this->co->fresh(), $this->manager, $this->committee(), $this->realNow, $this->tz);
                     $this->skipped = array_merge($this->skipped, $pledges->skipped);
                     $this->made += ['events' => $made['events'], 'wedding' => $made['wedding']];
+                    $this->skipped = array_merge($this->skipped, (new DemoPledgeExtras())->story($this->co->fresh(), $made['events'], $this->staff, $this->manager, $this->realNow, $this->tz));
                 }
             });
         } finally {
@@ -153,6 +154,7 @@ class AppDemoBuilder
             $pledges = new PublicDemoWedding();
             $today = $pledges->keepToday($this->co, $this->manager, (array) ($this->made['events'] ?? []), $this->realNow, $this->tz);
             $this->skipped = array_merge($this->skipped, $pledges->skipped);
+            (new DemoPledgeExtras())->remindToday($this->co, (array) ($this->made['events'] ?? []), $this->manager, $this->realNow, $this->tz);
 
             return ['added' => $today['pledges'] + $today['payments'], 'repairs' => []];
         } finally {
@@ -183,7 +185,18 @@ class AppDemoBuilder
             }
         }
 
-        return $repairs;
+        // Each button keeps the seat it promises: a visitor who chairs can change or remove them.
+        $committee = $this->committee();
+        foreach ((array) ($this->made['events'] ?? []) as $id) {
+            foreach ($committee as $userId => $role) {
+                if (DB::table('budget_program_members')->where('budget_program_id', $id)->where('user_id', $userId)->where('is_deleted', 0)->where('role', '!=', $role)->update(['role' => $role, 'updated_at' => now()]) > 0) {
+                    $repairs[] = 'seats';
+                }
+            }
+            (new DemoPledgeExtras())->apply((int) $id, (int) $this->manager->id, $committee, false);
+        }
+
+        return array_values(array_unique($repairs));
     }
 
     /** @return array{now: Carbon, tz: string, currency: string} */

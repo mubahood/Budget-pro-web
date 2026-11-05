@@ -22,7 +22,7 @@ return [
             'spent' => ['*' => 1.0], // all paid out: the visit is over
             'status' => ['paid' => 100, 'part' => 0, 'none' => 0],
             'groups' => [
-                ["Groom's family", 8, [50000, 100000, 100000, 200000], 300000],
+                ["Groom's family", 8, [50000, 100000, 100000, 200000], 850000], // more than the visit cost: In hand is never below zero
                 ['Friends', 5, [50000, 50000, 100000]],
                 ['Others', 2, [20000, 50000]],
             ],
@@ -35,7 +35,7 @@ return [
             'spent' => [
                 'Omutwalo (bride price envelope)' => 0.0, "Kanzu for the bride's father" => 1.0, "Coat (jacket) for the bride's father" => 1.0,
                 "Gomesi for the bride's mother" => 1.0, 'Gomesi for the ssenga' => 1.0, 'Gomesi for the aunts' => 0.5, 'Kanzu and coat for the groom' => 1.0,
-                'Matching kanzus for the delegation' => 0.6, 'Decor: stage, drapes and flowers' => 0.3, 'Omwogezi (spokesman)' => 0.5,
+                'Matching kanzus for the delegation' => 0.6, 'Decor: stage, drapes and flowers' => 0.1, 'Omwogezi (spokesman)' => 0.5,
                 'Photo and video' => 0.4, 'Tents (100 seats each)' => 0.5, 'Coaster bus for the delegation' => 0.5,
             ],
             'status' => ['paid' => 40, 'part' => 32, 'none' => 28],
@@ -55,7 +55,7 @@ return [
             'meeting' => ['when' => 'Thursdays at 6:30 pm', 'where' => 'Mukono Resort, conference room'],
             'reminder' => "Hello {name}! {event} is in {days_left} days ({date}).\nYou pledged {amount}, paid {paid}; {balance} to go.\nMTN MoMo: {payment_number}\nTreasurer: {treasurer} {treasurer_phone}\nThank you for standing with Brian and Grace!",
             'spent' => [
-                'Church wedding fees (booking, service, certificate)' => 1.0, 'Pre-marital counselling' => 1.0, 'Garden or hall hire' => 0.5,
+                'Buffet' => 0.2, 'Church wedding fees (booking, service, certificate)' => 1.0, 'Pre-marital counselling' => 1.0, 'Garden or hall hire' => 0.5,
                 'Decor package' => 0.4, 'Wedding gown' => 1.1, "Groom's suit" => 1.0, 'Wedding rings' => 1.0, 'Photo and video' => 0.5, 'MC' => 0.5,
                 'DJ' => 0.3, 'Bridal car (with driver and fuel)' => 0.3, 'Invitation cards' => 1.0,
             ],

@@ -53,7 +53,7 @@ class DashboardController extends Controller
             'net' => (float) (($finance->income ?? 0) - ($finance->expense ?? 0)),
         ];
 
-        $budget = DB::table('budget_programs')
+        $budget = \App\Services\Budget\BudgetAccess::limitToSeats(DB::table('budget_programs'), $request->user(), 'id') // only events this person has a seat on (PB-09)
             ->where('company_id', $companyId)
             ->selectRaw('COUNT(*) as cnt, COALESCE(SUM(budget_total),0) as budget_total, COALESCE(SUM(budget_spent),0) as budget_spent, COALESCE(SUM(total_collected),0) as collected')
             ->first();

@@ -459,6 +459,9 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // Budget / fundraising
         // A 30-minute signed link to the event's budget PDF (routes/web.php budget-program.pdf).
         Route::post('budget-programs/{id}/print-link', [BudgetProgramController::class, 'printLink'])->whereNumber('id')->middleware('throttle:30,1');
+        // Read-only: the event's money in one set of words, and who can be named as having taken money or a pledge.
+        Route::get('budget-programs/{id}/figures', [BudgetProgramController::class, 'figures'])->whereNumber('id');
+        Route::get('budget-programs/{id}/team', [BudgetProgramController::class, 'team'])->whereNumber('id');
         apiCrud('budget-programs', BudgetProgramController::class);
         apiCrud('budget-item-categories', BudgetItemCategoryController::class);
         apiCrud('budget-items', BudgetItemController::class);
@@ -470,6 +473,15 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::get('contribution-records/{id}/payments', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'index'])->whereNumber('id');
         Route::post('contribution-records/{id}/payments', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'store'])->whereNumber('id');
         Route::post('contribution-payments/{id}/reverse', [\App\Http\Controllers\Api\V1\ContributionPaymentController::class, 'reverse'])->whereNumber('id');
+        // Spending (PB-13): append-only; a reversal is a new row. Who may write is decided per event in the controller (BudgetAccess).
+        Route::get('budget-items/{id}/payments', [\App\Http\Controllers\Api\V1\BudgetPaymentController::class, 'index'])->whereNumber('id');
+        Route::post('budget-items/{id}/payments', [\App\Http\Controllers\Api\V1\BudgetPaymentController::class, 'store'])->whereNumber('id');
+        Route::get('budget-programs/{id}/budget-payments', [\App\Http\Controllers\Api\V1\BudgetPaymentController::class, 'ledger'])->whereNumber('id');
+        Route::post('budget-programs/{id}/budget-payments', [\App\Http\Controllers\Api\V1\BudgetPaymentController::class, 'storeOffBudget'])->whereNumber('id');
+        Route::post('budget-payments/{id}/reverse', [\App\Http\Controllers\Api\V1\BudgetPaymentController::class, 'reverse'])->whereNumber('id');
+        // A wrong pledge is withdrawn with a reason, and can be put back (PB-04); who may is BudgetAccess::canWithdraw.
+        Route::post('contribution-records/{id}/withdraw', [ContributionRecordController::class, 'withdraw'])->whereNumber('id');
+        Route::post('contribution-records/{id}/put-back', [ContributionRecordController::class, 'putBack'])->whereNumber('id');
         // Budget templates (read only, ETag) and an event's settings; who may change what: BudgetAccess, in the controller.
         Route::get('budget-templates', [\App\Http\Controllers\Api\V1\BudgetTemplateController::class, 'index']);
         Route::get('budget-templates/{key}', [\App\Http\Controllers\Api\V1\BudgetTemplateController::class, 'show'])->where('key', '[a-z0-9-]+');

@@ -110,7 +110,9 @@ class BackupTest extends TestCase
         config([
             'edition.licence_path' => $put('private/licence.json', '{"licence":{}}'),
             'edition.installed_path' => $put('private/installed.json', '{"edition":"standalone"}'),
+            'budget.cards_root' => $this->work.'/event-cards', // this test's own folder, never the machine's real cards
         ]);
+        $put('event-cards/9/card.png', 'png');
         $put('media/products/apple.jpg', 'jpeg');
         $put('media/logos/shop.png', 'png');
         $put('media/receipts/2026/10/r1.jpg', 'receipt');
@@ -130,7 +132,7 @@ class BackupTest extends TestCase
         $entries = array_map(fn ($i) => $zip->getNameIndex($i), range(0, $zip->numFiles - 1));
         sort($entries);
         $this->assertSame([
-            'RESTORE.txt', 'database.sql.gz',
+            'RESTORE.txt', 'database.sql.gz', 'event-cards/9/card.png',
             'files/logos/shop.png', 'files/products/apple.jpg', 'files/receipts/2026/10/r1.jpg',
             'settings/installed.json', 'settings/kernel.env', 'settings/licence.json', 'settings/web.env',
         ], $entries);

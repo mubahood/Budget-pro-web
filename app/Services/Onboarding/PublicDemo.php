@@ -242,7 +242,8 @@ class PublicDemo
             if ($role !== 'owner') {
                 $id = 0;
                 foreach ((array) $data['team'] as [$person, $personRole]) {
-                    if ($personRole === $role) {
+                    // A button names its person where several hold the same role on the account (Pledge & Budget's committee).
+                    if (($r['person'] ?? null) === $person || (! isset($r['person']) && $personRole === $role)) {
                         $id = (int) ($staff[strtolower(strtok($person, ' '))] ?? 0);
                         $name = (string) $person;
                         break;
@@ -498,7 +499,8 @@ class PublicDemo
         }
         if ($kind === 'events') {
             return DB::table('budget_programs')->where('company_id', $company->id)->count() >= count(PublicDemoWedding::names())
-                && DB::table('contribution_records')->where('company_id', $company->id)->where('is_deleted', 0)->count() >= 10;
+                && DB::table('contribution_records')->where('company_id', $company->id)->where('is_deleted', 0)->count() >= 10
+                && ! DemoPledgeExtras::inHandBelowZero($company); // a visitor paid out more than came in: In hand is never negative on the demo
         }
         $products = DB::table('stock_items')->where('company_id', $company->id)->where('is_deleted', 0)->count();
         $categories = DB::table('stock_categories')->where('company_id', $company->id)->count();

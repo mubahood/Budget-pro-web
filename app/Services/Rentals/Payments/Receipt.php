@@ -36,7 +36,7 @@ final class Receipt
 
     /** How each method reads on a receipt. */
     public const METHODS = ['cash' => 'Cash', 'mobile_money' => 'Mobile money', 'bank' => 'Bank', 'cheque' => 'Cheque', 'deposit' => 'From the deposit',
-        'waiver' => 'Forgiven', 'opening' => 'Brought forward'];
+        'waiver' => 'Forgiven', 'opening' => 'Brought forward', RentalPayment::DIRECT => 'Paid to the landlord directly, recorded by the agency.'];
 
     /**
      * @return array{header: list<string>, lines: list<array{0: string, 1: string}>, settled: list<array{0: string, 1: string}>,
@@ -108,7 +108,7 @@ final class Receipt
             $after[] = ['Paid up to', $pos['paid_up_to'] ? Carbon::parse($pos['paid_up_to'])->format('j M Y') : 'Not yet'];
         }
         if ($receivedBy !== '') {
-            $after[] = ['Received by', $receivedBy];
+            $after[] = [$p->method === RentalPayment::DIRECT ? 'Recorded by' : 'Received by', $receivedBy];
         }
         $footer = array_values(array_filter([trim((string) ($settings->receipt_footer ?? '')), 'Thank you.']));
 

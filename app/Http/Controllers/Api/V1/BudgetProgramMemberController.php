@@ -15,7 +15,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * An event's committee (roadmap 02 §6): GET/POST budget-programs/{id}/members, PUT/PATCH/DELETE
- * budget-programs/{id}/members/{memberId}. Every team member reads it; the chair of the event, the owner
+ * budget-programs/{id}/members/{memberId}. Who has a seat or full access reads it; the chair of the event, the owner
  * and anyone with manage_budget change it (BudgetAccess::COMMITTEE). Inviting someone new by phone also
  * needs manage_team (it adds a person to the account).
  */
@@ -30,7 +30,7 @@ class BudgetProgramMemberController extends Controller
     public function index(Request $request, $id): JsonResponse
     {
         $program = $this->program($request, $id);
-        if ($program === null) {
+        if ($program === null || ! BudgetAccess::canOpen($request->user(), (int) $program->id)) {
             return $this->notFound('Event not found.');
         }
 

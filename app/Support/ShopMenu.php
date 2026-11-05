@@ -71,13 +71,14 @@ final class ShopMenu
                 ['label' => 'Arrears', 'icon' => 'fa-triangle-exclamation', 'route' => 'rentals.arrears', 'path' => '/rentals/arrears', 'match' => ['rentals.arrears'], 'can' => 'rentals_view', 'caption' => 'Rent'],
                 ['label' => 'Payments', 'icon' => 'fa-receipt', 'route' => 'rentals.payments', 'path' => '/rentals/payments', 'match' => ['rentals.payments', 'rentals.collect'], 'can' => 'rentals_view', 'caption' => 'Rent'],
                 ['label' => 'Bills', 'icon' => 'fa-file-invoice', 'route' => 'rentals.billing', 'path' => '/rentals/billing', 'match' => ['rentals.billing'], 'can' => 'rentals_bill', 'caption' => 'Rent'],
-                ['label' => 'Properties', 'icon' => 'fa-building', 'route' => 'rentals.properties', 'path' => '/rentals/properties', 'match' => ['rentals.properties*', 'rentals.units*'], 'can' => 'rentals_view', 'caption' => 'Buildings'],
+                ['label' => 'Properties', 'icon' => 'fa-building', 'route' => 'rentals.properties', 'path' => '/rentals/properties', 'match' => ['rentals.properties*', 'rentals.units*', 'rentals.commission-change'], 'can' => 'rentals_view', 'caption' => 'Buildings'],
                 ['label' => 'Tenants', 'icon' => 'fa-users', 'route' => 'rentals.tenants', 'path' => '/rentals/tenants', 'match' => ['rentals.tenants*', 'rentals.leases*', 'rentals.move-in'], 'can' => 'rentals_view', 'caption' => 'Buildings'],
                 ['label' => 'Repairs', 'icon' => 'fa-screwdriver-wrench', 'route' => 'rentals.maintenance', 'path' => '/rentals/maintenance', 'match' => ['rentals.maintenance'], 'can' => 'rentals_maintenance', 'caption' => 'Buildings'],
                 ['label' => 'Meter readings', 'icon' => 'fa-gauge', 'route' => 'rentals.meters', 'path' => '/rentals/meters', 'match' => ['rentals.meters'], 'can' => 'rentals_maintenance', 'caption' => 'Buildings'],
-                ['label' => 'Landlords', 'icon' => 'fa-user-tie', 'route' => 'rentals.landlords', 'path' => '/rentals/landlords', 'match' => ['rentals.landlords*', 'rentals.payouts'], 'can' => 'rentals_landlords', 'owner_mode' => 'hide', 'caption' => 'Money'],
+                ['label' => 'Landlords', 'icon' => 'fa-user-tie', 'route' => 'rentals.landlords', 'path' => '/rentals/landlords', 'match' => ['rentals.landlords*', 'rentals.payouts*'], 'can' => 'rentals_landlords', 'owner_mode' => 'hide', 'caption' => 'Money'],
                 ['label' => 'Expenses', 'icon' => 'fa-wallet', 'route' => 'rentals.expenses', 'path' => '/rentals/expenses', 'match' => ['rentals.expenses'], 'can' => 'rentals_expenses', 'caption' => 'Money'],
                 ['label' => 'Cash book', 'icon' => 'fa-book', 'route' => 'rentals.cash', 'path' => '/rentals/cash', 'match' => ['rentals.cash'], 'can' => 'rentals_expenses', 'caption' => 'Money'],
+                ['label' => 'Month end', 'icon' => 'fa-calendar-check', 'route' => 'rentals.month-end', 'path' => '/rentals/month-end', 'match' => ['rentals.month-end*'], 'can' => 'rentals_close', 'caption' => 'Money'],
                 ['label' => 'Reports', 'icon' => 'fa-chart-column', 'route' => 'rentals.reports', 'path' => '/rentals/reports', 'match' => ['rentals.reports*'], 'can' => 'rentals_reports', 'caption' => 'Money'],
                 ['label' => 'Rent settings', 'icon' => 'fa-sliders', 'route' => 'rentals.settings', 'path' => '/rentals/settings', 'match' => ['rentals.settings'], 'can' => 'rentals_settings'],
                 ['label' => 'Bring in tenants', 'icon' => 'fa-file-import', 'route' => 'rentals.import', 'path' => '/rentals/import', 'match' => ['rentals.import'], 'can' => 'rentals_settings'],
@@ -86,6 +87,8 @@ final class ShopMenu
                 ['label' => 'Units', 'icon' => 'fa-door-open', 'route' => 'rentals.units', 'path' => '/rentals/units', 'match' => ['rentals.units*'], 'can' => 'rentals_view', 'drawn' => false],
                 ['label' => 'Leases', 'icon' => 'fa-file-signature', 'route' => 'rentals.leases', 'path' => '/rentals/leases', 'match' => ['rentals.leases*', 'rentals.move-in'], 'can' => 'rentals_view', 'drawn' => false],
                 ['label' => 'Payouts', 'icon' => 'fa-money-bill-transfer', 'route' => 'rentals.payouts', 'path' => '/rentals/payouts', 'match' => ['rentals.payouts'], 'can' => 'rentals_landlords', 'owner_mode' => 'hide', 'drawn' => false],
+                ['label' => 'Pay many', 'icon' => 'fa-money-bill-transfer', 'route' => 'rentals.payouts.run', 'path' => '/rentals/payouts/run', 'match' => ['rentals.payouts.run*'], 'can' => 'rentals_landlords', 'owner_mode' => 'hide', 'drawn' => false],
+                ['label' => 'Change commission', 'icon' => 'fa-percent', 'route' => 'rentals.commission-change', 'path' => '/rentals/commission-change', 'match' => ['rentals.commission-change'], 'can' => 'rentals_manage', 'owner_mode' => 'hide', 'drawn' => false],
             ]],
             ['key' => 'catalogue', 'label' => 'Shop', 'module' => 'shop', 'entries' => [
                 ['label' => 'Products', 'icon' => 'fa-box', 'route' => 'products.index', 'path' => '/products', 'match' => ['products.*']],
@@ -125,7 +128,7 @@ final class ShopMenu
     }
 
     /**
-     * Whether this person sees an entry (or section): edition, module, feature (any of), permission (any of).
+     * Whether this person sees an entry (or section): gate, edition, module, feature (any of), permission (any of).
      * `$saccoStrict` and `$ownerMode` are asked only for entries that carry their marker; without them those entries show.
      *
      * @param  callable(string): bool  $can  @param  callable(string): bool  $moduleOn  @param  callable(string): bool  $featureOn

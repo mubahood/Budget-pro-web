@@ -38,6 +38,7 @@ final class RentalExport
         'drawings_minor' => 'Owner drawings', 'landlords_minor' => 'Charged to landlords', 'agency_minor' => 'The agency\'s own',
         'held_by_agency_minor' => 'Held by the agency', 'held_by_landlords_minor' => 'Held by landlords', 'units' => 'Units', 'occupied' => 'Occupied', 'tenants' => 'Tenants',
         'vacant' => 'Vacant', 'leases' => 'Leases', 'receipts' => 'Receipts', 'requests' => 'Requests', 'still_open' => 'Still open',
+        'in_use' => 'Used by the landlord or a caretaker', 'direct_minor' => 'Tenants paid the landlord directly',
     ];
 
     /** The longest list a one-page report prints in full. */
@@ -53,7 +54,8 @@ final class RentalExport
      * What a report does on paper beyond its table. hide: columns left off the page (the other files keep them);
      * group: rows under a heading per value, with a subtotal of `sum` (subtotal_words: its words); subtotal_by: a subtotal
      * of `sum` after each value; total_label: the last line's words; show_head: false when the rows say what they are;
-     * portrait: stays upright however many columns.
+     * portrait: stays upright however many columns. A report may carry the same keys itself in its `paper`, so a new report
+     * needs no line here.
      */
     private const PAPER = [
         'rent_roll' => ['hide' => ['property', 'cycle_months', 'asking_minor'], 'group' => 'property', 'sum' => ['rent_minor', 'deposit_held_minor', 'owed_minor', 'overdue_minor']],
@@ -61,7 +63,7 @@ final class RentalExport
         'lease_list' => ['hide' => ['cycle_months']],
         'cash_book' => ['subtotal_by' => 'date', 'sum' => ['in_minor', 'out_minor']],
         'income_statement' => ['hide' => ['section'], 'group' => 'section', 'sum' => ['amount_minor'], 'total_label' => 'Net', 'show_head' => false, 'subtotal_words' => 'Total %s'],
-        'landlord_statement' => ['hide' => ['type', 'property'], 'portrait' => true],
+        'landlord_statement' => ['hide' => ['type', 'property']],
     ];
 
     /** @param array<string, mixed> $report */
@@ -97,7 +99,7 @@ final class RentalExport
     /** @param array<string, mixed> $report */
     public static function pdf(array $report, int $companyId): string
     {
-        $paper = self::PAPER[$report['key'] ?? ''] ?? [];
+        $paper = self::paperOf($report);
         $hide = (array) ($paper['hide'] ?? []);
         $wide = count(array_filter($report['columns'], fn ($c) => ! in_array($c['key'], $hide, true)));
         foreach ($report['sections'] ?? [] as $s) {
@@ -105,6 +107,11 @@ final class RentalExport
         }
         $orientation = $wide > 7 && empty($paper['portrait']) ? 'landscape' : 'portrait';
         $foot = ['left' => implode(' · ', array_filter([(string) ($report['account']['name'] ?? ''), (string) $report['title'], self::period($report, $companyId)])), 'generated' => self::generated($report, $companyId)];
+        $issued = (array) ($report['figures']['statement'] ?? []);
+        if (! empty($issued['number'])) {
+            // An issued copy prints the same each time: its number and proof come first, so a long name is what gets cut. No "generated" day.
+            $foot = ['left' => implode(' · ', array_filter([(string) $issued['number'], 'Proof '.$issued['proof_short'], (string) ($issued['letterhead']['name'] ?? $report['account']['name'] ?? ''), self::period($report, $companyId)])), 'generated' => ''];
+        }
         if (empty($report['one_page'])) {
             return RentalDocument::output(self::html($report, $companyId), 'a4', $orientation, $foot);
         }
@@ -165,6 +172,12 @@ final class RentalExport
         }
 
         return $p;
+    }
+
+    /** What a report does on paper: its own `paper`, else its line in PAPER. @param array<string, mixed> $report @return array<string, mixed> */
+    private static function paperOf(array $report): array
+    {
+        return (array) ($report['paper'] ?? self::PAPER[$report['key'] ?? ''] ?? []);
     }
 
     /** Columns left off the paper for this report (the other files keep them). @return list<string> */
@@ -349,6 +362,9 @@ final class RentalExport
             if (isset($cols[$k]) && $cols[$k] !== 'text') {
                 continue;
             }
+            if (in_array($k, ['in_use', 'direct_minor'], true) && (int) $v === 0) {
+                continue; // said only when there is one
+            }
             $type = str_ends_with($k, '_minor') ? 'money' : (str_ends_with($k, '_bp') ? 'pct' : 'int');
             $out[] = [self::TOTAL_LABELS[$k] ?? ucfirst(str_replace('_', ' ', preg_replace('/_(minor|bp)$/', '', $k))), $v, $type];
         }
@@ -366,13 +382,13 @@ final class RentalExport
     {
         $d = self::decimals($report, $companyId);
         $key = (string) ($report['key'] ?? '');
-        $paper = self::PAPER[$key] ?? [];
+        $paper = self::paperOf($report);
         $doc = ['title' => (string) $report['title'], 'head' => RentalDocument::letterhead($companyId),
             'sub' => array_filter([(string) ($report['subtitle'] ?? ''), ! empty($report['currency']) ? 'Amounts in '.$report['currency'] : ''])];
 
         return match ($key) {
             'monthly_building' => self::monthlyHtml($report, $doc, $d, $fold),
-            'landlord_statement' => self::statementHtml($report, $doc, $d),
+            'landlord_statement' => self::statementHtml($report, $doc, $d, $companyId),
             'tenant_statement' => self::tenantHtml($report, $doc, $d, $companyId),
             default => view('rentals.report', ['doc' => $doc, 'summary' => self::summary($report, $d),
                 'main' => self::paperTable($report['columns'], $report['rows'], (array) ($report['totals'] ?? []), (string) ($paper['total_label'] ?? $report['total_label'] ?? 'Total'), $d, $paper),
@@ -460,10 +476,29 @@ final class RentalExport
     }
 
     /** @param array<string, mixed> $report @param array<string, mixed> $doc */
-    private static function statementHtml(array $report, array $doc, int $d): string
+    private static function statementHtml(array $report, array $doc, int $d, int $companyId): string
+    {
+        $s = (array) ($report['figures']['statement'] ?? []);
+        $doc['head'] = self::issuedHead($s, $companyId) ?? $doc['head'];
+        if (! empty($s['commission_rule'])) {
+            $doc['sub'][] = (string) $s['commission_rule'];
+        }
+
+        return view('rentals.landlord-statement', ['doc' => $doc, 'st' => self::statementData($report, $d)])->render();
+    }
+
+    /**
+     * A landlord statement's page body, for one statement or many on one sheet (LC-08): the balance and how it came about; unit by unit; each line; expenses; paid to you; held
+     * for you, with its sentence; corrections. A section with nothing is dropped.
+     *
+     * @param  array<string, mixed>  $report
+     * @return array<string, mixed>
+     */
+    private static function statementData(array $report, int $d): array
     {
         $t = (array) ($report['totals'] ?? []);
-        $currency = (string) ($report['currency'] ?? '');
+        $s = (array) ($report['figures']['statement'] ?? []);
+        $currency = (string) ($s['currency'] ?? $report['currency'] ?? '');
         $owner = ! collect($report['columns'])->contains(fn ($c) => $c['key'] === 'commission_minor') && ! array_key_exists('commission_minor', $t);
         $v = fn (string $k) => (int) ($t[$k] ?? 0);
         $closing = $v('closing_minor');
@@ -474,17 +509,104 @@ final class RentalExport
                 $money[] = [$label, self::paperMoney($sign * $v($k), $d), false];
             }
         }
+        if ($v('direct_minor') !== 0) {
+            $money[] = ['Tenants paid you directly (with you already)', self::paperMoney($v('direct_minor'), $d), false];
+        }
         $money[] = [$closingLabel, self::paperMoney(abs($closing), $d, true), true];
-        $rows = array_map(function ($r) {
-            $r['unit'] = trim(trim((string) ($r['unit'] ?? '')).', '.trim((string) ($r['property'] ?? '')), ', ');
 
-            return $r;
-        }, $report['rows']);
+        $sections = collect($report['sections'] ?? [])->keyBy(fn ($x) => (string) ($x['key'] ?? ''))->all();
+        $table = function (array $x, array $o = []) use ($d) {
+            return self::paperTable($x['columns'], $x['rows'], (array) ($x['totals'] ?? []), (string) ($x['total_label'] ?? 'Total'), $d, $o + ['title' => (string) $x['title']]);
+        };
+        // The unit table and each line go under a heading per property when there is more than one.
+        $units = null;
+        if (! empty($sections['units']['rows'])) {
+            $many = collect($sections['units']['rows'])->pluck('property')->unique()->count() > 1;
+            $units = $table($sections['units'], $many ? ['hide' => ['property'], 'group' => 'property', 'sum' => ['paid_minor', 'owed_minor']] : ['hide' => ['property']]);
+        }
+        $lines = array_slice($report['rows'], 1);
+        $many = collect($lines)->pluck('property')->filter()->unique()->count() > 1;
+        if ($many) {
+            // A running balance means nothing across headings, and the opening is in the summary above.
+            $rows = array_map(fn ($r) => ['property' => $r['property'] ?: 'Not for one property'] + $r, $lines);
+            $main = self::paperTable($report['columns'], $rows, array_intersect_key($t, array_flip(['gross_minor', 'commission_minor', 'amount_minor'])), 'Total', $d,
+                ['hide' => ['type', 'property', 'balance_minor'], 'group' => 'property', 'sum' => ['gross_minor', 'commission_minor', 'amount_minor'], 'title' => 'Each line']);
+        } else {
+            $rows = array_map(function ($r) {
+                $r['unit'] = trim(trim((string) ($r['unit'] ?? '')).', '.trim((string) ($r['property'] ?? '')), ', ');
 
-        return view('rentals.landlord-statement', ['doc' => $doc, 'money' => $money,
-            'big' => ['label' => $closingLabel, 'value' => trim($currency.' '.self::paperMoney(abs($closing), $d, true)), 'units' => $v('units').' units · '.$v('occupied').' occupied · '.$v('vacant').' vacant'],
-            'main' => self::paperTable($report['columns'], $rows, array_intersect_key($t, array_flip(['gross_minor', 'commission_minor', 'amount_minor'])), 'Total', $d, self::PAPER['landlord_statement'] + ['title' => 'Each line']),
-            'sections' => self::paperSections($report, $d)])->render();
+                return $r;
+            }, $report['rows']);
+            $main = self::paperTable($report['columns'], $rows, array_intersect_key($t, array_flip(['gross_minor', 'commission_minor', 'amount_minor'])), 'Total', $d, self::PAPER['landlord_statement'] + ['title' => 'Each line']);
+        }
+        $replaces = $s['replaces'] ?? null;
+
+        return ['money' => $money, 'title' => (string) $report['title'], 'subtitle' => (string) ($report['subtitle'] ?? ''), 'stamp' => $s['stamp'] ?? null, 'number' => $s['number'] ?? null, 'issued' => $s['issued_at_words'] ?? null,
+            'big' => ['label' => $closingLabel, 'value' => trim($currency.' '.self::paperMoney(abs($closing), $d, true)), 'units' => $v('units').' units · '.$v('occupied').' occupied · '.$v('vacant').' vacant'.($v('in_use') > 0 ? ' · '.$v('in_use').' used by you or a caretaker' : '')],
+            'units' => $units, 'main' => $main,
+            'expenses' => ! empty($sections['expenses']['rows']) ? $table($sections['expenses']) : null,
+            'payouts' => ! empty($sections['payouts']['rows']) ? $table($sections['payouts']) : null,
+            'held' => ! empty($sections['held']['rows']) ? $table($sections['held']) : null,
+            'heldNote' => $owner ? 'This is your tenants\' money until it falls due, and it is not in the balance above.' : 'This is your tenants\' money until it falls due. It is not in your balance.',
+            'corrections' => ! empty($sections['corrections']['rows']) ? $table($sections['corrections']) : null,
+            'owes' => $units === null && ! empty($sections['arrears']['rows']) ? $table($sections['arrears']) : null,
+            'replaces' => is_array($replaces) ? ['number' => (string) ($replaces['number'] ?? ''), 'rows' => array_map(fn ($x) => [(string) $x['what'], self::paperMoney((int) $x['before_minor'], $d, true), self::paperMoney((int) $x['after_minor'], $d, true)], (array) ($replaces['difference'] ?? []))] : null];
+    }
+
+    /**
+     * A month's statements on one sheet (StatementPdf::renderMany): for the first part a cover with the by-landlord table for the office file, then each statement on its own page.
+     *
+     * @param  list<array<string, mixed>>  $reports  this part's statements
+     * @param  array<int, \App\Models\RentalStatement>  $all  every statement of the month
+     */
+    public static function statementsPdf(array $reports, array $all, int $companyId, string $month, int $part): string
+    {
+        $d = Minor::decimals($companyId);
+        $settings = RentalsModule::settings($companyId);
+        $owner = $settings->isOwnerMode();
+        $name = Carbon::parse($month.'-01')->format('F Y');
+        $cover = [];
+        foreach ($all as $s) {
+            $cover[] = ['landlord' => (string) (((array) $s->body)['landlord']['name'] ?? ''), 'number' => (string) $s->number, 'opening_minor' => (int) $s->opening_minor, 'collected_minor' => (int) $s->collected_minor,
+                'commission_minor' => (int) $s->commission_minor, 'expenses_minor' => (int) $s->expenses_minor, 'payouts_minor' => (int) $s->payouts_minor, 'closing_minor' => (int) $s->closing_minor];
+        }
+        $columns = [['key' => 'landlord', 'label' => $owner ? 'Account' : 'Landlord', 'type' => 'text'], ['key' => 'number', 'label' => 'Number', 'type' => 'text'], ['key' => 'opening_minor', 'label' => 'Opening', 'type' => 'money'],
+            ['key' => 'collected_minor', 'label' => 'Collected', 'type' => 'money'], ['key' => 'commission_minor', 'label' => 'Commission', 'type' => 'money'], ['key' => 'expenses_minor', 'label' => 'Expenses', 'type' => 'money'],
+            ['key' => 'payouts_minor', 'label' => $owner ? 'Drawings' : 'Paid out', 'type' => 'money'], ['key' => 'closing_minor', 'label' => 'Closing', 'type' => 'money']];
+        if ($owner) {
+            $columns = array_values(array_filter($columns, fn ($c) => $c['key'] !== 'commission_minor'));
+        }
+        $totals = [];
+        foreach (['opening_minor', 'collected_minor', 'commission_minor', 'expenses_minor', 'payouts_minor', 'closing_minor'] as $k) {
+            $totals[$k] = array_sum(array_column($cover, $k));
+        }
+        $company = (string) (\App\Models\Company::withoutGlobalScopes()->whereKey($companyId)->value('name') ?? '');
+        $title = $owner ? 'Property income statements' : 'Landlord statements';
+        $doc = ['title' => $title, 'head' => RentalDocument::letterhead($companyId), 'sub' => [$name, 'Amounts in '.$settings->currency, 'Part '.$part]];
+        $parts = (int) ceil(count($all) / \App\Services\Rentals\Landlords\StatementPdf::PART_SIZE);
+        if ($parts <= 1) {
+            array_pop($doc['sub']);
+        }
+        $html = view('rentals.landlord-statements', ['doc' => $doc, 'cover' => $part === 1 ? self::paperTable($columns, $cover, $totals, 'Total', $d, ['title' => count($cover).' statements for '.$name]) : null,
+            'statements' => array_map(fn ($r) => self::statementData($r, $d), $reports)])->render();
+
+        return RentalDocument::output($html, 'a4', 'landscape', ['left' => implode(' · ', [$company, $title, $name]), 'generated' => '']);
+    }
+
+    /**
+     * The letterhead as it stood when a statement was issued: its name and lines, the logo it was issued under.
+     *
+     * @param  array<string, mixed>  $s
+     * @return array{name: string, logo: ?string, lines: list<string>}|null
+     */
+    private static function issuedHead(array $s, int $companyId): ?array
+    {
+        $head = $s['letterhead'] ?? null;
+        if (! is_array($head)) {
+            return null;
+        }
+
+        return ['name' => (string) ($head['name'] ?? ''), 'logo' => RentalDocument::issued($companyId, (string) ($head['name'] ?? ''), null, (string) ($head['logo_path'] ?? ''), true)['logo'], 'lines' => array_values((array) ($head['lines'] ?? []))];
     }
 
     /** @param array<string, mixed> $report @param array<string, mixed> $doc */

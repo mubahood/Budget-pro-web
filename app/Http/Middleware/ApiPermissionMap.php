@@ -53,11 +53,13 @@ class ApiPermissionMap
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^financial-reports(/\d+)?$#', 'view_reports'],
         // Pledges, pledge payments and committees: per event (chair, treasurer, secretary…), checked in the
         // controllers by App\Services\Budget\BudgetAccess; the owner and manage_budget keep full access.
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^contribution-records(/\d+(/payments)?)?$#', null],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^contribution-records(/\d+(/payments|/withdraw|/put-back)?)?$#', null],
         [['POST'], '#^contribution-payments/\d+/reverse$#', null],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^budget-programs/\d+/members(/\d+)?$#', null],
         // An event's settings (chair; payment details also the treasurer) and applying a budget template (chair): BudgetAccess.
         [['POST', 'PUT', 'PATCH'], '#^budget-programs/\d+/(settings|apply-template)$#', null],
+        // Spending: the chair, the treasurer or full access on that event (BudgetAccess, in the controller).
+        [['POST'], '#^(budget-items/\d+/payments|budget-programs/\d+/budget-payments|budget-payments/\d+/reverse)$#', null],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^(budget-programs|budget-item-categories|budget-items)(/\d+)?$#', 'manage_budget'],
         // Akiba Ledger P1 (docs/akiba/04-architecture.md §13.2). Reads of the books need sacco_view (or the auditor's
         // sacco_audit_view, checked in the controllers: null here); finer rules (maker ≠ checker, positions) are SaccoAccess.
@@ -125,6 +127,7 @@ class ApiPermissionMap
         [['GET'], '#^rentals/activity$#', 'rentals_settings'],
         [['PUT', 'PATCH'], '#^rentals/properties/\d+/staff$#', 'rentals_settings'],
         [['POST'], '#^rentals/(tenants|landlords)/\d+/login$#', 'rentals_settings'],
+        [['POST'], '#^rentals/properties/\d+/handover$#', 'rentals_manage'],
         [['GET'], '#^rentals/landlords/\d+/statement$#', 'rentals_landlords'],
         [['POST'], '#^rentals/(payments|payouts|expenses)/\d+/reverse$#', 'rentals_reverse'],
         [['GET', 'POST'], '#^rentals/payouts$#', 'rentals_landlords'],

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Rentals;
 use App\Exceptions\BusinessRuleException;
 use App\Models\RentalPayment;
 use App\Models\RentalTenant;
+use App\Services\Rentals\Billing\Billing;
 use App\Services\Rentals\Payments\Payments;
 use App\Services\Rentals\Payments\Receipt;
 use App\Services\Rentals\RentalLinks;
@@ -55,7 +56,8 @@ class PaymentsController extends RentalsController
     /**
      * POST rentals/payments {uuid, lease_id, amount_minor, method, paid_on, reference, notes, device_id, split}: the Payment
      * with its receipt. `split` is a list of {charge_id, amount_minor}: open bills of this lease, each at most what is left
-     * on it, adding up to the amount (Payments::receive refuses anything else).
+     * on it, adding up to the amount (Payments::receive refuses anything else). `bill_ahead_periods` (1 to 12, rentals_bill too) bills the next periods now with
+     * what is more than is owed, instead of holding it as credit (LC-07); a resend with the same uuid is one payment and bills nothing more.
      */
     public function store(Request $request): JsonResponse
     {
@@ -73,7 +75,14 @@ class PaymentsController extends RentalsController
             $replay = is_string($uuid) && $uuid !== '' && RentalPayment::withoutGlobalScopes()->where('company_id', $lease->company_id)->where('uuid', $uuid)->exists();
             $data = $request->only(['method', 'paid_on', 'reference', 'notes']) + ['amount_minor' => $this->minor($request, 'amount_minor'), 'uuid' => $uuid ?: null,
                 'device_id' => $request->input('device_id') ?: $request->header('X-Device-Id'), 'split' => $this->split($request)];
-            $payment = app(Payments::class)->receive($this->user($request), $lease, array_filter($data, fn ($v) => $v !== null), $app ? 'app' : 'web');
+            $data = array_filter($data, fn ($v) => $v !== null);
+            $ahead = $request->input('bill_ahead_periods');
+            if ($ahead !== null && ! is_int($ahead)) {
+                throw BusinessRuleException::make('ahead_invalid', 'Bill between 1 and '.Billing::AHEAD_MAX.' periods ahead.');
+            }
+            $payment = $ahead !== null
+                ? app(Billing::class)->receiveAhead($this->user($request), $lease, $data, $ahead, $app ? 'app' : 'web')
+                : app(Payments::class)->receive($this->user($request), $lease, $data, $app ? 'app' : 'web');
             $shape = $this->shape($request, $payment);
 
             return $replay ? $this->success($shape, 'Already received.') : $this->created($shape, 'Payment received.');

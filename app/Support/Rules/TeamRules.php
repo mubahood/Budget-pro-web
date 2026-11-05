@@ -13,7 +13,7 @@ use Illuminate\Validation\Rule;
 class TeamRules
 {
     /** Permissions that stay with the owner whatever a role override says. */
-    public const OWNER_ONLY = ['billing', 'manage_team', 'manage_settings'];
+    public const OWNER_ONLY = ['billing', 'manage_team', 'manage_settings', 'rentals_reopen'];
 
     /** @return array<string, array<int, mixed>> */
     public static function invite(): array

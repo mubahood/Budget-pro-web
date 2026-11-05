@@ -18,7 +18,11 @@ use Illuminate\Support\Facades\DB;
  *   viewer     reads only
  *
  * One table for the API (controllers), sync (SyncApplier) and the phone (it reads the same roles from the
- * synced budget_program_members rows). Reads stay open to every team member, as in ApiPermissionMap.
+ * synced budget_program_members rows).
+ *
+ * Reading is by seat too (the review's PB-09, decision D3): someone with neither a seat nor full access does not see
+ * the event at all. A viewer sees names and amounts, not phone numbers; taking the list away is for the chair, the
+ * treasurer and the secretary; a list with names into a WhatsApp group for the chair and the treasurer.
  */
 final class BudgetAccess
 {
@@ -30,12 +34,29 @@ final class BudgetAccess
 
     public const COMMITTEE = 'manage_committee';
 
+    /** What was paid out on a budget line (PB-08): the treasurer's job, not only the chair's. */
+    public const SPENDING = 'record_spending';
+
+    /** Any pledge. A secretary or a member can also withdraw one of their own: canWithdraw. */
+    public const WITHDRAW = 'withdraw_pledges';
+
     /** ability => committee roles that have it */
     public const ABILITIES = [
         self::PLEDGE => ['chair', 'treasurer', 'secretary', 'member'],
         self::PAYMENT => ['chair', 'treasurer'],
         self::COMMITTEE => ['chair'],
+        self::SPENDING => ['chair', 'treasurer'],
+        self::WITHDRAW => ['chair', 'treasurer'],
     ];
+
+    /** Committee roles that see phone numbers and reach people. Everyone but the viewer. */
+    private const SEE_PHONES = ['chair', 'treasurer', 'secretary', 'member'];
+
+    /** Committee roles that may take a list of people away: CSV, Excel, the printable list. */
+    private const EXPORT = ['chair', 'treasurer', 'secretary'];
+
+    /** Committee roles that may share a list with names into a WhatsApp group. */
+    private const SHARE_NAMES = ['chair', 'treasurer'];
 
     public static function fullAccess(?User $user): bool
     {
@@ -65,6 +86,155 @@ final class BudgetAccess
         $role = self::roleOn($user, $programId);
 
         return $role !== null && in_array($role, self::ABILITIES[$ability] ?? [], true);
+    }
+
+    /** Full access, or a committee role in $roles (every role when null); false for someone switched off. */
+    private static function holds(?User $user, int $programId, ?array $roles): bool
+    {
+        if ($user === null || Permissions::roleOf($user) === 'none') {
+            return false;
+        }
+        if (self::fullAccess($user)) {
+            return true;
+        }
+        $role = self::roleOn($user, $programId);
+
+        return $role !== null && ($roles === null || in_array($role, $roles, true));
+    }
+
+    /** May open the event at all: its totals, names and amounts, and the committee report. A seat, or full access. */
+    public static function canOpen(?User $user, int $programId): bool
+    {
+        return self::holds($user, $programId, null);
+    }
+
+    public static function canSeePhones(?User $user, int $programId): bool
+    {
+        return self::holds($user, $programId, self::SEE_PHONES);
+    }
+
+    /** May remind, thank or call people from the event. */
+    public static function canRemind(?User $user, int $programId): bool
+    {
+        return self::holds($user, $programId, self::SEE_PHONES);
+    }
+
+    /** May take a list of people away: CSV, Excel, the printable list (PB-09's table). */
+    public static function canExport(?User $user, int $programId): bool
+    {
+        return self::holds($user, $programId, self::EXPORT);
+    }
+
+    public static function canShareNames(?User $user, int $programId): bool
+    {
+        return self::holds($user, $programId, self::SHARE_NAMES);
+    }
+
+    /**
+     * May withdraw this pledge (PB-04): the chair, the treasurer, full access; a secretary or a member only a pledge
+     * they entered themselves, today, that never had a payment.
+     */
+    public static function canWithdraw(?User $user, \App\Models\ContributionRecord|\stdClass $pledge): bool
+    {
+        $programId = (int) $pledge->budget_program_id;
+        if (self::can($user, $programId, self::WITHDRAW)) {
+            return true;
+        }
+        if ($user === null || ! self::can($user, $programId, self::PLEDGE) || (int) $pledge->treasurer_id !== (int) $user->id || empty($pledge->created_at)) {
+            return false;
+        }
+        $tz = \App\Support\LocalDate::timezone((int) $user->company_id);
+
+        return \Illuminate\Support\Carbon::parse($pledge->created_at)->setTimezone($tz)->toDateString() === now($tz)->toDateString()
+            && ! DB::table('contribution_payments')->where('contribution_record_id', (int) $pledge->id)->exists();
+    }
+
+    /** Someone who can be named as having taken money or a pledge on this event: a teammate with a seat or with full access. */
+    public static function onTeam(int $companyId, int $programId, int $userId): bool
+    {
+        $user = User::withoutGlobalScopes()->where('company_id', $companyId)->find($userId);
+
+        return $user !== null && self::canOpen($user, $programId);
+    }
+
+    /**
+     * Narrow a query of an event's rows to the events this person may open.
+     *
+     * @template TQuery
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public static function limitToSeats(mixed $query, ?User $user, string $column = 'budget_program_id'): mixed
+    {
+        if ($user === null || Permissions::roleOf($user) === 'none') {
+            return $query->whereRaw('1 = 0');
+        }
+        if (self::fullAccess($user)) {
+            return $query;
+        }
+
+        return $query->whereIn($column, DB::table('budget_program_members')->where('user_id', $user->id)->where('company_id', $user->company_id)
+            ->where('is_deleted', 0)->where('status', 'active')->select('budget_program_id'));
+    }
+
+    /**
+     * The older read-everything lists (ApiController::my_list, MobileApiController::genericList): the same seats, the
+     * same shape. Models that are not an event's rows pass through untouched.
+     *
+     * @template TQuery
+     *
+     * @param  TQuery  $query
+     * @param  class-string  $model
+     * @return TQuery
+     */
+    public static function narrowLegacyList(mixed $query, ?User $user, string $model): mixed
+    {
+        return match ($model) {
+            \App\Models\BudgetProgram::class => self::limitToSeats($query, $user, 'id'),
+            \App\Models\BudgetItem::class, \App\Models\BudgetItemCategory::class => self::limitToSeats($query, $user),
+            \App\Models\ContributionRecord::class => self::limitToSeats($query, $user)->where('is_deleted', 0)
+                ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', EventBook::KIND_IN_KIND)),
+            default => $query,
+        };
+    }
+
+    /**
+     * Empties the phone numbers of rows this person may not see them on.
+     *
+     * @param  iterable<object>  $rows  each with budget_program_id and phone
+     */
+    public static function hidePhones(iterable $rows, ?User $user): void
+    {
+        $may = [];
+        foreach ($rows as $row) {
+            $event = (int) $row->budget_program_id;
+            $may[$event] ??= self::canSeePhones($user, $event);
+            if (! $may[$event]) {
+                $row->phone = null;
+            }
+        }
+    }
+
+    /**
+     * Narrow a query of an event's rows to the events whose phone numbers this person may see.
+     *
+     * @template TQuery
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public static function limitToPhones(mixed $query, ?User $user, string $column = 'budget_program_id'): mixed
+    {
+        if ($user === null || Permissions::roleOf($user) === 'none') {
+            return $query->whereRaw('1 = 0');
+        }
+        if (self::fullAccess($user)) {
+            return $query;
+        }
+
+        return $query->whereIn($column, DB::table('budget_program_members')->where('user_id', $user->id)->where('company_id', $user->company_id)
+            ->where('is_deleted', 0)->where('status', 'active')->whereIn('role', self::SEE_PHONES)->select('budget_program_id'));
     }
 
     /**

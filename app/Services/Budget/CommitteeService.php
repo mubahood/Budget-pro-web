@@ -17,7 +17,10 @@ use Illuminate\Support\Facades\DB;
  */
 class CommitteeService
 {
-    /** Add a teammate, or invite by phone/email. Inviting a new person to the account needs manage_team. */
+    /** The link of the invite add() just made (or null): the person sends it from their own phone. */
+    public ?string $inviteLink = null;
+
+    /** Add a teammate, or invite by phone/email. The event's chair may invite to it (PB-22): they join the account as a viewer, and their seat says what they do here. */
     public function add(User $by, BudgetProgram $program, array $data): BudgetProgramMember
     {
         $role = strtolower(trim((string) ($data['role'] ?? 'member')));
@@ -34,6 +37,7 @@ class CommitteeService
                 if ($active !== null) {
                     throw BusinessRuleException::make('already_on_committee', 'This person is already on the committee. Change their role instead.');
                 }
+                $this->assertSeatFits($companyId, $userId, $role);
                 $member = new BudgetProgramMember();
                 $member->forceFill(['uuid' => $data['uuid'] ?? null, 'company_id' => $companyId, 'budget_program_id' => $program->id, 'user_id' => $userId,
                     'role' => $role, 'status' => 'active', 'added_by_id' => $by->id]);
@@ -48,8 +52,8 @@ class CommitteeService
         if ($phone === '' && $email === '') {
             throw BusinessRuleException::make('contact_required', 'Choose a team member, or enter a phone number to invite someone.');
         }
-        if (! Permissions::can($by, 'manage_team')) {
-            throw BusinessRuleException::make('forbidden', 'Only the owner or a manager can invite new people to the account. Ask them to invite this person, then add them here.', ['permission' => 'manage_team']);
+        if (! Permissions::can($by, 'manage_team') && ! BudgetAccess::can($by, (int) $program->id, BudgetAccess::COMMITTEE)) {
+            throw BusinessRuleException::make('forbidden', 'Only the owner, a manager or the chair can invite new people. Ask them to invite this person, then add them here.', ['permission' => 'manage_team']);
         }
         $name = trim((string) ($data['name'] ?? '')) ?: null;
 
@@ -64,7 +68,9 @@ class CommitteeService
         }
 
         // Someone new: the team invite (viewer on the account; their committee role gives them this event).
-        $invite = (new TeamService())->invite($by, 'viewer', $phone !== '' ? $phone : null, $email !== '' ? $email : null, $name)['invite'];
+        $sent = (new TeamService())->invite($by, 'viewer', $phone !== '' ? $phone : null, $email !== '' ? $email : null, $name, $role === 'viewer');
+        $invite = $sent['invite'];
+        $this->inviteLink = $sent['link'];
         $member = new BudgetProgramMember();
         $member->forceFill(['uuid' => $data['uuid'] ?? null, 'company_id' => $companyId, 'budget_program_id' => $program->id, 'invite_id' => $invite->id,
             'role' => $role, 'status' => 'invited', 'name' => $name, 'phone' => $invite->phone_e164 ?? null, 'added_by_id' => $by->id]);
@@ -112,11 +118,50 @@ class CommitteeService
             throw BusinessRuleException::make('invalid_role', 'Choose chair, treasurer, secretary, member or viewer.');
         }
         if ($member->role !== $role) {
+            if ($member->user_id) {
+                $this->assertSeatFits((int) $member->company_id, (int) $member->user_id, $role);
+            }
             $member->role = $role;
             $member->save();
         }
 
         return $member;
+    }
+
+    /** Someone the plan does not count yet (viewer seats only) starts to count with a seat above viewer: it must fit the plan. */
+    private function assertSeatFits(int $companyId, int $userId, string $role): void
+    {
+        if ($role === 'viewer') {
+            return;
+        }
+        $company = \App\Models\Company::withoutGlobalScopes()->find($companyId);
+        $quotas = new \App\Services\Billing\Quotas();
+        if ($company !== null && $quotas->isFreeViewer($company, $userId)) {
+            $quotas->assertCanAdd($company, 'users');
+        }
+    }
+
+    /** A new link for a seat still waiting (the old one stops working). @return string the link */
+    public function resendInvite(User $by, BudgetProgramMember $member): string
+    {
+        $invite = $member->invite_id ? DB::table('invites')->where('company_id', $member->company_id)->where('id', $member->invite_id)->first() : null;
+        if ($invite === null) {
+            throw BusinessRuleException::make('invite_closed', 'This invite is no longer open.');
+        }
+
+        return (new TeamService())->resend($invite, $by);
+    }
+
+    /** A seat still waiting is taken back: its invite stops working, unless it also waits on another event's seat. */
+    public function cancelInvite(BudgetProgramMember $member): void
+    {
+        DB::transaction(function () use ($member) {
+            $others = BudgetProgramMember::withoutGlobalScopes()->where('invite_id', $member->invite_id)->where('id', '!=', $member->id)->where('is_deleted', 0)->exists();
+            if ($member->invite_id && ! $others) {
+                DB::table('invites')->where('company_id', $member->company_id)->where('id', $member->invite_id)->where('status', 'pending')->update(['status' => 'revoked', 'updated_at' => now()]);
+            }
+            $member->delete();
+        });
     }
 
     /** Off the committee (a tombstone, so phones remove it too). They stay on the team. */

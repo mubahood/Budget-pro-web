@@ -155,6 +155,30 @@ class BudgetModuleTest extends ApiTestCase
         $this->get(str_replace('company_id='.$companyId, 'company_id='.($companyId + 1), $path))->assertStatus(403);
     }
 
+    public function test_the_printable_group_list_is_of_one_event_only(): void
+    {
+        $t = $this->registerTenant();
+        $h = $this->auth($t['token']);
+        $intro = $this->postJson('/api/v1/budget-programs', ['name' => 'Introduction'], $h)->json('data.id');
+        $wedding = $this->postJson('/api/v1/budget-programs', ['name' => 'Wedding'], $h)->json('data.id');
+        $this->postJson('/api/v1/contribution-records', ['budget_program_id' => $intro, 'name' => 'Peter at the introduction', 'amount' => 1000, 'category_id' => 'Friend'], $h)->assertStatus(201);
+        $this->postJson('/api/v1/contribution-records', ['budget_program_id' => $wedding, 'name' => 'Rose at the wedding', 'amount' => 1000, 'category_id' => 'Friend'], $h)->assertStatus(201);
+        $open = fn (string $url) => $this->get(parse_url($url, PHP_URL_PATH).'?'.parse_url($url, PHP_URL_QUERY));
+
+        // A newer app names the event, and it cannot be changed.
+        $url = $this->postJson('/api/v1/contribution-records/print-link', ['category_id' => 'Friend', 'budget_program_id' => $intro], $h)->assertOk()->json('data.url');
+        $open($url)->assertOk()->assertSee('Peter at the introduction')->assertDontSee('Rose at the wedding');
+        $this->assertSame(403, $open(str_replace('program='.$intro, 'program='.$wedding, $url))->getStatusCode());
+
+        // An older app names none: the group's most recent open event, and a line that says so.
+        $url = $this->postJson('/api/v1/contribution-records/print-link', ['category_id' => 'Friend'], $h)->assertOk()->json('data.url');
+        $open($url)->assertOk()->assertSee('Rose at the wedding')->assertDontSee('Peter at the introduction')->assertSee('This list is for Wedding only');
+
+        // Another company's event.
+        $other = $this->registerTenant();
+        $this->postJson('/api/v1/contribution-records/print-link', ['category_id' => 'Friend', 'budget_program_id' => $wedding], $this->auth($other['token']))->assertNotFound();
+    }
+
     public function test_the_phone_budget_pdf_opens_from_a_signed_link_for_its_own_event_only(): void
     {
         $t = $this->registerTenant();
