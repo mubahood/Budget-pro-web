@@ -2972,7 +2972,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"password\": \"\"\n}"
+                            "raw": "{\n    \"password\": \"\",\n    \"google_token\": \"\"\n}"
                         }
                     }
                 },

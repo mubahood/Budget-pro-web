@@ -26,6 +26,9 @@ final class SiblingAccounts
     /** The start of a sibling's username: nothing signs in with one. */
     public const USERNAME_PREFIX = 'sibling-';
 
+    /** What a person signs in with. */
+    private const SIGN_IN = ['email', 'email_verified_at', 'username', 'phone_number', 'phone_e164', 'phone_verified_at', 'password'];
+
     private static ?bool $ready = null;
 
     /**
@@ -108,6 +111,43 @@ final class SiblingAccounts
         $others = DB::table('account_siblings')->where('user_id', $first)->pluck('sibling_user_id')->push($first)->reject(fn ($id) => (int) $id === (int) $changed->id);
         if ($others->isNotEmpty() && (int) $first !== 0) {
             DB::table('admin_users')->whereIn('id', $others->all())->update(['password' => $changed->password]);
+        }
+    }
+
+    /**
+     * These logins are going with their account. Takes every link naming them away, so someone who asks again later gets a new account
+     * and not a refusal, and says who must take over: a person whose own sign-in goes still has the account beside it, and needs a way in.
+     * Call it before the logins are deleted, and [takeOver] after.
+     *
+     * @param  array<int, int|string>  $userIds
+     * @return array<int, array<string, mixed>> the login that stays => how the person signs in
+     */
+    public static function leaving(array $userIds): array
+    {
+        if ($userIds === [] || ! self::ready()) {
+            return [];
+        }
+        $going = array_map('intval', $userIds);
+        $heirs = [];
+        foreach (DB::table('account_siblings')->whereIn('user_id', $going)->orderBy('id')->get()->groupBy('user_id') as $first => $links) {
+            $stays = $links->reject(fn ($l) => in_array((int) $l->sibling_user_id, $going, true))->values();
+            if ($stays->isEmpty()) {
+                continue;
+            }
+            $heir = (int) $stays->first()->sibling_user_id;
+            $heirs[$heir] = (array) DB::table('admin_users')->where('id', $first)->first(self::SIGN_IN);
+            DB::table('account_siblings')->whereIn('id', $stays->slice(1)->pluck('id')->all())->update(['user_id' => $heir]);
+        }
+        DB::table('account_siblings')->whereIn('user_id', $going)->orWhereIn('sibling_user_id', $going)->delete();
+
+        return $heirs;
+    }
+
+    /** @param  array<int, array<string, mixed>>  $heirs what [leaving] returned */
+    public static function takeOver(array $heirs): void
+    {
+        foreach ($heirs as $heir => $signIn) {
+            DB::table('admin_users')->where('id', $heir)->update($signIn);
         }
     }
 

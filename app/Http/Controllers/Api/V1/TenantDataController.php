@@ -47,9 +47,13 @@ class TenantDataController extends Controller
 
     public function delete(Request $request)
     {
-        $data = $request->validate(['password' => ['required', 'string']]);
+        // One proof that it is really the owner: their password, or Google if that is how they signed up.
+        $data = $request->validate(['password' => ['required_without:google_token', 'nullable', 'string'], 'google_token' => ['required_without:password', 'nullable', 'string', 'max:4096']]);
+        $company = Company::withoutGlobalScopes()->findOrFail($request->user()->company_id);
         try {
-            $id = $this->data->requestDeletion(Company::withoutGlobalScopes()->findOrFail($request->user()->company_id), $request->user(), $data['password']);
+            $id = ($data['password'] ?? '') !== ''
+                ? $this->data->requestDeletion($company, $request->user(), $data['password'])
+                : $this->data->requestDeletionWithGoogle($company, $request->user(), (string) ($data['google_token'] ?? ''));
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }

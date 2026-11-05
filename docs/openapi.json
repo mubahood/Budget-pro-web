@@ -7986,19 +7986,26 @@
                 ],
                 "x-module": "core",
                 "requestBody": {
-                    "required": true,
+                    "required": false,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
                                 "properties": {
                                     "password": {
-                                        "type": "string"
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "google_token": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 4096
                                     }
-                                },
-                                "required": [
-                                    "password"
-                                ]
+                                }
                             }
                         }
                     }

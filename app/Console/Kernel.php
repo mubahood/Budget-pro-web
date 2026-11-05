@@ -57,9 +57,10 @@ class Kernel extends ConsoleKernel
             $schedule->call($task('sacco:demo'))->name('sacco:demo')->hourlyAt(20)->withoutOverlapping(90);
             // Estate Ledger's demo accounts (KR-21): the same, at their own minute.
             $schedule->call($task('rentals:demo'))->name('rentals:demo')->hourlyAt(40)->withoutOverlapping(90);
-            $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:00')->withoutOverlapping();
+            // Minute :20: this host's scheduler runs on */20 and often fails to start on the hour, so a backup at 02:00 was sometimes missed.
+            $schedule->call($task('ops', ['task' => 'backup']))->name('ops backup')->dailyAt('02:20')->withoutOverlapping();
             $schedule->call($task('ops', ['task' => 'drill']))->name('ops drill')->weeklyOn(0, '03:30')->withoutOverlapping();
-            $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:00')->withoutOverlapping();
+            $schedule->call($task('ops', ['task' => 'purge']))->name('ops purge')->dailyAt('04:40')->withoutOverlapping();
             // Release builds run from their own cron line (`releases:work`, every 2 minutes), never in here;
             // this only fails a build whose worker died so it can be retried.
             $schedule->call(fn () => \App\Models\StandaloneRelease::failStale())->name('standalone-release-stale-check')->everyTenMinutes();

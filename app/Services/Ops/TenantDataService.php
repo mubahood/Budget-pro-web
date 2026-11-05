@@ -4,10 +4,15 @@ namespace App\Services\Ops;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\Company;
+use App\Models\RentalLogin;
 use App\Models\User;
+use App\Services\Auth\GoogleSignIn;
 use App\Services\Notifications\Notifier;
+use App\Services\Onboarding\SiblingAccounts;
+use App\Services\Rentals\PrivateFiles;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 
 /**
@@ -18,6 +23,9 @@ class TenantDataService
 {
     /** Tables that hold secrets or plumbing, never exported. */
     private const NOT_EXPORTED = ['otp_codes', 'message_log', 'api_idempotency_keys', 'web_link_tokens', 'scheduled_notices', 'sync_batches', 'number_sequences', 'personal_access_tokens', 'data_requests', 'error_events', 'jobs', 'failed_jobs', 'sync_sequence', 'rental_search_entries', 'rental_search_keys', 'rental_search_marks'];
+
+    /** Tables with no company_id that still belong to a login. */
+    private const KEPT_BY_USER = ['admin_role_users', 'admin_user_permissions', 'notification_preferences', 'auth_one_time_tokens', 'admin_operation_log', 'chat_participants'];
 
     private const SECRET_COLUMNS = ['password', 'remember_token', 'token_hash', 'code_hash', 'pin_hash', 'pos_pin_hash', 'password_pending_at', 'sessions_valid_from'];
 
@@ -64,7 +72,7 @@ class TenantDataService
             $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
             $zip->close();
             DB::table('data_requests')->where('id', $id)->update(['status' => 'ready', 'file' => basename($file), 'completed_at' => now(), 'updated_at' => now()]);
-            app(Notifier::class)->notify($companyId, 'team', 'Your data export is ready', 'Download it from Company settings → Your data within 7 days.', [], [User::withoutGlobalScopes()->find($userId)]);
+            app(Notifier::class)->notify($companyId, 'team', 'Your data export is ready', 'Download it from Your data within 7 days.', [], [User::withoutGlobalScopes()->find($userId)]);
         } catch (\Throwable $e) {
             DB::table('data_requests')->where('id', $id)->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 500), 'updated_at' => now()]);
             throw $e;
@@ -82,13 +90,37 @@ class TenantDataService
 
     public function requestDeletion(Company $company, User $owner, string $password): int
     {
-        \App\Services\Onboarding\PublicDemo::guard($company, 'deleting the shop');
-        if ((int) $company->owner_id !== (int) $owner->id) {
-            throw BusinessRuleException::make('owner_only', 'Only the owner can delete the shop.');
-        }
+        $this->assertMayDelete($company, $owner);
         if (! Hash::check($password, $owner->password)) {
             throw BusinessRuleException::make('wrong_password', 'Your password is not correct.');
         }
+
+        return $this->scheduleDeletion($company, $owner);
+    }
+
+    /** The same request from someone who proved who they are with Google: if they signed up that way, they have no password to type. */
+    public function requestDeletionWithGoogle(Company $company, User $owner, string $idToken): int
+    {
+        $this->assertMayDelete($company, $owner);
+        $proved = app(GoogleSignIn::class)->verify($idToken)['email'];
+        $theirs = strtolower(trim((string) SiblingAccounts::signInOf($owner)->email));
+        if ($theirs === '' || ! hash_equals($theirs, $proved)) {
+            throw BusinessRuleException::make('wrong_google', 'That Google account is not the one on this account.');
+        }
+
+        return $this->scheduleDeletion($company, $owner);
+    }
+
+    private function assertMayDelete(Company $company, User $owner): void
+    {
+        \App\Services\Onboarding\PublicDemo::guard($company, 'deleting the account');
+        if ((int) $company->owner_id !== (int) $owner->id) {
+            throw BusinessRuleException::make('owner_only', 'Only the owner can delete this account.');
+        }
+    }
+
+    private function scheduleDeletion(Company $company, User $owner): int
+    {
         $open = DB::table('data_requests')->where('company_id', $company->id)->where('kind', 'delete')->where('status', 'scheduled')->value('id');
         if ($open) {
             return (int) $open;
@@ -97,9 +129,9 @@ class TenantDataService
         $id = (int) DB::table('data_requests')->insertGetId(['company_id' => $company->id, 'requested_by_id' => $owner->id, 'kind' => 'delete', 'status' => 'scheduled',
             'purge_after' => now()->addDays($days), 'created_at' => now(), 'updated_at' => now()]);
         $when = now()->addDays($days)->toFormattedDateString();
-        app(Notifier::class)->notify((int) $company->id, 'billing', 'Shop deletion scheduled', \App\Support\Edition::isStandalone()
-            ? "You asked to close and wipe this installation. Nothing is deleted automatically: from {$when} it can be wiped by hand. Cancel any time in Company settings → Your data."
-            : "{$company->name} and all its data will be deleted on {$when}. Cancel any time before then in Company settings → Your data.");
+        app(Notifier::class)->notify((int) $company->id, 'billing', 'Deletion scheduled', \App\Support\Edition::isStandalone()
+            ? "You asked to close and wipe this installation. Nothing is deleted automatically: from {$when} it can be wiped by hand. Cancel any time in Your data."
+            : "{$company->name} and all its data will be deleted on {$when}. Cancel any time before then in Your data.");
 
         return $id;
     }
@@ -138,11 +170,19 @@ class TenantDataService
     public function purge(int $companyId): void
     {
         $users = DB::table('admin_users')->where('company_id', $companyId)->pluck('id')->all();
+        $people = DB::table('rental_logins')->where('company_id', $companyId)->pluck('id')->all();
+        $images = $this->ownImages($companyId, $users);
         $tables = collect(DB::select("SELECT table_name AS t FROM information_schema.columns WHERE table_schema = DATABASE() AND column_name = 'company_id'"))->pluck('t')->unique()
             ->reject(fn ($t) => $t === 'data_requests')->all();
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
         try {
-            DB::transaction(function () use ($companyId, $users, $tables) {
+            DB::transaction(function () use ($companyId, $users, $tables, $people) {
+                // Before the logins go: the table loop below takes them too.
+                $heirs = SiblingAccounts::leaving($users);
+                $who = DB::table('admin_users')->whereIn('id', $users)->get(['email', 'phone_e164']);
+                $emails = $who->pluck('email')->filter()->all();
+                DB::table('otp_codes')->whereIn('identifier', [...$emails, ...$who->pluck('phone_e164')->filter()->all()])->delete();
+                DB::table('password_reset_tokens')->whereIn('email', $emails)->delete();
                 $records = DB::table('stock_records')->where('company_id', $companyId)->pluck('id');
                 foreach ($records->chunk(1000) as $chunk) {
                     DB::table('stock_record_batches')->whereIn('stock_record_id', $chunk->all())->delete();
@@ -151,10 +191,13 @@ class TenantDataService
                     DB::table($t)->where('company_id', $companyId)->delete();
                 }
                 DB::table('personal_access_tokens')->where('tokenable_type', User::class)->whereIn('tokenable_id', $users)->delete();
-                DB::table('admin_role_users')->whereIn('user_id', $users)->delete();
-                DB::table('notification_preferences')->whereIn('user_id', $users)->delete();
+                DB::table('personal_access_tokens')->where('tokenable_type', RentalLogin::class)->whereIn('tokenable_id', $people)->delete();
+                foreach (self::KEPT_BY_USER as $table) {
+                    DB::table($table)->whereIn('user_id', $users)->delete();
+                }
                 DB::table('admin_users')->whereIn('id', $users)->delete();
                 DB::table('companies')->where('id', $companyId)->delete();
+                SiblingAccounts::takeOver($heirs);
             });
         } finally {
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
@@ -162,5 +205,37 @@ class TenantDataService
         foreach (glob(rtrim((string) config('backup.exports_path'), '/')."/company-{$companyId}-*.zip") ?: [] as $f) {
             @unlink($f);
         }
+        // The rows are gone for good by now: a file that won't go is reported, never a reason to call the deletion failed.
+        try {
+            PrivateFiles::deleteAccount($companyId);
+            Storage::disk('public')->deleteDirectory("files/{$companyId}");
+            foreach ($images as $image) {
+                @unlink(public_path('storage/'.$image));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * The logo and the people's pictures of an account, as far as they are its own: an uploaded file, not used by anybody else.
+     *
+     * @param  array<int, int|string>  $users
+     * @return list<string>
+     */
+    private function ownImages(int $companyId, array $users): array
+    {
+        $company = DB::table('companies')->where('id', $companyId)->first(['logo', 'logo_wide']);
+        $paths = array_merge([$company->logo ?? null, $company->logo_wide ?? null], DB::table('admin_users')->whereIn('id', $users)->pluck('avatar')->all());
+        $own = [];
+        foreach (array_unique(array_filter($paths, fn ($p) => is_string($p) && preg_match('~^images/[\w.-]+$~', $p))) as $path) {
+            $shared = DB::table('companies')->where('id', '<>', $companyId)->where(fn ($q) => $q->where('logo', $path)->orWhere('logo_wide', $path))->exists()
+                || DB::table('admin_users')->whereNotIn('id', $users)->where('avatar', $path)->exists();
+            if (! $shared) {
+                $own[] = $path;
+            }
+        }
+
+        return $own;
     }
 }
