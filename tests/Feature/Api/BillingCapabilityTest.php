@@ -156,9 +156,10 @@ class BillingCapabilityTest extends ApiTestCase
             app(Lifecycle::class)->run();
             $this->assertSame($expected, $this->notices($t['company_id'], 'renewal'));
         }
-        $titles = DB::table('app_notifications')->where('company_id', $t['company_id'])->where('title', 'like', 'Starter renews in%')->pluck('title')->all();
-        $this->assertEqualsCanonicalizing(['Starter renews in 7 days', 'Starter renews in 3 days', 'Starter renews in 1 day'], $titles);
-        $this->assertStringContainsString(BillingService::billingUrl(), (string) DB::table('app_notifications')->where('company_id', $t['company_id'])->where('title', 'Starter renews in 1 day')->value('body'));
+        // Nothing renews by itself here (no saved card), so the words say the plan ends, never that it renews.
+        $titles = DB::table('app_notifications')->where('company_id', $t['company_id'])->where('title', 'like', 'Your Starter plan ends in%')->pluck('title')->all();
+        $this->assertEqualsCanonicalizing(['Your Starter plan ends in 7 days', 'Your Starter plan ends in 3 days', 'Your Starter plan ends in 1 day'], $titles);
+        $this->assertStringContainsString(BillingService::billingUrl(), (string) DB::table('app_notifications')->where('company_id', $t['company_id'])->where('title', 'Your Starter plan ends in 1 day')->value('body'));
     }
 
     public function test_card_auto_renew_charges_the_saved_card_once_before_the_end(): void

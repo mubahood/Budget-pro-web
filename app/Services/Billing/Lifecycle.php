@@ -76,7 +76,8 @@ class Lifecycle
             foreach ([3, 1] as $d) {
                 if ($end->isFuture() && now()->diffInHours($end) <= $d * 24) {
                     $counts['trial_reminders'] += (int) Notices::once($cid, 'trial_ending', "d{$d}:".$end->toDateString(), fn () => $this->notifier->notify($cid, 'billing',
-                        "Your free trial ends in {$d} day".($d > 1 ? 's' : ''), 'Choose a plan to keep every feature. If you do nothing you move to the Free plan — your data stays safe.'));
+                        "Your free trial ends in {$d} day".($d > 1 ? 's' : ''), 'It ends on '.self::day($end).'. Choose a plan to keep everything as it is: '.BillingService::billingUrl()
+                    .'. If you don\'t, '.$company->name.' moves to the Free plan ('.$this->freeLimits($company).'). Nothing is deleted.', ['url' => BillingService::billingUrl()]));
                 }
             }
             if ($end->isPast()) {
@@ -115,14 +116,49 @@ class Lifecycle
 
             return; // past the grace window: no catch-up reminders, straight to Free
         }
-        // Only the latest reminder that is due (day 0, 3, last grace day), once each.
+        // Only the latest reminder that is due (day 0, 3, last grace day), once each. Nothing stops in these days: the words say
+        // so, say when the Free plan starts and what it allows, and how to keep the plan. Never "payment due" for a plan given free.
         $due = collect([0, 3, $grace - 1])->filter(fn ($d) => $d < $grace && $daysOver >= $d)->max();
         if ($due !== null) {
             $left = $grace - $daysOver;
+            $name = $sub->plan?->name ?? 'your';
+            $until = self::day($sub->ends_at->copy()->addDays($grace));
             $counts['dunning'] += (int) Notices::once($cid, 'dunning', "d{$due}:".$sub->ends_at->toDateString(), fn () => $this->notifier->notify($cid, 'billing',
-                'Payment due for '.($sub->plan?->name ?? 'your plan'), "Your plan ended. Renew within {$left} day".($left > 1 ? 's' : '').' to keep your plan; after that the shop moves to the Free plan. Renew: '.BillingService::billingUrl(),
+                $left <= 1 ? 'Tomorrow you move to the Free plan' : 'Your '.$name.' plan has ended',
+                'Everything keeps working until '.$until.'. To keep '.$name.', pay '.$this->priceText($company, $sub->plan, $sub->interval()).': '.BillingService::billingUrl()
+                .'. If you don\'t, on '.$until.' '.$company->name.' moves to the Free plan ('.$this->freeLimits($company).'). Nothing is deleted.',
                 ['url' => BillingService::billingUrl()]));
         }
+    }
+
+    /** 8 Nov 2026: how a date reads in a message. */
+    private static function day(\DateTimeInterface $at): string
+    {
+        return $at->format('j M Y');
+    }
+
+    /** "UGX 1,000,000 for a year, or UGX 100,000 a month": what keeping the plan costs, with the smaller payment beside a year's. */
+    private function priceText(Company $company, ?Plan $plan, string $interval): string
+    {
+        if ($plan === null) {
+            return 'for your plan';
+        }
+        $currency = app(BillingService::class)->currency($company);
+        $say = fn (array $p) => $p['currency'].' '.number_format($p['amount']);
+        $month = $plan->chargeIn($currency, 'month');
+        if ($interval === 'year') {
+            return $say($plan->chargeIn($currency, 'year')).' for a year, or '.$say($month).' a month';
+        }
+
+        return $say($month).' a month';
+    }
+
+    /** What the Free plan of this account's app allows, in words. */
+    private function freeLimits(Company $company): string
+    {
+        $free = $this->freePlan($company);
+
+        return $free === null ? 'with lower limits' : $this->limitsText($free);
     }
 
     /** Renewal reminders 7/3/1 days before a paid period ends (only the latest due, once each), or the saved-card charge. */
@@ -160,11 +196,17 @@ class Lifecycle
         }
         $price = $next ? $next->chargeIn($billing->currency($company), $interval) : null;
         $auto = config('saas.auto_renew') && $sub->auto_renew && $sub->savedCard() !== null;
-        $counts['renewal_reminders'] += (int) Notices::once($cid, 'renewal', "d{$due}:{$end}", fn () => $this->notifier->notify($cid, 'billing',
-            ($next?->name ?? 'Your plan').' renews in '.$due.' day'.($due > 1 ? 's' : ''),
-            ($auto ? 'We will charge your saved card' : 'Renew')
-            .($price ? ' '.number_format($price['amount']).' '.$price['currency'] : '').' before '.$sub->ends_at->toFormattedDateString()
-            .($auto ? '.' : ' to keep every feature: '.BillingService::billingUrl()),
+        $name = $next?->name ?? 'your';
+        $in = $due.' day'.($due > 1 ? 's' : '');
+        $grace = (int) config('saas.grace_days', 7);
+        // "Renews" only when it really will by itself; a plan given free says so, and nobody is told a payment is due before it is.
+        $title = $auto ? $name.' renews in '.$in : ($sub->provider === 'comp' ? 'Your free '.$name.' plan ends in '.$in : 'Your '.$name.' plan ends in '.$in);
+        $body = $auto
+            ? 'We will charge your saved card'.($price ? ' '.$price['currency'].' '.number_format($price['amount']) : '').' on '.self::day($sub->ends_at).'.'
+            : 'It ends on '.self::day($sub->ends_at).'. To keep '.$name.', pay '.$this->priceText($company, $next, $interval).': '.BillingService::billingUrl()
+                .'. If you don\'t, nothing stops: everything keeps working until '.self::day($sub->ends_at->copy()->addDays($grace)).', then '.$company->name
+                .' moves to the Free plan. Nothing is deleted.';
+        $counts['renewal_reminders'] += (int) Notices::once($cid, 'renewal', "d{$due}:{$end}", fn () => $this->notifier->notify($cid, 'billing', $title, $body,
             ['url' => BillingService::billingUrl()]));
     }
 
@@ -231,9 +273,28 @@ class Lifecycle
         $company->unsetRelation('subscription');
         app(SyncApplier::class)->applyHeld($company);
         $on = PlanLine::of($free) === PlanLine::FAMILY ? 'the Free plan' : $free->name;
-        $this->notifier->notify((int) $company->id, 'billing', $why, "{$company->name} is now on {$on}: ".$this->limitsText($free).'. Upgrade any time: '.BillingService::billingUrl(), ['url' => BillingService::billingUrl()]);
+        $over = $this->overLimits($company);
+        $this->notifier->notify((int) $company->id, 'billing', $why, "{$company->name} is now on {$on}: ".$this->limitsText($free).'. Nothing was deleted, and what you already have keeps working.'
+            .($over === '' ? '' : ' You have '.$over.': adding more needs a paid plan.').' Upgrade any time: '.BillingService::billingUrl(), ['url' => BillingService::billingUrl()]);
 
         return true;
+    }
+
+    /** "467 products and 2 phones": what the account already has beyond its plan's hard limits, or ''. */
+    private function overLimits(Company $company): string
+    {
+        $quotas = new Quotas();
+        $over = [];
+        foreach (['products', 'devices', 'users', 'members', 'units', 'locations'] as $what) {
+            $limit = $quotas->limit($company, $what);
+            $used = $limit === null ? 0 : $quotas->used($company, $what);
+            if ($limit !== null && $used > $limit) {
+                $over[] = number_format($used).' '.($used === 1 ? rtrim(Quotas::LABELS[$what], 's') : Quotas::LABELS[$what]);
+            }
+        }
+        $last = array_pop($over);
+
+        return $over === [] ? (string) $last : implode(', ', $over).' and '.$last;
     }
 
     private function limitsText(Plan $plan): string

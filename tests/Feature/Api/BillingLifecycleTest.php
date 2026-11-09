@@ -102,7 +102,7 @@ class BillingLifecycleTest extends ApiTestCase
         $sub = $this->sub($t['company_id']);
         $this->travelTo($sub->ends_at->copy()->addDays(40));
         $counts = app(Lifecycle::class)->run();
-        $this->assertSame(0, DB::table('app_notifications')->where('company_id', $t['company_id'])->where('title', 'like', 'Payment due%')->count());
+        $this->assertSame(0, DB::table('app_notifications')->where('company_id', $t['company_id'])->where(fn ($q) => $q->where('title', 'like', 'Your % plan has ended')->orWhere('title', 'like', 'Tomorrow you move%'))->count());
         $this->assertSame('free', $sub->fresh()->plan->slug);
         $this->assertGreaterThanOrEqual(1, $counts['to_free']);
     }
@@ -198,5 +198,60 @@ class BillingLifecycleTest extends ApiTestCase
         $this->assertCount(1, $n('unsynced_device'));
         $this->assertStringContainsString("Counter 2' hasn't synced for 4 days", $n('unsynced_device')[0]->title);
         $this->artisan('saas:hourly')->assertSuccessful();
+    }
+
+    /**
+     * What someone is told as a plan ends, start to finish (the owner's rule, 2026-11-09: nobody is ever confused): "ends", not
+     * "renews", when nothing renews by itself; no "payment due" for a plan given free; every message says what keeps working,
+     * until when, what the Free plan allows, that nothing is deleted, and how to keep the plan, with a month's price beside a year's.
+     */
+    public function test_the_words_as_a_plan_ends_say_what_happens_when_and_what_to_do(): void
+    {
+        $t = $this->registerTenant(['currency' => 'UGX']);
+        $cid = $t['company_id'];
+        $company = Company::find($cid);
+        $business = Plan::where('slug', 'business')->first() ?? Plan::where('slug', 'starter')->first();
+        $admin = \App\Models\User::find(DB::table('admin_users')->where('company_id', $cid)->value('id'));
+        app(\App\Services\Billing\AdminBilling::class)->comp($company, $business, now()->addDays(10), 'A gift for the test', $admin);
+        $sub = $this->sub($cid);
+        DB::table('subscriptions')->where('id', $sub->id)->update(['billing_interval' => 'year']);
+        $end = $sub->fresh()->ends_at->copy();
+        $note = fn (string $like) => DB::table('app_notifications')->where('company_id', $cid)->where('title', 'like', $like)->orderByDesc('id')->first();
+
+        $this->travelTo($end->copy()->subHours(20));
+        app(Lifecycle::class)->run();
+        $before = $note('Your free % plan ends in 1 day');
+        $this->assertNotNull($before, 'a plan given free is called free, and it ends');
+        $this->assertStringContainsString('a year, or UGX', $before->body, 'a month\'s price beside a year\'s');
+        $this->assertStringContainsString('everything keeps working until', $before->body);
+        $this->assertStringContainsString('Nothing is deleted', $before->body);
+
+        $this->travelTo($end->copy()->addHours(2));
+        app(Lifecycle::class)->run();
+        $this->assertSame('grace', Company::find($cid)->accessState());
+        $ended = $note('Your % plan has ended');
+        $this->assertNotNull($ended);
+        $this->assertSame(0, DB::table('app_notifications')->where('company_id', $cid)->where('title', 'like', '%due%')->count(), 'never "payment due"');
+        $until = $end->copy()->addDays((int) config('saas.grace_days', 7))->format('j M Y');
+        $this->assertStringContainsString('Everything keeps working until '.$until, $ended->body);
+        $this->assertStringContainsString('moves to the Free plan (', $ended->body, 'and what the Free plan allows');
+
+        $phone = $this->getJson('/api/v1/subscription', $this->auth($t['token']))->assertOk()->json('data');
+        $this->assertSame('grace', $phone['access_state']);
+        $this->assertTrue($phone['subscription']['gift']);
+        $this->assertStringContainsString('Everything keeps working until '.$until, (string) $phone['plan_note']);
+        $badge = \App\Services\Billing\PlanBadge::forApp(Company::find($cid));
+        $this->assertSame('Plan ended', $badge['badge']);
+        $this->assertTrue($badge['urgent']);
+        $this->assertStringContainsString('Everything keeps working until '.$until, $badge['nudge']);
+        $this->assertStringNotContainsString('read-only', $badge['nudge']);
+        $this->assertStringNotContainsString('shop', $badge['nudge']);
+
+        $this->travelTo($end->copy()->addDays(8));
+        app(Lifecycle::class)->run();
+        $free = $note('Your plan has ended');
+        $this->assertNotNull($free);
+        $this->assertStringContainsString('Nothing was deleted', $free->body);
+        $this->assertSame('active', Company::find($cid)->accessState(), 'on the Free plan, working');
     }
 }

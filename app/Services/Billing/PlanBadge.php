@@ -14,7 +14,7 @@ use App\Support\Edition;
 final class PlanBadge
 {
     /** kind => web chip icon */
-    public const ICONS = ['suspended' => 'fa-ban', 'read_only' => 'fa-lock', 'expired' => 'fa-lock', 'trial' => 'fa-hourglass-half',
+    public const ICONS = ['suspended' => 'fa-ban', 'read_only' => 'fa-calendar-xmark', 'expired' => 'fa-lock', 'trial' => 'fa-hourglass-half',
         'free' => 'fa-arrow-up', 'ending' => 'fa-calendar-xmark', 'renew' => 'fa-rotate'];
 
     /** Whole days until the plan's end (rounded up), 0 once it has passed, null when it has no end. */
@@ -42,12 +42,13 @@ final class PlanBadge
         $n = fn (int $x) => $x.' '.($x === 1 ? 'day' : 'days');
         [$kind, $label, $tone] = match (true) {
             $state === 'inactive' => ['suspended', 'Suspended', 'bad'],
-            $state === 'grace' => ['read_only', 'Ended — read-only', 'bad'],
+            // The kind keeps its old name: phones already in people's hands pick their icon by it. Nothing is locked in grace.
+            $state === 'grace' => ['read_only', 'Plan ended', 'warn'],
             $state === 'expired' => ['expired', 'Expired', 'bad'],
             $sub?->status === 'trialing' => ['trial', 'Trial: '.$n($d).' left', $d <= 3 ? 'warn' : 'neutral'],
             (bool) $sub?->plan?->isFree() => ['free', 'Free plan', 'neutral'],
             $sub?->status === 'canceled' && $d <= 14 => ['ending', 'Ends in '.$n($d), 'warn'],
-            $days !== null && $d <= 7 => ['renew', ($sub?->auto_renew ? 'Renews' : 'Renew').' in '.$n($d), 'warn'],
+            $days !== null && $d <= 7 => ['renew', ($sub?->auto_renew ? 'Renews' : 'Ends').' in '.$n($d), 'warn'],
             default => [null, null, null],
         };
 
@@ -72,17 +73,26 @@ final class PlanBadge
         $when = $d <= 0 ? 'today' : 'in '.$d.' '.($d === 1 ? 'day' : 'days');
         $grace = (int) config('saas.grace_days', 7);
         $graceLeft = max(0, $grace - (int) floor(max(0, now()->getTimestamp() - (int) $company->accessEndedAt()?->getTimestamp()) / 86400));
+        $plan = $sub?->plan?->name ?? 'your';
+        $ended = $company->accessEndedAt();
+        $day = fn ($at) => $at?->format('j M Y');
+        // Plain words, the same everywhere (the web's chip and banner, the phone's plan block): what happens, when, and what to do.
+        // Never a shop's words or a product's name: this serves every app, and some stand alone.
         $nudge = match ($chip['kind'] ?? null) {
-            'suspended' => 'This shop is switched off. Contact Budget Pro support to switch it back on.',
-            'read_only' => 'Your plan has ended and the shop is read-only on the web. Renew within '.$graceLeft.' '.($graceLeft === 1 ? 'day' : 'days').' to keep phones syncing.',
-            'expired' => 'Your plan has expired. Renew to start recording sales again. Sales made on phones are kept until then.',
-            'trial' => 'Your free trial ends '.$when.'. Choose a plan to keep selling without a break.',
-            'free' => 'You are on the Free plan. Upgrade for more products, team members and features.',
-            'ending' => 'Your plan was cancelled and ends '.$when.'.',
-            'renew' => $sub?->auto_renew ? 'Your plan renews '.$when.'.' : 'Your plan ends '.$when.'. Renew to keep selling without a break.',
+            'suspended' => 'This account is switched off. Contact support to switch it back on.',
+            'read_only' => 'Your '.$plan.' plan ended on '.$day($ended).'. Everything keeps working until '.$day($ended?->copy()->addDays($grace))
+                .'; then the account moves to the Free plan, and nothing is deleted. Pay to keep '.$plan.'.',
+            'expired' => 'Your plan has expired. Choose a plan to carry on: nothing has been deleted, and work saved on phones waits until then.',
+            'trial' => 'Your free trial ends '.$when.'. Choose a plan to keep everything as it is; if you don\'t, the account moves to the Free plan and nothing is deleted.',
+            'free' => 'You are on the Free plan. Upgrade any time for higher limits.',
+            'ending' => 'Your plan was cancelled and ends '.$when.'. Then the account moves to the Free plan; nothing is deleted.',
+            'renew' => $sub?->auto_renew
+                ? 'Your plan renews '.$when.' with your saved card.'
+                : ($sub?->provider === 'comp' ? 'Your free '.$plan.' plan ends '.$when.'. ' : 'Your '.$plan.' plan ends '.$when.'. ')
+                    .'Pay to keep it. If you don\'t, everything keeps working for '.$grace.' more days, then the account moves to the Free plan.',
             default => null,
         };
-        $urgent = $chip !== null && ($chip['tone'] === 'bad'
+        $urgent = $chip !== null && ($chip['tone'] === 'bad' || $chip['kind'] === 'read_only'
             || (in_array($chip['kind'], ['trial', 'ending', 'renew'], true) && $d <= 3 && ! ($chip['kind'] === 'renew' && $sub?->auto_renew)));
 
         return [

@@ -91,10 +91,14 @@ class BillingController extends Controller
                 'pending_plan' => $subscription->pendingPlan?->only(['id', 'name', 'slug']),
                 'pending_change_at' => optional($subscription->pending_change_at)->toIso8601String(),
                 'auto_renew' => (bool) $subscription->auto_renew,
+                // A plan given free: the phone says "Free until", never "Renews", and nothing asks for a payment before it ends.
+                'gift' => $subscription->provider === 'comp',
                 'card' => ($c = $subscription->savedCard()) ? ['last4' => $c['last4'] ?? null, 'type' => $c['type'] ?? null, 'expiry' => $c['expiry'] ?? null] : null,
             ] : null,
             'has_active_access' => $company->hasActiveAccess(),
             'access_state' => $company->accessState(),
+            // The same sentence as the web's banner and the phone's home (PlanBadge): what happens, when, and what to do; null when all is well.
+            'plan_note' => data_get(\App\Services\Billing\PlanBadge::forApp($company), 'nudge'),
             'usage' => (new \App\Services\Billing\Quotas())->usage($company),
             'currency' => app(\App\Services\Billing\BillingService::class)->currency($company),
             'can_manage' => $this->canManageBilling($company, $request->user()),
