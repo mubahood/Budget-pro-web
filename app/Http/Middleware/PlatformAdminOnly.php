@@ -41,6 +41,7 @@ class PlatformAdminOnly
         'product-templates', 'product-templates/*',
         'system-health', 'system-health/*',
         'standalone-releases', 'standalone-releases/*',
+        'promo-videos', 'promo-videos/*',
         'standalone-products', 'standalone-products/*',
         'standalone-licences', 'standalone-licences/*',
     ];

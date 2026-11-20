@@ -141,6 +141,14 @@ Route::group([
         $router->resource('plans', PlanController::class);
         $router->resource('subscriptions', SubscriptionController::class);
         // Standalone releases (docs/STANDALONE_EDITION_PLAN.md §10).
+        // Promo videos from the video studio (App\Models\PromoVideo): words, renders, publishing.
+        $router->get('promo-videos', 'PromoVideoController@index');
+        $router->post('promo-videos', 'PromoVideoController@store');
+        $router->get('promo-videos/{id}', 'PromoVideoController@show')->where('id', '[0-9]+');
+        $router->post('promo-videos/{id}/upload/{kind}', 'PromoVideoController@upload')->where(['id' => '[0-9]+', 'kind' => 'video|poster|captions']);
+        foreach (['details', 'script', 'render', 'publish', 'unpublish', 'feature'] as $promoAction) {
+            $router->post('promo-videos/{id}/'.$promoAction, 'PromoVideoController@'.$promoAction)->where('id', '[0-9]+');
+        }
         $router->get('standalone-releases', 'StandaloneReleaseController@index');
         $router->post('standalone-releases', 'StandaloneReleaseController@stage');
         $router->post('standalone-releases/{id}/publish', 'StandaloneReleaseController@publish')->where('id', '[0-9]+');

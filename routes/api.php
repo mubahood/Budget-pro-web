@@ -109,12 +109,28 @@ Route::middleware('legacy')->group(function () {
     });
 }); // legacy (counted; retired by LEGACY_API_ENABLED=false)
 
+// The video studio's worker (pb-studio): scripts and renders in, queued renders out (App\Models\PromoVideo).
+// Bearer token checked against PROMO_STUDIO_TOKEN_SHA256; off (503) when that is not set.
+Route::prefix('studio-api')->middleware('studio.token')->controller(\App\Http\Controllers\Studio\StudioApiController::class)->group(function () {
+    Route::get('videos', 'index');
+    Route::get('videos/{app}/{slug}', 'show')->where(['app' => '[a-z0-9-]{2,40}', 'slug' => '[a-z0-9-]{2,80}']);
+    Route::put('videos/{app}/{slug}', 'upsert')->where(['app' => '[a-z0-9-]{2,40}', 'slug' => '[a-z0-9-]{2,80}']);
+    Route::post('videos/{app}/{slug}/files/{kind}', 'file')->where(['app' => '[a-z0-9-]{2,40}', 'slug' => '[a-z0-9-]{2,80}', 'kind' => 'video|poster|sheet']);
+    Route::post('videos/{app}/{slug}/rendered', 'rendered')->where(['app' => '[a-z0-9-]{2,40}', 'slug' => '[a-z0-9-]{2,80}']);
+    Route::post('renders/claim', 'claim');
+    Route::post('renders/{id}', 'report')->where('id', '[0-9]+');
+});
+
 Route::prefix('v1')->middleware('app.version')->group(function () {
     // Public: what the phone app reads before sign-in — versions, and which edition this server is
     // (a standalone copy hides "Create your shop" and billing: registration_open false).
     Route::get('app/version', fn () => response()->json(['code' => 1, 'message' => 'App versions.', 'data' => [
         'min_version' => config('mobile.min_version'), 'latest_version' => config('mobile.latest_version'), 'store_url' => config('mobile.store_url'),
     ] + \App\Support\EditionMeta::forApp()]));
+    // Public: an app's published promo videos, and their captions (App\Models\PromoVideo; only what is live).
+    Route::get('videos', [\App\Http\Controllers\Api\V1\PromoVideoController::class, 'index'])->middleware('throttle:60,1,promo-videos');
+    Route::get('videos/{app}/{slug}/captions.vtt', [\App\Http\Controllers\Api\V1\PromoVideoController::class, 'captions'])
+        ->where(['app' => '[a-z0-9-]{2,40}', 'slug' => '[a-z0-9-]{2,80}'])->middleware('throttle:60,1,promo-videos');
 
     // ── Public auth endpoints (rate-limited to deter brute force): 10 a minute per address, and `login`
     //    (RouteServiceProvider) 6 a minute per account and address on sign-in, codes and reset ──

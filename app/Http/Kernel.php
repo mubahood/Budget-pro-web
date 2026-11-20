@@ -84,6 +84,7 @@ class Kernel extends HttpKernel
         'app.version' => \App\Http\Middleware\MinAppVersion::class,
         'api.idempotent' => \App\Http\Middleware\IdempotentRequests::class, // API writes: Idempotency-Key replay (MOBILE_EXCELLENCE_PLAN D5)
         'edition' => \App\Http\Middleware\RequireEdition::class, // saas | standalone (docs/STANDALONE_EDITION_PLAN.md)
+        'studio.token' => \App\Http\Middleware\StudioToken::class, // /api/studio-api: the video studio's worker
         'admin.platform' => \App\Http\Middleware\PlatformAdminOnly::class, // Admin panel: platform-only screens (P0-1)
         'pingpin.member' => \App\PingPin\Http\Middleware\EnsurePingPinMembership::class, // Ping Pin: fail-closed org membership (see class docblock)
         'rentals.portal' => \App\Http\Middleware\RentalPortalAuth::class, // Estate Ledger: a tenant's or landlord's own token (rentals/me/*, KR-16)
