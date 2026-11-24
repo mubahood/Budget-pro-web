@@ -34,7 +34,7 @@ class PlatformAdminOnly
         'auth/menu', 'auth/menu/*',
         'auth/logs', 'auth/logs/*',
         'companies', 'companies/*',
-        'platform-overview',
+        'platform-overview', 'same-person-twice',
         'plans', 'plans/*',
         'subscriptions', 'subscriptions/*',
         'pingpin-plans', 'pingpin-plans/*',

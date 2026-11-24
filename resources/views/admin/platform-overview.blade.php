@@ -27,6 +27,7 @@
     <a href="{{ admin_url('subscriptions') }}"><i class="fa fa-credit-card"></i> Subscriptions</a>
     <a href="{{ admin_url('plans') }}"><i class="fa fa-tags"></i> Plans</a>
     <a href="{{ admin_url('auth/users') }}"><i class="fa fa-users"></i> Users</a>
+    <a href="{{ admin_url('same-person-twice') }}"><i class="fa fa-clone"></i> Same person twice</a>
     <a href="{{ admin_url('promo-videos') }}"><i class="fa fa-film"></i> Promo videos</a>
     <a href="{{ admin_url('system-health') }}"><i class="fa fa-heartbeat"></i> System health</a>
     <span class="text-muted">As of {{ $o['at']->format('d M Y, H:i') }}</span>

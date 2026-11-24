@@ -49,7 +49,7 @@ class OtpService
      *                                  `rentals:{email}` (scoped()), and sent to that email, AK-61)
      * @param  string|null  $sender  the name the code is sent in (a SACCO's or a letting agency's own name); null = the product's
      */
-    public function request(string $identifier, string $purpose, ?string $ip = null, ?string $deliverTo = null, ?string $sender = null): array
+    public function request(string $identifier, string $purpose, ?string $ip = null, ?string $deliverTo = null, ?string $sender = null, ?string $fromApp = null): array
     {
         if (! in_array($purpose, self::PURPOSES, true)) {
             throw BusinessRuleException::make('invalid_purpose', 'Unknown code purpose.');
@@ -70,13 +70,23 @@ class OtpService
         // Staff of a SACCO account (a reset or sign-in code) hear from their SACCO, never another product (AK-68).
         // An Estate Ledger tenant or landlord hears from their agency (the caller's $sender), else from Estate Ledger (KR-05).
         $app = match (self::scopeOf($identifier)) { 'rentals' => 'estate-ledger', 'sacco' => 'akiba', default => self::staffApp($identifier) };
+        // The app the person asked from (its sign-in screen sends it): the code comes in that app's name.
+        $fromApp = \App\Support\AppFamily::slug($fromApp);
+        if ($fromApp !== null && $sender === null && $app === null && \App\Support\AppFamily::ownBooks($fromApp)) {
+            $app = $fromApp === 'akiba-ledger' ? 'akiba' : 'estate-ledger';
+            $sender = \App\Support\AppFamily::name($fromApp);
+        }
         $sender ??= self::scopeOf($identifier) === 'rentals' ? 'Estate Ledger' : ($app === 'estate-ledger' ? 'Estate Ledger' : self::saccoSender($identifier));
         // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
         // An Akiba Ledger SACCO speaks only in its own name ($sender), never the family's.
-        $product = $sender ?? (\App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name'));
+        $family = $fromApp !== null && ! \App\Support\AppFamily::ownBooks($fromApp) && ! \App\Support\Edition::isStandalone() ? \App\Support\AppFamily::name($fromApp) : null;
+        $product = $sender ?? $family ?? (\App\Support\Edition::isStandalone() ? \App\Support\ShopBrand::productName() : config('app.name'));
         $text = 'Your '.$product." code is {$code}. It expires in {$cfg['ttl_minutes']} minutes. Never share it.";
         $channels = $isEmail ? ['mail'] : ['whatsapp', 'sms'];
-        $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your verification code']]];
+        $meta = ['purpose' => 'otp', 'options' => ['whatsapp' => ['template' => config('messaging.whatsapp.meta.otp_template'), 'params' => [$code]], 'mail' => ['subject' => 'Your '.$product.' code: '.$code]]];
+        if ($family !== null && $sender === null) {
+            $meta['options']['mail']['from_name'] = $family; // the From line says the app, not the family's name
+        }
         if ($sender !== null) {
             // A SACCO (a member, or staff of a SACCO account): the email names the SACCO, and its footer Akiba Ledger only.
             // An Estate Ledger tenant's or landlord's code names their agency and is marked Estate Ledger's, never Akiba Ledger's (KR-05).

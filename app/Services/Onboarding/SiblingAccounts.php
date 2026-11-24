@@ -20,8 +20,15 @@ use Illuminate\Support\Str;
  */
 final class SiblingAccounts
 {
-    /** Apps that may be opened this way => the module their accounts are built around. */
-    public const APPS = ['estate-ledger' => 'rentals'];
+    /** Apps whose own books are always opened this way => the module their accounts are built around. A family app (\App\Support\AppFamily)
+     *  is opened this way too, but only for a person whose own books stand alone (an Akiba or Estate account can't take a shop module). */
+    public const APPS = ['estate-ledger' => 'rentals', 'akiba-ledger' => 'sacco'];
+
+    /** The business type a new account beside the person's is built as, per module. */
+    private const BUSINESS_TYPE = ['shop' => 'retail', 'poultry' => 'poultry', 'budget' => 'fundraising', 'sacco' => 'sacco', 'rentals' => 'rentals'];
+
+    /** What the name question says, per module. */
+    private const NAME_ASK = ['shop' => 'Name your shop.', 'poultry' => 'Name your farm.', 'budget' => 'Name your event or budget.', 'sacco' => 'Name your SACCO.', 'rentals' => 'Name your agency or property.'];
 
     /** The start of a sibling's username: nothing signs in with one. */
     public const USERNAME_PREFIX = 'sibling-';
@@ -38,14 +45,19 @@ final class SiblingAccounts
      */
     public function open(User $person, string $app, string $name): array
     {
-        $module = self::APPS[$app] ?? throw BusinessRuleException::make('app_not_offered', 'This app does not open a separate account.');
+        $app = \App\Support\AppFamily::slug($app) ?? throw BusinessRuleException::make('app_not_offered', 'This app does not open a separate account.');
+        $module = \App\Support\AppFamily::module($app);
         $person = self::signInOf($person);
         PublicDemo::guardAccount($person, 'opening another account');
         $company = Company::withoutGlobalScopes()->find($person->company_id);
         if ($company === null) {
             throw BusinessRuleException::make('no_company', 'Your account is not linked to a business.');
         }
-        if (in_array($module, $company->modules(), true)) {
+        if (! \App\Support\AppFamily::ownBooks($app) && ! \App\Support\AppFamily::booksStandAlone($company->modules())) {
+            // Family books take the app as a module instead (\App\Services\Auth\AppAccess::join).
+            throw BusinessRuleException::make('app_not_offered', 'This app is added to your books, not opened beside them.');
+        }
+        if (\App\Support\AppFamily::opens($company->modules(), $app)) {
             throw BusinessRuleException::make('already_has_it', 'This account already has it.');
         }
         $existing = self::forApp($person, $app);
@@ -54,7 +66,7 @@ final class SiblingAccounts
         }
         $name = trim($name);
         if ($name === '') {
-            throw BusinessRuleException::make('name_required', 'Name your agency or property.');
+            throw BusinessRuleException::make('name_required', self::NAME_ASK[$module] ?? 'Name your business.');
         }
 
         return DB::transaction(function () use ($person, $company, $app, $module, $name) {
@@ -68,7 +80,7 @@ final class SiblingAccounts
                 'currency' => $company->currency,
                 'country' => $company->country,
                 'timezone' => $company->timezone,
-                'business_type' => $module,
+                'business_type' => self::BUSINESS_TYPE[$module] ?? 'other',
                 'modules' => [$module],
             ], RegistrationService::PRODUCT_BUDGET, 'sibling');
             $made['user']->forceFill(['email' => null, 'username' => $username, 'password' => $person->password, 'email_verified_at' => now()])->saveQuietly();
@@ -79,13 +91,28 @@ final class SiblingAccounts
         });
     }
 
-    /** The login that opens [app] for the person who just proved who they are: the account beside theirs if they have one, else theirs. */
+    /**
+     * The login that opens [app] for the person who just proved who they are: the account beside theirs made for that app if there is
+     * one, else theirs. A family app on a person whose own books stand alone falls back to any family account beside theirs, since
+     * family books are one set whichever family app opened them.
+     */
     public static function forApp(User $person, ?string $app): User
     {
-        if ($app === null || ! isset(self::APPS[$app]) || ! self::ready()) {
+        $app = \App\Support\AppFamily::slug($app);
+        if ($app === null || ! self::ready()) {
             return $person;
         }
-        $id = DB::table('account_siblings')->where('user_id', $person->id)->where('app', $app)->value('sibling_user_id');
+        $links = DB::table('account_siblings')->where('user_id', $person->id)->orderBy('id')->pluck('sibling_user_id', 'app');
+        if ($links->isEmpty()) {
+            return $person;
+        }
+        $id = $links[$app] ?? null;
+        if ($id === null && ! \App\Support\AppFamily::ownBooks($app)) {
+            $own = Company::withoutGlobalScopes()->find($person->company_id);
+            if ($own !== null && \App\Support\AppFamily::booksStandAlone($own->modules())) {
+                $id = $links->first(fn ($sid, $linked) => \App\Support\AppFamily::slug($linked) !== null && ! \App\Support\AppFamily::ownBooks(\App\Support\AppFamily::slug($linked)));
+            }
+        }
 
         return ($id === null ? null : User::withoutGlobalScopes()->find($id)) ?? $person;
     }
@@ -136,6 +163,9 @@ final class SiblingAccounts
             }
             $heir = (int) $stays->first()->sibling_user_id;
             $heirs[$heir] = (array) DB::table('admin_users')->where('id', $first)->first(self::SIGN_IN);
+            if (Schema::hasTable('user_identities')) {
+                DB::table('user_identities')->where('user_id', $first)->update(['user_id' => $heir]); // their Google goes with their sign-in
+            }
             DB::table('account_siblings')->whereIn('id', $stays->slice(1)->pluck('id')->all())->update(['user_id' => $heir]);
         }
         DB::table('account_siblings')->whereIn('user_id', $going)->orWhereIn('sibling_user_id', $going)->delete();

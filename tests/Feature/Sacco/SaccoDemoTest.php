@@ -70,6 +70,12 @@ class SaccoDemoTest extends ApiTestCase
         $this->assertSame('Active', SaccoDemo::login('teller')->fresh()->status);
         $this->assertSame('active', DB::table('company_members')->where('company_id', $cid)->where('user_id', $teller->id)->value('status'));
         $this->assertNotEmpty((new MemberLogin())->attempt(SaccoDemo::memberEmail(), SaccoDemo::password()));
+
+        // The Akiba Ledger phone's "Try the demo": its own SACCO, as one of its office roles, never another app's demo.
+        $this->getJson('/api/v1/demo/session?app=akiba-ledger')->assertOk()->assertJsonPath('data.roles.0.role', 'chair');
+        $d = $this->postJson('/api/v1/demo/session', ['app' => 'akiba-ledger', 'role' => 'teller', 'device_name' => 't'])->assertOk()->json('data');
+        $this->assertSame((int) SaccoDemo::company()->id, (int) $d['company']['id']);
+        $this->assertSame((int) SaccoDemo::login('teller')->id, (int) $d['user']['id']);
         $this->assertSame([], LedgerVerifier::failed((new LedgerVerifier())->verify($cid)));
         $this->assertSame(0, (int) DB::table('sacco_periods')->where('company_id', $cid)->where('status', 'open')->where('ends_on', '<', now('Africa/Kampala')->startOfMonth()->toDateString())->count(), 'every ended month closed');
 

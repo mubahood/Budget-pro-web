@@ -38,7 +38,7 @@ class RentalsAccountDeletionTest extends RentalsPhoneApiCase
     {
         config(['services.google.web_client_id' => 'client.apps.googleusercontent.com']);
         $this->googleSays = $email;
-        Http::fake(['oauth2.googleapis.com/*' => fn () => Http::response(['email' => $this->googleSays, 'email_verified' => 'true', 'aud' => 'client.apps.googleusercontent.com',
+        Http::fake(['oauth2.googleapis.com/*' => fn () => Http::response(['sub' => 'sub-'.md5($this->googleSays), 'email' => $this->googleSays, 'email_verified' => 'true', 'aud' => 'client.apps.googleusercontent.com',
             'iss' => 'https://accounts.google.com', 'exp' => (string) (time() + 600), 'given_name' => 'Asha', 'family_name' => 'Sample'])]);
     }
 

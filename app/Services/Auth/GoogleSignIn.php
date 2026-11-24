@@ -7,14 +7,14 @@ use Illuminate\Support\Facades\Http;
 
 /**
  * Whether a Google ID token from the phone is real and meant for us. Google checks the signature (tokeninfo); we check it was made
- * for our app, that it is Google's, that it has not expired and that Google has confirmed the email. Nothing is kept from it.
+ * for our app, that it is Google's, that it has not expired and that Google has confirmed the email. Only its `sub` (Google's lasting id for the person) and email are kept, in user_identities (GoogleIdentities).
  */
 final class GoogleSignIn
 {
     private const ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 
     /**
-     * @return array{email: string, first_name: string, last_name: string}
+     * @return array{sub: string, email: string, first_name: string, last_name: string}
      *
      * @throws BusinessRuleException google_off, google_unreachable or google_invalid
      */
@@ -32,10 +32,11 @@ final class GoogleSignIn
         $claims = $answer->successful() ? (array) $answer->json() : [];
         $email = strtolower(trim((string) ($claims['email'] ?? '')));
         $verified = filter_var($claims['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        if ($email === '' || ! $verified || ($claims['aud'] ?? null) !== $clientId || ! in_array($claims['iss'] ?? null, self::ISSUERS, true) || (int) ($claims['exp'] ?? 0) <= time()) {
+        $sub = trim((string) ($claims['sub'] ?? ''));
+        if ($email === '' || $sub === '' || ! $verified || ($claims['aud'] ?? null) !== $clientId || ! in_array($claims['iss'] ?? null, self::ISSUERS, true) || (int) ($claims['exp'] ?? 0) <= time()) {
             throw BusinessRuleException::make('google_invalid', 'Google could not confirm this sign-in. Please try again.');
         }
 
-        return ['email' => $email, 'first_name' => trim((string) ($claims['given_name'] ?? '')), 'last_name' => trim((string) ($claims['family_name'] ?? ''))];
+        return ['sub' => $sub, 'email' => $email, 'first_name' => trim((string) ($claims['given_name'] ?? '')), 'last_name' => trim((string) ($claims['family_name'] ?? ''))];
     }
 }

@@ -188,6 +188,11 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         Route::post('web-link', [\App\Http\Controllers\Api\V1\WebLinkController::class, 'store'])->middleware('throttle:10,1');
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::post('auth/sibling', [AuthController::class, 'sibling'])->middleware(['edition:saas', 'throttle:5,1']);
+        Route::post('auth/join', [AuthController::class, 'join'])->middleware(['edition:saas', 'throttle:10,1']);
+        Route::get('auth/sign-in-methods', [AuthController::class, 'signInMethods']);
+        Route::post('auth/google/link', [AuthController::class, 'googleLink'])->middleware('throttle:10,1');
+        Route::delete('auth/google/link', [AuthController::class, 'googleUnlink'])->middleware('throttle:10,1');
+        Route::post('auth/google/nudge/dismiss', [AuthController::class, 'googleNudgeDismiss']);
         Route::post('auth/logout-all', [AuthController::class, 'logoutAll']);
         Route::put('auth/password', [AuthController::class, 'updatePassword']);
         Route::put('auth/profile', [AuthController::class, 'updateProfile']);

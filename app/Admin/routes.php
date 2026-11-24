@@ -132,6 +132,7 @@ Route::group([
     // copy has no platform admin (docs/STANDALONE_EDITION_PLAN.md §5.3), so these are 404 there.
     $router->middleware(['edition:saas', 'admin.platform:all'])->group(function (Router $router) {
         $router->get('platform-overview', 'PlatformOverviewController@index');
+        $router->get('same-person-twice', 'SamePersonTwiceController@index');
         $router->resource('companies', CompanyController::class);
         // "Sign in as" one of a company's accounts in the web portal, with the master password (App\Support\MasterPassword).
         $router->get('companies/{company}/sign-in-as', 'SignInAsController@show')->where('company', '[0-9]+');

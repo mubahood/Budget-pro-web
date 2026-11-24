@@ -27,6 +27,7 @@ class GoogleSignInTest extends TestCase
 
     private function google(array $claims = [], int $status = 200): void
     {
+        $claims += ['sub' => 'sub-'.md5(strtolower($claims['email'] ?? 'new.person@example.com'))]; // Google's lasting id for the person
         Http::fake(['oauth2.googleapis.com/*' => Http::response(array_replace([
             'aud' => self::CLIENT, 'iss' => 'https://accounts.google.com', 'email' => 'new.person@example.com', 'email_verified' => 'true',
             'given_name' => 'New', 'family_name' => 'Person', 'exp' => (string) (time() + 600),

@@ -46,10 +46,11 @@ class MailChannel implements MessagingChannel
             $own = ['akiba' => 'Akiba Ledger', 'estate-ledger' => 'Estate Ledger'][$app] ?? null;
             $contact = match ($app) { 'akiba' => SupportContact::forSacco(), 'estate-ledger' => SupportContact::forRentals(), default => SupportContact::platform() };
             $line = $footer ? $contact->mailLine($context, $vars) : '';
-            Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options, $own) {
+            $fromName = $own ?? (isset($options['from_name']) && is_string($options['from_name']) && $options['from_name'] !== '' ? $options['from_name'] : null);
+            Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options, $own, $fromName) {
                 $m->to($to)->subject($options['subject'] ?? ($own ?? config('app.name')));
-                if ($own !== null) {
-                    $m->from((string) config('mail.from.address'), $own);
+                if ($fromName !== null) {
+                    $m->from((string) config('mail.from.address'), $fromName);
                 }
             });
 

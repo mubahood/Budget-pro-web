@@ -34,6 +34,10 @@ class AuthController extends Controller
             ['user' => $user, 'company' => $company] = app(RegistrationService::class)
                 ->register($request->validated(), RegistrationService::PRODUCT_BUDGET, 'api');
         } catch (BusinessRuleException $e) {
+            if (in_array($e->errorCode(), ['email_taken', 'phone_taken'], true)) {
+                return $this->knownIdentity($e->errorCode() === 'email_taken' ? 'email' : 'phone', $e->errorCode(), $request->input('app'), $e->errorCode() === 'email_taken' ? 'email' : 'phone_number');
+            }
+
             return $this->error($e->getMessage(), 422, $e->toErrors());
         } catch (\Throwable $e) {
             Log::error('API registration failed', ['error' => $e->getMessage()]);
@@ -92,7 +96,31 @@ class AuthController extends Controller
             'expires_at' => now()->addMinutes((int) config('sanctum.expiration'))->toIso8601String(),
             'user' => new UserResource($user),
             'company' => new CompanyResource($company),
+            // Whether this login has the app it signed in from, and how to add it (AppAccess). Absent when the app did not say.
+            'access' => \App\Services\Auth\AppAccess::of($user, $request->input('app')),
+            'connect_google' => \App\Services\Auth\GoogleIdentities::nudge($user),
         ], $message);
+    }
+
+    /**
+     * The answer to a sign-up with an email or phone we already know. Never "already registered": the person proves it is them (their
+     * password, Google, or a code) and is then offered this app (AppAccess). The code stays the old one so older phones still read it;
+     * nothing about the account is shown before the proof.
+     */
+    private function knownIdentity(string $kind, string $code, ?string $app, string $field = 'identifier')
+    {
+        $slug = \App\Support\AppFamily::slug($app);
+        $what = $kind === 'email' ? 'this email' : 'this phone number';
+        $then = $slug === null ? '' : ' to add '.\App\Support\AppFamily::name($slug);
+        $proofs = ['password', 'code'];
+        if ($kind === 'email' && trim((string) config('services.google.web_client_id')) !== '') {
+            $proofs[] = 'google';
+        }
+
+        $message = 'You already have an account with '.$what.'. Log in'.$then.'.';
+
+        // The field's own line too, where older phones look for it.
+        return $this->error($message, 422, ['code' => $code, 'known_identity' => true, 'proofs' => $proofs, $field => [$message]]);
     }
 
     /** Email (case-insensitive) or phone in any local/international form (App\Services\Auth\AccountLookup). */
@@ -119,13 +147,11 @@ class AuthController extends Controller
             return $this->error($e->getMessage(), $e->errorCode() === 'google_off' ? 503 : 422, $e->toErrors());
         }
 
-        $user = $this->findByIdentifier($who['email']);
+        $user = \App\Services\Auth\GoogleIdentities::signIn($who); // shared with the web doors
         if ($user !== null) {
             if (strtolower((string) $user->status) === 'inactive') {
                 return $this->forbidden('Your account has been deactivated. Please contact your administrator.');
             }
-            \App\Services\Auth\EmailProof::claim($user); // the first proof of this email: nothing set up before it stays valid
-            $this->markVerified($user, $who['email']);
             $user = \App\Services\Onboarding\SiblingAccounts::forApp($user, $data['app'] ?? null);
             $company = Company::find($user->company_id);
 
@@ -155,9 +181,79 @@ class AuthController extends Controller
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }
+        \App\Services\Auth\GoogleIdentities::link($user, $who);
         app(\App\Services\Notifications\Notifier::class)->welcome($user, $company);
 
         return $this->issue($request, $user, $company, 'Registration successful.');
+    }
+
+    /**
+     * POST auth/join {app, name?, device_name?}: adds the app this person is signed in from (AppAccess). A family app joins the books
+     * they have; Akiba, Estate or any app beside books that stand alone opens books of its own (it needs a name). Same shape as a
+     * sign-in, with the login that opens the app now; this phone's old sign-in ends, since the phone holds the new one.
+     */
+    public function join(Request $request)
+    {
+        $data = $request->validate(['app' => ['required', 'string', 'max:40'], 'name' => ['nullable', 'string', 'max:191'], 'device_name' => ['nullable', 'string', 'max:100']]);
+        try {
+            $made = app(\App\Services\Auth\AppAccess::class)->join($request->user(), $data['app'], $data['name'] ?? null);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), $e->errorCode() === 'not_allowed' ? 403 : 422, $e->toErrors());
+        }
+        $answer = $this->issue($request, $made['user'], $made['company'], $made['joined'] ? 'Added.' : 'You already have it.');
+        $request->user()->currentAccessToken()?->delete();
+
+        return $answer;
+    }
+
+    /** GET auth/sign-in-methods: how this person can sign in (for Settings › Sign-in and security). No secrets. */
+    public function signInMethods(Request $request)
+    {
+        $person = \App\Services\Onboarding\SiblingAccounts::signInOf($request->user());
+
+        return $this->success([
+            'email' => $person->email,
+            'phone' => $person->phone_e164 ?: $person->phone_number,
+            'password' => true,
+            'google' => \App\Services\Auth\GoogleIdentities::of($person),
+            'google_available' => trim((string) config('services.google.web_client_id')) !== '',
+            'connect_google' => \App\Services\Auth\GoogleIdentities::nudge($person),
+        ]);
+    }
+
+    /** POST auth/google/link {id_token}: connects a Google account to this sign-in. */
+    public function googleLink(Request $request)
+    {
+        $data = $request->validate(['id_token' => ['required', 'string', 'max:4096']]);
+        try {
+            \App\Services\Onboarding\PublicDemo::guardAccount(\App\Services\Onboarding\SiblingAccounts::signInOf($request->user()), 'connecting Google');
+            $who = app(\App\Services\Auth\GoogleSignIn::class)->verify($data['id_token']);
+            \App\Services\Auth\GoogleIdentities::link($request->user(), $who);
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), $e->errorCode() === 'google_off' ? 503 : 422, $e->toErrors());
+        }
+
+        return $this->success(['google' => \App\Services\Auth\GoogleIdentities::of($request->user())], 'Google connected.');
+    }
+
+    /** DELETE auth/google/link: disconnects Google, unless it is the only way back in. */
+    public function googleUnlink(Request $request)
+    {
+        try {
+            \App\Services\Auth\GoogleIdentities::unlink($request->user());
+        } catch (BusinessRuleException $e) {
+            return $this->error($e->getMessage(), 422, $e->toErrors());
+        }
+
+        return $this->success(['google' => []], 'Google disconnected.');
+    }
+
+    /** POST auth/google/nudge/dismiss: "Not now" on Connect Google. */
+    public function googleNudgeDismiss(Request $request)
+    {
+        \App\Services\Auth\GoogleIdentities::dismiss($request->user());
+
+        return $this->success(['connect_google' => false], 'OK.');
     }
 
     /**
@@ -182,18 +278,18 @@ class AuthController extends Controller
     /** POST auth/otp/request { identifier, purpose: login|register|reset } */
     public function otpRequest(Request $request)
     {
-        $data = $request->validate(['identifier' => ['required', 'string', 'max:191'], 'purpose' => ['required', 'in:login,register,reset'], 'country' => ['nullable', 'string', 'size:2']]);
+        $data = $request->validate(['identifier' => ['required', 'string', 'max:191'], 'purpose' => ['required', 'in:login,register,reset'], 'country' => ['nullable', 'string', 'size:2'], 'app' => ['nullable', 'string', 'max:40']]);
         try {
             $id = \App\Services\Auth\OtpService::identifier($data['identifier'], $data['country'] ?? 'UG');
             $user = $this->findByIdentifier($id);
             if ($data['purpose'] === 'register' && $user !== null) {
-                return $this->error('This '.(str_contains($id, '@') ? 'email' : 'phone number').' is already registered. Log in instead.', 422, ['code' => 'already_registered']);
+                return $this->knownIdentity(str_contains($id, '@') ? 'email' : 'phone', 'already_registered', $request->input('app'));
             }
             if ($data['purpose'] !== 'register' && $user === null) {
                 // Same answer as success so the endpoint cannot be used to discover accounts.
                 return $this->success(['sent' => true, 'expires_in' => 600], 'If an account exists, a code has been sent.');
             }
-            $r = app(\App\Services\Auth\OtpService::class)->request($id, $data['purpose'], $request->ip());
+            $r = app(\App\Services\Auth\OtpService::class)->request($id, $data['purpose'], $request->ip(), null, null, $data['app'] ?? null);
         } catch (BusinessRuleException $e) {
             return $this->error($e->getMessage(), 422, $e->toErrors());
         }

@@ -30,6 +30,8 @@ class DemoSessionController extends Controller
     /** Estate Ledger's demo stands alone (RentalsDemo): its own companies, its own lock, and people who sign in with their own token. */
     private const ESTATE_LEDGER = 'estate-ledger';
 
+    private const AKIBA_LEDGER = 'akiba-ledger';
+
     /** What each of its buttons opens, in the phone's words. Key: account:role. */
     private const ESTATE_LEDGER_WHAT = [
         'agency:owner' => 'Sees everything: today, the landlords, month end and the money.',
@@ -48,6 +50,9 @@ class DemoSessionController extends Controller
     {
         if ($request->input('app') === self::ESTATE_LEDGER) {
             return $this->estateLedgerRoles();
+        }
+        if ($request->input('app') === self::AKIBA_LEDGER) {
+            return $this->akibaRoles();
         }
         if (! PublicDemo::enabled()) {
             return $this->notFound('There is no live demo on this server.');
@@ -68,6 +73,9 @@ class DemoSessionController extends Controller
     {
         if ($request->input('app') === self::ESTATE_LEDGER) {
             return $this->estateLedgerSession($request);
+        }
+        if ($request->input('app') === self::AKIBA_LEDGER) {
+            return $this->akibaSession($request);
         }
         if (! PublicDemo::enabled()) {
             return $this->notFound('There is no live demo on this server.');
@@ -99,6 +107,40 @@ class DemoSessionController extends Controller
             'user' => new UserResource($as),
             'company' => new CompanyResource($company),
         ], 'Welcome to the live demo.');
+    }
+
+    /** Akiba Ledger: the demo SACCO's office roles (SaccoDemo), the same people as the web's buttons. Never another app's demo. */
+    private function akibaRoles()
+    {
+        if (! \App\Services\Sacco\Demo\SaccoDemo::enabled() || \App\Services\Sacco\Demo\SaccoDemo::company() === null) {
+            return $this->notFound('There is no live demo on this server.');
+        }
+        $roles = [];
+        foreach (\App\Services\Sacco\Demo\SaccoDemo::roles() as $key => $r) {
+            $roles[] = ['role' => (string) $key, 'label' => (string) $r['label'], 'what' => (string) $r['label'], 'name' => (string) $r['name']];
+        }
+
+        return $this->success(['app' => self::AKIBA_LEDGER, 'roles' => $roles], 'Demo roles.');
+    }
+
+    private function akibaSession(Request $request)
+    {
+        $company = \App\Services\Sacco\Demo\SaccoDemo::enabled() ? \App\Services\Sacco\Demo\SaccoDemo::company() : null;
+        if ($company === null) {
+            return $this->notFound('There is no live demo on this server.');
+        }
+        $role = (string) $request->input('role', 'chair');
+        $as = array_key_exists($role, \App\Services\Sacco\Demo\SaccoDemo::roles()) ? \App\Services\Sacco\Demo\SaccoDemo::login($role) : null;
+        $as ??= \App\Services\Sacco\Demo\SaccoDemo::login('chair');
+        if ($as === null || (int) $as->company_id !== (int) $company->id || strtolower((string) $as->status) === 'inactive') {
+            return $this->error('The demo is being rebuilt. Try again in a few minutes.', 409, ['code' => 'demo_rebuilding']);
+        }
+        $as->tokens()->where('expires_at', '<', now())->delete();
+        $expires = now()->addHours(max(1, (int) config('demo.token_hours', 12)));
+        $device = substr('demo:'.preg_replace('/[^A-Za-z0-9 ._-]/', '', (string) $request->input('device_name', 'phone')), 0, 60);
+
+        return $this->success(['token' => $as->createToken($device, ['*'], $expires)->plainTextToken, 'token_type' => 'Bearer', 'expires_at' => $expires->toIso8601String(), 'demo' => true, 'app' => self::AKIBA_LEDGER,
+            'user' => new UserResource($as), 'company' => new CompanyResource($company)], 'Welcome to the live demo.');
     }
 
     /** The agency's staff and people, and the landlord on his own, from RentalsDemo. No sign-in details: the phone never holds a password. */
