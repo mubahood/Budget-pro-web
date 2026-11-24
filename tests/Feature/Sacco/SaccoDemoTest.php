@@ -68,6 +68,8 @@ class SaccoDemoTest extends ApiTestCase
         $this->assertSame("Wakiso Teachers' SACCO (Demo)", Company::find($cid)->name);
         $this->assertTrue(Hash::check(SaccoDemo::password(), (string) SaccoDemo::login('chair')->fresh()->password));
         $this->assertSame('Active', SaccoDemo::login('teller')->fresh()->status);
+        config(['services.google.web_client_id' => 'client.apps.googleusercontent.com']);
+        $this->assertFalse(\App\Services\Auth\GoogleIdentities::nudge(SaccoDemo::login('chair')), 'a demo is never asked to connect Google');
         $this->assertSame('active', DB::table('company_members')->where('company_id', $cid)->where('user_id', $teller->id)->value('status'));
         $this->assertNotEmpty((new MemberLogin())->attempt(SaccoDemo::memberEmail(), SaccoDemo::password()));
 
