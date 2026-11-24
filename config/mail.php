@@ -43,7 +43,9 @@ return [
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
-            'local_domain' => env('MAIL_EHLO_DOMAIN'),
+            // The name we greet the mail server with. Left empty, it is "[127.0.0.1]", and shared hosts' outgoing spam
+            // filters (HostGator's fightspamHG) silently drop that mail: every sign-in code was lost until 2026-11-24.
+            'local_domain' => env('MAIL_EHLO_DOMAIN') ?: (parse_url((string) env('APP_URL', ''), PHP_URL_HOST) ?: null),
         ],
 
         'ses' => [
