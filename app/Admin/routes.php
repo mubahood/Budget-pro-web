@@ -131,6 +131,7 @@ Route::group([
     // permission tables also exclude them; this is the explicit second lock. SaaS only: a standalone
     // copy has no platform admin (docs/STANDALONE_EDITION_PLAN.md §5.3), so these are 404 there.
     $router->middleware(['edition:saas', 'admin.platform:all'])->group(function (Router $router) {
+        $router->get('platform-overview', 'PlatformOverviewController@index');
         $router->resource('companies', CompanyController::class);
         // "Sign in as" one of a company's accounts in the web portal, with the master password (App\Support\MasterPassword).
         $router->get('companies/{company}/sign-in-as', 'SignInAsController@show')->where('company', '[0-9]+');

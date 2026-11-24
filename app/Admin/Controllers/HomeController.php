@@ -18,6 +18,10 @@ class HomeController extends Controller
     {
         /** @var \App\Models\User $u */
         $u = Admin::user();
+        // Platform admins start on the platform overview; their own shop's dashboard is one link away (?shop=1).
+        if (! request()->boolean('shop') && ! \App\Support\Edition::isStandalone() && \App\Http\Middleware\PlatformAdminOnly::isPlatformAdmin($u)) {
+            return redirect(admin_url('platform-overview'));
+        }
         $company = Company::find($u->company_id);
 
         if ($company === null) {
