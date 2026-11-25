@@ -5,6 +5,11 @@
     
     RewriteEngine On
 
+    # Hand the Authorization header (the phone's bearer token) on to PHP: Apache drops it under CGI/FastCGI,
+    # and every token request then answers 401. Same rule as Laravel's stock public/.htaccess.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
     # When the project root is the document root (shared hosting, MAMP), every real file would
     # otherwise be reachable. Deny the application tree, but only where the path really exists at
     # the root: public asset URLs such as /vendor/laravel-admin/* and /storage/* live in public/ and
