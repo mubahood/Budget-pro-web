@@ -169,7 +169,7 @@ class DemoSessionController extends Controller
         }
         $roles = [];
         foreach (\App\Services\Kin\Demo\KinDemo::roles() as $key => $r) {
-            $roles[] = ['role' => (string) $key, 'label' => (string) $r['label'], 'what' => (string) $r['label'], 'name' => (string) $r['name']];
+            $roles[] = ['role' => (string) $key, 'label' => (string) $r['label'], 'what' => (string) ($r['what'] ?? $r['label']), 'name' => (string) $r['name']];
         }
 
         return $this->success(['app' => 'family-roots', 'roles' => $roles], 'Demo roles.');

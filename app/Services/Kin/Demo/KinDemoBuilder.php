@@ -32,11 +32,11 @@ final class KinDemoBuilder
 
     /** The sign-ins: key => [name, team role]. The head is the account's owner. */
     public const LOGINS = [
-        'head' => ['name' => 'Petero Tibamwenda', 'role' => 'owner', 'label' => 'Head of the family'],
-        'secretary' => ['name' => 'Ruth Tibamwenda', 'role' => 'kin_secretary', 'label' => 'Secretary'],
-        'treasurer' => ['name' => 'Isaka Mugisha', 'role' => 'kin_treasurer', 'label' => 'Treasurer'],
-        'coordinator' => ['name' => 'Grace Tibamwenda', 'role' => 'kin_branch_coordinator', 'label' => 'Branch coordinator'],
-        'member' => ['name' => 'Brian Tibamwenda', 'role' => 'kin_member', 'label' => 'Family member'],
+        'head' => ['name' => 'Petero Tibamwenda', 'role' => 'owner', 'label' => 'Head of the family', 'what' => 'Everything: people, branches, the team and settings'],
+        'secretary' => ['name' => 'Ruth Tibamwenda', 'role' => 'kin_secretary', 'label' => 'Secretary', 'what' => 'Adds and edits people and branches'],
+        'treasurer' => ['name' => 'Isaka Mugisha', 'role' => 'kin_treasurer', 'label' => 'Treasurer', 'what' => 'Sees the whole family'],
+        'coordinator' => ['name' => 'Grace Tibamwenda', 'role' => 'kin_branch_coordinator', 'label' => 'Branch coordinator', 'what' => 'Looks after one branch\'s people'],
+        'member' => ['name' => 'Brian Tibamwenda', 'role' => 'kin_member', 'label' => 'Family member', 'what' => 'Looks up anyone in the family'],
     ];
 
     private const MALE = ['Joel', 'Paulo', 'Isaka', 'Timoteo', 'Gideon', 'Silas', 'Benoni', 'Aloni', 'Caleb', 'Nathan', 'Edwin', 'Allan', 'Derrick', 'Ivan', 'Ryan', 'Elias', 'Ruben', 'Noah', 'Ethan', 'Liam'];
