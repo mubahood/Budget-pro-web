@@ -180,6 +180,16 @@ class SchemaIntegrity
         ['rental_logins', 'company_id', 'companies', 'restrict'],
         ['rental_documents', 'company_id', 'companies', 'restrict'],
         ['rental_activities', 'company_id', 'companies', 'restrict'],
+        // My Family Roots 360: a family's tree joins its people (sacco_members), which are never deleted.
+        ['kin_branches', 'company_id', 'companies', 'restrict'],
+        ['kin_branches', 'founder_id', 'sacco_members', 'restrict'],
+        ['kin_links', 'company_id', 'companies', 'restrict'],
+        ['kin_links', 'child_id', 'sacco_members', 'restrict'],
+        ['kin_links', 'parent_id', 'sacco_members', 'restrict'],
+        ['kin_spouses', 'company_id', 'companies', 'restrict'],
+        ['kin_spouses', 'person_id', 'sacco_members', 'restrict'],
+        ['kin_spouses', 'spouse_id', 'sacco_members', 'restrict'],
+        ['sacco_members', 'branch_id', 'kin_branches', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -294,6 +304,10 @@ class SchemaIntegrity
         ['rental_paid_reports', 'status', ['pending', 'confirmed', 'declined']],
         ['rental_logins', 'subject_type', ['tenant', 'landlord']],
         ['rental_documents', 'owner_type', ['tenant', 'lease', 'property', 'landlord']],
+        // My Family Roots 360.
+        ['kin_links', 'role', ['father', 'mother', 'parent']],
+        ['kin_links', 'kind', ['birth', 'adoptive', 'step', 'guardian']],
+        ['kin_spouses', 'status', ['current', 'ended', 'widowed']],
     ];
 
     /**
@@ -369,6 +383,9 @@ class SchemaIntegrity
         'rental_paid_reports' => \App\Models\RentalPaidReport::class,
         'rental_logins' => \App\Models\RentalLogin::class,
         'rental_documents' => \App\Models\RentalDocument::class,
+        // My Family Roots 360.
+        'kin_links' => \App\Models\KinLink::class,
+        'kin_spouses' => \App\Models\KinSpouse::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */

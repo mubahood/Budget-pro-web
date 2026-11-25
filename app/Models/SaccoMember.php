@@ -40,7 +40,9 @@ class SaccoMember extends Model
 
     protected $casts = ['date_of_birth' => 'date:Y-m-d', 'joined_on' => 'date:Y-m-d', 'status_changed_on' => 'date:Y-m-d', 'kyc_verified_at' => 'datetime',
         'consent_data_at' => 'datetime', 'consent_messages_at' => 'datetime', 'messages_opt_out_at' => 'datetime', 'consent_credit_bureau_at' => 'datetime',
-        'is_insider' => 'boolean', 'is_deleted' => 'boolean'];
+        'is_insider' => 'boolean', 'is_deleted' => 'boolean',
+        // My Family Roots 360 (the kin module).
+        'date_of_death' => 'date:Y-m-d', 'dues_start_date' => 'date:Y-m-d', 'heritage' => 'array', 'privacy' => 'array', 'in_purse' => 'boolean'];
 
     protected static function booted(): void
     {
@@ -53,6 +55,17 @@ class SaccoMember extends Model
                 return;
             }
             $company = Company::withoutGlobalScopes()->findOrFail($m->company_id);
+            if (\App\Services\Kin\TreeService::isFamily($company)) {
+                // A family's person (My Family Roots 360): counted against the plan's people, numbered, active unless said otherwise.
+                app(\App\Services\Billing\Quotas::class)->assertCanAdd($company, 'people');
+                $m->member_no = \App\Services\Shop\NumberSequencer::next((int) $m->company_id, 'mem');
+                $m->status = in_array($m->status, config('kin.statuses'), true) ? $m->status : 'active';
+                $m->kyc_status = 'pending';
+                $m->joined_on ??= \App\Support\LocalDate::today((int) $m->company_id)->toDateString();
+                $m->setAttribute('status_changed_on', \App\Support\LocalDate::today((int) $m->company_id)->toDateString());
+
+                return;
+            }
             if ($m->consent_data_at === null && \App\Support\Rules\SaccoRules::strict((int) $m->company_id)) {
                 throw BusinessRuleException::make('consent_required', 'Record the member\'s consent to keep their details first.');
             }
@@ -64,6 +77,26 @@ class SaccoMember extends Model
             $m->joined_on ??= \App\Support\LocalDate::today((int) $m->company_id)->toDateString();
             $m->setAttribute('status_changed_on', \App\Support\LocalDate::today((int) $m->company_id)->toDateString());
             $m->consent_version ??= \App\Services\Sacco\Members\MemberService::CONSENT_VERSION;
+        });
+        static::saving(function (self $m) {
+            // A death is recorded with the status deceased, and never before the birth or after today.
+            if ($m->date_of_death === null) {
+                return;
+            }
+            if ($m->status !== 'deceased') {
+                throw BusinessRuleException::make('death_needs_status', 'A date of death is kept only for someone marked as departed.', ['date_of_death' => ['Set the status to deceased first.']]);
+            }
+            if ($m->date_of_birth !== null && $m->date_of_death->lt($m->date_of_birth)) {
+                throw BusinessRuleException::make('death_before_birth', 'The date of death is before the date of birth.', ['date_of_death' => ['The date of death is before the date of birth.']]);
+            }
+            if ($m->date_of_death->gt(\App\Support\LocalDate::today((int) $m->company_id))) {
+                throw BusinessRuleException::make('death_in_future', 'The date of death cannot be in the future.', ['date_of_death' => ['The date of death cannot be in the future.']]);
+            }
+        });
+        static::created(function (self $m) {
+            if (\App\Services\Kin\TreeService::isFamily((int) $m->company_id)) {
+                \App\Services\Kin\TreeService::changed((int) $m->company_id); // a new person is a founder until linked
+            }
         });
         static::deleting(function () {
             throw BusinessRuleException::make('member_history', 'A member is never deleted: their record stays. Change their status instead.');

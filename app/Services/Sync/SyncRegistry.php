@@ -191,8 +191,22 @@ class SyncRegistry
             // reference?, narration?}. Products and accounts come down as pull-only snapshots.
             'sacco_members' => ['model' => \App\Models\SaccoMember::class, 'kind' => self::KIND_MASTER, 'fields' => ['kind', 'first_name', 'last_name', 'other_names', 'gender',
                 'date_of_birth', 'phone_e164', 'phone_alt_e164', 'email', 'address', 'district', 'subcounty', 'parish', 'village', 'occupation', 'employer_name', 'payroll_no',
-                'joined_on', 'consent_data_at', 'consent_messages_at', 'messages_opt_out_at', 'guardian_name', 'guardian_phone_e164'],
-                'user_fields' => ['created_by_id'], 'rules' => [\App\Support\Rules\SaccoMemberRules::class, 'syncRules']],
+                'joined_on', 'consent_data_at', 'consent_messages_at', 'messages_opt_out_at', 'guardian_name', 'guardian_phone_e164',
+                // My Family Roots 360: a family's people are members rows too, with their own columns (generation and root_id are the server's).
+                // A SACCO's phone may not send them, its status least of all (SaccoMemberRules::syncRules).
+                ...self::present('sacco_members', ['status', 'date_of_death', 'place_of_death', 'birth_date_precision', 'education_level', 'country', 'heritage', 'privacy', 'dues_duty', 'dues_personal_minor', 'dues_start_date'])],
+                'user_fields' => ['created_by_id'], 'rules' => [\App\Support\Rules\SaccoMemberRules::class, 'syncRules'],
+                'refs' => self::presentRefs('sacco_members', ['branch_uuid' => ['model' => \App\Models\KinBranch::class, 'column' => 'branch_id']])],
+            // My Family Roots 360 (the kin module): the tree. Links and marriages name their people by uuid; every save passes TreeService's
+            // guards (a refused link comes back rejected), and the generations are worked out once after the batch.
+            'kin_branches' => ['model' => \App\Models\KinBranch::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'notes', 'sort_order'],
+                'user_fields' => ['created_by_id'], 'refs' => ['founder_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'founder_id']]],
+            'kin_links' => ['model' => \App\Models\KinLink::class, 'kind' => self::KIND_MASTER, 'fields' => ['role', 'kind', 'notes'],
+                'user_fields' => ['created_by_id'], 'rules' => [\App\Services\Kin\TreeService::class, 'linkSyncRules'],
+                'refs' => ['child_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'child_id'], 'parent_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'parent_id']]],
+            'kin_spouses' => ['model' => \App\Models\KinSpouse::class, 'kind' => self::KIND_MASTER, 'fields' => ['spouse_name', 'status', 'married_on', 'ended_on', 'sort_order', 'notes'],
+                'user_fields' => ['created_by_id'], 'rules' => [\App\Services\Kin\TreeService::class, 'spouseSyncRules'],
+                'refs' => ['person_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'person_id'], 'spouse_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'spouse_id']]],
             'sacco_transactions' => ['model' => \App\Models\SaccoTransaction::class, 'kind' => self::KIND_EVENT, 'handler' => 'sacco_transaction',
                 'refs' => ['member_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'member_id']]],
             'sacco_savings_products' => ['model' => null, 'kind' => self::KIND_SNAPSHOT, 'snapshot' => ['table' => 'sacco_savings_products', 'where' => ['is_deleted', '=', 0]]],
@@ -256,6 +270,9 @@ class SyncRegistry
             if ($key === 'cash_movements') {
                 return in_array('server_seq', self::columns('cash_movements'), true);
             }
+            if (str_starts_with($key, 'kin_')) {
+                return self::columns($key) !== []; // the Family Roots migration not run yet
+            }
             if (str_starts_with($key, 'sacco_')) {
                 return self::columns($key) !== []; // the Akiba migrations not run yet
             }
@@ -304,5 +321,7 @@ class SyncRegistry
     /** Server-derived columns devices may never set directly. */
     public const DERIVED_COLUMNS = ['id', 'company_id', 'server_seq', 'version', 'is_deleted', 'created_at', 'updated_at', 'current_quantity', 'receipt_number', 'invoice_number', 'total_amount', 'amount_paid', 'balance', 'change_given', 'subtotal', 'payment_status', 'processed_at', 'voided_at', 'voided_by_id', 'total_income', 'total_expense', 'total_collected', 'total_expected', 'total_in_pledge', 'budget_total', 'budget_spent', 'budget_balance', 'balance', 'percentage_done', 'is_complete', 'not_paid_amount',
         // Akiba Ledger (04 §9.3): caches and numbers only the server writes.
-        'balance_minor', 'held_minor', 'shares_count', 'member_no', 'journal_entry_id', 'hold_reason', 'kyc_status', 'nin_hash', 'nin_encrypted'];
+        'balance_minor', 'held_minor', 'shares_count', 'member_no', 'journal_entry_id', 'hold_reason', 'kyc_status', 'nin_hash', 'nin_encrypted',
+        // My Family Roots 360: worked out from the tree (TreeService::recompute).
+        'generation', 'root_id'];
 }

@@ -67,7 +67,20 @@ final class SaccoMemberRules
         return array_intersect_key(self::rules($ignoreId === null), array_flip(['kind', 'first_name', 'last_name', 'other_names', 'gender', 'date_of_birth', 'email', 'address',
             'district', 'subcounty', 'parish', 'village', 'occupation', 'employer_name', 'payroll_no', 'joined_on', 'guardian_name']))
             + ['phone_e164' => $phone, 'phone_alt_e164' => $phone, 'guardian_phone_e164' => $phone, 'consent_data_at' => ['nullable', 'date'], 'consent_messages_at' => ['nullable', 'date'],
-                'messages_opt_out_at' => ['nullable', 'date']];
+                'messages_opt_out_at' => ['nullable', 'date']]
+            + self::kinSyncRules($companyId);
+    }
+
+    /** The family's own columns (My Family Roots 360): a family's phone may send them, a SACCO's may not. @return array<string, array<int, mixed>> */
+    public static function kinSyncRules(int $companyId): array
+    {
+        $fields = ['status' => ['sometimes', 'in:'.implode(',', config('kin.statuses'))], 'date_of_death' => ['nullable', 'date'], 'place_of_death' => ['nullable', 'string', 'max:150'],
+            'birth_date_precision' => ['nullable', 'in:'.implode(',', config('kin.birth_date_precisions'))], 'education_level' => ['nullable', 'string', 'max:60'],
+            'country' => ['nullable', 'string', 'max:60'], 'heritage' => ['nullable', 'array'], 'privacy' => ['nullable', 'array'],
+            'dues_duty' => ['nullable', 'in:'.implode(',', config('kin.dues_duties'))], 'dues_personal_minor' => ['nullable', 'integer', 'min:0', 'max:'.SaccoRules::MAX_MINOR],
+            'dues_start_date' => ['nullable', 'date']];
+
+        return \App\Services\Kin\TreeService::isFamily($companyId) ? $fields : array_map(fn () => ['exclude'], $fields);
     }
 
     /** @return array<string, array<int, mixed>> one nominee of a nomination */

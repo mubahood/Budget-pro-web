@@ -108,6 +108,12 @@ class MasterDataService
         // Fields with rules of their own (the supermarket product / customer fields) are checked like the web form checks them.
         if (isset($config['rules']) && is_callable($config['rules'])) {
             $rules = array_intersect_key(($config['rules'])($companyId, $existing?->getKey()), array_flip(array_intersect($allowed, array_keys($data))));
+            // A field ruled ['exclude'] is not this account's to send (a SACCO phone's family fields): dropped, as an unknown field is.
+            foreach ($rules as $field => $r) {
+                if ($r === ['exclude']) {
+                    unset($rules[$field], $data[$field]);
+                }
+            }
             if ($rules !== []) {
                 $v = \Illuminate\Support\Facades\Validator::make($data, $rules);
                 if ($v->fails()) {

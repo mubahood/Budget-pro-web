@@ -148,7 +148,8 @@ class SyncApplier
 
     private function applyInTransaction(Company $company, int $companyId, ?string $deviceId, int $userId, array $batch, string $batchUuid): array
     {
-        $result = DB::transaction(function () use ($company, $companyId, $deviceId, $userId, $batch, $batchUuid) {
+        // A family tree (kin) changed by the batch is worked out once, after it (TreeService::batch).
+        $result = \App\Services\Kin\TreeService::batch(fn () => DB::transaction(function () use ($company, $companyId, $deviceId, $userId, $batch, $batchUuid) {
             $ops = [];
             $assigned = [];
             $derived = ['products' => [], 'customers' => []];
@@ -169,6 +170,9 @@ class SyncApplier
                 }
                 $op['_user_id'] = $userId;
                 $need = self::permissionFor($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
+                if ($table === 'sacco_members' && in_array('kin', $company->modules(), true)) {
+                    $need = 'kin_people'; // a family's people are its members rows (My Family Roots 360)
+                }
                 if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)
                     // An event's settings and payment details belong to its chair (and treasurer): BudgetAccess.
                     && ! \App\Services\Budget\BudgetAccess::allowsSettingsSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))
@@ -267,7 +271,7 @@ class SyncApplier
             $this->log($companyId, $deviceId, $userId, $batch, $batchUuid, $status, $result);
 
             return $result;
-        });
+        }));
 
         return $result;
     }
@@ -938,6 +942,9 @@ class SyncApplier
             'sacco_transactions' => 'sacco_teller',
             'sacco_members' => 'sacco_members',
             'sacco_loans' => 'sacco_loans',
+            // My Family Roots 360: the tree and the branches (as ApiPermissionMap's kin/ rules).
+            'kin_links', 'kin_spouses' => 'kin_people',
+            'kin_branches' => 'kin_branches',
             default => null, // poultry: farm roles live in the poultry module
         };
     }
