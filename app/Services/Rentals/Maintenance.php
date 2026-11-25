@@ -74,6 +74,7 @@ final class Maintenance
                 'photos' => self::ownPhotos($companyId, (array) ($data['photos'] ?? [])) ?: null,
                 'created_by_id' => $by?->id]);
             RentalAudit::record($companyId, 'maintenance.opened', $m, "Opened {$m->number}: {$m->title}", ['priority' => $priority], $reporter[0], $reporter[1] ?? $by?->id);
+            \App\Services\Notifications\Triggers::maintenance($m, 'opened', $by?->id);
 
             return $m;
         });
@@ -166,6 +167,7 @@ final class Maintenance
             $m->forceFill(['status' => 'done', 'cost_minor' => $cost ?: null, 'expense_id' => $expenseId, 'resolved_on' => LocalDate::date($cid, $data['resolved_on'] ?? null)->toDateString(),
                 'resolution' => isset($data['resolution']) ? mb_substr((string) $data['resolution'], 0, 5000) : null])->save();
             RentalAudit::record($cid, 'maintenance.done', $m, "Closed {$m->number}: {$m->title}", ['cost_minor' => $cost], 'staff', $by->id);
+            \App\Services\Notifications\Triggers::maintenance($m, 'done', (int) $by->id);
 
             return $m->fresh();
         });

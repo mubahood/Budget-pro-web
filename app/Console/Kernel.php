@@ -32,6 +32,7 @@ class Kernel extends ConsoleKernel
         $schedule->call($task('customers:adopt-named'))->name('customers:adopt-named')->hourlyAt(40)->withoutOverlapping();
         // Push notifications (engage plan §2): pushes held by quiet hours go at :20 and :40 (the host's cron reaches only those minutes reliably).
         $schedule->call($task('notifications:push'))->name('notifications:push')->cron('20,40 * * * *')->withoutOverlapping(30);
+        $schedule->call($task('notifications:engage'))->name('notifications:engage')->cron('20,40 * * * *')->withoutOverlapping(30); // engage plan §3: reminders and the Sunday week
         $schedule->call($task('shop:product-stats'))->name('shop:product-stats')->dailyAt('01:30')->withoutOverlapping();
         // Akiba Ledger (ADR 0009 §7): every SACCO's books proved sound each night; failures reach the owner and System health.
         $schedule->call($task('sacco:approvals-expire'))->name('sacco:approvals-expire')->hourlyAt(15)->withoutOverlapping();

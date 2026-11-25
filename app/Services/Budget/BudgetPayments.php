@@ -220,6 +220,9 @@ class BudgetPayments
             $item->is_complete = $complete;
             // Only the figure changed: a person's edit made before this, on a phone offline, is still the newest edit (MasterDataService).
             $item->saveQuietlySynced(true);
+            if ($stored !== null) {
+                \App\Services\Notifications\Triggers::budgetOverspent($item, (string) $stored->invested_amount, $paid, $target); // only when it crosses the target
+            }
         } else {
             DB::table('budget_items')->where('id', $item->id)->update(['balance' => $balance, 'percentage_done' => $percent, 'is_complete' => $complete]);
         }

@@ -89,6 +89,7 @@ class ContributionRecord extends Model
         //created
         static::created(function ($model) {
             self::finalizer($model);
+            \App\Services\Notifications\Triggers::pledgeMade($model);
         });
     }
 

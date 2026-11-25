@@ -29,7 +29,10 @@ class UnitySubscription extends Model
     {
         static::addGlobalScope(new CompanyScope);
         static::saving(fn (self $s) => Memberships::guard($s));
-        static::saved(fn (self $s) => Memberships::recompute((int) $s->company_id, (int) $s->member_id));
+        static::saved(function (self $s) {
+            Memberships::recompute((int) $s->company_id, (int) $s->member_id);
+            \App\Services\Notifications\Triggers::unityPaid($s); // money in: the managers hear it
+        });
         static::deleting(function () {
             throw BusinessRuleException::make('subscription_history', 'A subscription is never deleted. Cancel it instead.');
         });

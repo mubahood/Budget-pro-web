@@ -609,7 +609,7 @@ final class LoanFlow
     {
         $cid = (int) $loan->company_id;
         DB::afterCommit(function () use ($cid, $loan, $users, $title, $body) {
-            (new Notifier())->notify($cid, 'sacco_loans', $title, $body, ['loan_id' => (int) $loan->id], $users);
+            (new Notifier())->notify($cid, 'sacco_loans', $title, $body, ['loan_id' => (int) $loan->id], $users, link: 'loan/'.(int) $loan->id, app: 'akiba-ledger');
             $settings = LoanBooks::settings($cid);
             if (in_array($settings->receipts_channel, ['none', 'app'], true)) {
                 return;

@@ -52,7 +52,7 @@ class ContributionPayments
         $paidOn = $this->paidOn($companyId, $data['paid_on'] ?? null);
         $uuid = $this->uuid($data['uuid'] ?? null);
 
-        return DB::transaction(function () use ($companyId, $recordId, $data, $userId, $allowOverpay, $amount, $method, $paidOn, $uuid) {
+        $result = DB::transaction(function () use ($companyId, $recordId, $data, $userId, $allowOverpay, $amount, $method, $paidOn, $uuid) {
             if ($uuid !== null && ($replay = $this->replay($companyId, $uuid, $recordId, null)) !== null) {
                 return $replay;
             }
@@ -84,6 +84,9 @@ class ContributionPayments
 
             return ['payment' => $payment, 'record' => self::recalculate($record), 'replayed' => false];
         });
+        \App\Services\Notifications\Triggers::pledgePaid($result, $userId); // the committee hears it (after commit; never a replay)
+
+        return $result;
     }
 
     /** @return array{payment: ContributionPayment, record: ContributionRecord, replayed: bool} */

@@ -157,6 +157,7 @@ class SaleService
             return $this->finalize($sale->fresh(), $payments, $userId, (bool) ($data['allow_negative_stock'] ?? false), $location);
         });
         \App\Services\Fiscal\FiscalService::queueSale($sale); // F2: queued after commit; nothing when `fiscal` is off; never throws
+        \App\Services\Notifications\Triggers::bigSale($companyId, $sale, $userId); // far above the usual: the managers hear it
 
         return ['sale' => $this->loaded($sale), 'replayed' => false];
     }

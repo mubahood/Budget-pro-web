@@ -96,6 +96,7 @@ final class LoanDecisionExecutor extends BaseExecutor implements ChecksChecker, 
         $facts = LoanProducts::keyFacts((int) $p['amount_minor'], $loan->loanTerms(), LoanBooks::today($cid), Schedule::firstDueAfter(LoanBooks::today($cid), $loan->loanTerms()->frequency), (string) $loan->currency);
         LoanNotices::toMember($cid, (int) $loan->member_id, 'loan_approved', ['loan' => (string) $loan->loan_no, 'amount' => LoanBooks::fmt($cid, (int) $p['amount_minor']),
             'days' => 7, 'cost' => LoanBooks::fmt($cid, (int) $facts['total_cost_of_credit_minor'])]);
+        \App\Services\Notifications\Triggers::loanDecided($loan, true, (int) $checker->id);
 
         return ['loan_id' => (int) $loan->id, 'status' => 'approved'];
     }
@@ -112,6 +113,7 @@ final class LoanDecisionExecutor extends BaseExecutor implements ChecksChecker, 
             $loan->fill(['status' => 'rejected', 'rejected_at' => now(), 'decision_note' => $approval->decision_note])->save();
             (new \App\Services\Sacco\Loans\Guarantors())->releaseAll($loan, 'The loan was not approved.');
             LoanNotices::toMember($cid, (int) $loan->member_id, 'loan_rejected', ['loan' => (string) $loan->loan_no]);
+            \App\Services\Notifications\Triggers::loanDecided($loan, false);
         } else {
             $loan->fill(['status' => 'appraised'])->save(); // cancelled or expired: it can be sent again
         }

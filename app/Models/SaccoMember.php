@@ -110,6 +110,7 @@ class SaccoMember extends Model
         static::created(function (self $m) {
             if (\App\Services\Kin\TreeService::isFamily((int) $m->company_id)) {
                 \App\Services\Kin\TreeService::changed((int) $m->company_id); // a new person is a founder until linked
+                \App\Services\Notifications\Triggers::kinPersonAdded($m); // the branch's coordinator hears it
             }
         });
         static::deleting(function () {

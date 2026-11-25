@@ -343,9 +343,11 @@ class TeamService
         if ($role === 'owner' || ! in_array($role, self::rolesFor($company), true)) {
             throw BusinessRuleException::make('invalid_role', 'Unknown role.');
         }
+        $before = DB::table('company_members')->where('company_id', $company->id)->where('user_id', $member->id)->value('role');
         DB::table('company_members')->updateOrInsert(['company_id' => $company->id, 'user_id' => $member->id], ['role' => $role, 'status' => 'active', 'updated_at' => now()]);
         $this->syncAdminRole($member, $role);
         Permissions::flush();
+        \App\Services\Notifications\Triggers::roleChanged($company, $member, $before, $role);
     }
 
     /**

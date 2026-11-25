@@ -96,6 +96,7 @@ final class Payments
             }
             $p->forceFill(['unallocated_minor' => $left])->save();
             RentalAudit::record($cid, 'payment.received', $p, "Received {$p->number} for lease {$lease->number}", ['amount_minor' => $amount, 'method' => $method], $by ? 'staff' : 'system', $by?->id);
+            \App\Services\Notifications\Triggers::rentPaid($p, $lease, $by?->id);
 
             return Receipt::stamp($p);
         });
@@ -166,6 +167,7 @@ final class Payments
                 throw BusinessRuleException::make('direct_too_much', 'Paid to the landlord settles bills only: '.Minor::format($left, $cid).' is on no bill.');
             }
             RentalAudit::record($cid, 'payment.paid_landlord', $p, "Recorded {$p->number}: the tenant on lease {$lease->number} paid the landlord directly", ['amount_minor' => $amount], $by ? 'staff' : 'system', $by?->id);
+            \App\Services\Notifications\Triggers::rentPaid($p, $lease, $by?->id, true);
 
             return Receipt::stamp($p);
         });
