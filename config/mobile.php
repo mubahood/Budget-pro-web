@@ -14,7 +14,8 @@ return [
     // empty until set.
     'store_urls' => [
         'unitydesk' => env('MOBILE_STORE_URL_UNITYDESK', 'https://play.google.com/store/apps/details?id=com.budget.dynamics'),
-        'budget-pro' => env('MOBILE_STORE_URL_BUDGET_PRO', ''),
+        // Budget Pro's phones are on com.budget.dynamics until the switch day (unitydesk docs 07): then set MOBILE_STORE_URL_BUDGET_PRO= (empty) and MOBILE_STORE_URL to the web.
+        'budget-pro' => env('MOBILE_STORE_URL_BUDGET_PRO', 'https://play.google.com/store/apps/details?id=com.budget.dynamics'),
         'family-roots' => env('MOBILE_STORE_URL_FAMILY_ROOTS', 'https://play.google.com/store/apps/details?id=musenene.com'),
         'pledge-and-budget' => env('MOBILE_STORE_URL_PLEDGE_BUDGET', 'https://play.google.com/store/apps/details?id=com.budgetpro.pledgeandbudget'),
         'shelfie' => env('MOBILE_STORE_URL_SHELFIE', ''),

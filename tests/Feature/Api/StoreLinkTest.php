@@ -19,7 +19,9 @@ class StoreLinkTest extends ApiTestCase
         $this->assertSame('https://play.google.com/store/apps/details?id=com.budget.dynamics', $listing(['X-App' => 'unitydesk']));
         $this->assertSame('https://play.google.com/store/apps/details?id=com.budget.dynamics', $listing(['X-App' => 'unity']));
         $this->assertSame('https://play.google.com/store/apps/details?id=musenene.com', $listing(['X-App' => 'kin']));
-        $this->assertSame('', $listing(['X-App' => 'budget-pro']), 'Budget Pro is on the web');
+        $this->assertSame('https://play.google.com/store/apps/details?id=com.budget.dynamics', $listing(['X-App' => 'budget-pro']), 'Budget Pro keeps its listing until the switch day');
+        config(['mobile.store_urls.budget-pro' => '']);
+        $this->assertSame('', $listing(['X-App' => 'budget-pro']), 'after the switch Budget Pro is on the web');
         foreach (['shelfie', 'akiba', 'keyroll', 'kuku-tally'] as $app) {
             $this->assertStringNotContainsString('com.budget.dynamics', $listing(['X-App' => $app]), $app.' is never sent to UnityDesk\'s listing');
         }
