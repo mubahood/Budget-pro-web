@@ -73,10 +73,11 @@ class OtpService
         // The app the person asked from (its sign-in screen sends it): the code comes in that app's name.
         $fromApp = \App\Support\AppFamily::slug($fromApp);
         if ($fromApp !== null && $sender === null && $app === null && \App\Support\AppFamily::ownBooks($fromApp)) {
-            $app = $fromApp === 'akiba-ledger' ? 'akiba' : 'estate-ledger';
-            $sender = \App\Support\AppFamily::name($fromApp);
+            $app = match ($fromApp) { 'akiba-ledger' => 'akiba', 'family-roots' => 'kin', default => 'estate-ledger' };
+            $sender = $app === 'kin' ? self::kinName() : \App\Support\AppFamily::name($fromApp);
         }
-        $sender ??= self::scopeOf($identifier) === 'rentals' ? 'Estate Ledger' : ($app === 'estate-ledger' ? 'Estate Ledger' : self::saccoSender($identifier));
+        // A family's staff (My Family Roots 360) hear from the family's app, even with a purse: never a SACCO's name (doc 11 T1).
+        $sender ??= self::scopeOf($identifier) === 'rentals' ? 'Estate Ledger' : match ($app) { 'estate-ledger' => 'Estate Ledger', 'kin' => self::kinName(), default => self::saccoSender($identifier) };
         // A standalone copy speaks in the business's name (STANDALONE_EDITION_PLAN.md §15).
         // An Akiba Ledger SACCO speaks only in its own name ($sender), never the family's.
         $family = $fromApp !== null && ! \App\Support\AppFamily::ownBooks($fromApp) && ! \App\Support\Edition::isStandalone() ? \App\Support\AppFamily::name($fromApp) : null;
@@ -90,7 +91,7 @@ class OtpService
         if ($sender !== null) {
             // A SACCO (a member, or staff of a SACCO account): the email names the SACCO, and its footer Akiba Ledger only.
             // An Estate Ledger tenant's or landlord's code names their agency and is marked Estate Ledger's, never Akiba Ledger's (KR-05).
-            $meta['options']['mail'] = ['subject' => $sender.': your code', ($app === 'estate-ledger' ? 'estate-ledger' : 'akiba') => true];
+            $meta['options']['mail'] = ['subject' => $sender.': your code', match ($app) { 'estate-ledger' => 'estate-ledger', 'kin' => 'kin', default => 'akiba' } => true];
         }
         $logId = app(Messenger::class)->send($to, $text, $channels, $meta, now: true);
         /** @var object{status: string, channel: string|null}|null $row */
@@ -102,7 +103,13 @@ class OtpService
         return ['sent' => $row?->status === 'sent', 'channel' => $row?->channel, 'sent_to' => $isEmail ? self::mask($to) : $to, 'expires_in' => $cfg['ttl_minutes'] * 60];
     }
 
-    /** The app a staff login's account speaks as ('akiba', 'estate-ledger'), else null. */
+    /** The name My Family Roots 360 sends codes as. */
+    private static function kinName(): string
+    {
+        return (string) config('kin.brand.name', 'My Family Roots 360');
+    }
+
+    /** The app a staff login's account speaks as ('kin', 'akiba', 'estate-ledger'), else null. */
     private static function staffApp(string $identifier): ?string
     {
         $id = trim($identifier);

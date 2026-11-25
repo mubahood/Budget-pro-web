@@ -3,10 +3,10 @@
 namespace App\Support;
 
 /**
- * The six apps as the server sees them: which module each one opens, and whether its books stand alone.
+ * The seven apps as the server sees them: which module each one opens, and whether its books stand alone.
  *
  * Family apps share one set of books: joining one adds its module to the books a person already has. Own-books apps (Akiba Ledger,
- * Estate Ledger) never mix with anything: joining one opens a second account beside the person's (SiblingAccounts), on the same sign-in.
+ * Estate Ledger, Family Roots) never mix with anything: joining one opens a second account beside the person's (SiblingAccounts), on the same sign-in.
  * The web portal's config/apps.php carries the pages and words; this is only what the sign-in needs (docs/accounts in budget-pro-new).
  */
 final class AppFamily
@@ -19,13 +19,14 @@ final class AppFamily
         'budget-pro' => ['Budget Pro', 'shop', false],
         'akiba-ledger' => ['Akiba Ledger', 'sacco', true],
         'estate-ledger' => ['Estate Ledger', 'rentals', true],
+        'family-roots' => ['Family Roots', 'kin', true],
     ];
 
     /** Older names the phones still send. */
-    private const ALIASES = ['keyroll' => 'estate-ledger', 'akiba' => 'akiba-ledger', 'budgetpro' => 'budget-pro', 'pledgebudget' => 'pledge-and-budget', 'kukutally' => 'kuku-tally'];
+    private const ALIASES = ['keyroll' => 'estate-ledger', 'akiba' => 'akiba-ledger', 'budgetpro' => 'budget-pro', 'pledgebudget' => 'pledge-and-budget', 'kukutally' => 'kuku-tally', 'kin' => 'family-roots', 'familyroots' => 'family-roots'];
 
     /** Modules whose books stand alone. */
-    public const OWN_BOOKS_MODULES = ['sacco', 'rentals'];
+    public const OWN_BOOKS_MODULES = ['sacco', 'rentals', 'kin'];
 
     public static function slug(?string $app): ?string
     {
@@ -59,6 +60,10 @@ final class AppFamily
     /** Whether books with these modules already open [slug]. Budget Pro opens any family books. */
     public static function opens(array $modules, string $slug): bool
     {
+        // A family's books (even with a purse, ['kin', 'sacco']) open in Family Roots only, never as a SACCO (doc 11 T1).
+        if (in_array('kin', $modules, true)) {
+            return $slug === 'family-roots';
+        }
         if (self::ownBooks($slug)) {
             return in_array(self::module($slug), $modules, true);
         }

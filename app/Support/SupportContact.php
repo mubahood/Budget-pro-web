@@ -37,7 +37,7 @@ final class SupportContact
     public const FALLBACK = 'site.general';
 
     /** Where a tracked click came from (support_clicks.app): the surfaces, then the phone app flavors. */
-    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger', 'estate-ledger'];
+    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger', 'estate-ledger', 'family_roots'];
 
     /** An error reference: E + the error's fingerprint, or R + a request's own id (8 hex characters). */
     public const REFERENCE_PATTERN = '/^[ER][0-9A-F]{8}$/';
@@ -127,6 +127,27 @@ final class SupportContact
         return $c;
     }
 
+    /** Our contact as My Family Roots 360: every prefilled message greets the family's app and names no other product. */
+    public static function forKin(): self
+    {
+        $c = self::platform();
+        $c->product = 'My Family Roots 360';
+
+        return $c;
+    }
+
+    /** Whether a company keeps a family's records (its mail, codes and footers speak as My Family Roots 360, even with a purse). */
+    public static function isKin(Company|int|null $company): bool
+    {
+        try {
+            $company = is_int($company) ? Company::withoutGlobalScopes()->find($company) : $company;
+
+            return $company !== null && in_array('kin', $company->modules(), true);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     /** Whether a company keeps the rental books (its mail, footers and receipts speak as Estate Ledger). */
     public static function isRentals(Company|int|null $company): bool
     {
@@ -140,31 +161,40 @@ final class SupportContact
     }
 
     /**
-     * The app an account built around an exclusive module speaks as ('akiba', 'estate-ledger'), or null for the family's apps.
-     * Its mail, codes, invites and footers carry that app's name only.
+     * The app an account built around an exclusive module speaks as ('kin', 'akiba', 'estate-ledger'), or null for the family's apps.
+     * Its mail, codes, invites and footers carry that app's name only. A family's account speaks as Family Roots even with a purse.
      */
     public static function standaloneApp(Company|int|null $company): ?string
     {
+        $company = is_int($company) ? rescue(fn () => Company::withoutGlobalScopes()->find($company), null, false) : $company;
+        if (self::isKin($company)) {
+            return 'kin';
+        }
+
         return self::isSacco($company) ? 'akiba' : (self::isRentals($company) ? 'estate-ledger' : null);
     }
 
-    /** The product name an account's messages use: Akiba Ledger, Estate Ledger, or the platform's. */
+    /** The product name an account's messages use: Akiba Ledger, Estate Ledger, My Family Roots 360, or the platform's. */
     public static function productName(Company|int|null $company): string
     {
         return match (self::standaloneApp($company)) {
             'akiba' => 'Akiba Ledger',
             'estate-ledger' => 'Estate Ledger',
+            'kin' => (string) config('kin.brand.name', 'My Family Roots 360'),
             default => (string) config('app.name'),
         };
     }
 
-    /** Whether a company keeps SACCO books (its mail, footers and receipts speak as Akiba Ledger). */
+    /**
+     * Whether a company is a SACCO (its mail, footers and receipts speak as Akiba Ledger). A family's purse keeps SACCO books
+     * too, but that account is a family's (['kin', 'sacco']): it never speaks as Akiba (doc 11 T1).
+     */
     public static function isSacco(Company|int|null $company): bool
     {
         try {
             $company = is_int($company) ? Company::withoutGlobalScopes()->find($company) : $company;
 
-            return $company !== null && in_array('sacco', $company->modules(), true);
+            return $company !== null && in_array('sacco', $modules = $company->modules(), true) && ! in_array('kin', $modules, true);
         } catch (Throwable) {
             return false;
         }

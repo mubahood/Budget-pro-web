@@ -25,6 +25,7 @@ class DatabaseSeeder extends Seeder
             PledgeBudgetPlanSeeder::class, // Pledge & Budget's trial, on the family's line: 10 logins (PB-33)
             AkibaPlanSeeder::class,        // Akiba Ledger's own plan line (akiba-*, AK-15)
             EstateLedgerPlanSeeder::class,      // Estate Ledger's own plan line (estate-ledger-*, KR-20)
+            FamilyRootsPlanSeeder::class,       // My Family Roots 360's own plan line (family-roots-*)
             PingPinPlanSeeder::class,
             ProductTemplateSeeder::class,  // template packs for the setup wizard
             PlatformAdminSeeder::class,    // first platform admin from ADMIN_EMAIL / ADMIN_PASSWORD

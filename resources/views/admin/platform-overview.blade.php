@@ -87,6 +87,9 @@
         ['Rentals', 'fa-key', [
             ['Properties', $n($b['rentals']['properties'])], ['Units', $n($b['rentals']['units'])], ['Units let', $n($b['rentals']['let'])],
             ['Tenants', $n($b['rentals']['tenants'])], ['Rent collected, 30 days', $ugx($b['rentals']['collected_30d'])]]],
+        ['Families', 'fa-sitemap', [
+            ['Families', $n($b['kin']['families'])], ['People', $n($b['kin']['people']).' (+'.$n($b['kin']['departed']).' departed)'],
+            ['Branches', $n($b['kin']['branches'])], ['Parent links', $n($b['kin']['links'])]]],
     ] as [$title, $icon, $lines])
         <div class="col-md-{{ $loop->index < 3 ? 4 : 6 }}">
             <div class="box"><div class="box-header with-border"><h3 class="box-title"><i class="fa {{ $icon }}"></i> {{ $title }}</h3></div>

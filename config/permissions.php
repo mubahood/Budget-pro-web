@@ -54,6 +54,11 @@ return [
         'rentals_settings' => 'Settings, staff property assignments, tenant and landlord sign-ins',
         'rentals_close' => 'Close a month and issue its statements',
         'rentals_reopen' => 'Reopen a closed month, with a written reason',
+        // Family Roots (the kin module): offered only to family accounts (see `module_permissions`).
+        'kin_view' => 'See the family tree, people and branches',
+        'kin_people' => 'Add and edit people, parents and spouses',
+        'kin_branches' => 'Add and edit branches',
+        'kin_settings' => 'Family settings',
     ],
 
     // Permissions that belong to one module: a company is offered (and its owner holds) only its own modules'
@@ -63,6 +68,7 @@ return [
             'sacco_disburse', 'sacco_accounts', 'sacco_reports', 'sacco_settings', 'sacco_officers', 'sacco_audit_view', 'sacco_meetings'],
         'rentals' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses',
             'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close', 'rentals_reopen'],
+        'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings'],
     ],
 
     // What an account built around an exclusive module keeps of the family's permissions (the account itself).
@@ -95,6 +101,12 @@ return [
         'rentals_accountant' => ['label' => 'Accountant', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_collect', 'rentals_bill', 'rentals_reverse',
             'rentals_landlords', 'rentals_expenses', 'rentals_reports', 'rentals_close']],
         'rentals_caretaker' => ['label' => 'Caretaker', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_collect', 'rentals_maintenance']],
+        // Family Roots roles: `module` keeps them to family accounts. The head of the family is the account's owner;
+        // a family's viewer also gets kin_view (Permissions::forRole). A member only reads.
+        'kin_secretary' => ['label' => 'Secretary', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_branches']],
+        'kin_treasurer' => ['label' => 'Treasurer', 'module' => 'kin', 'permissions' => ['kin_view']],
+        'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people']],
+        'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view']],
     ],
 
     // laravel-admin role slug each company role maps to (web menu + access).
@@ -106,5 +118,7 @@ return [
         'sacco_loans_officer' => 'shop_viewer', 'sacco_committee' => 'shop_viewer', 'sacco_auditor' => 'shop_viewer', 'sacco_teller' => 'shop_viewer',
         // Nor any rental screens (the rental books live in the web portal and the Estate Ledger app).
         'rentals_manager' => 'shop_viewer', 'rentals_accountant' => 'shop_viewer', 'rentals_caretaker' => 'shop_viewer',
+        // Nor any family screens (a family's records live in the web portal and the Family Roots app).
+        'kin_secretary' => 'shop_viewer', 'kin_treasurer' => 'shop_viewer', 'kin_branch_coordinator' => 'shop_viewer', 'kin_member' => 'shop_viewer',
     ],
 ];

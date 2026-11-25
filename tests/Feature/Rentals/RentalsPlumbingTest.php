@@ -65,7 +65,7 @@ class RentalsPlumbingTest extends ApiTestCase
             'hint' => 'Properties, tenants, rent and landlords'], config('onboarding.business_types.rentals'));
         $this->assertContains('rentals', EnsureApiModule::MODULES);
         $this->assertContains('rentals', CompanyRules::CORE_MODULES);
-        $this->assertSame(['sacco', 'rentals'], CompanyRules::EXCLUSIVE_MODULES);
+        $this->assertSame(['sacco', 'rentals', 'kin'], CompanyRules::EXCLUSIVE_MODULES);
         $this->assertArrayNotHasKey('rentals', CompanyRules::familyBusinessTypes(), 'only Estate Ledger signs it up');
         $this->assertContains('estate-ledger', SupportContact::APPS);
         $this->assertContains('rental_photo', FileController::PURPOSES);

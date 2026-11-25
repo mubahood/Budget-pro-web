@@ -16,10 +16,11 @@ class InstallChoicesTest extends TestCase
     {
         $config = require dirname(__DIR__, 2).'/config/onboarding.php';
         $exclusive = array_keys(array_filter($config['business_types'], fn ($t) => array_intersect($t['modules'], CompanyRules::EXCLUSIVE_MODULES) !== []));
-        $this->assertSame(['sacco', 'rentals'], $exclusive);
+        $this->assertSame(['sacco', 'rentals', 'kin'], $exclusive);
         $types = InstallChoices::businessTypes();
         $this->assertArrayNotHasKey('sacco', $types);
         $this->assertArrayNotHasKey('rentals', $types);
+        $this->assertArrayNotHasKey('kin', $types);
         $this->assertSame(array_values(array_diff(array_keys($config['business_types']), $exclusive)), array_keys($types));
         $this->assertCount(22, $types);
     }

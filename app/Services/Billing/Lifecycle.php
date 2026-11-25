@@ -285,7 +285,7 @@ class Lifecycle
     {
         $quotas = new Quotas();
         $over = [];
-        foreach (['products', 'devices', 'users', 'members', 'units', 'locations'] as $what) {
+        foreach (['products', 'devices', 'users', 'members', 'units', 'people', 'locations'] as $what) {
             $limit = $quotas->limit($company, $what);
             $used = $limit === null ? 0 : $quotas->used($company, $what);
             if ($limit !== null && $used > $limit) {
@@ -304,6 +304,7 @@ class Lifecycle
         return implode(', ', array_filter([
             isset($l['max_members']) ? $l['max_members'].' members' : null,
             isset($l['max_units']) ? $l['max_units'].' units' : null,
+            isset($l['max_people']) ? number_format((int) $l['max_people']).' people' : null,
             isset($l['max_devices']) ? $l['max_devices'].' phone'.($l['max_devices'] > 1 ? 's' : '') : null,
             isset($l['max_products']) ? $l['max_products'].' products' : null,
             isset($l['max_sales_per_month']) ? $l['max_sales_per_month'].' sales a month' : null,

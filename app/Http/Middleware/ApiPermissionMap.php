@@ -166,6 +166,11 @@ class ApiPermissionMap
         [['GET'], '#^rentals/properties/\d+/handover-preview$#', 'rentals_manage'],
         [['POST'], '#^rentals/maintenance/\d+/(ask-landlord|landlord-answer)$#', 'rentals_maintenance'],
         [['GET'], '#^rentals(/.*)?$#', 'rentals_view'], // every other read
+        // Family Roots (the kin module): officers write, everyone on the family's team reads (a member's role has kin_view only).
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/(people|links|spouses)(/\d+)?$#', 'kin_people'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/branches(/\d+)?$#', 'kin_branches'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin(/.*)?$#', 'kin_settings'], // any other write
+        [['GET'], '#^kin(/.*)?$#', 'kin_view'], // every read
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],
         [['GET'], '#^subscription/payments/\d+$#', 'billing'],
@@ -183,8 +188,12 @@ class ApiPermissionMap
         foreach (self::RULES as [$methods, $pattern, $permission]) {
             if (in_array($request->method(), $methods, true) && preg_match($pattern, $uri)) {
                 if ($permission !== null && ! Permissions::can($request->user(), $permission)) {
-                    // An Estate Ledger team hears about its property manager, not a shop (KR-05).
-                    $ask = str_starts_with($uri, 'rentals/') ? 'Ask your property manager.' : 'Ask the shop owner.';
+                    // An Estate Ledger team hears about its property manager, a family about its head, not a shop (KR-05).
+                    $ask = match (true) {
+                        str_starts_with($uri, 'rentals/') => 'Ask your property manager.',
+                        str_starts_with($uri, 'kin/') => 'Ask the head of the family.',
+                        default => 'Ask the shop owner.',
+                    };
 
                     return response()->json(['code' => 0, 'message' => 'Your role does not allow this. '.$ask, 'data' => null,
                         'errors' => ['code' => 'forbidden', 'permission' => $permission]], 403);

@@ -34,7 +34,7 @@ class CompanyRules
      * The modules a business is built around (budget-pro-new docs/FAMILY_PLAN.md): every account keeps at
      * least one of them, so it always has a home screen. `finance` (Income & expenses) sits beside them.
      */
-    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco', 'rentals'];
+    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco', 'rentals', 'kin'];
 
     public const CORE_MODULE_MESSAGE = 'Pick at least one: Shop, Poultry farm or Budget & pledges.';
 
@@ -44,8 +44,14 @@ class CompanyRules
      * never describe the same money as Income & expenses. So a company with one has no other module, not even
      * `finance`, and no account moves into or out of one later: a treasurer who also runs a shop uses two accounts.
      * Refused with 422 `module_exclusive`.
+     *
+     * `kin` (My Family Roots 360) stands alone too, and wins over `sacco`: a family may keep a purse (`sacco`) beside its
+     * tree only when config('kin.purse_enabled') is on, and such an account is a family's, never a SACCO's (doc 11 T1).
      */
-    public const EXCLUSIVE_MODULES = ['sacco', 'rentals'];
+    public const EXCLUSIVE_MODULES = ['sacco', 'rentals', 'kin'];
+
+    /** The one mix an exclusive module allows: a family's purse beside its tree, while config('kin.purse_enabled'). */
+    public const KIN_PURSE = ['kin', 'sacco'];
 
     // Names no other product (AK-68): a SACCO's staff only ever hear about their SACCO.
     public const EXCLUSIVE_MESSAGE = 'A SACCO keeps its books in an account of its own, and other books stay in theirs.';
@@ -54,6 +60,7 @@ class CompanyRules
     public const EXCLUSIVE_MESSAGES = [
         'sacco' => self::EXCLUSIVE_MESSAGE,
         'rentals' => 'Estate Ledger keeps the rental books in an account of their own, and other books stay in theirs.',
+        'kin' => 'My Family Roots 360 keeps a family\'s records in an account of their own, and other books stay in theirs.',
     ];
 
     /** Each exclusive module's settings table: its books are set up once the account has a row there. */
@@ -191,7 +198,8 @@ class CompanyRules
     }
 
     /**
-     * An exclusive module stands alone: a list holding one holds nothing else.
+     * An exclusive module stands alone: a list holding one holds nothing else. The one exception is a family's purse
+     * (['kin', 'sacco'], in any order), and only while config('kin.purse_enabled') is on.
      *
      * @param  array<int, string>  $modules
      */
@@ -199,23 +207,35 @@ class CompanyRules
     {
         $modules = array_values(array_unique($modules));
         $exclusive = array_values(array_intersect($modules, self::EXCLUSIVE_MODULES));
+        if ($exclusive === []) {
+            return true;
+        }
+        if (count($modules) === 2 && array_diff($modules, self::KIN_PURSE) === [] && array_diff(self::KIN_PURSE, $modules) === []) {
+            return (bool) config('kin.purse_enabled', false);
+        }
 
-        return $exclusive === [] || $modules === $exclusive && count($exclusive) === 1;
+        return $modules === $exclusive && count($exclusive) === 1;
     }
 
     /**
-     * The exclusive module a list of modules is built around, or null (a family account).
+     * The exclusive module a list of modules is built around, or null (a family account). `kin` wins over everything:
+     * a family's account with a purse is a family's, and never opens as a SACCO (doc 11 T1).
      *
      * @param  array<int, string>  $modules
      */
     public static function exclusiveOf(array $modules): ?string
     {
+        if (in_array('kin', $modules, true)) {
+            return 'kin';
+        }
+
         return array_values(array_intersect(self::EXCLUSIVE_MODULES, $modules))[0] ?? null;
     }
 
     /**
      * The business types of the family's own setup screens (the classic wizard): every type but the ones built
-     * around an exclusive module, which only their own app signs up (Akiba Ledger for `sacco`, Estate Ledger for `rentals`).
+     * around an exclusive module, which only their own app signs up (Akiba Ledger for `sacco`, Estate Ledger for `rentals`,
+     * Family Roots for `kin`).
      *
      * @return array<string, array<string, mixed>>
      */

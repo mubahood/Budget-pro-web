@@ -17,7 +17,7 @@ class Permissions
      * What the viewer also sees on an account with each module: a SACCO's viewer its books (docs/akiba 04 §6.1),
      * an Estate Ledger account's viewer its rental books and reports (docs/estate-ledger 04 §7.1).
      */
-    private const VIEWER_SEES = ['sacco' => ['sacco_view'], 'rentals' => ['rentals_view', 'rentals_reports']];
+    private const VIEWER_SEES = ['sacco' => ['sacco_view'], 'rentals' => ['rentals_view', 'rentals_reports'], 'kin' => ['kin_view']];
 
     /** @var array<string, array{role: string, perms: array<int, string>}> */
     private static array $cache = [];
@@ -40,7 +40,14 @@ class Permissions
         $byModule = (array) config('permissions.module_permissions', []);
         $exclusive = \App\Support\Rules\CompanyRules::exclusiveOf($modules);
         if ($exclusive !== null) {
-            return array_values(array_unique([...(array) config('permissions.exclusive_keeps', []), ...(array) ($byModule[$exclusive] ?? [])]));
+            // A family with a purse (['kin', 'sacco'], kin.purse_enabled) is offered both modules' permissions.
+            $own = $exclusive === 'kin' ? array_values(array_intersect(\App\Support\Rules\CompanyRules::KIN_PURSE, $modules)) : [$exclusive];
+            $perms = (array) config('permissions.exclusive_keeps', []);
+            foreach ($own as $module) {
+                $perms = [...$perms, ...(array) ($byModule[$module] ?? [])];
+            }
+
+            return array_values(array_unique($perms));
         }
         $off = [];
         foreach ($byModule as $module => $perms) {

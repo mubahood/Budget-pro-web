@@ -21,6 +21,7 @@ final class PlatformOverview
         'pledge-and-budget' => ['name' => 'Pledge & Budget', 'what' => 'Events, pledges and budgets'],
         'akiba' => ['name' => 'Akiba Ledger', 'what' => 'SACCOs'],
         'estate-ledger' => ['name' => 'Estate Ledger', 'what' => 'Rentals'],
+        'family-roots' => ['name' => 'Family Roots', 'what' => 'Families'],
     ];
 
     /**
@@ -30,6 +31,9 @@ final class PlatformOverview
     public static function appOf(mixed $modules): string
     {
         $m = is_array($modules) ? $modules : (json_decode((string) $modules, true) ?: []);
+        if (in_array('kin', $m, true)) {
+            return 'family-roots'; // a family's account, even with a purse (['kin', 'sacco'])
+        }
         if (in_array('sacco', $m, true)) {
             return 'akiba';
         }
@@ -126,6 +130,10 @@ final class PlatformOverview
     private function books(array $ugx, Carbon $d30): array
     {
         $live = fn ($q) => $q->where(fn ($w) => $w->whereNull('is_deleted')->orWhere('is_deleted', 0));
+        // A family's people are sacco_members rows too: they count as families', never as SACCO members.
+        $kin = DB::table('companies')->where('enabled_modules', 'like', '%"kin"%')->pluck('id')->all();
+        $sacco = fn ($q) => $live($q)->whereNotIn('company_id', $kin);
+        $family = fn ($q) => $live($q)->whereIn('company_id', $kin);
 
         return [
             'shop' => [
@@ -154,8 +162,8 @@ final class PlatformOverview
                 'cards' => $this->count('event_invitations', $live),
             ],
             'sacco' => [
-                'members' => $this->count('sacco_members', fn ($q) => $live($q)->where('status', 'active')),
-                'applicants' => $this->count('sacco_members', fn ($q) => $live($q)->where('status', 'applicant')),
+                'members' => $this->count('sacco_members', fn ($q) => $sacco($q)->where('status', 'active')),
+                'applicants' => $this->count('sacco_members', fn ($q) => $sacco($q)->where('status', 'applicant')),
                 'loans_active' => $this->count('sacco_loans', fn ($q) => $q->where('status', 'active')),
                 'loans_waiting' => $this->count('sacco_loans', fn ($q) => $q->whereIn('status', ['submitted', 'appraised', 'in_committee', 'pending_guarantor', 'pending_chair', 'approved'])),
                 'outstanding' => $this->sum('sacco_loans', 'principal_outstanding_minor', fn ($q) => $q->whereIn('company_id', $ugx)->where('status', 'active')),
@@ -167,6 +175,13 @@ final class PlatformOverview
                 'let' => $this->count('rental_leases', fn ($q) => $q->whereIn('status', ['active', 'notice'])),
                 'tenants' => $this->count('rental_tenants'),
                 'collected_30d' => $this->sum('rental_payments', 'amount_minor', fn ($q) => $q->whereIn('company_id', $ugx)->whereNull('reversed_at')->where('paid_on', '>=', $d30)),
+            ],
+            'kin' => [
+                'families' => count($kin),
+                'people' => $this->count('sacco_members', fn ($q) => $family($q)->whereIn('status', ['active', 'applicant'])),
+                'departed' => $this->count('sacco_members', fn ($q) => $family($q)->where('status', 'deceased')),
+                'branches' => $this->count('kin_branches', $live),
+                'links' => $this->count('kin_links', $live),
             ],
             'money' => [
                 'records' => $this->count('financial_records', $live),

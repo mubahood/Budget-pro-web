@@ -88,6 +88,20 @@ class Notifier
 
     public function welcome(User $user, Company $company): void
     {
+        if (in_array('kin', $company->modules(), true)) {
+            // My Family Roots 360 stands alone (even with a purse): its own name and first steps, its own footer.
+            $brand = (string) config('kin.brand.name', 'My Family Roots 360');
+            $to = $user->phone_e164 ?: $user->email;
+            if ($to) {
+                $this->messenger->send($to, "Welcome to {$brand}, {$user->first_name}! {$company->name} is ready: add yourself, your parents and your children, then invite your family.",
+                    Messenger::channelsFor($user->phone_e164, $user->email), ['company_id' => $company->id, 'user_id' => $user->id, 'purpose' => 'welcome',
+                        'options' => ['mail' => ['subject' => 'Welcome to '.$brand, 'kin' => true]]]);
+            }
+            DB::table('app_notifications')->insert(['company_id' => $company->id, 'user_id' => $user->id, 'type' => 'welcome', 'title' => 'Welcome!',
+                'body' => 'Start your family tree with yourself and your parents.', 'created_at' => now(), 'updated_at' => now()]);
+
+            return;
+        }
         if (in_array('sacco', $company->modules(), true)) {
             // Akiba Ledger stands alone (the owner's rule): its own name, its own first steps, no family footer.
             $to = $user->phone_e164 ?: $user->email;
