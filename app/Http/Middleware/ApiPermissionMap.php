@@ -167,7 +167,7 @@ class ApiPermissionMap
         [['POST'], '#^rentals/maintenance/\d+/(ask-landlord|landlord-answer)$#', 'rentals_maintenance'],
         [['GET'], '#^rentals(/.*)?$#', 'rentals_view'], // every other read
         // Family Roots (the kin module): officers write, everyone on the family's team reads (a member's role has kin_view only).
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/(people|links|spouses)(/\d+)?$#', 'kin_people'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/(people|links|siblings|spouses)(/\d+)?$#', 'kin_people'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/branches(/\d+)?$#', 'kin_branches'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin(/.*)?$#', 'kin_settings'], // any other write
         [['GET'], '#^kin(/.*)?$#', 'kin_view'], // every read

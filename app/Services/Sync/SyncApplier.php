@@ -194,6 +194,12 @@ class SyncApplier
                     $failed = true;
                     break;
                 }
+                // A branch coordinator changes only their branch's people (My Family Roots 360, KinScope), as on the API.
+                if (in_array('kin', $company->modules(), true) && ($why = \App\Services\Kin\KinScope::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''))) !== null) {
+                    $ops[] = ['op_uuid' => $opUuid, 'table' => $table, 'uuid' => $op['uuid'] ?? null, 'status' => 'rejected', 'code' => 'forbidden', 'message' => $why, 'permission' => 'kin_people'];
+                    $failed = true;
+                    break;
+                }
                 // Pledges, pledge payments and committees are per event (chair, treasurer, secretary…): BudgetAccess.
                 $need = \App\Services\Budget\BudgetAccess::refuseSyncOp($actor, $companyId, $table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : [], (string) ($op['uuid'] ?? ''), (int) ($op['client_updated_at'] ?? 0))
                     ?? \App\Services\Budget\BudgetPayments::refuseSyncOp($actor, $companyId, $table, is_array($op['data'] ?? null) ? $op['data'] : []);

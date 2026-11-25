@@ -9,6 +9,7 @@
 use App\Http\Controllers\Api\V1\Kin\BranchesController;
 use App\Http\Controllers\Api\V1\Kin\LinksController;
 use App\Http\Controllers\Api\V1\Kin\PeopleController;
+use App\Http\Controllers\Api\V1\Kin\SiblingsController;
 use App\Http\Controllers\Api\V1\Kin\SpousesController;
 use App\Http\Controllers\Api\V1\Kin\TreeController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,7 @@ Route::prefix('kin')->middleware(['auth:sanctum', 'api.tenant', 'api.module:kin'
 
     Route::post('links', [LinksController::class, 'store']);
     Route::delete('links/{id}', [LinksController::class, 'destroy'])->whereNumber('id');
+    Route::post('siblings', [SiblingsController::class, 'store']);
 
     Route::post('spouses', [SpousesController::class, 'store']);
     Route::match(['put', 'patch'], 'spouses/{id}', [SpousesController::class, 'update'])->whereNumber('id');

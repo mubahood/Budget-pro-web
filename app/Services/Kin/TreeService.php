@@ -253,7 +253,8 @@ final class TreeService
             'spouses' => $spouses->map(function ($s) use ($personId, $brief) {
                 $other = (int) $s->person_id === $personId ? ($s->spouse_id ? (int) $s->spouse_id : null) : (int) $s->person_id;
 
-                return ($other ? $brief($other) : ['id' => null, 'name' => $s->spouse_name]) + ['spouse_link_id' => (int) $s->id, 'status' => $s->status,
+                // status is always the person's own (living, late), as for every relative; the marriage's is marriage_status.
+                return ($other ? $brief($other) : ['id' => null, 'name' => $s->spouse_name, 'status' => null]) + ['spouse_link_id' => (int) $s->id, 'marriage_status' => $s->status,
                     'married_on' => $s->married_on?->toDateString(), 'ended_on' => $s->ended_on?->toDateString(), 'sort_order' => (int) $s->sort_order];
             })->values()->all(),
         ];

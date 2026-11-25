@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Kin;
 
 use App\Models\SaccoMember;
 use App\Services\Kin\KinPeople;
+use App\Services\Kin\KinScope;
 use App\Services\Kin\TreeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,7 +52,8 @@ class PeopleController extends KinController
     public function store(Request $request): JsonResponse
     {
         return $this->attempt(function () use ($request) {
-            $person = app(KinPeople::class)->create($this->company($request), $request->user(), $request->validate(KinPeople::rules($this->cid($request), true)));
+            $d = KinScope::placeNew($request->user(), $this->cid($request), $request->validate(KinPeople::rules($this->cid($request), true)), true);
+            $person = app(KinPeople::class)->create($this->company($request), $request->user(), $d);
 
             return $this->created(KinPeople::present($person, true), 'Person added.');
         });
@@ -62,7 +64,9 @@ class PeopleController extends KinController
     {
         return $this->attempt(function () use ($request, $id) {
             $person = KinPeople::find($this->cid($request), $id);
-            $person = app(KinPeople::class)->update($this->company($request), $person, $request->validate(KinPeople::rules($this->cid($request), false)));
+            KinScope::guard($request->user(), $this->cid($request), (int) $person->id);
+            $d = KinScope::placeNew($request->user(), $this->cid($request), $request->validate(KinPeople::rules($this->cid($request), false)), false);
+            $person = app(KinPeople::class)->update($this->company($request), $person, $d);
 
             return $this->success(KinPeople::present($person, true), 'Saved.');
         });
