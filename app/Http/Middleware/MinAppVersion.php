@@ -6,7 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Apps that send X-App-Version older than mobile.min_version get 426 upgrade_required (plan B10, P4-8). */
+/** Apps that send X-App-Version older than their app's min_version (AppVersions) get 426 upgrade_required (plan B10, P4-8). */
 class MinAppVersion
 {
     public function handle(Request $request, Closure $next): Response
@@ -19,12 +19,13 @@ class MinAppVersion
                 \Illuminate\Support\Facades\Log::info('API call without X-App-Version', ['path' => $request->path(), 'caller' => $who, 'agent' => mb_substr((string) $request->userAgent(), 0, 120)]);
             }
         }
-        if ($v !== '' && preg_match('/^\d+(\.\d+){0,3}$/', $v) && version_compare($v, (string) config('mobile.min_version'), '<')) {
+        $min = \App\Support\AppVersions::for($request)['min_version']; // the requesting app's own, else the shared one
+        if ($v !== '' && preg_match('/^\d+(\.\d+){0,3}$/', $v) && version_compare($v, $min, '<')) {
             return response()->json(['code' => 0, 'message' => 'Please update the app to keep working.', 'data' => null,
-                'errors' => ['code' => 'upgrade_required', 'min_version' => config('mobile.min_version'), 'store_url' => \App\Support\StoreLink::for($request)]], 426);
+                'errors' => ['code' => 'upgrade_required', 'min_version' => $min, 'store_url' => \App\Support\StoreLink::for($request)]], 426);
         }
         $response = $next($request);
-        $response->headers->set('X-Min-App-Version', (string) config('mobile.min_version'));
+        $response->headers->set('X-Min-App-Version', $min);
 
         return $response;
     }

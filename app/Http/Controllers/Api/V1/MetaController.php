@@ -51,7 +51,7 @@ class MetaController extends Controller
             ],
             'payment_methods' => MetaEnums::paymentMethods($company),
             'enums' => MetaEnums::all(),
-            'app' => ['min_version' => (string) config('mobile.min_version'), 'latest_version' => (string) config('mobile.latest_version'), 'download_url' => \App\Support\StoreLink::for(request(), $company)],
+            'app' => \App\Support\AppVersions::for(request(), $company) + ['download_url' => \App\Support\StoreLink::for(request(), $company)],
             // Who to ask for help, with the prefilled messages (docs/roadmap/06 §4): a standalone copy's own contact first.
             'support' => SupportContact::forCompany($company)->toArray(),
             'web_url' => $webUrl,

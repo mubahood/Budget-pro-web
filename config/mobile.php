@@ -7,6 +7,20 @@ return [
     // Apps older than this get 426 "update required" (sent as X-App-Version by app 2.0+).
     'min_version' => env('MOBILE_MIN_VERSION', '2.0.0'),
     'latest_version' => env('MOBILE_LATEST_VERSION', '2.0.0'),
+    // Each app's own versions (App\Support\AppVersions): MOBILE_MIN_VERSION_<APP> / MOBILE_LATEST_VERSION_<APP>, unset = the
+    // shared values above. Raise an app's min only when its old builds would break: Play's own update check already forces updates.
+    'apps' => (function () {
+        $apps = [];
+        foreach (['shelfie', 'kuku-tally', 'pledge-and-budget', 'akiba-ledger', 'estate-ledger', 'family-roots', 'unitydesk', 'budget-pro'] as $slug) {
+            $key = strtoupper(str_replace('-', '_', $slug));
+            $apps[$slug] = [
+                'min_version' => env('MOBILE_MIN_VERSION_'.$key) ?: env('MOBILE_MIN_VERSION', '2.0.0'),
+                'latest_version' => env('MOBILE_LATEST_VERSION_'.$key) ?: env('MOBILE_LATEST_VERSION', '2.0.0'),
+            ];
+        }
+
+        return $apps;
+    })(),
     // Only for a request that names no app (App\Support\StoreLink): old phones that send nothing keep today's link.
     'store_url' => env('MOBILE_STORE_URL', 'https://play.google.com/store/apps/details?id=com.budget.dynamics'),
     // Each app's own listing, by AppFamily slug (the X-App header or the `app` field). '' means no listing: the phone is not
