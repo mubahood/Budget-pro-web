@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Kin;
 
+use App\Services\Kin\KinScope;
 use App\Models\KinSpouse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,7 @@ class SpousesController extends KinController
         $d = $request->validate(self::rules(true));
 
         return $this->attempt(function () use ($request, $d) {
+            KinScope::guard($request->user(), $this->cid($request), (int) $d['person_id'], (int) ($d['spouse_id'] ?? 0));
             $s = new KinSpouse($d + ['company_id' => $this->cid($request), 'status' => 'current', 'created_by_id' => $request->user()->id]);
             $s->save();
 
@@ -29,6 +31,7 @@ class SpousesController extends KinController
 
         return $this->attempt(function () use ($request, $id, $d) {
             $s = KinSpouse::withoutGlobalScopes()->where('company_id', $this->cid($request))->where('is_deleted', 0)->findOrFail($id);
+            KinScope::guard($request->user(), $this->cid($request), (int) $s->person_id, (int) $s->spouse_id);
             if (array_key_exists('spouse_id', $d) && $d['spouse_id'] !== null) {
                 $d['spouse_name'] = null;
             }
@@ -42,7 +45,9 @@ class SpousesController extends KinController
     public function destroy(Request $request, int $id): JsonResponse
     {
         return $this->attempt(function () use ($request, $id) {
-            KinSpouse::withoutGlobalScopes()->where('company_id', $this->cid($request))->where('is_deleted', 0)->findOrFail($id)->delete();
+            $s = KinSpouse::withoutGlobalScopes()->where('company_id', $this->cid($request))->where('is_deleted', 0)->findOrFail($id);
+            KinScope::guard($request->user(), $this->cid($request), (int) $s->person_id, (int) $s->spouse_id);
+            $s->delete();
 
             return $this->success(null, 'Marriage removed.');
         });

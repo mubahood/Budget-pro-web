@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Kin;
 
+use App\Services\Kin\KinScope;
 use App\Models\KinLink;
 use App\Services\Kin\TreeService;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class LinksController extends KinController
             'kind' => ['sometimes', 'in:'.implode(',', config('kin.link_kinds'))], 'notes' => ['nullable', 'string', 'max:255']]);
 
         return $this->attempt(function () use ($request, $d) {
+            KinScope::guard($request->user(), $this->cid($request), (int) $d['child_id'], (int) $d['parent_id']);
             $link = new KinLink($d + ['company_id' => $this->cid($request), 'kind' => 'birth', 'created_by_id' => $request->user()->id]);
             $link->save();
 
@@ -28,7 +30,9 @@ class LinksController extends KinController
     public function destroy(Request $request, int $id): JsonResponse
     {
         return $this->attempt(function () use ($request, $id) {
-            KinLink::withoutGlobalScopes()->where('company_id', $this->cid($request))->where('is_deleted', 0)->findOrFail($id)->delete();
+            $link = KinLink::withoutGlobalScopes()->where('company_id', $this->cid($request))->where('is_deleted', 0)->findOrFail($id);
+            KinScope::guard($request->user(), $this->cid($request), (int) $link->child_id, (int) $link->parent_id);
+            $link->delete();
 
             return $this->success(null, 'Link removed.');
         });
