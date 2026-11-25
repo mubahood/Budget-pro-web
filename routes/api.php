@@ -566,4 +566,6 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
     // My Family Roots 360 (the kin module): routes/api_kin.php.
     require __DIR__.'/api_kin.php';
+    // UnityDesk (the unity module): routes/api_unity.php.
+    require __DIR__.'/api_unity.php';
 });
