@@ -25,20 +25,20 @@ class UnityDeskPlanSeeder extends Seeder
         return [
             ['name' => 'UnityDesk trial', 'slug' => 'unitydesk-trial', 'description' => '30 days of UnityDesk, free, while you bring your members in.',
                 'price' => 0, 'price_ugx' => 0, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 30, 'is_public' => false, 'sort_order' => 400,
-                'features' => $line,
-                'limits' => ['max_unity_members' => 1000, 'max_users' => 10, 'max_devices' => 10, 'storage_mb' => 2000]],
+                'features' => $line + ['unity_chapters' => true],
+                'limits' => ['max_unity_members' => 1000, 'max_users' => 10, 'max_devices' => 10, 'storage_mb' => 2000, 'max_sms_per_month' => 500]],
             ['name' => 'UnityDesk Free', 'slug' => 'unitydesk-free', 'description' => 'For a small club: up to 100 members.',
                 'price' => 0, 'price_ugx' => 0, 'price_ugx_annual' => 0, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 0, 'is_public' => true, 'sort_order' => 401,
                 'features' => $line,
-                'limits' => ['max_unity_members' => 100, 'max_users' => 3, 'max_devices' => 3, 'storage_mb' => 300]],
-            ['name' => 'UnityDesk Group', 'slug' => 'unitydesk-group', 'description' => 'For an association: up to 1,000 members, chapters, officers and subscriptions.',
+                'limits' => ['max_unity_members' => 100, 'max_users' => 3, 'max_devices' => 3, 'storage_mb' => 300, 'max_sms_per_month' => 0]],
+            ['name' => 'UnityDesk Group', 'slug' => 'unitydesk-group', 'description' => 'For an association: up to 1,000 members, officers, subscriptions and SMS.',
                 'price' => 7, 'price_ugx' => 25000, 'price_ugx_annual' => 250000, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 30, 'is_public' => true, 'sort_order' => 402,
                 'features' => $line,
-                'limits' => ['max_unity_members' => 1000, 'max_users' => 10, 'max_devices' => 10, 'storage_mb' => 2000]],
-            ['name' => 'UnityDesk Organisation', 'slug' => 'unitydesk-organisation', 'description' => 'For a large organisation: no limit on members, more officers and chapters.',
+                'limits' => ['max_unity_members' => 1000, 'max_users' => 10, 'max_devices' => 10, 'storage_mb' => 2000, 'max_sms_per_month' => 500]],
+            ['name' => 'UnityDesk Organisation', 'slug' => 'unitydesk-organisation', 'description' => 'For a large organisation: no limit on members, more officers, and chapters.',
                 'price' => 16, 'price_ugx' => 60000, 'price_ugx_annual' => 600000, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 30, 'is_public' => true, 'sort_order' => 403,
-                'features' => $line,
-                'limits' => ['max_unity_members' => null, 'max_users' => 30, 'max_devices' => 30, 'storage_mb' => 10000]],
+                'features' => $line + ['unity_chapters' => true],
+                'limits' => ['max_unity_members' => null, 'max_users' => 30, 'max_devices' => 30, 'storage_mb' => 10000, 'max_sms_per_month' => 2000]],
         ];
     }
 

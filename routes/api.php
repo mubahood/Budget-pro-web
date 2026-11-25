@@ -124,8 +124,8 @@ Route::prefix('studio-api')->middleware('studio.token')->controller(\App\Http\Co
 Route::prefix('v1')->middleware('app.version')->group(function () {
     // Public: what the phone app reads before sign-in — versions, and which edition this server is
     // (a standalone copy hides "Create your shop" and billing: registration_open false).
-    Route::get('app/version', fn () => response()->json(['code' => 1, 'message' => 'App versions.', 'data' => [
-        'min_version' => config('mobile.min_version'), 'latest_version' => config('mobile.latest_version'), 'store_url' => config('mobile.store_url'),
+    Route::get('app/version', fn (\Illuminate\Http\Request $request) => response()->json(['code' => 1, 'message' => 'App versions.', 'data' => [
+        'min_version' => config('mobile.min_version'), 'latest_version' => config('mobile.latest_version'), 'store_url' => \App\Support\StoreLink::for($request),
     ] + \App\Support\EditionMeta::forApp()]));
     // Public: an app's published promo videos, and their captions (App\Models\PromoVideo; only what is live).
     Route::get('videos', [\App\Http\Controllers\Api\V1\PromoVideoController::class, 'index'])->middleware('throttle:60,1,promo-videos');

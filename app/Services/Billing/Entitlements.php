@@ -17,7 +17,9 @@ class Entitlements
         'sacco_office_mode' => false, 'sacco_returns' => false, 'sacco_momo' => false, 'sacco_payouts' => false, 'sacco_checkoff' => false,
         'sacco_member_app' => false, 'sacco_sms_receipts' => false,
         // Estate Ledger (EstateLedgerPlanSeeder): tenants' and landlords' own sign-in, and texts the server sends (KR-18); only rentals code reads them.
-        'rentals_portal' => false, 'rentals_sms' => false];
+        'rentals_portal' => false, 'rentals_sms' => false,
+        // UnityDesk (UnityDeskPlanSeeder): chapters are on Organisation (and the trial); only unity code reads it.
+        'unity_chapters' => false];
 
     public static function for(Company $company): array
     {

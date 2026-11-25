@@ -21,7 +21,7 @@ class MinAppVersion
         }
         if ($v !== '' && preg_match('/^\d+(\.\d+){0,3}$/', $v) && version_compare($v, (string) config('mobile.min_version'), '<')) {
             return response()->json(['code' => 0, 'message' => 'Please update the app to keep working.', 'data' => null,
-                'errors' => ['code' => 'upgrade_required', 'min_version' => config('mobile.min_version'), 'store_url' => config('mobile.store_url')]], 426);
+                'errors' => ['code' => 'upgrade_required', 'min_version' => config('mobile.min_version'), 'store_url' => \App\Support\StoreLink::for($request)]], 426);
         }
         $response = $next($request);
         $response->headers->set('X-Min-App-Version', (string) config('mobile.min_version'));

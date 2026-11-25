@@ -180,4 +180,23 @@ class UnityMembershipsTest extends ApiTestCase
         $this->assertSame(1, Memberships::refreshStanding($cid));
         $this->assertSame('lapsed', $soon->fresh()->standing);
     }
+
+    public function test_chapters_are_on_organisation_and_the_trial_and_sms_counts_on_group_and_up(): void
+    {
+        $plan = fn (string $slug) => \App\Models\Subscription::where('company_id', $this->co->id)->update(['plan_id' => \App\Models\Plan::where('slug', $slug)->value('id')]);
+        $usage = fn () => (new \App\Services\Billing\Quotas())->usage($this->co->fresh());
+        $this->assertSame(2000, $usage()['sms']['max']);
+        UnityChapter::create(['company_id' => $this->co->id, 'name' => 'Central']);
+
+        $plan('unitydesk-group');
+        $this->refused('feature_not_in_plan', fn () => UnityChapter::create(['company_id' => $this->co->id, 'name' => 'West']));
+        $this->assertSame(500, $usage()['sms']['max']);
+        $this->assertArrayNotHasKey('members', $usage(), 'Akiba\'s member count stays Akiba\'s');
+
+        $plan('unitydesk-free');
+        $this->assertSame(0, $usage()['sms']['max']);
+        $plan('unitydesk-trial');
+        UnityChapter::create(['company_id' => $this->co->id, 'name' => 'East']);
+        $this->assertStringNotContainsString('chapters', (string) \App\Models\Plan::where('slug', 'unitydesk-group')->value('description'));
+    }
 }

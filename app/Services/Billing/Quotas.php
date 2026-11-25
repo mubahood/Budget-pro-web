@@ -31,6 +31,15 @@ class Quotas
      */
     public const LINE_KEYS = ['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA, 'units' => PlanLine::ESTATE_LEDGER, 'people' => PlanLine::FAMILY_ROOTS, 'unity_members' => PlanLine::UNITYDESK];
 
+    /** Keys another line counts too: UnityDesk's Group and Organisation plans carry an SMS allowance (max_sms_per_month), Free none. */
+    public const LINE_SHARED = ['sms' => [PlanLine::UNITYDESK]];
+
+    /** Whether a line-only key counts for this line. */
+    public static function onLine(string $what, string $line): bool
+    {
+        return ! isset(self::LINE_KEYS[$what]) || self::LINE_KEYS[$what] === $line || in_array($line, self::LINE_SHARED[$what] ?? [], true);
+    }
+
     /** People on a family's tree that count against max_people (Family Roots): the living, the joining and the departed; not those who left. */
     public const PEOPLE_STATUSES = ['active', 'applicant', 'deceased'];
 
@@ -186,7 +195,7 @@ class Quotas
         $out = [];
         $line = PlanLine::for($company);
         foreach (self::KEYS as $what => $key) {
-            if (isset(self::LINE_KEYS[$what]) && self::LINE_KEYS[$what] !== $line) {
+            if (! self::onLine($what, $line)) {
                 continue;
             }
             $limit = $this->limit($company, $what);

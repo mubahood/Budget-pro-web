@@ -27,8 +27,8 @@ class LegacyApi
         }
         // Retired on a standalone copy whatever LEGACY_API_ENABLED says: it never shipped with the old app.
         if (! config('mobile.legacy_enabled') || \App\Support\Edition::isStandalone()) {
-            return response()->json(['code' => 0, 'message' => 'This version of the app is no longer supported. Please update Budget Pro from the Play Store: '.config('mobile.store_url'),
-                'data' => null, 'errors' => ['code' => 'upgrade_required', 'store_url' => config('mobile.store_url')]], 426);
+            return response()->json(['code' => 0, 'message' => 'This version of the app is no longer supported. Please update Budget Pro from the Play Store: '.\App\Support\StoreLink::for($request),
+                'data' => null, 'errors' => ['code' => 'upgrade_required', 'store_url' => \App\Support\StoreLink::for($request)]], 426);
         }
 
         return $next($request);

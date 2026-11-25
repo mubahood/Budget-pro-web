@@ -22,6 +22,12 @@ class UnityChapter extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        static::creating(function (self $c) {
+            $company = Company::withoutGlobalScopes()->find($c->company_id);
+            if ($company !== null && ! (new \App\Services\Billing\Quotas())->featureOn($company, 'unity_chapters')) {
+                throw BusinessRuleException::make('feature_not_in_plan', 'Chapters are on the Organisation plan.', ['feature' => 'unity_chapters']);
+            }
+        });
         static::saving(function (self $c) {
             if (trim((string) $c->name) === '') {
                 throw BusinessRuleException::make('name_required', 'Name the chapter.', ['name' => ['Name the chapter.']]);
