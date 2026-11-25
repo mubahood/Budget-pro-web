@@ -77,6 +77,9 @@ class EnsureApiTenant
         // Make the resolved tenant available to controllers without re-querying.
         $request->attributes->set('company', $company);
 
+        // Last seen and daily use for the Platform pages (a write at most every five minutes; never throws).
+        \App\Services\Platform\Activity::touch((int) $user->id, (int) $company->id, 'phone', $request->header('X-App-Version'));
+
         // CompanyScope narrows every scoped query to this company for the rest of the request, and
         // forgets it when the request is done (roadmap 02 §4). The hand-written company filters stay.
         $companyId = (int) $company->id;

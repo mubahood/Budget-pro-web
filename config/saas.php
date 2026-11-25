@@ -156,4 +156,10 @@ return [
         'max_kb' => env('SAAS_UPLOAD_MAX_KB', 5120), // 5 MB
         'allowed_mimes' => ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'],
     ],
+
+    // The emails that bring people back (the portal's `engage daily`, App\Shop\Engage\Engage): budget-pro's scheduler runs
+    // the portal's command at 06:40 UTC when this is on. Off by default: the owner turns it on after the first send.
+    'engage_daily' => (bool) env('ENGAGE_DAILY', false),
+    // Where the portal (budget-pro-new) lives on this host, for the scheduler to run its commands.
+    'portal_path' => env('SAAS_PORTAL_PATH', dirname(__DIR__, 2).'/budget-pro-new'),
 ];

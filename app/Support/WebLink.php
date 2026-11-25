@@ -20,6 +20,9 @@ final class WebLink
 {
     public const TTL_SECONDS = 120;
 
+    /** The longest a link may last: an emailed "welcome back" link (seven days, still once only). */
+    public const MAIL_TTL_SECONDS = 7 * 86400;
+
     public const PATH = '/web-link';
 
     public const TABLE = 'web_link_tokens';
@@ -34,8 +37,11 @@ final class WebLink
      *
      * @throws BusinessRuleException invalid_path | web_link_unavailable
      */
-    public static function issue(User $user, string $path, ?string $base = null, ?int $masterUntil = null): array
+    public static function issue(User $user, string $path, ?string $base = null, ?int $masterUntil = null, ?int $ttlSeconds = null): array
     {
+        if ($masterUntil !== null && $ttlSeconds !== null) {
+            throw new \InvalidArgumentException('A master session link is always short.');
+        }
         $clean = self::cleanPath($path);
         if ($clean === null) {
             throw BusinessRuleException::make('invalid_path', 'Choose a page of the web portal: a path that starts with "/".');
@@ -45,8 +51,11 @@ final class WebLink
             throw BusinessRuleException::make('web_link_unavailable', 'This server has no web portal address set (SAAS_NEW_UI_URL), so it cannot open the web for you.');
         }
         $nonce = Str::random(40);
-        $expires = now()->addSeconds(self::TTL_SECONDS);
+        $expires = now()->addSeconds(max(30, min($ttlSeconds ?? self::TTL_SECONDS, self::MAIL_TTL_SECONDS)));
         $claims = ['u' => (int) $user->id, 'c' => (int) $user->company_id, 'p' => $clean, 'e' => $expires->getTimestamp(), 'n' => $nonce];
+        if ($ttlSeconds !== null) {
+            $claims['k'] = 'mail'; // an emailed link: opened on a page with a button, never used up by a link scanner
+        }
         if ($masterUntil !== null) {
             $claims['m'] = $masterUntil;
         }
@@ -64,24 +73,66 @@ final class WebLink
      *
      * @throws BusinessRuleException invalid_link | link_expired | link_used
      */
-    public static function consume(string $token, ?string $ip = null): array
+    public static function consume(string $token, ?string $ip = null, bool $fromMail = false): array
     {
-        $parts = explode('.', $token);
-        $claims = count($parts) === 2 && hash_equals(self::encode(self::mac($parts[0])), $parts[1]) ? json_decode(self::decode($parts[0]), true) : null;
-        if (! is_array($claims) || ! isset($claims['u'], $claims['c'], $claims['p'], $claims['e'], $claims['n']) || self::cleanPath((string) $claims['p']) === null) {
-            throw BusinessRuleException::make('invalid_link', 'This link is not valid. Open the page from the app again.');
-        }
-        if ((int) $claims['e'] < now()->getTimestamp()) {
-            throw BusinessRuleException::make('link_expired', 'This link has expired: links from the app last two minutes. Open the page from the app again.');
-        }
+        $claims = self::read($token, $fromMail);
         $used = DB::table(self::TABLE)->where('nonce_hash', hash('sha256', (string) $claims['n']))->where('user_id', (int) $claims['u'])
             ->whereNull('used_at')->where('expires_at', '>=', now())->update(['used_at' => now(), 'used_ip' => $ip === null ? null : mb_substr($ip, 0, 45)]);
         if ($used !== 1) {
-            throw BusinessRuleException::make('link_used', 'This link was already used. Open the page from the app again.');
+            throw BusinessRuleException::make('link_used', $fromMail
+                ? 'This sign-in link was already used. Sign in with your email or phone and password, or ask for a code.'
+                : 'This link was already used. Open the page from the app again.');
         }
 
         return ['user_id' => (int) $claims['u'], 'company_id' => (int) $claims['c'], 'path' => (string) $claims['p'],
             'master_until' => isset($claims['m']) ? (int) $claims['m'] : null];
+    }
+
+    /**
+     * Check an emailed link without using it up (the page it opens shows a "Continue" button, so a mail scanner
+     * that opens every link never spends it).
+     *
+     * @return array{user_id: int, company_id: int, path: string, nonce_hash: string}
+     *
+     * @throws BusinessRuleException invalid_link | link_expired | link_used
+     */
+    public static function peekMail(string $token): array
+    {
+        $claims = self::read($token, true);
+        $row = DB::table(self::TABLE)->where('nonce_hash', hash('sha256', (string) $claims['n']))->where('user_id', (int) $claims['u'])->first(['used_at']);
+        if ($row === null || $row->used_at !== null) {
+            throw BusinessRuleException::make('link_used', 'This sign-in link was already used. Sign in with your email or phone and password, or ask for a code.');
+        }
+
+        return ['user_id' => (int) $claims['u'], 'company_id' => (int) $claims['c'], 'path' => (string) $claims['p'], 'nonce_hash' => hash('sha256', (string) $claims['n'])];
+    }
+
+    /** The hash an emailed link is recorded by (engagement_emails.click_hash), from the URL issue() made. */
+    public static function hashOfUrl(string $url): ?string
+    {
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+        $parts = explode('.', (string) ($q['token'] ?? ''));
+        $claims = count($parts) === 2 ? json_decode(self::decode($parts[0]), true) : null;
+
+        return is_array($claims) && isset($claims['n']) ? hash('sha256', (string) $claims['n']) : null;
+    }
+
+    /** @return array<string, mixed> the checked claims; a link from the app is refused on the mail page and the other way round. */
+    private static function read(string $token, bool $fromMail): array
+    {
+        $parts = explode('.', $token);
+        $claims = count($parts) === 2 && hash_equals(self::encode(self::mac($parts[0])), $parts[1]) ? json_decode(self::decode($parts[0]), true) : null;
+        if (! is_array($claims) || ! isset($claims['u'], $claims['c'], $claims['p'], $claims['e'], $claims['n']) || self::cleanPath((string) $claims['p']) === null
+            || (($claims['k'] ?? null) === 'mail') !== $fromMail) {
+            throw BusinessRuleException::make('invalid_link', $fromMail ? 'This sign-in link is not valid. Sign in with your email or phone and password.' : 'This link is not valid. Open the page from the app again.');
+        }
+        if ((int) $claims['e'] < now()->getTimestamp()) {
+            throw BusinessRuleException::make('link_expired', $fromMail
+                ? 'This sign-in link has expired. Sign in with your email or phone and password, or ask for a code: codes now arrive within seconds.'
+                : 'This link has expired: links from the app last two minutes. Open the page from the app again.');
+        }
+
+        return $claims;
     }
 
     /** A path on the web portal ("/sales?scope=unpaid"), or null: no scheme, host, "//", backslash, spaces or control characters. */
