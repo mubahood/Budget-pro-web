@@ -168,6 +168,12 @@ class SyncApplier
                     $failed = true;
                     break;
                 }
+                // The tree tables belong to a family's books only (My Family Roots 360): any other account's phone is refused.
+                if (str_starts_with($table, 'kin_') && ! in_array('kin', $company->modules(), true)) {
+                    $ops[] = ['op_uuid' => $opUuid, 'status' => 'rejected', 'code' => 'unknown_table', 'table' => $table];
+                    $failed = true;
+                    break;
+                }
                 $op['_user_id'] = $userId;
                 $need = self::permissionFor($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
                 if ($table === 'sacco_members' && in_array('kin', $company->modules(), true)) {

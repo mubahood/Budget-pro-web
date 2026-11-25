@@ -164,4 +164,19 @@ class KinApiTest extends ApiTestCase
 
         $this->assertSame(['exclude'], \App\Support\Rules\SaccoMemberRules::kinSyncRules((int) $this->registerTenant(['modules' => ['sacco']])['company_id'])['status']);
     }
+
+    public function test_a_phone_of_an_account_without_a_family_cannot_send_tree_rows(): void
+    {
+        $sacco = $this->registerTenant(['modules' => ['sacco']]);
+        $h = ['Authorization' => 'Bearer '.$sacco['token']];
+        $device = (string) Str::uuid();
+        $this->postJson('/api/v1/devices/register', ['device_id' => $device], $h)->assertOk();
+        foreach (['kin_links' => ['role' => 'father', 'kind' => 'birth'], 'kin_spouses' => ['spouse_name' => 'Someone'], 'kin_branches' => ['name' => 'House']] as $table => $data) {
+            $r = $this->postJson('/api/v1/sync/push', ['batches' => [['batch_uuid' => (string) Str::uuid(), 'kind' => 'master', 'ops' => [
+                ['op_uuid' => (string) Str::uuid(), 'table' => $table, 'uuid' => (string) Str::uuid(), 'action' => 'insert', 'client_updated_at' => SyncSequence::nowMs(), 'version' => 0, 'data' => $data],
+            ]]]], $h + ['X-Device-Id' => $device])->assertOk();
+            $this->assertSame('rejected', $r->json('data.results.0.status'), $table);
+            $this->assertSame(0, \Illuminate\Support\Facades\DB::table($table)->where('company_id', $sacco['company_id'])->count(), $table);
+        }
+    }
 }

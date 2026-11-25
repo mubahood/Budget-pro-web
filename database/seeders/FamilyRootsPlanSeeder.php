@@ -32,14 +32,14 @@ class FamilyRootsPlanSeeder extends Seeder
                 'price' => 0, 'price_ugx' => 0, 'price_ugx_annual' => 0, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 0, 'is_public' => true, 'sort_order' => 301,
                 'features' => $line,
                 'limits' => ['max_people' => 150, 'max_users' => 3, 'max_devices' => 3, 'storage_mb' => 100]],
-            ['name' => 'Family Roots Family', 'slug' => 'family-roots-family', 'description' => 'For an extended family: up to 1,000 people, branches and officers.',
+            ['name' => 'Family Roots Family', 'slug' => 'family-roots-family', 'description' => 'For an extended family: up to 1,000 people, branches, officers and 5 GB of memories.',
                 'price' => 6, 'price_ugx' => 20000, 'price_ugx_annual' => 200000, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 30, 'is_public' => true, 'sort_order' => 302,
                 'features' => $line,
-                'limits' => ['max_people' => 1000, 'max_users' => 10, 'max_devices' => 10, 'storage_mb' => 1000]],
-            ['name' => 'Family Roots Clan', 'slug' => 'family-roots-clan', 'description' => 'For a whole clan: no limit on people, and more officers.',
+                'limits' => ['max_people' => 1000, 'max_users' => 10, 'max_devices' => 10, 'storage_mb' => 5000]],
+            ['name' => 'Family Roots Clan', 'slug' => 'family-roots-clan', 'description' => 'For a whole clan: no limit on people, more officers and 20 GB of memories.',
                 'price' => 14, 'price_ugx' => 50000, 'price_ugx_annual' => 500000, 'currency' => 'USD', 'interval' => 'month', 'trial_days' => 30, 'is_public' => true, 'sort_order' => 303,
                 'features' => $line,
-                'limits' => ['max_people' => null, 'max_users' => 30, 'max_devices' => 30, 'storage_mb' => 5000]],
+                'limits' => ['max_people' => null, 'max_users' => 30, 'max_devices' => 30, 'storage_mb' => 20000]],
         ];
     }
 
