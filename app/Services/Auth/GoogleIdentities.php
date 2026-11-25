@@ -149,7 +149,7 @@ final class GoogleIdentities
             return false;
         }
         $person = SiblingAccounts::signInOf($login);
-        if (PublicDemo::isDemoUser($person) || \App\Services\Sacco\Demo\SaccoDemo::isDemoUser($person) || \App\Services\Rentals\Demo\RentalsDemo::isDemoUser($person) || (int) ($person->google_nudge_count ?? 0) >= self::MAX_DISMISSALS) {
+        if (PublicDemo::isDemoUser($person) || \App\Services\Sacco\Demo\SaccoDemo::isDemoUser($person) || \App\Services\Rentals\Demo\RentalsDemo::isDemoUser($person) || \App\Services\Kin\Demo\KinDemo::isDemoUser($person) || (int) ($person->google_nudge_count ?? 0) >= self::MAX_DISMISSALS) {
             return false;
         }
         if ($person->google_nudge_until !== null && now()->lt(\Illuminate\Support\Carbon::parse($person->google_nudge_until))) {

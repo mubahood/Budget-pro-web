@@ -30,6 +30,14 @@ return [
     'link_kinds' => ['birth', 'adoptive', 'step', 'guardian'],
     'spouse_statuses' => ['current', 'ended', 'widowed'],
 
-    // The demo family (KinDemo): invented names only, a local sign-in for trying the app.
-    'demo' => ['email' => env('KIN_DEMO_EMAIL', 'family.demo@example.com'), 'company_name' => 'The Sample Family (Demo)'],
+    // The demo family (App\Services\Kin\Demo\KinDemo, `kin:demo`): invented people only, one sign-in per role on the
+    // demo's own made-up domain, sharing one published demo password (like the other apps' demos). SaaS only.
+    'demo' => [
+        'enabled' => (bool) env('DEMO_KIN', true),
+        'company_name' => 'The Sample Family (Demo)',
+        'domain' => env('DEMO_KIN_DOMAIN', 'samplefamily.example'),
+        'password' => env('DEMO_KIN_PASSWORD', 'demo-family-roots-2026'),
+        'plan' => 'family-roots-clan',
+        'rebuild_hours' => (int) env('DEMO_KIN_REBUILD_HOURS', 72),
+    ],
 ];

@@ -57,6 +57,8 @@ class Kernel extends ConsoleKernel
             $schedule->call($task('sacco:demo'))->name('sacco:demo')->hourlyAt(20)->withoutOverlapping(90);
             // Estate Ledger's demo accounts (KR-21): the same, at their own minute.
             $schedule->call($task('rentals:demo'))->name('rentals:demo')->hourlyAt(40)->withoutOverlapping(90);
+            // My Family Roots 360's demo family: its own job, at :20 beside the SACCO's (the host's */20 ticks).
+            $schedule->call($task('kin:demo'))->name('kin:demo')->hourlyAt(20)->withoutOverlapping(90);
             // "We miss you" emails to people idle 3+ days (the portal's `engage daily`): 06:40 UTC is 09:40 in Kampala.
             if (config('saas.engage_daily') && is_file(($portal = (string) config('saas.portal_path')).'/artisan')) {
                 $schedule->exec(escapeshellarg(PHP_BINARY).' '.escapeshellarg($portal.'/artisan').' engage daily --send')

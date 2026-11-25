@@ -32,6 +32,9 @@ class DemoSessionController extends Controller
 
     private const AKIBA_LEDGER = 'akiba-ledger';
 
+    /** My Family Roots 360: the phone sends app=kin (AppFamily aliases kin and familyroots). */
+    private const FAMILY_ROOTS = ['family-roots', 'kin', 'familyroots'];
+
     /** What each of its buttons opens, in the phone's words. Key: account:role. */
     private const ESTATE_LEDGER_WHAT = [
         'agency:owner' => 'Sees everything: today, the landlords, month end and the money.',
@@ -53,6 +56,9 @@ class DemoSessionController extends Controller
         }
         if ($request->input('app') === self::AKIBA_LEDGER) {
             return $this->akibaRoles();
+        }
+        if (in_array($request->input('app'), self::FAMILY_ROOTS, true)) {
+            return $this->familyRootsRoles();
         }
         if (! PublicDemo::enabled()) {
             return $this->notFound('There is no live demo on this server.');
@@ -76,6 +82,9 @@ class DemoSessionController extends Controller
         }
         if ($request->input('app') === self::AKIBA_LEDGER) {
             return $this->akibaSession($request);
+        }
+        if (in_array($request->input('app'), self::FAMILY_ROOTS, true)) {
+            return $this->familyRootsSession($request);
         }
         if (! PublicDemo::enabled()) {
             return $this->notFound('There is no live demo on this server.');
@@ -140,6 +149,39 @@ class DemoSessionController extends Controller
         $device = substr('demo:'.preg_replace('/[^A-Za-z0-9 ._-]/', '', (string) $request->input('device_name', 'phone')), 0, 60);
 
         return $this->success(['token' => $as->createToken($device, ['*'], $expires)->plainTextToken, 'token_type' => 'Bearer', 'expires_at' => $expires->toIso8601String(), 'demo' => true, 'app' => self::AKIBA_LEDGER,
+            'user' => new UserResource($as), 'company' => new CompanyResource($company)], 'Welcome to the live demo.');
+    }
+
+    /** The demo family's roles (KinDemo). Never another app's demo. */
+    private function familyRootsRoles()
+    {
+        if (! \App\Services\Kin\Demo\KinDemo::enabled() || \App\Services\Kin\Demo\KinDemo::company() === null) {
+            return $this->notFound('There is no live demo on this server.');
+        }
+        $roles = [];
+        foreach (\App\Services\Kin\Demo\KinDemo::roles() as $key => $r) {
+            $roles[] = ['role' => (string) $key, 'label' => (string) $r['label'], 'what' => (string) $r['label'], 'name' => (string) $r['name']];
+        }
+
+        return $this->success(['app' => 'family-roots', 'roles' => $roles], 'Demo roles.');
+    }
+
+    private function familyRootsSession(Request $request)
+    {
+        $company = \App\Services\Kin\Demo\KinDemo::enabled() ? \App\Services\Kin\Demo\KinDemo::company() : null;
+        if ($company === null) {
+            return $this->notFound('There is no live demo on this server.');
+        }
+        $role = (string) $request->input('role', 'head');
+        $as = \App\Services\Kin\Demo\KinDemo::login(array_key_exists($role, \App\Services\Kin\Demo\KinDemo::roles()) ? $role : 'head');
+        if ($as === null || (int) $as->company_id !== (int) $company->id || strtolower((string) $as->status) === 'inactive') {
+            return $this->error('The demo is being rebuilt. Try again in a few minutes.', 409, ['code' => 'demo_rebuilding']);
+        }
+        $as->tokens()->where('expires_at', '<', now())->delete();
+        $expires = now()->addHours(max(1, (int) config('demo.token_hours', 12)));
+        $device = substr('demo:'.preg_replace('/[^A-Za-z0-9 ._-]/', '', (string) $request->input('device_name', 'phone')), 0, 60);
+
+        return $this->success(['token' => $as->createToken($device, ['*'], $expires)->plainTextToken, 'token_type' => 'Bearer', 'expires_at' => $expires->toIso8601String(), 'demo' => true, 'app' => 'family-roots',
             'user' => new UserResource($as), 'company' => new CompanyResource($company)], 'Welcome to the live demo.');
     }
 
