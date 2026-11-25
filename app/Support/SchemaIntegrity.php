@@ -190,6 +190,15 @@ class SchemaIntegrity
         ['kin_spouses', 'person_id', 'sacco_members', 'restrict'],
         ['kin_spouses', 'spouse_id', 'sacco_members', 'restrict'],
         ['sacco_members', 'branch_id', 'kin_branches', 'restrict'],
+        // UnityDesk.
+        ['unity_categories', 'company_id', 'companies', 'restrict'],
+        ['unity_chapters', 'company_id', 'companies', 'restrict'],
+        ['unity_chapters', 'lead_member_id', 'sacco_members', 'restrict'],
+        ['unity_subscriptions', 'company_id', 'companies', 'restrict'],
+        ['unity_subscriptions', 'member_id', 'sacco_members', 'restrict'],
+        ['unity_subscriptions', 'category_id', 'unity_categories', 'restrict'],
+        ['sacco_members', 'category_id', 'unity_categories', 'restrict'],
+        ['sacco_members', 'chapter_id', 'unity_chapters', 'restrict'],
     ];
 
     /** [table, column, allowed values] — enforced with CHECK constraints (MySQL 8.0.16+ / MariaDB 10.2+). */
@@ -308,6 +317,9 @@ class SchemaIntegrity
         ['kin_links', 'role', ['father', 'mother', 'parent']],
         ['kin_links', 'kind', ['birth', 'adoptive', 'step', 'guardian']],
         ['kin_spouses', 'status', ['current', 'ended', 'widowed']],
+        // UnityDesk.
+        ['unity_subscriptions', 'status', ['pending', 'paid', 'waived', 'cancelled']],
+        ['sacco_members', 'standing', ['good', 'lapsed', 'life']],
     ];
 
     /**
@@ -386,6 +398,8 @@ class SchemaIntegrity
         // My Family Roots 360.
         'kin_links' => \App\Models\KinLink::class,
         'kin_spouses' => \App\Models\KinSpouse::class,
+        // UnityDesk.
+        'unity_subscriptions' => \App\Models\UnitySubscription::class,
     ];
 
     /** Refuse unknown statuses in the application too (plan Part D "enums for statuses"). */

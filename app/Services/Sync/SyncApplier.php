@@ -169,7 +169,9 @@ class SyncApplier
                     break;
                 }
                 // The tree tables belong to a family's books only (My Family Roots 360): any other account's phone is refused.
-                if (str_starts_with($table, 'kin_') && ! in_array('kin', $company->modules(), true)) {
+                // The same for an association's tables (UnityDesk).
+                if ((str_starts_with($table, 'kin_') && ! in_array('kin', $company->modules(), true))
+                    || (str_starts_with($table, 'unity_') && ! in_array('unity', $company->modules(), true))) {
                     $ops[] = ['op_uuid' => $opUuid, 'status' => 'rejected', 'code' => 'unknown_table', 'table' => $table];
                     $failed = true;
                     break;
@@ -178,6 +180,8 @@ class SyncApplier
                 $need = self::permissionFor($table, (string) ($op['action'] ?? 'insert'), is_array($op['data'] ?? null) ? $op['data'] : []);
                 if ($table === 'sacco_members' && in_array('kin', $company->modules(), true)) {
                     $need = 'kin_people'; // a family's people are its members rows (My Family Roots 360)
+                } elseif ($table === 'sacco_members' && in_array('unity', $company->modules(), true)) {
+                    $need = 'unity_members'; // an association's members (UnityDesk)
                 }
                 if ($need !== null && ! \App\Services\Team\Permissions::can($actor, $need)
                     // An event's settings and payment details belong to its chair (and treasurer): BudgetAccess.
@@ -951,6 +955,9 @@ class SyncApplier
             // My Family Roots 360: the tree and the branches (as ApiPermissionMap's kin/ rules).
             'kin_links', 'kin_spouses' => 'kin_people',
             'kin_branches' => 'kin_branches',
+            // UnityDesk (as ApiPermissionMap's unity/ rules).
+            'unity_categories', 'unity_subscriptions' => 'unity_finance',
+            'unity_chapters' => 'unity_chapters',
             default => null, // poultry: farm roles live in the poultry module
         };
     }

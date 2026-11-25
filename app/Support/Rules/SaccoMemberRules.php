@@ -68,7 +68,18 @@ final class SaccoMemberRules
             'district', 'subcounty', 'parish', 'village', 'occupation', 'employer_name', 'payroll_no', 'joined_on', 'guardian_name']))
             + ['phone_e164' => $phone, 'phone_alt_e164' => $phone, 'guardian_phone_e164' => $phone, 'consent_data_at' => ['nullable', 'date'], 'consent_messages_at' => ['nullable', 'date'],
                 'messages_opt_out_at' => ['nullable', 'date']]
+            + self::unitySyncRules($companyId) // first, so an association's status rule wins over the family's 'exclude'
             + self::kinSyncRules($companyId);
+    }
+
+    /** An association's own columns (UnityDesk): its phone may send them, any other account's may not. @return array<string, array<int, mixed>> */
+    public static function unitySyncRules(int $companyId): array
+    {
+        if (! \App\Services\Unity\Memberships::isAssociation($companyId)) {
+            return ['member_since' => ['exclude']];
+        }
+
+        return ['status' => ['sometimes', 'in:'.implode(',', config('unity.statuses'))], 'member_since' => ['nullable', 'date']];
     }
 
     /** The family's own columns (My Family Roots 360): a family's phone may send them, a SACCO's may not. @return array<string, array<int, mixed>> */

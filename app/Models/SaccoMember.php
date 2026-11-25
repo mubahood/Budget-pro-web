@@ -42,7 +42,9 @@ class SaccoMember extends Model
         'consent_data_at' => 'datetime', 'consent_messages_at' => 'datetime', 'messages_opt_out_at' => 'datetime', 'consent_credit_bureau_at' => 'datetime',
         'is_insider' => 'boolean', 'is_deleted' => 'boolean',
         // My Family Roots 360 (the kin module).
-        'date_of_death' => 'date:Y-m-d', 'dues_start_date' => 'date:Y-m-d', 'heritage' => 'array', 'privacy' => 'array', 'in_purse' => 'boolean'];
+        'date_of_death' => 'date:Y-m-d', 'dues_start_date' => 'date:Y-m-d', 'heritage' => 'array', 'privacy' => 'array', 'in_purse' => 'boolean',
+        // UnityDesk (the unity module): membership_ends_on and standing are the server's caches (Memberships::recompute).
+        'member_since' => 'date:Y-m-d', 'membership_ends_on' => 'date:Y-m-d'];
 
     protected static function booted(): void
     {
@@ -62,6 +64,18 @@ class SaccoMember extends Model
                 $m->status = in_array($m->status, config('kin.statuses'), true) ? $m->status : 'active';
                 $m->kyc_status = 'pending';
                 $m->joined_on ??= \App\Support\LocalDate::today((int) $m->company_id)->toDateString();
+                $m->setAttribute('status_changed_on', \App\Support\LocalDate::today((int) $m->company_id)->toDateString());
+
+                return;
+            }
+            if (\App\Services\Unity\Memberships::isAssociation($company)) {
+                // An association's member (UnityDesk): counted against the plan's members, numbered, active unless said otherwise.
+                app(\App\Services\Billing\Quotas::class)->assertCanAdd($company, 'unity_members');
+                $m->member_no = \App\Services\Shop\NumberSequencer::next((int) $m->company_id, 'mem');
+                $m->status = in_array($m->status, config('unity.statuses'), true) ? $m->status : 'active';
+                $m->kyc_status = 'pending';
+                $m->joined_on ??= \App\Support\LocalDate::today((int) $m->company_id)->toDateString();
+                $m->member_since ??= $m->joined_on;
                 $m->setAttribute('status_changed_on', \App\Support\LocalDate::today((int) $m->company_id)->toDateString());
 
                 return;

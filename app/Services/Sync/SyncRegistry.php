@@ -194,9 +194,21 @@ class SyncRegistry
                 'joined_on', 'consent_data_at', 'consent_messages_at', 'messages_opt_out_at', 'guardian_name', 'guardian_phone_e164',
                 // My Family Roots 360: a family's people are members rows too, with their own columns (generation and root_id are the server's).
                 // A SACCO's phone may not send them, its status least of all (SaccoMemberRules::syncRules).
-                ...self::present('sacco_members', ['status', 'date_of_death', 'place_of_death', 'birth_date_precision', 'education_level', 'country', 'heritage', 'privacy', 'dues_duty', 'dues_personal_minor', 'dues_start_date'])],
+                ...self::present('sacco_members', ['status', 'date_of_death', 'place_of_death', 'birth_date_precision', 'education_level', 'country', 'heritage', 'privacy', 'dues_duty', 'dues_personal_minor', 'dues_start_date',
+                    // UnityDesk: an association's members carry the day they joined the association (their category and chapter come as refs).
+                    'member_since'])],
                 'user_fields' => ['created_by_id'], 'rules' => [\App\Support\Rules\SaccoMemberRules::class, 'syncRules'],
-                'refs' => self::presentRefs('sacco_members', ['branch_uuid' => ['model' => \App\Models\KinBranch::class, 'column' => 'branch_id']])],
+                'refs' => self::presentRefs('sacco_members', ['branch_uuid' => ['model' => \App\Models\KinBranch::class, 'column' => 'branch_id'],
+                    'category_uuid' => ['model' => \App\Models\UnityCategory::class, 'column' => 'category_id'], 'chapter_uuid' => ['model' => \App\Models\UnityChapter::class, 'column' => 'chapter_id']])],
+            // UnityDesk (the unity module): categories, chapters and subscriptions. A subscription is never deleted (cancel it with
+            // status cancelled); its receipt number and the member's ends-on date and standing are the server's (Memberships).
+            // Only an association's phone may send these tables (SyncApplier).
+            'unity_categories' => ['model' => \App\Models\UnityCategory::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'fee_minor', 'period_months', 'benefits', 'is_active', 'sort_order'],
+                'user_fields' => ['created_by_id']],
+            'unity_chapters' => ['model' => \App\Models\UnityChapter::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'location', 'notes', 'sort_order'],
+                'user_fields' => ['created_by_id'], 'refs' => ['lead_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'lead_member_id']]],
+            'unity_subscriptions' => ['model' => \App\Models\UnitySubscription::class, 'kind' => self::KIND_MASTER, 'fields' => ['starts_on', 'ends_on', 'amount_minor', 'paid_minor', 'paid_on', 'method', 'reference', 'status', 'notes'],
+                'user_fields' => ['created_by_id'], 'refs' => ['member_uuid' => ['model' => \App\Models\SaccoMember::class, 'column' => 'member_id'], 'category_uuid' => ['model' => \App\Models\UnityCategory::class, 'column' => 'category_id']]],
             // My Family Roots 360 (the kin module): the tree. Links and marriages name their people by uuid; every save passes TreeService's
             // guards (a refused link comes back rejected), and the generations are worked out once after the batch.
             'kin_branches' => ['model' => \App\Models\KinBranch::class, 'kind' => self::KIND_MASTER, 'fields' => ['name', 'notes', 'sort_order'],
@@ -270,7 +282,7 @@ class SyncRegistry
             if ($key === 'cash_movements') {
                 return in_array('server_seq', self::columns('cash_movements'), true);
             }
-            if (str_starts_with($key, 'kin_')) {
+            if (str_starts_with($key, 'kin_') || str_starts_with($key, 'unity_')) {
                 return self::columns($key) !== []; // the Family Roots migration not run yet
             }
             if (str_starts_with($key, 'sacco_')) {
@@ -323,5 +335,7 @@ class SyncRegistry
         // Akiba Ledger (04 §9.3): caches and numbers only the server writes.
         'balance_minor', 'held_minor', 'shares_count', 'member_no', 'journal_entry_id', 'hold_reason', 'kyc_status', 'nin_hash', 'nin_encrypted',
         // My Family Roots 360: worked out from the tree (TreeService::recompute).
-        'generation', 'root_id'];
+        'generation', 'root_id',
+        // UnityDesk: worked out from the subscriptions (Memberships::recompute).
+        'membership_ends_on', 'standing'];
 }

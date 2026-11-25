@@ -16,6 +16,9 @@ return [
         'background' => '#F7F8FA',
     ],
 
+    // What a member's record may say (sacco_members.status). Lapsed is a standing, never a status.
+    'statuses' => ['applicant', 'active', 'dormant', 'suspended', 'exited', 'deceased'],
+
     // A member's standing, worked out by App\Services\Unity\Memberships from their subscriptions (cached on sacco_members).
     'standings' => ['good', 'lapsed', 'life'],
     'subscription_statuses' => ['pending', 'paid', 'waived', 'cancelled'],
