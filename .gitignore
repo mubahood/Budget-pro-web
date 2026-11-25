@@ -32,3 +32,8 @@ deploy_key*
 
 # Live account lists hold personal data: never in a repo or a web folder (kept in ~/BudgetPro-private/).
 LIVE_ACCOUNTS*
+
+# Firebase service-account keys never go in this public repo (FIREBASE_CREDENTIALS points outside it)
+*firebase-adminsdk*.json
+/firebase*.json
+/storage/firebase*.json

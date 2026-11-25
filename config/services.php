@@ -37,5 +37,10 @@ return [
     'google' => [
         'web_client_id' => env('GOOGLE_WEB_CLIENT_ID', ''),
     ],
+    // Push to the phones (FCM HTTP v1, App\Services\Notifications\PushSender): the path of the Firebase service-account JSON, kept
+    // OUTSIDE the repo (this repo is public). Unset or unreadable: pushes are skipped (logged once), the inbox still fills.
+    'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS', ''),
+    ],
 
 ];

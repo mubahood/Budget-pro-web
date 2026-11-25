@@ -153,7 +153,8 @@ class PhoneAuthTest extends ApiTestCase
         $this->assertSame(0, $this->getJson('/api/v1/notifications', $h)->json('data.unread'));
 
         $prefs = $this->getJson('/api/v1/notifications/preferences', $h)->assertOk()->json('data');
-        $this->assertFalse(collect($prefs)->firstWhere('key', 'daily_summary')['enabled']);
+        $this->assertTrue(collect($prefs)->firstWhere('key', 'daily_summary')['enabled'], 'on by default: the inbox and a push, no WhatsApp unless chosen');
+        $this->assertSame(['in_app', 'push'], collect($prefs)->firstWhere('key', 'daily_summary')['channels']);
         $this->putJson('/api/v1/notifications/preferences', ['preferences' => [['key' => 'daily_summary', 'enabled' => true, 'channels' => ['whatsapp', 'in_app', 'bogus']]]], $h)->assertOk();
         $row = collect($this->getJson('/api/v1/notifications/preferences', $h)->json('data'))->firstWhere('key', 'daily_summary');
         $this->assertTrue($row['enabled']);

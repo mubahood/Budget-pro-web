@@ -11,9 +11,12 @@ class Device extends Model
 {
     public const WEB_PREFIX = 'W';
 
-    protected $fillable = ['company_id', 'user_id', 'device_id', 'name', 'platform', 'app_version', 'number_prefix', 'prefix_index', 'status', 'last_seen_at', 'last_pull_seq'];
+    protected $fillable = ['company_id', 'user_id', 'device_id', 'name', 'platform', 'app_version', 'number_prefix', 'prefix_index', 'status', 'last_seen_at', 'last_pull_seq',
+        'push_token', 'push_provider', 'app', 'locale', 'access_token_id', 'push_token_at'];
 
-    protected $casts = ['last_seen_at' => 'datetime', 'revoked_at' => 'datetime', 'prefix_index' => 'integer', 'last_pull_seq' => 'integer'];
+    protected $hidden = ['push_token'];
+
+    protected $casts = ['last_seen_at' => 'datetime', 'revoked_at' => 'datetime', 'prefix_index' => 'integer', 'last_pull_seq' => 'integer', 'push_token_at' => 'datetime'];
 
     protected static function booted(): void
     {
@@ -71,5 +74,40 @@ class Device extends Model
                 'number_prefix' => static::prefixFor($index), 'prefix_index' => $index, 'status' => 'active', 'last_seen_at' => now(),
             ]);
         });
+    }
+
+    /**
+     * The phone's push token (FCM), which app it is and its language. One token belongs to one device row (one user, one app) at a
+     * time: registering it here takes it off any other row, in any account. A null token clears this row's.
+     */
+    public function setPush(?string $token, ?string $provider, ?string $app, ?string $locale, ?int $accessTokenId): void
+    {
+        $token = $token !== null && trim($token) !== '' ? trim($token) : null;
+        if ($token !== null) {
+            static::withoutGlobalScopes()->where('push_token', $token)->where('id', '!=', $this->id)
+                ->update(['push_token' => null, 'push_provider' => null, 'access_token_id' => null, 'push_token_at' => null]);
+        }
+        $this->push_token = $token;
+        $this->push_provider = $token !== null ? ($provider ?: 'fcm') : null;
+        $this->access_token_id = $token !== null ? $accessTokenId : null;
+        $this->push_token_at = $token !== null ? now() : null;
+        $this->app = $app ?? $this->app;
+        $this->locale = $locale ?? $this->locale;
+        $this->save();
+    }
+
+    /** Sign-out: the sign-in's phone stops getting pushes. */
+    public static function clearPushForAccessTokens(array $accessTokenIds): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $accessTokenIds)));
+
+        return $ids === [] ? 0 : static::withoutGlobalScopes()->whereIn('access_token_id', $ids)->whereNotNull('push_token')
+            ->update(['push_token' => null, 'push_provider' => null, 'access_token_id' => null, 'push_token_at' => null]);
+    }
+
+    public static function clearPushForUser(int $userId): int
+    {
+        return static::withoutGlobalScopes()->where('user_id', $userId)->whereNotNull('push_token')
+            ->update(['push_token' => null, 'push_provider' => null, 'access_token_id' => null, 'push_token_at' => null]);
     }
 }

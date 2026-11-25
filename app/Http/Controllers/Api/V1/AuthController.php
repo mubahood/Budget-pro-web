@@ -463,6 +463,9 @@ class AuthController extends Controller
     public function revokeSession(Request $request, $id)
     {
         $deleted = $request->user()->tokens()->where('id', $id)->delete();
+        if ($deleted) {
+            \App\Models\Device::clearPushForAccessTokens([(int) $id]);
+        }
 
         return $deleted ? $this->success(null, 'Signed out of that device.') : $this->notFound('Session not found.');
     }
@@ -474,6 +477,10 @@ class AuthController extends Controller
         $company = Company::find($user->company_id);
         $old = $user->currentAccessToken();
         $response = $this->issue($request, $user, $company, 'Token refreshed.');
+        if ($old instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            // The phone's push token follows its sign-in to the new token.
+            \App\Models\Device::withoutGlobalScopes()->where('access_token_id', $old->id)->update(['access_token_id' => $user->tokens()->max('id')]);
+        }
         $old->delete();
 
         return $response;
@@ -484,7 +491,11 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->user()->currentAccessToken();
+        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            \App\Models\Device::clearPushForAccessTokens([(int) $token->id]); // this phone stops getting pushes
+        }
+        $token->delete();
 
         return $this->success(null, 'Logged out successfully.');
     }
@@ -495,6 +506,7 @@ class AuthController extends Controller
     public function logoutAll(Request $request)
     {
         $request->user()->tokens()->delete();
+        \App\Models\Device::clearPushForUser((int) $request->user()->id);
 
         return $this->success(null, 'Logged out of all devices.');
     }

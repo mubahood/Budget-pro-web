@@ -18,17 +18,23 @@ class NotificationController extends Controller
         $u = $request->user();
         $rows = DB::table('app_notifications')->where('company_id', $u->company_id)
             ->where(fn ($q) => $q->where('user_id', $u->id)->orWhereNull('user_id'))
-            ->orderByDesc('id')->limit(100)->get()->map(fn ($r) => (array) $r + ['data' => json_decode((string) $r->data, true)]);
+            ->orderByDesc('id')->limit(100)->get()
+            ->map(fn ($r) => array_diff_key((array) $r, array_flip(['dedupe_key', 'push_due_at'])) + ['data' => json_decode((string) $r->data, true)]);
 
         return $this->success(['items' => $rows, 'unread' => $rows->whereNull('read_at')->count()], 'Notifications.');
     }
 
     public function markRead(Request $request)
     {
-        $data = $request->validate(['ids' => ['nullable', 'array'], 'ids.*' => ['integer']]);
+        // via=push: the person tapped the push (ids = its notification_id), counted as an open (PushStats).
+        $data = $request->validate(['ids' => ['nullable', 'array'], 'ids.*' => ['integer'], 'via' => ['nullable', 'in:push,inbox']]);
         $u = $request->user();
-        DB::table('app_notifications')->where('company_id', $u->company_id)->where(fn ($q) => $q->where('user_id', $u->id)->orWhereNull('user_id'))
-            ->when(! empty($data['ids']), fn ($q) => $q->whereIn('id', $data['ids']))->whereNull('read_at')->update(['read_at' => now()]);
+        $mine = fn () => DB::table('app_notifications')->where('company_id', $u->company_id)->where(fn ($q) => $q->where('user_id', $u->id)->orWhereNull('user_id'))
+            ->when(! empty($data['ids']), fn ($q) => $q->whereIn('id', $data['ids']));
+        if (($data['via'] ?? null) === 'push' && ! empty($data['ids'])) {
+            $mine()->whereNull('opened_at')->update(['opened_at' => now()]);
+        }
+        $mine()->whereNull('read_at')->update(['read_at' => now()]);
 
         return $this->success(null, 'Marked as read.');
     }
@@ -36,7 +42,9 @@ class NotificationController extends Controller
     public function preferences(Request $request, Notifier $notifier)
     {
         $out = [];
-        foreach (Notifier::TYPES as $key => [$label]) {
+        // Only this app's kinds (a SACCO never sees a shop's), with "hide details" last.
+        $app = \App\Support\StoreLink::appOf($request, \App\Models\Company::find($request->user()->company_id));
+        foreach (Notifier::forApp($app) as $key => [$label]) {
             $out[] = ['key' => $key, 'label' => $label] + $notifier->preference((int) $request->user()->id, $key);
         }
 

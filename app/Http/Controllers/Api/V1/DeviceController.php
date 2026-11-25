@@ -14,7 +14,8 @@ use Illuminate\Http\Request;
  * Device registration (plan A.1, P1-2): a stable receipt prefix per device,
  * server time for clock-skew detection and the entitlement snapshot.
  *
- *  POST   devices/register       { device_id, name?, platform?, app_version? }
+ *  POST   devices/register       { device_id, name?, platform?, app_version?, push_token?, push_provider?, app?, locale? }
+ *         push_token: the phone's FCM token (null clears it, a missing key leaves it as it is); app: the AppFamily slug.
  *  GET    devices                owner: list company devices
  *  POST   devices/{id}/revoke    owner: stop a lost/stolen till from syncing
  */
@@ -29,6 +30,10 @@ class DeviceController extends Controller
             'name' => ['nullable', 'string', 'max:100'],
             'platform' => ['nullable', 'string', 'max:20'],
             'app_version' => ['nullable', 'string', 'max:30'],
+            'push_token' => ['nullable', 'string', 'max:255'],
+            'push_provider' => ['nullable', 'in:fcm'],
+            'app' => ['nullable', 'string', 'max:40'],
+            'locale' => ['nullable', 'string', 'max:12', 'regex:/^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,4})?$/'],
         ]);
         $user = $request->user();
         $company = $request->attributes->get('company') ?? Company::find($user->company_id);
@@ -45,6 +50,13 @@ class DeviceController extends Controller
         if ($device->isRevoked()) {
             return $this->error('This device has been revoked by the owner.', 403, ['code' => 'device_revoked']);
         }
+        $app = \App\Support\AppFamily::slug($data['app'] ?? null) ?? \App\Support\StoreLink::appOf($request, $company);
+        if ($request->exists('push_token') || $app !== $device->app || (isset($data['locale']) && $data['locale'] !== $device->locale)) {
+            $access = $user->currentAccessToken();
+            $token = $request->exists('push_token') ? ($data['push_token'] ?? null) : $device->push_token;
+            $device->setPush($token, $data['push_provider'] ?? null, $app, $data['locale'] ?? null,
+                $access instanceof \Laravel\Sanctum\PersonalAccessToken ? (int) $access->id : $device->access_token_id);
+        }
 
         return $this->success([
             'device_id' => $device->device_id,
@@ -52,6 +64,7 @@ class DeviceController extends Controller
             // The highest receipt number this phone already sent: a phone whose counter started again continues after it.
             'number_floors' => ['receipt' => self::lastReceiptNumber((int) $company->id, $device->device_id)],
             'name' => $device->name,
+            'push' => $device->push_token !== null,
             'server_time' => SyncSequence::nowMs(),
             'server_seq' => SyncSequence::current(),
             'entitlements' => Entitlements::for($company),
@@ -93,6 +106,8 @@ class DeviceController extends Controller
         }
         $device->status = 'revoked';
         $device->revoked_at = now();
+        $device->push_token = null; // a lost phone gets no more pushes
+        $device->access_token_id = null;
         $device->save();
 
         return $this->success($device, 'Device revoked.');
