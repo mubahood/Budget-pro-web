@@ -36,6 +36,9 @@ return [
     // Sign in with Google on the phone: the Web client ID of the Firebase project (not a secret; the app is told it by app/version). Empty: no Google button.
     'google' => [
         'web_client_id' => env('GOOGLE_WEB_CLIENT_ID', ''),
+        // Only if an app's phone asks Google for a token with another Web client ID (another Firebase project): those IDs,
+        // comma-separated. Every app in the one project shares GOOGLE_WEB_CLIENT_ID and needs nothing here.
+        'extra_client_ids' => env('GOOGLE_EXTRA_CLIENT_IDS', ''),
     ],
     // Push to the phones (FCM HTTP v1, App\Services\Notifications\PushSender): the path of the Firebase service-account JSON, kept
     // OUTSIDE the repo (this repo is public). Unset or unreadable: pushes are skipped (logged once), the inbox still fills.

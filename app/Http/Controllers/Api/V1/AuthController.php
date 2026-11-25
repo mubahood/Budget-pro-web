@@ -175,7 +175,7 @@ class AuthController extends Controller
                 'currency' => $data['currency'] ?? 'UGX',
                 'country' => $data['country'] ?? 'UG',
                 'business_type' => $data['business_type'] ?? null,
-                'modules' => $data['modules'] ?? null,
+                'modules' => $data['modules'] ?? self::appModules($data['app'] ?? null),
                 'verification_token' => RegistrationService::verificationToken($who['email']),
             ], RegistrationService::PRODUCT_BUDGET, 'google');
         } catch (BusinessRuleException $e) {
@@ -185,6 +185,14 @@ class AuthController extends Controller
         app(\App\Services\Notifications\Notifier::class)->welcome($user, $company);
 
         return $this->issue($request, $user, $company, 'Registration successful.');
+    }
+
+    /** A new person from an app that sent no modules: the books that app opens (a shop app keeps the shop default). */
+    private static function appModules(?string $app): ?array
+    {
+        $slug = \App\Support\AppFamily::slug($app);
+
+        return $slug === null || \App\Support\AppFamily::module($slug) === 'shop' ? null : [\App\Support\AppFamily::module($slug)];
     }
 
     /**

@@ -33,10 +33,21 @@ final class GoogleSignIn
         $email = strtolower(trim((string) ($claims['email'] ?? '')));
         $verified = filter_var($claims['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $sub = trim((string) ($claims['sub'] ?? ''));
-        if ($email === '' || $sub === '' || ! $verified || ($claims['aud'] ?? null) !== $clientId || ! in_array($claims['iss'] ?? null, self::ISSUERS, true) || (int) ($claims['exp'] ?? 0) <= time()) {
+        if ($email === '' || $sub === '' || ! $verified || ! in_array($claims['aud'] ?? null, self::audiences($clientId), true) || ! in_array($claims['iss'] ?? null, self::ISSUERS, true) || (int) ($claims['exp'] ?? 0) <= time()) {
             throw BusinessRuleException::make('google_invalid', 'Google could not confirm this sign-in. Please try again.');
         }
 
         return ['sub' => $sub, 'email' => $email, 'first_name' => trim((string) ($claims['given_name'] ?? '')), 'last_name' => trim((string) ($claims['family_name'] ?? ''))];
+    }
+
+    /**
+     * Whom a token may be for: the Web client ID every app's phone asks Google with (the Android clients of the one Firebase
+     * project share it, so one ID serves all the apps), plus any listed in GOOGLE_EXTRA_CLIENT_IDS. @return list<string>
+     */
+    private static function audiences(string $clientId): array
+    {
+        $extra = array_map('trim', explode(',', (string) config('services.google.extra_client_ids', '')));
+
+        return array_values(array_filter(array_unique([$clientId, ...$extra]), fn ($id) => $id !== ''));
     }
 }

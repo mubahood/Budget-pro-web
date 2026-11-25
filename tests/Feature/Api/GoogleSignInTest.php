@@ -170,4 +170,27 @@ class GoogleSignInTest extends TestCase
         config(['services.google.web_client_id' => self::CLIENT]);
         $this->getJson('/api/v1/app/version')->assertOk()->assertJsonPath('data.google_client_id', self::CLIENT);
     }
+
+    public function test_every_app_signs_someone_new_in_with_the_one_client_id_and_opens_its_own_books(): void
+    {
+        $email = '';
+        Http::fake(function () use (&$email) { return Http::response(['aud' => self::CLIENT, 'iss' => 'https://accounts.google.com', 'email' => $email, 'email_verified' => 'true',
+            'sub' => 'sub-'.md5($email), 'given_name' => 'New', 'family_name' => 'Person', 'exp' => (string) (time() + 600)]); });
+        foreach (array_keys(\App\Support\AppFamily::APPS) as $slug) {
+            $email = 'new.'.str_replace('-', '', $slug).'@example.com';
+            $d = $this->ask(['app' => $slug, 'company_name' => 'Sample '.$slug])->assertOk()->json('data');
+            $this->assertNotEmpty($d['token'] ?? null, $slug);
+            $this->assertSame($email, $d['user']['email'] ?? User::withoutGlobalScopes()->find($d['user']['id'] ?? 0)?->email, "{$slug} signs in its own new person");
+            $module = \App\Support\AppFamily::module($slug);
+            $this->assertContains($module, Company::withoutGlobalScopes()->findOrFail($d['company']['id'])->modules(), "{$slug} opens its {$module} books");
+        }
+    }
+
+    public function test_an_extra_client_id_is_accepted_only_when_listed(): void
+    {
+        $this->google(['email' => 'extra.person@example.com', 'aud' => 'other-456.apps.googleusercontent.com']);
+        $this->ask(['app' => 'shelfie'])->assertJsonPath('errors.code', 'google_invalid');
+        config(['services.google.extra_client_ids' => ' other-456.apps.googleusercontent.com , ']);
+        $this->ask(['app' => 'shelfie'])->assertOk()->assertJsonPath('data.new', true);
+    }
 }
