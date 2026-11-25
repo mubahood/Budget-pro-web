@@ -563,4 +563,7 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
     // Estate Ledger – Rent & Tenants (the rentals module): routes/api_rentals.php.
     require __DIR__.'/api_rentals.php';
+
+    // My Family Roots 360 (the kin module): routes/api_kin.php.
+    require __DIR__.'/api_kin.php';
 });
