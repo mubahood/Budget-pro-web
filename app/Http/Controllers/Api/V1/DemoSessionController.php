@@ -35,6 +35,9 @@ class DemoSessionController extends Controller
     /** My Family Roots 360: the phone sends app=kin (AppFamily aliases kin and familyroots). */
     private const FAMILY_ROOTS = ['family-roots', 'kin', 'familyroots'];
 
+    /** UnityDesk: the phone sends app=unitydesk (alias unity). */
+    private const UNITYDESK = ['unitydesk', 'unity'];
+
     /** What each of its buttons opens, in the phone's words. Key: account:role. */
     private const ESTATE_LEDGER_WHAT = [
         'agency:owner' => 'Sees everything: today, the landlords, month end and the money.',
@@ -59,6 +62,9 @@ class DemoSessionController extends Controller
         }
         if (in_array($request->input('app'), self::FAMILY_ROOTS, true)) {
             return $this->familyRootsRoles();
+        }
+        if (in_array($request->input('app'), self::UNITYDESK, true)) {
+            return $this->unityRoles();
         }
         if (! PublicDemo::enabled()) {
             return $this->notFound('There is no live demo on this server.');
@@ -85,6 +91,9 @@ class DemoSessionController extends Controller
         }
         if (in_array($request->input('app'), self::FAMILY_ROOTS, true)) {
             return $this->familyRootsSession($request);
+        }
+        if (in_array($request->input('app'), self::UNITYDESK, true)) {
+            return $this->unitySession($request);
         }
         if (! PublicDemo::enabled()) {
             return $this->notFound('There is no live demo on this server.');
@@ -182,6 +191,39 @@ class DemoSessionController extends Controller
         $device = substr('demo:'.preg_replace('/[^A-Za-z0-9 ._-]/', '', (string) $request->input('device_name', 'phone')), 0, 60);
 
         return $this->success(['token' => $as->createToken($device, ['*'], $expires)->plainTextToken, 'token_type' => 'Bearer', 'expires_at' => $expires->toIso8601String(), 'demo' => true, 'app' => 'family-roots',
+            'user' => new UserResource($as), 'company' => new CompanyResource($company)], 'Welcome to the live demo.');
+    }
+
+    /** The demo association's roles (UnityDemo). Never another app's demo. */
+    private function unityRoles()
+    {
+        if (! \App\Services\Unity\Demo\UnityDemo::enabled() || \App\Services\Unity\Demo\UnityDemo::company() === null) {
+            return $this->notFound('There is no live demo on this server.');
+        }
+        $roles = [];
+        foreach (\App\Services\Unity\Demo\UnityDemo::roles() as $key => $r) {
+            $roles[] = ['role' => (string) $key, 'label' => (string) $r['label'], 'what' => (string) $r['label'], 'name' => (string) $r['name']];
+        }
+
+        return $this->success(['app' => 'unitydesk', 'roles' => $roles], 'Demo roles.');
+    }
+
+    private function unitySession(Request $request)
+    {
+        $company = \App\Services\Unity\Demo\UnityDemo::enabled() ? \App\Services\Unity\Demo\UnityDemo::company() : null;
+        if ($company === null) {
+            return $this->notFound('There is no live demo on this server.');
+        }
+        $role = (string) $request->input('role', 'chair');
+        $as = \App\Services\Unity\Demo\UnityDemo::login(array_key_exists($role, \App\Services\Unity\Demo\UnityDemo::roles()) ? $role : 'chair');
+        if ($as === null || (int) $as->company_id !== (int) $company->id || strtolower((string) $as->status) === 'inactive') {
+            return $this->error('The demo is being rebuilt. Try again in a few minutes.', 409, ['code' => 'demo_rebuilding']);
+        }
+        $as->tokens()->where('expires_at', '<', now())->delete();
+        $expires = now()->addHours(max(1, (int) config('demo.token_hours', 12)));
+        $device = substr('demo:'.preg_replace('/[^A-Za-z0-9 ._-]/', '', (string) $request->input('device_name', 'phone')), 0, 60);
+
+        return $this->success(['token' => $as->createToken($device, ['*'], $expires)->plainTextToken, 'token_type' => 'Bearer', 'expires_at' => $expires->toIso8601String(), 'demo' => true, 'app' => 'unitydesk',
             'user' => new UserResource($as), 'company' => new CompanyResource($company)], 'Welcome to the live demo.');
     }
 

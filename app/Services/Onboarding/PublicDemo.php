@@ -177,6 +177,7 @@ class PublicDemo
             \App\Services\Rentals\Demo\RentalsDemo::guard($company, $what); // and so has the Estate Ledger demo agency (KR-21)
         }
         \App\Services\Kin\Demo\KinDemo::guard($company, $what); // and the Family Roots demo family
+        \App\Services\Unity\Demo\UnityDemo::guard($company, $what); // and the UnityDesk demo association
         if (! self::$building && ($account = self::accountOf($company)) !== null) {
             $w = self::words($account);
             throw BusinessRuleException::make('demo_locked', ucfirst(str_replace('the shop', 'the '.$w['place'], $what)).' is switched off in the '.$w['name'].', which everyone shares. '.$w['own'].' to do this.');
@@ -193,6 +194,7 @@ class PublicDemo
             \App\Services\Rentals\Demo\RentalsDemo::guardAccount($user, $what);
         }
         \App\Services\Kin\Demo\KinDemo::guardAccount($user, $what);
+        \App\Services\Unity\Demo\UnityDemo::guardAccount($user, $what);
         if (! self::$building && self::isDemoUser($user)) {
             throw BusinessRuleException::make('demo_locked', ucfirst($what).' is switched off for the demo account, so the next visitor can still sign in. '.self::words(self::accountOf((int) $user->company_id))['own'].' to do this.');
         }
