@@ -74,6 +74,8 @@ return [
         'rentals' => ['label' => 'Letting agency or landlord', 'modules' => ['rentals'], 'group' => 'Something else', 'icon' => 'fa-key', 'hint' => 'Properties, tenants, rent and landlords'],
         // Family Roots (the kin module): a family's tree only, never beside another module (CompanyRules::EXCLUSIVE_MODULES, doc 11 T1).
         'kin' => ['label' => 'Family or clan', 'modules' => ['kin'], 'group' => 'Something else', 'icon' => 'fa-people-roof', 'hint' => 'Family tree, branches and members'],
+        // UnityDesk (the unity module): an association's members and subscriptions only, never beside another module.
+        'unity' => ['label' => 'Association or club', 'modules' => ['unity'], 'group' => 'Something else', 'icon' => 'fa-people-group', 'hint' => 'Members, subscriptions and chapters'],
         'other' => ['label' => 'Something else', 'modules' => ['shop', 'finance'], 'group' => 'Something else', 'icon' => 'fa-shapes', 'hint' => 'Services and a few common items'],
     ],
 
@@ -89,6 +91,8 @@ return [
         'rentals' => 'Rentals and tenants',
         // Exclusive (doc 11 T1): a family's account has this module alone, or with `sacco` as its purse while kin.purse_enabled.
         'kin' => 'Family tree and members',
+        // Exclusive: an association's account has this module and no other (CompanyRules::EXCLUSIVE_MODULES).
+        'unity' => 'Members and subscriptions',
     ],
 
     // Web paths per module (first path segment, `*` = prefix) — hidden from menus and refused when the module is off.
@@ -103,6 +107,8 @@ return [
         'rentals' => [],
         // No classic screens: the family's records live in the web portal and the Family Roots app.
         'kin' => [],
+        // No classic screens: an association's members live in the web portal and the UnityDesk app.
+        'unity' => [],
         // Ping Pin (phone tracking) is a separate product: shown only to companies that use it (see AdminMenu::modulesOn).
         'pingpin' => ['tracked-devices*', 'tracking-map*', 'device-*'],
     ],

@@ -90,6 +90,9 @@
         ['Families', 'fa-sitemap', [
             ['Families', $n($b['kin']['families'])], ['People', $n($b['kin']['people']).' (+'.$n($b['kin']['departed']).' departed)'],
             ['Branches', $n($b['kin']['branches'])], ['Parent links', $n($b['kin']['links'])]]],
+        ['Associations', 'fa-users', [
+            ['Associations', $n($b['unity']['associations'])], ['Members', $n($b['unity']['members']).' ('.$n($b['unity']['lapsed']).' lapsed)'],
+            ['Chapters', $n($b['unity']['chapters'])], ['Subscriptions paid, 30 days', $ugx($b['unity']['collected_30d'])]]],
     ] as [$title, $icon, $lines])
         <div class="col-md-{{ $loop->index < 3 ? 4 : 6 }}">
             <div class="box"><div class="box-header with-border"><h3 class="box-title"><i class="fa {{ $icon }}"></i> {{ $title }}</h3></div>

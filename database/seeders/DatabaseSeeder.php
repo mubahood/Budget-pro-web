@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             AkibaPlanSeeder::class,        // Akiba Ledger's own plan line (akiba-*, AK-15)
             EstateLedgerPlanSeeder::class,      // Estate Ledger's own plan line (estate-ledger-*, KR-20)
             FamilyRootsPlanSeeder::class,       // My Family Roots 360's own plan line (family-roots-*)
+            UnityDeskPlanSeeder::class,         // UnityDesk's own plan line (unitydesk-*)
             PingPinPlanSeeder::class,
             ProductTemplateSeeder::class,  // template packs for the setup wizard
             PlatformAdminSeeder::class,    // first platform admin from ADMIN_EMAIL / ADMIN_PASSWORD

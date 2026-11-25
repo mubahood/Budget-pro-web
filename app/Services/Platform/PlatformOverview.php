@@ -22,6 +22,7 @@ final class PlatformOverview
         'akiba' => ['name' => 'Akiba Ledger', 'what' => 'SACCOs'],
         'estate-ledger' => ['name' => 'Estate Ledger', 'what' => 'Rentals'],
         'family-roots' => ['name' => 'Family Roots', 'what' => 'Families'],
+        'unitydesk' => ['name' => 'UnityDesk', 'what' => 'Associations'],
     ];
 
     /**
@@ -33,6 +34,9 @@ final class PlatformOverview
         $m = is_array($modules) ? $modules : (json_decode((string) $modules, true) ?: []);
         if (in_array('kin', $m, true)) {
             return 'family-roots'; // a family's account, even with a purse (['kin', 'sacco'])
+        }
+        if (in_array('unity', $m, true)) {
+            return 'unitydesk';
         }
         if (in_array('sacco', $m, true)) {
             return 'akiba';
@@ -132,8 +136,12 @@ final class PlatformOverview
         $live = fn ($q) => $q->where(fn ($w) => $w->whereNull('is_deleted')->orWhere('is_deleted', 0));
         // A family's people are sacco_members rows too: they count as families', never as SACCO members.
         $kin = DB::table('companies')->where('enabled_modules', 'like', '%"kin"%')->pluck('id')->all();
-        $sacco = fn ($q) => $live($q)->whereNotIn('company_id', $kin);
+        // An association's members (UnityDesk) are sacco_members rows too: theirs, never a SACCO's.
+        $unity = DB::table('companies')->where('enabled_modules', 'like', '%"unity"%')->pluck('id')->all();
+        $sacco = fn ($q) => $live($q)->whereNotIn('company_id', array_merge($kin, $unity));
         $family = fn ($q) => $live($q)->whereIn('company_id', $kin);
+        $association = fn ($q) => $live($q)->whereIn('company_id', $unity);
+        $standing = Schema::hasTable('sacco_members') && Schema::hasColumn('sacco_members', 'standing');
 
         return [
             'shop' => [
@@ -182,6 +190,13 @@ final class PlatformOverview
                 'departed' => $this->count('sacco_members', fn ($q) => $family($q)->where('status', 'deceased')),
                 'branches' => $this->count('kin_branches', $live),
                 'links' => $this->count('kin_links', $live),
+            ],
+            'unity' => [
+                'associations' => count($unity),
+                'members' => $this->count('sacco_members', fn ($q) => $association($q)->whereIn('status', \App\Services\Billing\Quotas::MEMBER_STATUSES)),
+                'lapsed' => $standing ? $this->count('sacco_members', fn ($q) => $association($q)->whereIn('status', \App\Services\Billing\Quotas::MEMBER_STATUSES)->where('standing', 'lapsed')) : 0,
+                'chapters' => $this->count('unity_chapters', $live),
+                'collected_30d' => $this->sum('unity_subscriptions', 'paid_minor', fn ($q) => $live($q)->whereIn('company_id', $ugx)->where('status', 'paid')->where('paid_on', '>=', $d30)),
             ],
             'money' => [
                 'records' => $this->count('financial_records', $live),

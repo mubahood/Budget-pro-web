@@ -34,7 +34,7 @@ class CompanyRules
      * The modules a business is built around (budget-pro-new docs/FAMILY_PLAN.md): every account keeps at
      * least one of them, so it always has a home screen. `finance` (Income & expenses) sits beside them.
      */
-    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco', 'rentals', 'kin'];
+    public const CORE_MODULES = ['shop', 'poultry', 'budget', 'sacco', 'rentals', 'kin', 'unity'];
 
     public const CORE_MODULE_MESSAGE = 'Pick at least one: Shop, Poultry farm or Budget & pledges.';
 
@@ -47,8 +47,10 @@ class CompanyRules
      *
      * `kin` (My Family Roots 360) stands alone too, and wins over `sacco`: a family may keep a purse (`sacco`) beside its
      * tree only when config('kin.purse_enabled') is on, and such an account is a family's, never a SACCO's (doc 11 T1).
+     *
+     * `unity` (UnityDesk, an association's members and their subscriptions) stands alone with no mix at all.
      */
-    public const EXCLUSIVE_MODULES = ['sacco', 'rentals', 'kin'];
+    public const EXCLUSIVE_MODULES = ['sacco', 'rentals', 'kin', 'unity'];
 
     /** The one mix an exclusive module allows: a family's purse beside its tree, while config('kin.purse_enabled'). */
     public const KIN_PURSE = ['kin', 'sacco'];
@@ -61,6 +63,7 @@ class CompanyRules
         'sacco' => self::EXCLUSIVE_MESSAGE,
         'rentals' => 'Estate Ledger keeps the rental books in an account of their own, and other books stay in theirs.',
         'kin' => 'My Family Roots 360 keeps a family\'s records in an account of their own, and other books stay in theirs.',
+        'unity' => 'UnityDesk keeps an association\'s members in an account of their own, and other books stay in theirs.',
     ];
 
     /** Each exclusive module's settings table: its books are set up once the account has a row there. */
@@ -192,7 +195,12 @@ class CompanyRules
      */
     public static function exclusiveMessage(array $modules, array $before = []): string
     {
-        $module = self::exclusiveOf($before) ?? self::exclusiveOf($modules);
+        $mine = self::exclusiveOf($before);
+        $module = $mine ?? self::exclusiveOf($modules);
+        if ($mine === null && $module === 'unity') {
+            // Other apps never say UnityDesk: an account that is not an association hears the rule without the name.
+            return 'Those books are kept in an account of their own, and other books stay in theirs.';
+        }
 
         return $module === null ? self::EXCLUSIVE_MESSAGE : (self::EXCLUSIVE_MESSAGES[$module] ?? self::EXCLUSIVE_MESSAGE);
     }

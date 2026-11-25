@@ -16,7 +16,8 @@ class InstallChoicesTest extends TestCase
     {
         $config = require dirname(__DIR__, 2).'/config/onboarding.php';
         $exclusive = array_keys(array_filter($config['business_types'], fn ($t) => array_intersect($t['modules'], CompanyRules::EXCLUSIVE_MODULES) !== []));
-        $this->assertSame(['sacco', 'rentals', 'kin'], $exclusive);
+        $this->assertSame(['sacco', 'rentals', 'kin', 'unity'], $exclusive);
+        $this->assertArrayNotHasKey('unity', InstallChoices::businessTypes());
         $types = InstallChoices::businessTypes();
         $this->assertArrayNotHasKey('sacco', $types);
         $this->assertArrayNotHasKey('rentals', $types);

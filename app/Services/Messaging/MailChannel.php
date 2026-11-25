@@ -42,10 +42,11 @@ class MailChannel implements MessagingChannel
             // Akiba Ledger and Estate Ledger stand alone: their mail carries neither the family's footer nor its name
             // (their own footer greets "Akiba Ledger" or "Estate Ledger", AK-68, KR-05).
             // My Family Roots 360 too (`kin`), and its name wins for a family with a purse.
-            $app = ! empty($options['kin']) ? 'kin' : (! empty($options['akiba']) ? 'akiba' : (! empty($options['estate-ledger']) ? 'estate-ledger'
-                : (isset($options['company_id']) ? SupportContact::standaloneApp((int) $options['company_id']) : null)));
-            $own = ['akiba' => 'Akiba Ledger', 'estate-ledger' => 'Estate Ledger', 'kin' => (string) config('kin.brand.name', 'My Family Roots 360')][$app] ?? null;
-            $contact = match ($app) { 'akiba' => SupportContact::forSacco(), 'estate-ledger' => SupportContact::forRentals(), 'kin' => SupportContact::forKin(), default => SupportContact::platform() };
+            // UnityDesk too (`unity`): its own name only, "by Solavia" at most.
+            $app = ! empty($options['kin']) ? 'kin' : (! empty($options['unity']) ? 'unity' : (! empty($options['akiba']) ? 'akiba' : (! empty($options['estate-ledger']) ? 'estate-ledger'
+                : (isset($options['company_id']) ? SupportContact::standaloneApp((int) $options['company_id']) : null))));
+            $own = ['akiba' => 'Akiba Ledger', 'estate-ledger' => 'Estate Ledger', 'kin' => (string) config('kin.brand.name', 'My Family Roots 360'), 'unity' => (string) config('unity.brand.name', 'UnityDesk')][$app] ?? null;
+            $contact = match ($app) { 'akiba' => SupportContact::forSacco(), 'estate-ledger' => SupportContact::forRentals(), 'kin' => SupportContact::forKin(), 'unity' => SupportContact::forUnity(), default => SupportContact::platform() };
             $line = $footer ? $contact->mailLine($context, $vars) : '';
             $fromName = $own ?? (isset($options['from_name']) && is_string($options['from_name']) && $options['from_name'] !== '' ? $options['from_name'] : null);
             Mail::raw($line === '' ? $text : rtrim($text)."\n\n--\n".$line, function ($m) use ($to, $options, $own, $fromName) {

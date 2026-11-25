@@ -24,7 +24,11 @@ final class AppAccess
     /**
      * What the apps say after a sign-in. Null when the app is unknown (old phones, the web's own doors).
      *
-     * @return array{app: string, name: string, has: bool, add: ?string, can_add: bool, books: ?string}|null
+     * `handoff` is true when the person signed in but has no books for this app yet: the token still opens their own
+     * account, nothing was created for them, and the phone shows its neutral "this app is for ..." screen (UnityDesk's
+     * phone, which replaces Budget Pro's, reads this when an old Budget Pro user signs in) and offers `add` only when asked.
+     *
+     * @return array{app: string, name: string, has: bool, handoff: bool, add: ?string, can_add: bool, books: ?string}|null
      */
     public static function of(User $login, ?string $app): ?array
     {
@@ -47,6 +51,7 @@ final class AppAccess
             'app' => $slug,
             'name' => AppFamily::name($slug),
             'has' => $has,
+            'handoff' => ! $has,
             'add' => $add,
             'can_add' => $canAdd,
             // Only for a module: the books it joins. Akiba and Estate never name the person's other books.

@@ -67,7 +67,7 @@ class AccountsJoinTest extends TestCase
     {
         $r = $this->person('amina.join@example.com', ['shop', 'finance']);
         $d = $this->login('amina.join@example.com', 'pledge-and-budget');
-        $this->assertSame(['app' => 'pledge-and-budget', 'name' => 'Pledge & Budget', 'has' => false, 'add' => 'module', 'can_add' => true, 'books' => 'Amina Hardware'], $d['access']);
+        $this->assertSame(['app' => 'pledge-and-budget', 'name' => 'Pledge & Budget', 'has' => false, 'handoff' => true, 'add' => 'module', 'can_add' => true, 'books' => 'Amina Hardware'], $d['access']);
 
         $before = $this->counts();
         $j = $this->postJson('/api/v1/auth/join', ['app' => 'pledge-and-budget', 'device_name' => 't'], $this->bearer($d['token']))->assertOk()->json('data');

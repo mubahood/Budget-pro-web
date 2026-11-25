@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Builder;
  *   estate-ledger  Estate Ledger, slugs `estate-ledger-*` (EstateLedgerPlanSeeder), for accounts with the exclusive `rentals` module (KR-20)
  *   family-roots   Family Roots, slugs `family-roots-*` (FamilyRootsPlanSeeder), for accounts with the exclusive `kin` module
  *                  (a family with a purse, ['kin', 'sacco'], stays on this line)
+ *   unitydesk      UnityDesk, slugs `unitydesk-*` (UnityDeskPlanSeeder), for accounts with the exclusive `unity` module
  *
  * Every place that lists or sells plans narrows by the account's line (the API and classic billing pages,
  * Quotas::planThatFits, the free fallback in Lifecycle, the trial at sign-up), and buying, scheduling or
@@ -32,22 +33,25 @@ final class PlanLine
 
     public const FAMILY_ROOTS = 'family-roots';
 
-    public const LINES = [self::FAMILY, self::AKIBA, self::ESTATE_LEDGER, self::FAMILY_ROOTS];
+    public const UNITYDESK = 'unitydesk';
+
+    public const LINES = [self::FAMILY, self::AKIBA, self::ESTATE_LEDGER, self::FAMILY_ROOTS, self::UNITYDESK];
 
     /** The family line's trial for an account that is only about events (Pledge & Budget): more logins, nothing else changed (D11). */
     public const EVENTS_TRIAL = 'pledge-budget-trial';
 
     /** The module that puts an account on each line other than the family's; the first one an account has wins (`kin` before `sacco`). */
-    private const MODULE_LINES = ['kin' => self::FAMILY_ROOTS, 'sacco' => self::AKIBA, 'rentals' => self::ESTATE_LEDGER];
+    private const MODULE_LINES = ['kin' => self::FAMILY_ROOTS, 'sacco' => self::AKIBA, 'rentals' => self::ESTATE_LEDGER, 'unity' => self::UNITYDESK];
 
     /** The app each line other than the family's sells (the platform admin's labels). */
-    private const APPS = [self::AKIBA => 'Akiba Ledger', self::ESTATE_LEDGER => 'Estate Ledger', self::FAMILY_ROOTS => 'Family Roots'];
+    private const APPS = [self::AKIBA => 'Akiba Ledger', self::ESTATE_LEDGER => 'Estate Ledger', self::FAMILY_ROOTS => 'Family Roots', self::UNITYDESK => 'UnityDesk'];
 
     /** What an account of each app line hears for another line's plan: its own app's name only (AK-68, KR-05). */
     private const NOT_FOR = [
         self::AKIBA => 'This plan is not for SACCO accounts. Choose an Akiba Ledger plan.',
         self::ESTATE_LEDGER => 'This plan is not for Estate Ledger accounts. Choose an Estate Ledger plan.',
         self::FAMILY_ROOTS => 'This plan is not for family accounts. Choose a My Family Roots 360 plan.',
+        self::UNITYDESK => 'This plan is not for UnityDesk accounts. Choose a UnityDesk plan.',
     ];
 
     /** What a family account hears for a plan of an app line, by the plan's line. */
@@ -55,6 +59,8 @@ final class PlanLine
         self::AKIBA => 'This plan is for Akiba Ledger SACCO accounts. Choose one of your app\'s plans.',
         self::ESTATE_LEDGER => 'This plan is for Estate Ledger accounts. Choose one of your app\'s plans.',
         self::FAMILY_ROOTS => 'This plan is for My Family Roots 360 accounts. Choose one of your app\'s plans.',
+        // Other apps never say UnityDesk: its plans are refused in neutral words.
+        self::UNITYDESK => 'This plan is for another app\'s accounts. Choose one of your app\'s plans.',
     ];
 
     public static function of(Plan $plan): string
@@ -108,6 +114,7 @@ final class PlanLine
             self::AKIBA => config('sacco.plans.trial', 'akiba-trial'),
             self::ESTATE_LEDGER => config('rentals.plans.trial', 'estate-ledger-trial'),
             self::FAMILY_ROOTS => config('kin.plans.trial', 'family-roots-trial'),
+            self::UNITYDESK => config('unity.plans.trial', 'unitydesk-trial'),
             default => config('saas.default_plan', 'trial'),
         };
     }
@@ -131,6 +138,7 @@ final class PlanLine
             self::AKIBA => config('sacco.plans.free', 'akiba-free'),
             self::ESTATE_LEDGER => config('rentals.plans.free', 'estate-ledger-free'),
             self::FAMILY_ROOTS => config('kin.plans.free', 'family-roots-free'),
+            self::UNITYDESK => config('unity.plans.free', 'unitydesk-free'),
             default => config('saas.free_plan', 'free'),
         };
     }

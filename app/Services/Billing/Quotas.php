@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 class Quotas
 {
     public const KEYS = ['users' => 'max_users', 'products' => 'max_products', 'sales' => 'max_sales_per_month', 'storage' => 'storage_mb', 'devices' => 'max_devices', 'locations' => 'max_locations',
-        'members' => 'max_members', 'sms' => 'max_sms_per_month', 'units' => 'max_units', 'people' => 'max_people'];
+        'members' => 'max_members', 'sms' => 'max_sms_per_month', 'units' => 'max_units', 'people' => 'max_people', 'unity_members' => 'max_unity_members'];
 
     /** Limits that only warn (never refuse). */
     public const SOFT = ['sales'];
@@ -29,19 +29,19 @@ class Quotas
      * in-app; money is never refused); an Estate Ledger account counts its rental units (hard: a new unit is refused,
      * rent is never refused; docs/estate-ledger/04-architecture.md §15). The family's usage block and answers are unchanged.
      */
-    public const LINE_KEYS = ['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA, 'units' => PlanLine::ESTATE_LEDGER, 'people' => PlanLine::FAMILY_ROOTS];
+    public const LINE_KEYS = ['members' => PlanLine::AKIBA, 'sms' => PlanLine::AKIBA, 'units' => PlanLine::ESTATE_LEDGER, 'people' => PlanLine::FAMILY_ROOTS, 'unity_members' => PlanLine::UNITYDESK];
 
     /** People on a family's tree that count against max_people (Family Roots): the living, the joining and the departed; not those who left. */
     public const PEOPLE_STATUSES = ['active', 'applicant', 'deceased'];
 
-    /** Members that count against max_members: everyone not exited, deceased or rejected. */
+    /** Members that count against max_members (Akiba) and max_unity_members (UnityDesk): everyone not exited, deceased or rejected. */
     public const MEMBER_STATUSES = ['applicant', 'active', 'dormant', 'suspended'];
 
     /** Rental units that count against max_units: every one but those switched off (available, reserved, in maintenance). */
     public const UNIT_NOT_COUNTED = 'inactive';
 
     public const LABELS = ['users' => 'team members', 'products' => 'products', 'sales' => 'sales this month', 'storage' => 'MB of files', 'devices' => 'phones', 'locations' => 'locations',
-        'members' => 'members', 'sms' => 'SMS this month', 'units' => 'units', 'people' => 'people'];
+        'members' => 'members', 'sms' => 'SMS this month', 'units' => 'units', 'people' => 'people', 'unity_members' => 'members'];
 
     public function limits(Company $company): array
     {
@@ -60,6 +60,7 @@ class Quotas
             'members' => (int) DB::table('sacco_members')->where('company_id', $company->id)->whereIn('status', self::MEMBER_STATUSES)->whereNull('merged_into_id')->where('is_deleted', 0)->count(),
             'sms' => (int) DB::table('message_log')->where('company_id', $company->id)->where('channel', 'sms')->where('created_at', '>=', now()->startOfMonth())->count(),
             'people' => (int) DB::table('sacco_members')->where('company_id', $company->id)->whereIn('status', self::PEOPLE_STATUSES)->whereNull('merged_into_id')->where('is_deleted', 0)->count(),
+            'unity_members' => (int) DB::table('sacco_members')->where('company_id', $company->id)->whereIn('status', self::MEMBER_STATUSES)->whereNull('merged_into_id')->where('is_deleted', 0)->count(),
             'units' => (int) DB::table('rental_units')->where('company_id', $company->id)->where('status', '!=', self::UNIT_NOT_COUNTED)->count(),
             default => 0,
         };

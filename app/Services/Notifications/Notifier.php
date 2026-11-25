@@ -102,6 +102,20 @@ class Notifier
 
             return;
         }
+        if (in_array('unity', $company->modules(), true)) {
+            // UnityDesk stands alone: its own name and first steps, its own footer, no other app named.
+            $brand = (string) config('unity.brand.name', 'UnityDesk');
+            $to = $user->phone_e164 ?: $user->email;
+            if ($to) {
+                $this->messenger->send($to, "Welcome to {$brand}, {$user->first_name}! {$company->name} is ready: set your membership categories, then add your members.",
+                    Messenger::channelsFor($user->phone_e164, $user->email), ['company_id' => $company->id, 'user_id' => $user->id, 'purpose' => 'welcome',
+                        'options' => ['mail' => ['subject' => 'Welcome to '.$brand, 'unity' => true]]]);
+            }
+            DB::table('app_notifications')->insert(['company_id' => $company->id, 'user_id' => $user->id, 'type' => 'welcome', 'title' => 'Welcome!',
+                'body' => 'Start by setting your membership categories and fees.', 'created_at' => now(), 'updated_at' => now()]);
+
+            return;
+        }
         if (in_array('sacco', $company->modules(), true)) {
             // Akiba Ledger stands alone (the owner's rule): its own name, its own first steps, no family footer.
             $to = $user->phone_e164 ?: $user->email;

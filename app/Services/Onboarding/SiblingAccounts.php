@@ -22,13 +22,13 @@ final class SiblingAccounts
 {
     /** Apps whose own books are always opened this way => the module their accounts are built around. A family app (\App\Support\AppFamily)
      *  is opened this way too, but only for a person whose own books stand alone (an Akiba or Estate account can't take a shop module). */
-    public const APPS = ['estate-ledger' => 'rentals', 'akiba-ledger' => 'sacco', 'family-roots' => 'kin'];
+    public const APPS = ['estate-ledger' => 'rentals', 'akiba-ledger' => 'sacco', 'family-roots' => 'kin', 'unitydesk' => 'unity'];
 
     /** The business type a new account beside the person's is built as, per module. */
-    private const BUSINESS_TYPE = ['shop' => 'retail', 'poultry' => 'poultry', 'budget' => 'fundraising', 'sacco' => 'sacco', 'rentals' => 'rentals', 'kin' => 'kin'];
+    private const BUSINESS_TYPE = ['shop' => 'retail', 'poultry' => 'poultry', 'budget' => 'fundraising', 'sacco' => 'sacco', 'rentals' => 'rentals', 'kin' => 'kin', 'unity' => 'unity'];
 
     /** What the name question says, per module. */
-    private const NAME_ASK = ['shop' => 'Name your shop.', 'poultry' => 'Name your farm.', 'budget' => 'Name your event or budget.', 'sacco' => 'Name your SACCO.', 'rentals' => 'Name your agency or property.', 'kin' => 'Name your family.'];
+    private const NAME_ASK = ['shop' => 'Name your shop.', 'poultry' => 'Name your farm.', 'budget' => 'Name your event or budget.', 'sacco' => 'Name your SACCO.', 'rentals' => 'Name your agency or property.', 'kin' => 'Name your family.', 'unity' => 'Name your association.'];
 
     /** The start of a sibling's username: nothing signs in with one. */
     public const USERNAME_PREFIX = 'sibling-';

@@ -37,7 +37,7 @@ final class SupportContact
     public const FALLBACK = 'site.general';
 
     /** Where a tracked click came from (support_clicks.app): the surfaces, then the phone app flavors. */
-    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger', 'estate-ledger', 'family_roots'];
+    public const APPS = ['site', 'admin', 'classic', 'mail', 'api', 'budget_pro', 'kuku_tally', 'shelfie', 'pledge_and_budget', 'akiba_ledger', 'estate-ledger', 'family_roots', 'unitydesk'];
 
     /** An error reference: E + the error's fingerprint, or R + a request's own id (8 hex characters). */
     public const REFERENCE_PATTERN = '/^[ER][0-9A-F]{8}$/';
@@ -136,6 +136,27 @@ final class SupportContact
         return $c;
     }
 
+    /** Our contact as UnityDesk: every prefilled message greets UnityDesk and names no other product. */
+    public static function forUnity(): self
+    {
+        $c = self::platform();
+        $c->product = (string) config('unity.brand.name', 'UnityDesk');
+
+        return $c;
+    }
+
+    /** Whether a company keeps an association's members (its mail, codes and footers speak as UnityDesk). */
+    public static function isUnity(Company|int|null $company): bool
+    {
+        try {
+            $company = is_int($company) ? Company::withoutGlobalScopes()->find($company) : $company;
+
+            return $company !== null && in_array('unity', $company->modules(), true);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     /** Whether a company keeps a family's records (its mail, codes and footers speak as My Family Roots 360, even with a purse). */
     public static function isKin(Company|int|null $company): bool
     {
@@ -161,7 +182,7 @@ final class SupportContact
     }
 
     /**
-     * The app an account built around an exclusive module speaks as ('kin', 'akiba', 'estate-ledger'), or null for the family's apps.
+     * The app an account built around an exclusive module speaks as ('kin', 'unity', 'akiba', 'estate-ledger'), or null for the family's apps.
      * Its mail, codes, invites and footers carry that app's name only. A family's account speaks as Family Roots even with a purse.
      */
     public static function standaloneApp(Company|int|null $company): ?string
@@ -170,17 +191,21 @@ final class SupportContact
         if (self::isKin($company)) {
             return 'kin';
         }
+        if (self::isUnity($company)) {
+            return 'unity';
+        }
 
         return self::isSacco($company) ? 'akiba' : (self::isRentals($company) ? 'estate-ledger' : null);
     }
 
-    /** The product name an account's messages use: Akiba Ledger, Estate Ledger, My Family Roots 360, or the platform's. */
+    /** The product name an account's messages use: Akiba Ledger, Estate Ledger, My Family Roots 360, UnityDesk, or the platform's. */
     public static function productName(Company|int|null $company): string
     {
         return match (self::standaloneApp($company)) {
             'akiba' => 'Akiba Ledger',
             'estate-ledger' => 'Estate Ledger',
             'kin' => (string) config('kin.brand.name', 'My Family Roots 360'),
+            'unity' => (string) config('unity.brand.name', 'UnityDesk'),
             default => (string) config('app.name'),
         };
     }

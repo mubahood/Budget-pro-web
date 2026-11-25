@@ -171,6 +171,14 @@ class ApiPermissionMap
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/branches(/\d+)?$#', 'kin_branches'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin(/.*)?$#', 'kin_settings'], // any other write
         [['GET'], '#^kin(/.*)?$#', 'kin_view'], // every read
+        // UnityDesk (the unity module): the chair (owner) does everything; a member's role has no unity_view and reads only
+        // their own record (unity/me, open to everyone on the association's team).
+        [['GET'], '#^unity/me$#', null],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/members(/\d+)?$#', 'unity_members'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/(categories|subscriptions)(/\d+(/cancel)?)?$#', 'unity_finance'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/chapters(/\d+)?$#', 'unity_chapters'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity(/.*)?$#', 'unity_settings'], // any other write
+        [['GET'], '#^unity(/.*)?$#', 'unity_view'], // every other read
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
         [['POST'], '#^subscription/(checkout|verify|cancel|resume|momo|schedule-change|cancel-change)$#', 'billing'],
         [['GET'], '#^subscription/payments/\d+$#', 'billing'],
@@ -192,6 +200,7 @@ class ApiPermissionMap
                     $ask = match (true) {
                         str_starts_with($uri, 'rentals/') => 'Ask your property manager.',
                         str_starts_with($uri, 'kin/') => 'Ask the head of the family.',
+                        str_starts_with($uri, 'unity/') => 'Ask the chair.',
                         default => 'Ask the shop owner.',
                     };
 

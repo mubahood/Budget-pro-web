@@ -59,6 +59,12 @@ return [
         'kin_people' => 'Add and edit people, parents and spouses',
         'kin_branches' => 'Add and edit branches',
         'kin_settings' => 'Family settings',
+        // UnityDesk (the unity module): offered only to association accounts (see `module_permissions`).
+        'unity_view' => 'See the members, categories, chapters and subscriptions',
+        'unity_members' => 'Add and edit members',
+        'unity_finance' => 'Membership categories and fees, and record subscriptions and payments',
+        'unity_chapters' => 'Add and edit chapters',
+        'unity_settings' => 'Association settings',
     ],
 
     // Permissions that belong to one module: a company is offered (and its owner holds) only its own modules'
@@ -69,6 +75,7 @@ return [
         'rentals' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses',
             'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close', 'rentals_reopen'],
         'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings'],
+        'unity' => ['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_settings'],
     ],
 
     // What an account built around an exclusive module keeps of the family's permissions (the account itself).
@@ -107,6 +114,12 @@ return [
         'kin_treasurer' => ['label' => 'Treasurer', 'module' => 'kin', 'permissions' => ['kin_view']],
         'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people']],
         'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view']],
+        // UnityDesk roles: the chair is the account's owner. A member reads their own record only (no unity_view:
+        // the unity/ API answers them with themselves alone).
+        'unity_secretary' => ['label' => 'Secretary', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_chapters']],
+        'unity_treasurer' => ['label' => 'Treasurer', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_finance']],
+        'unity_chapter_lead' => ['label' => 'Chapter lead', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members']],
+        'unity_member' => ['label' => 'Member', 'module' => 'unity', 'permissions' => []],
     ],
 
     // laravel-admin role slug each company role maps to (web menu + access).
@@ -120,5 +133,7 @@ return [
         'rentals_manager' => 'shop_viewer', 'rentals_accountant' => 'shop_viewer', 'rentals_caretaker' => 'shop_viewer',
         // Nor any family screens (a family's records live in the web portal and the Family Roots app).
         'kin_secretary' => 'shop_viewer', 'kin_treasurer' => 'shop_viewer', 'kin_branch_coordinator' => 'shop_viewer', 'kin_member' => 'shop_viewer',
+        // Nor any association screens (an association's members live in the web portal and the UnityDesk app).
+        'unity_secretary' => 'shop_viewer', 'unity_treasurer' => 'shop_viewer', 'unity_chapter_lead' => 'shop_viewer', 'unity_member' => 'shop_viewer',
     ],
 ];

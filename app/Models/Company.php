@@ -83,7 +83,7 @@ class Company extends Model
             return config("onboarding.business_types.{$this->business_type}.modules");
         }
 
-        // An account that never chose sees every family module; an exclusive one (sacco, rentals) is only ever chosen.
+        // An account that never chose sees every family module; an exclusive one (sacco, rentals, kin, unity) is only ever chosen.
         return array_values(array_diff(array_keys(config('onboarding.modules')), \App\Support\Rules\CompanyRules::EXCLUSIVE_MODULES));
     }
 
