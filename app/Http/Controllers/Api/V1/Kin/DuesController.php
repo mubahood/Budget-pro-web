@@ -19,7 +19,7 @@ class DuesController extends KinController
     {
         $rows = SaccoDuesProgramme::withoutGlobalScopes()->where('company_id', $this->cid($request))->orderByRaw("status = 'active' DESC")->orderByDesc('id')->get();
 
-        return $this->success($rows->map(fn ($p) => $this->dues->present($p))->values()->all(), 'Listed successfully.');
+        return $this->success(['programmes' => $rows->map(fn ($p) => $this->dues->present($p))->values()->all()], 'Listed successfully.');
     }
 
     /** GET kin/dues/{id}?period=2026-11 */
@@ -31,11 +31,11 @@ class DuesController extends KinController
             $s = $this->dues->standing($p, $period);
             $filter = ['programme_id' => $p->id];
             if ($period !== null && ($line = \Illuminate\Support\Facades\DB::table('sacco_dues_lines')->where('programme_id', $p->id)->where('period_key', $period)->first()) !== null) {
-                $filter['paid_on'] = [$line->period_start, $line->period_end ?? '9999-12-31'];
+                $filter['period'] = [$period, $line->period_start, $line->period_end];
             }
 
-            return $this->success($this->dues->present($p, $s) + ['period' => $period, 'people' => $s['people'],
-                'payments' => $this->dues->payments($this->cid($request), $filter), 'periods' => DuesService::periods($p)]);
+            return $this->success(['programme' => $this->dues->present($p, $s), 'period' => $period, 'periods' => DuesService::periods($p),
+                'people' => $s['people'], 'payments' => $this->dues->payments($this->cid($request), $filter)]);
         });
     }
 

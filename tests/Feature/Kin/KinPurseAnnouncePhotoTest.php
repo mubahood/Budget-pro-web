@@ -42,7 +42,8 @@ class KinPurseAnnouncePhotoTest extends ApiTestCase
     public function test_the_head_switches_the_purse_on_and_the_family_app_still_opens(): void
     {
         $ann = $this->person('Ann');
-        $this->getJson('/api/v1/kin/purse', $this->head)->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.can_enable', true);
+        $this->getJson('/api/v1/kin/purse', $this->head)->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.can_enable', true)
+            ->assertJsonPath('data.currency', 'UGX');
         $treasurer = $this->bearer($this->kinStaff($this->co, 'kin_treasurer'));
         $this->getJson('/api/v1/kin/purse', $treasurer)->assertOk()->assertJsonPath('data.can_enable', false);
         $this->postJson('/api/v1/kin/purse', ['enabled' => true], $treasurer)->assertForbidden();

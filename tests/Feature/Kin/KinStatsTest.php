@@ -42,7 +42,8 @@ class KinStatsTest extends ApiTestCase
         $this->person(['first_name' => 'Leo', 'last_name' => 'Sample', 'gender' => 'male', 'date_of_birth' => '1990-01-01', 'status' => 'exited', 'education_level' => 'phd']);
 
         KinAnnouncement::withoutGlobalScopes()->create(['company_id' => $this->co->id, 'title' => 'Older news', 'published_at' => now()->subDay()]);
-        KinAnnouncement::withoutGlobalScopes()->create(['company_id' => $this->co->id, 'title' => 'Pinned news', 'pinned' => true, 'published_at' => now()->subDays(5)]);
+        KinAnnouncement::withoutGlobalScopes()->create(['company_id' => $this->co->id, 'title' => 'Pinned news', 'pinned' => true, 'published_at' => now()->subDays(5),
+            'author_user_id' => $this->co->owner_id]);
         KinAnnouncement::withoutGlobalScopes()->create(['company_id' => $this->co->id, 'title' => 'Later news', 'published_at' => now()->addDay()]);
 
         $d = $this->getJson('/api/v1/kin/stats', $h)->assertOk()->json('data');
@@ -61,6 +62,7 @@ class KinStatsTest extends ApiTestCase
         $this->assertSame(1, $d['facts']['missing_birth_date']);
         $this->assertNotSame($amos, $d['facts']['youngest']['id']);
         $this->assertSame('Pinned news', $d['announcement']['title']);
+        $this->assertNotEmpty($d['announcement']['author_name']);
         $this->assertFalse($d['purse']['enabled']);
         $this->assertSame(0, $d['dues']['active']);
     }

@@ -242,28 +242,26 @@ class DuesService
             ->get(['member_id', 'period_key', 'period_start', 'period_end', 'expected_minor']);
         $paidTotal = DB::table('sacco_dues_payments')->where('programme_id', $p->id)->groupBy('member_id')
             ->selectRaw('member_id, SUM(amount_minor) AS paid')->pluck('paid', 'member_id')->map(fn ($v) => (int) $v)->all();
+        $named = self::named($p);
         $any = $p->amount_mode === 'any';
         $periodPaid = [];
         if ($period !== null && $any) {
             $range = $lines->firstWhere('period_key', $period);
             if ($range !== null) {
-                $periodPaid = DB::table('sacco_dues_payments')->where('programme_id', $p->id)->where('paid_on', '>=', $range->period_start)
-                    ->when($range->period_end, fn ($q) => $q->where('paid_on', '<=', $range->period_end))
+                $periodPaid = self::inPeriod(DB::table('sacco_dues_payments')->where('programme_id', $p->id), $period, $range->period_start, $range->period_end)
                     ->groupBy('member_id')->selectRaw('member_id, SUM(amount_minor) AS paid')->pluck('paid', 'member_id')->map(fn ($v) => (int) $v)->all();
             }
         }
 
         $rows = [];
         foreach ($lines->groupBy('member_id') as $memberId => $own) {
-            $left = $paidTotal[$memberId] ?? 0;
+            $shares = self::allocate($own->values(), $paidTotal[$memberId] ?? 0, $named[$memberId] ?? []);
             $expected = 0;
             $paid = 0;
-            foreach ($own as $line) {
-                $share = max(0, min($left, (int) $line->expected_minor));
-                $left -= $share;
+            foreach ($own->values() as $i => $line) {
                 if ($period === null || $line->period_key === $period) {
                     $expected += (int) $line->expected_minor;
-                    $paid += $share;
+                    $paid += $shares[$i];
                 }
             }
             if ($period === null) {
@@ -311,6 +309,51 @@ class DuesService
         usort($out, fn ($a, $b) => [$order[$a['status']], $a['name']] <=> [$order[$b['status']], $b['name']]);
 
         return ['people' => $out] + $t;
+    }
+
+    /** @return array<int, array<string, int>> member => period => amount, for payments that named their period */
+    private static function named(SaccoDuesProgramme $p): array
+    {
+        $out = [];
+        foreach (DB::table('sacco_dues_payments')->where('programme_id', $p->id)->whereNotNull('period_key')->groupBy('member_id', 'period_key')
+            ->selectRaw('member_id, period_key, SUM(amount_minor) AS paid')->get() as $r) {
+            $out[(int) $r->member_id][(string) $r->period_key] = (int) $r->paid;
+        }
+
+        return $out;
+    }
+
+    /**
+     * What each of a person's lines (oldest first) is paid: a payment that named its period fills that period first;
+     * everything else (and what a named payment gives beyond its period) fills the oldest periods first.
+     *
+     * @param  \Illuminate\Support\Collection<int, object>  $own
+     * @param  array<string, int>  $named
+     * @return list<int>
+     */
+    private static function allocate($own, int $total, array $named): array
+    {
+        $pool = $total;
+        $shares = [];
+        foreach ($own as $i => $line) {
+            $given = $named[$line->period_key] ?? 0;
+            $shares[$i] = max(0, min($given, (int) $line->expected_minor));
+            $pool -= $shares[$i];
+        }
+        foreach ($own as $i => $line) {
+            $more = max(0, min($pool, (int) $line->expected_minor - $shares[$i]));
+            $shares[$i] += $more;
+            $pool -= $more;
+        }
+
+        return $shares;
+    }
+
+    /** Payments for one period: those that named it, and unnamed ones received within it. */
+    private static function inPeriod($q, string $period, $start, $end)
+    {
+        return $q->where(fn ($w) => $w->where('period_key', $period)
+            ->orWhere(fn ($u) => $u->whereNull('period_key')->where('paid_on', '>=', $start)->when($end, fn ($x) => $x->where('paid_on', '<=', $end))));
     }
 
     public static function status(string $duty, int $expected, int $paid, bool $any): string
@@ -362,6 +405,7 @@ class DuesService
             'method' => ['required', Rule::in(self::METHODS)],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'paid_by_member_id' => ['sometimes', 'nullable', 'integer'],
+            'period' => ['sometimes', 'nullable', 'string', 'max:10'],
             'note' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
@@ -389,7 +433,12 @@ class DuesService
             throw BusinessRuleException::make('date_in_future', 'A payment is recorded on the day it was received, never a day ahead.', ['paid_on' => ['In the future.']]);
         }
 
-        return DB::transaction(function () use ($company, $cid, $p, $member, $d, $paidOn, $by) {
+        $period = $p->kind === 'once' ? null : (filled($d['period'] ?? null) ? (string) $d['period'] : null);
+        if ($period !== null && ! DB::table('sacco_dues_lines')->where('programme_id', $p->id)->where('member_id', $member->id)->where('period_key', $period)->exists()) {
+            throw BusinessRuleException::make('period_invalid', "{$member->full_name} has no dues for ".(self::periodLabel($period) ?? $period).' in this contribution.', ['period' => ['Not one of their periods.']]);
+        }
+
+        return DB::transaction(function () use ($company, $cid, $p, $member, $d, $paidOn, $by, $period) {
             DB::table('companies')->where('id', $cid)->lockForUpdate()->first();
             $amount = (int) $d['amount_minor'];
             if ($p->amount_mode !== 'any' && ! $p->allow_advance) {
@@ -403,7 +452,7 @@ class DuesService
                 }
             }
 
-            return SaccoDuesPayment::create(['company_id' => $cid, 'programme_id' => $p->id, 'member_id' => $member->id, 'amount_minor' => $amount, 'paid_on' => $paidOn,
+            return SaccoDuesPayment::create(['company_id' => $cid, 'programme_id' => $p->id, 'member_id' => $member->id, 'period_key' => $period, 'amount_minor' => $amount, 'paid_on' => $paidOn,
                 'method' => $d['method'], 'reference' => $d['reference'] ?? null, 'paid_by_member_id' => $d['paid_by_member_id'] ?? null, 'note' => $d['note'] ?? null,
                 'receipt_no' => self::nextReceipt($cid), 'recorded_by_id' => $by->id]);
         });
@@ -423,7 +472,7 @@ class DuesService
             if ($pay->reversed_at !== null) {
                 throw BusinessRuleException::make('already_reversed', 'This payment was already reversed.');
             }
-            $back = SaccoDuesPayment::create(['company_id' => $cid, 'programme_id' => $pay->programme_id, 'member_id' => $pay->member_id, 'amount_minor' => -1 * (int) $pay->amount_minor,
+            $back = SaccoDuesPayment::create(['company_id' => $cid, 'programme_id' => $pay->programme_id, 'member_id' => $pay->member_id, 'period_key' => $pay->period_key, 'amount_minor' => -1 * (int) $pay->amount_minor,
                 'paid_on' => LocalDate::today($cid)->toDateString(), 'method' => $pay->method, 'reference' => $pay->reference, 'paid_by_member_id' => $pay->paid_by_member_id,
                 'note' => 'Reversal of '.$pay->receipt_no, 'receipt_no' => self::nextReceipt($cid), 'reverses_id' => $pay->id, 'reason' => $reason, 'recorded_by_id' => $by->id]);
             $pay->forceFill(['reversed_at' => now(), 'reason' => $reason])->save();
@@ -450,7 +499,11 @@ class DuesService
     {
         $q = SaccoDuesPayment::withoutGlobalScopes()->where('company_id', $companyId);
         foreach ($filter as $column => $value) {
-            is_array($value) ? $q->whereBetween($column, $value) : $q->where($column, $value);
+            if ($column === 'period') {
+                self::inPeriod($q, ...$value); // [key, start, end]
+            } else {
+                is_array($value) ? $q->whereBetween($column, $value) : $q->where($column, $value);
+            }
         }
         $rows = $q->orderByDesc('paid_on')->orderByDesc('id')->limit($limit)->get();
 
@@ -463,14 +516,23 @@ class DuesService
         $ids = $rows->pluck('member_id')->merge($rows->pluck('paid_by_member_id'))->filter()->unique()->all();
         $names = SaccoMember::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('id', $ids)->get(['id', 'first_name', 'last_name', 'other_names'])
             ->mapWithKeys(fn ($m) => [(int) $m->id => $m->full_name]);
-        $programmes = DB::table('sacco_dues_programmes')->whereIn('id', $rows->pluck('programme_id')->unique())->pluck('name', 'id');
+        $programmes = SaccoDuesProgramme::withoutGlobalScopes()->whereIn('id', $rows->pluck('programme_id')->unique())->get()->keyBy('id');
+        $periodOf = function (SaccoDuesPayment $r) use ($programmes): ?string {
+            $p = $programmes[$r->programme_id] ?? null;
+            if ($r->period_key !== null || $p === null || $p->kind === 'once' || $r->paid_on === null) {
+                return $r->period_key;
+            }
+
+            return self::periodOf($p, CarbonImmutable::parse($r->paid_on->toDateString()))['key'] ?? null; // unnamed: the period it was received in
+        };
 
         return $rows->map(fn (SaccoDuesPayment $r) => ['id' => (int) $r->id, 'receipt_no' => $r->receipt_no, 'programme_id' => (int) $r->programme_id,
-            'programme_name' => $programmes[$r->programme_id] ?? null, 'member_id' => (int) $r->member_id, 'name' => $names[(int) $r->member_id] ?? null,
+            'programme_name' => $programmes[$r->programme_id]->name ?? null, 'member_id' => (int) $r->member_id, 'name' => $names[(int) $r->member_id] ?? null,
+            'member_name' => $names[(int) $r->member_id] ?? null, 'period' => $periodOf($r), 'period_named' => $r->period_key !== null,
             'amount_minor' => (int) $r->amount_minor, 'paid_on' => $r->paid_on?->toDateString(), 'method' => $r->method, 'reference' => $r->reference,
             'paid_by_member_id' => $r->paid_by_member_id ? (int) $r->paid_by_member_id : null, 'paid_by_name' => $r->paid_by_member_id ? ($names[(int) $r->paid_by_member_id] ?? null) : null,
             'note' => $r->note, 'reverses_id' => $r->reverses_id ? (int) $r->reverses_id : null, 'reversed' => $r->reversed_at !== null,
-            'reversed_at' => $r->reversed_at?->toIso8601String(), 'reason' => $r->reason, 'recorded_by_id' => $r->recorded_by_id ? (int) $r->recorded_by_id : null,
+            'reversed_at' => $r->reversed_at?->toIso8601String(), 'reason' => $r->reason, 'reversal_reason' => $r->reason, 'recorded_by_id' => $r->recorded_by_id ? (int) $r->recorded_by_id : null,
             'created_at' => $r->created_at?->toIso8601String()])->values()->all();
     }
 
@@ -503,15 +565,15 @@ class DuesService
                 ->merge(DB::table('sacco_dues_payments')->where('member_id', $m->id)->distinct()->pluck('programme_id'))->unique()->values()->all())
             ->orderByRaw("status = 'active' DESC")->orderByDesc('id')->get();
         foreach ($programmes as $p) {
-            $left = (int) DB::table('sacco_dues_payments')->where('programme_id', $p->id)->where('member_id', $m->id)->sum('amount_minor');
-            $totals['paid'] += $left;
-            $own = DB::table('sacco_dues_lines')->where('programme_id', $p->id)->where('member_id', $m->id)->orderBy('period_start')->get();
-            foreach ($own as $line) {
+            $total = (int) DB::table('sacco_dues_payments')->where('programme_id', $p->id)->where('member_id', $m->id)->sum('amount_minor');
+            $totals['paid'] += $total;
+            $own = DB::table('sacco_dues_lines')->where('programme_id', $p->id)->where('member_id', $m->id)->orderBy('period_start')->orderBy('id')->get()->values();
+            $shares = self::allocate($own, $total, self::named($p)[(int) $m->id] ?? []);
+            foreach ($own as $i => $line) {
                 $expected = (int) $line->expected_minor;
-                $share = $p->amount_mode === 'any' ? 0 : max(0, min($left, $expected));
-                $left -= $share;
+                $share = $p->amount_mode === 'any' ? 0 : $shares[$i];
                 $totals['expected'] += $expected;
-                $lines[] = ['programme_id' => (int) $p->id, 'programme_name' => $p->name, 'period_key' => $line->period_key, 'period_label' => self::periodLabel($line->period_key),
+                $lines[] = ['programme_id' => (int) $p->id, 'programme_name' => $p->name, 'period' => $line->period_key, 'period_key' => $line->period_key, 'period_label' => self::periodLabel($line->period_key),
                     'expected_minor' => $expected, 'paid_minor' => $share, 'balance_minor' => max(0, $expected - $share),
                     'status' => self::status((string) $m->dues_duty, $expected, $share, $p->amount_mode === 'any')];
             }

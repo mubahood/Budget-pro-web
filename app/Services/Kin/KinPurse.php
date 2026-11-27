@@ -44,6 +44,7 @@ class KinPurse
             'savings_minor' => $on ? (int) DB::table('sacco_savings_accounts')->where('company_id', $cid)->where('is_deleted', 0)->where('status', '!=', 'closed')->sum('balance_minor') : 0,
             'loans_out_minor' => $on ? (int) DB::table('sacco_loans')->where('company_id', $cid)->where('is_deleted', 0)->whereNotNull('disbursement_entry_id')
                 ->whereNotIn('status', ['closed', 'written_off'])->sum('principal_outstanding_minor') : 0,
+            'currency' => strtoupper((string) ($company->currency ?: config('saas.default_currency', 'UGX'))),
         ];
     }
 

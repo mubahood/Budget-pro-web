@@ -319,8 +319,14 @@ class FamilyStats
     private function announcement(): ?array
     {
         $a = DB::table('kin_announcements')->where('company_id', $this->cid)->whereNull('deleted_at')->whereNotNull('published_at')->where('published_at', '<=', now())
-            ->orderByDesc('pinned')->orderByDesc('published_at')->orderByDesc('id')->first(['id', 'title', 'published_at', 'pinned']);
+            ->orderByDesc('pinned')->orderByDesc('published_at')->orderByDesc('id')->first(['id', 'title', 'published_at', 'pinned', 'author_user_id']);
+        if (! $a) {
+            return null;
+        }
+        $u = $a->author_user_id ? DB::table('admin_users')->where('id', $a->author_user_id)->first(['name', 'first_name', 'last_name']) : null;
+        $author = $u ? trim((string) ($u->name ?: $u->first_name.' '.$u->last_name)) : null;
 
-        return $a ? ['id' => (int) $a->id, 'title' => $a->title, 'published_at' => CarbonImmutable::parse($a->published_at)->toIso8601String(), 'pinned' => (bool) $a->pinned] : null;
+        return ['id' => (int) $a->id, 'title' => $a->title, 'published_at' => CarbonImmutable::parse($a->published_at)->toIso8601String(), 'pinned' => (bool) $a->pinned,
+            'author_name' => $author !== '' ? $author : null];
     }
 }

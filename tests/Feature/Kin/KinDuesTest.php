@@ -64,7 +64,7 @@ class KinDuesTest extends ApiTestCase
         $people = collect($show['people'])->keyBy('member_id');
         $this->assertSame('paid', $people[$amos]['status']);
         $this->assertSame('owing', $people[$joel]['status']);
-        $this->assertSame(30_000, $show['collected_minor']);
+        $this->assertSame(30_000, $show['programme']['collected_minor']);
         $this->assertCount(3, $show['periods']);
         $this->assertSame(now()->format('Y-m'), $show['periods'][0]);
 
@@ -90,7 +90,40 @@ class KinDuesTest extends ApiTestCase
         $month = $this->getJson("/api/v1/kin/dues/{$id}/share?period=".now()->format('Y-m'), $this->head)->assertOk()->json('data.text');
         $this->assertStringContainsString(now()->format('F Y'), $month);
 
-        $this->getJson('/api/v1/kin/dues', $this->head)->assertOk()->assertJsonPath('data.0.paid_count', 1)->assertJsonPath('data.0.part_count', 1);
+        $this->getJson('/api/v1/kin/dues', $this->head)->assertOk()->assertJsonPath('data.programmes.0.paid_count', 1)->assertJsonPath('data.programmes.0.part_count', 1);
+        $rows = collect($this->getJson("/api/v1/kin/dues/{$id}", $this->head)->json('data.payments'))->keyBy('id');
+        $this->assertSame('Amos Sample', $rows[$ahead]['member_name']);
+        $this->assertTrue($rows[$ahead]['reversed']);
+        $this->assertSame('Entered twice', $rows[$ahead]['reversal_reason']);
+        $this->assertSame(now()->format('Y-m'), $rows[$ahead]['period'], 'unnamed: the month it came in');
+    }
+
+    public function test_a_payment_can_name_its_period(): void
+    {
+        $amos = $this->person('Amos');
+        $start = now()->subMonths(2)->startOfMonth();
+        $id = $this->postJson('/api/v1/kin/dues', ['name' => 'Monthly subscription', 'kind' => 'recurring', 'period' => 'monthly', 'amount_mode' => 'fixed',
+            'amount_minor' => 10_000, 'starts_on' => $start->toDateString()], $this->head)->assertCreated()->json('data.id');
+        $now = now()->format('Y-m');
+        $first = $start->format('Y-m');
+        $body = ['member_id' => $amos, 'method' => 'cash'];
+
+        // Paid for this month: this month is paid, the first month still owes (no oldest-first for a named period).
+        $pid = $this->postJson("/api/v1/kin/dues/{$id}/payments", $body + ['amount_minor' => 10_000, 'period' => $now], $this->head)->assertCreated()->json('data.id');
+        $this->postJson("/api/v1/kin/dues/{$id}/payments", $body + ['amount_minor' => 10_000, 'period' => '1999-01'], $this->head)->assertStatus(422)->assertJsonPath('errors.code', 'period_invalid');
+        $person = fn (string $period) => collect($this->getJson("/api/v1/kin/dues/{$id}?period={$period}", $this->head)->assertOk()->json('data.people'))->firstWhere('member_id', $amos)['status'];
+        $this->assertSame('paid', $person($now));
+        $this->assertSame('owing', $person($first));
+        $show = $this->getJson("/api/v1/kin/dues/{$id}?period={$now}", $this->head)->json('data');
+        $this->assertSame($now, $show['period']);
+        $this->assertSame($id, $show['programme']['id']);
+        $this->assertSame([$pid], array_column($show['payments'], 'id'));
+        $this->assertSame($now, $show['payments'][0]['period']);
+        $this->assertSame([], $this->getJson("/api/v1/kin/dues/{$id}?period={$first}", $this->head)->json('data.payments'));
+
+        // Reversed, the reversal keeps the period; the month owes again.
+        $this->postJson("/api/v1/kin/dues/payments/{$pid}/reverse", ['reason' => 'Wrong person'], $this->head)->assertCreated()->assertJsonPath('data.period', $now);
+        $this->assertSame('owing', $person($now));
     }
 
     public function test_who_may_write_my_dues_and_another_family(): void
@@ -115,6 +148,8 @@ class KinDuesTest extends ApiTestCase
         $this->patchJson("/api/v1/kin/people/{$amos}", ['user_id' => $member->id], $this->head)->assertOk()->assertJsonPath('data.user_id', $member->id);
         $mine = $this->getJson('/api/v1/kin/dues/mine', $mh)->assertOk()->json('data');
         $this->assertSame($amos, $mine['member']['id']);
+        $this->assertSame('once', $mine['lines'][0]['period']);
+        $this->assertSame($id, $mine['lines'][0]['programme_id']);
         $this->assertSame(1_150_000, $mine['paid_minor']);
         $this->assertCount(2, $mine['payments']);
 
@@ -125,7 +160,7 @@ class KinDuesTest extends ApiTestCase
         $this->getJson("/api/v1/kin/dues/{$id}/share", $oh)->assertNotFound();
         $this->postJson("/api/v1/kin/dues/{$id}/payments", $body, $oh)->assertNotFound();
         $this->postJson("/api/v1/kin/dues/payments/{$pid}/reverse", ['reason' => 'x'], $oh)->assertNotFound();
-        $this->getJson('/api/v1/kin/dues', $oh)->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/kin/dues', $oh)->assertOk()->assertJsonCount(0, 'data.programmes');
         $mineOwn = $this->postJson('/api/v1/kin/dues', ['name' => 'Ours', 'kind' => 'once', 'amount_mode' => 'any'], $oh)->assertCreated()->json('data.id');
         $this->postJson("/api/v1/kin/dues/{$mineOwn}/payments", $body, $oh)->assertNotFound()->assertJsonPath('errors.code', 'not_found');
     }

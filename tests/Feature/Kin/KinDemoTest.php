@@ -55,7 +55,7 @@ class KinDemoTest extends ApiTestCase
         $this->assertTrue($stats['announcement']['pinned']);
         $this->assertTrue($stats['purse']['enabled']);
         $this->assertGreaterThan(0, $stats['purse']['loans_out_minor']);
-        $dues = collect($this->getJson('/api/v1/kin/dues', $h)->json('data'))->keyBy('name');
+        $dues = collect($this->getJson('/api/v1/kin/dues', $h)->json('data.programmes'))->keyBy('name');
         $this->assertSame(6, count($this->getJson('/api/v1/kin/dues/'.$dues['Monthly family subscription']['id'], $h)->json('data.periods')));
         $this->assertSame($dues['Ancestral home renovation']['target_minor'] / 2, $dues['Ancestral home renovation']['collected_minor']);
         $this->assertGreaterThan(0, $dues['Monthly family subscription']['part_count']);
