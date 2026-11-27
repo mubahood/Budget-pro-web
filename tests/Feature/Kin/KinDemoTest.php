@@ -22,7 +22,7 @@ class KinDemoTest extends ApiTestCase
         $company = KinDemo::company();
         $this->assertNotNull($company);
         $cid = (int) $company->id;
-        $this->assertSame(['kin'], $company->modules());
+        $this->assertSame(['kin', 'sacco'], $company->modules(), 'the purse is on');
 
         $people = SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->count();
         $this->assertGreaterThanOrEqual(50, $people);
@@ -43,6 +43,23 @@ class KinDemoTest extends ApiTestCase
         $this->getJson('/api/v1/demo/session?app=kin')->assertOk()->assertJsonCount(5, 'data.roles');
         $token = $this->postJson('/api/v1/demo/session', ['app' => 'kin', 'role' => 'member'])->assertOk()->assertJsonPath('data.app', 'family-roots')->json('data.token');
         $this->getJson('/api/v1/kin/tree', ['Authorization' => 'Bearer '.$token])->assertOk()->assertJsonPath('data.generations', 5);
+
+        // Build 2: every age band, the sign-ins in the tree, contributions, news and the purse with a running loan.
+        $h = ['Authorization' => 'Bearer '.$token];
+        $this->assertNotNull($this->getJson('/api/v1/kin/tree', $h)->json('meta.me_id'));
+        $stats = $this->getJson('/api/v1/kin/stats', $h)->assertOk()->json('data');
+        foreach ($stats['age_bands'] as $band) {
+            $this->assertGreaterThan(0, $band['count'], 'age band '.$band['key']);
+        }
+        $this->assertSame(2, $stats['dues']['active']);
+        $this->assertTrue($stats['announcement']['pinned']);
+        $this->assertTrue($stats['purse']['enabled']);
+        $this->assertGreaterThan(0, $stats['purse']['loans_out_minor']);
+        $dues = collect($this->getJson('/api/v1/kin/dues', $h)->json('data'))->keyBy('name');
+        $this->assertSame(6, count($this->getJson('/api/v1/kin/dues/'.$dues['Monthly family subscription']['id'], $h)->json('data.periods')));
+        $this->assertSame($dues['Ancestral home renovation']['target_minor'] / 2, $dues['Ancestral home renovation']['collected_minor']);
+        $this->assertGreaterThan(0, $dues['Monthly family subscription']['part_count']);
+        $this->assertSame(0, \Illuminate\Support\Facades\Artisan::call('sacco:ledger-verify', ['--company' => $cid]));
 
         // Visitors cannot add to the team or change a demo sign-in.
         try {

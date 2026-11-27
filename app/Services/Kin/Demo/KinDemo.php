@@ -238,9 +238,16 @@ final class KinDemo
         try {
             $users = DB::table('admin_users')->where('company_id', $id)->pluck('id');
             DB::table('admin_user_permissions')->whereIn('user_id', $users)->delete();
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement('SET @sacco_ledger_purge = 1'); // the purse's journals are append-only except when a whole demo goes
+            }
             app(TenantDataService::class)->purge($id);
         } catch (\Throwable $e) {
             Log::warning('[kin-demo] old account not deleted', ['company_id' => $id, 'error' => $e->getMessage()]);
+        } finally {
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement('SET @sacco_ledger_purge = 0');
+            }
         }
         self::$isDemo = [];
     }

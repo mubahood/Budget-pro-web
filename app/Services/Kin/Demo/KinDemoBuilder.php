@@ -4,17 +4,26 @@ namespace App\Services\Kin\Demo;
 
 use App\Models\Company;
 use App\Models\CompanyMember;
+use App\Models\KinAnnouncement;
 use App\Models\KinBranch;
 use App\Models\KinLink;
 use App\Models\KinSpouse;
 use App\Models\Plan;
+use App\Models\SaccoSavingsAccount;
 use App\Models\SaccoMember;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Kin\KinPurse;
 use App\Services\Kin\TreeService;
 use App\Services\Onboarding\OnboardingEvents;
 use App\Services\Onboarding\OnboardingService;
+use App\Services\Sacco\Dues\DuesService;
+use App\Services\Sacco\SaccoTransactions;
+use App\Services\Sacco\Shares\ShareService;
+use App\Services\Sacco\Simple\LoanFlow;
 use App\Services\Team\TeamService;
+use App\Support\LocalDate;
+use Carbon\CarbonImmutable;
 use Database\Seeders\FamilyRootsPlanSeeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -24,11 +33,17 @@ use Illuminate\Support\Str;
  * wives, five children, three branches (houses) of his sons, people who married in, a marriage that ended (a name only),
  * an adopted child, a guardian, the departed with their dates, one who left and one still being added. Every name is
  * made up, and the same every build (no randomness: the counters below pick from the lists).
+ *
+ * Build 2 adds what the family's home screen shows: ages in every band (one elder known by year only, one person with no
+ * birth date), education, work and where people live; each sign-in is a person in the tree (user_id, for "my dues" and
+ * "jump to me"); two contributions (a monthly subscription over six months, paid, part paid and owing, with one
+ * reversed mistake; a one-off renovation half collected); three announcements, one pinned; and the family purse,
+ * switched on through the real SACCO services: group savings deposits, shares and one running loan.
  */
 final class KinDemoBuilder
 {
     /** Bump when what is built changes: the next run rebuilds. */
-    public const BUILD = 1;
+    public const BUILD = 2;
 
     /** The sign-ins: key => [name, team role]. The head is the account's owner. */
     public const LOGINS = [
@@ -74,6 +89,10 @@ final class KinDemoBuilder
                 $this->createCompany();
                 $this->createTeam();
                 TreeService::batch(fn () => $this->grow());
+                $this->linkLogins();
+                $this->announce();
+                $this->dues();
+                $this->purse();
             });
         } finally {
             KinDemo::$building = false;
@@ -166,10 +185,14 @@ final class KinDemoBuilder
         $this->marry($founder, $w2, 'widowed', 2, '1954-02-01');
 
         // Generation 2: five children; each son founds a branch (house).
-        $kids = [[$w1, 'Erisa', 'male', 1946], [$w1, 'Mariamu', 'female', 1949], [$w1, 'Danieri', 'male', 1952], [$w2, 'Samwiri', 'male', 1956], [$w2, 'Yudesi', 'female', 1960]];
+        $kids = [[$w1, 'Erisa', 'male', 1946], [$w1, 'Mariamu', 'female', 1944], [$w1, 'Danieri', 'male', 1952], [$w2, 'Samwiri', 'male', 1956], [$w2, 'Yudesi', 'female', 1960]];
         $gen2 = [];
         foreach ($kids as $i => [$mother, $first, $gender, $born]) {
-            $extra = $first === 'Erisa' ? ['status' => 'deceased', 'date_of_death' => '2015-11-03', 'place_of_death' => 'Town hospital'] : [];
+            $extra = match ($first) {
+                'Erisa' => ['status' => 'deceased', 'date_of_death' => '2015-11-03', 'place_of_death' => 'Town hospital'],
+                'Mariamu' => ['birth_date_precision' => 'year'], // the family's eldest living person: only the year is known
+                default => [],
+            };
             $id = $this->person($first, self::FAMILY, $gender, $born, $extra + ['gen' => 2]);
             $this->link($id, $founder, 'father');
             $this->link($id, $mother, 'mother');
@@ -245,16 +268,146 @@ final class KinDemoBuilder
         $this->person('Precious', self::FAMILY, 'female', 0, ['status' => 'applicant']);
     }
 
+    // ── Build 2: the sign-ins in the tree, news, contributions and the purse ──
+
+    /** @var array<string, int> sign-in key => the person it is */
+    private array $me = [];
+
+    /** Each sign-in is a person in the tree (a living adult of the right sex), named as the demo door names them. */
+    private function linkLogins(): void
+    {
+        $year = (int) now()->year;
+        $coordBranch = (int) KinBranch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('coordinator_user_id', $this->users['coordinator']->id)->value('id');
+        $wants = [
+            'head' => fn ($p) => $p['gen'] === 3 && $p['gender'] === 'male' && $p['last'] === self::FAMILY && $p['born'] <= $year - 40,
+            'secretary' => fn ($p) => $p['gen'] === 3 && $p['gender'] === 'female' && $p['last'] === self::FAMILY,
+            'coordinator' => fn ($p) => in_array($p['gen'], [3, 4], true) && $p['gender'] === 'female' && $p['branch'] === $coordBranch && $p['born'] <= $year - 25,
+            'treasurer' => fn ($p) => $p['gen'] === 3 && $p['gender'] === 'male' && $p['last'] !== self::FAMILY,
+            'member' => fn ($p) => $p['gen'] === 4 && $p['gender'] === 'male' && $p['born'] <= $year - 20 && $p['born'] > 0,
+        ];
+        foreach ($wants as $key => $want) {
+            $gender = in_array($key, ['secretary', 'coordinator'], true) ? 'female' : 'male';
+            $free = fn ($id, $p) => ! in_array($id, $this->me, true) && $p['gen'] >= 3 && $p['born'] > 0 && $p['born'] <= $year - 18 && $p['gender'] === $gender;
+            $id = collect($this->people)->filter(fn ($p, $id) => $free($id, $p) && $want($p))->keys()->first()
+                ?? collect($this->people)->filter(fn ($p, $id) => $free($id, $p))->keys()->first();
+            if ($id === null) {
+                continue;
+            }
+            [$first, $last] = explode(' ', self::LOGINS[$key]['name'], 2) + [1 => ''];
+            $m = SaccoMember::withoutGlobalScopes()->find($id);
+            $m->first_name = $first;
+            $m->last_name = $last;
+            $m->user_id = $this->users[$key]->id;
+            $m->save();
+            $this->people[$id]['last'] = $last;
+            $this->me[$key] = (int) $id;
+        }
+    }
+
+    private function announce(): void
+    {
+        $head = (int) $this->users['head']->id;
+        $news = [
+            ['Family meeting on the last Saturday of the month', "We meet at the old home at 10 in the morning. On the agenda: the renovation, this year's subscription and the end-of-year gathering. Bring a dish to share.", true, 2],
+            ['Renovation: half way there', 'Thank you to everyone who has given towards the ancestral home. The roof is done; the walls and the water tank come next.', false, 9],
+            ['Welcome to the newest members of the family', 'Please add new babies and new in-laws to the tree, or send their details to the secretary.', false, 20],
+        ];
+        foreach ($news as [$title, $body, $pinned, $daysAgo]) {
+            $at = now()->subDays($daysAgo);
+            KinAnnouncement::withoutGlobalScopes()->create(['company_id' => $this->companyId, 'title' => $title, 'body' => $body, 'pinned' => $pinned,
+                'author_user_id' => $head, 'published_at' => $at, 'created_at' => $at, 'updated_at' => $at]);
+        }
+    }
+
+    /**
+     * "Monthly family subscription" (fixed, six months: some paid up, some part paid, some owing, one mistaken payment
+     * reversed) and "Ancestral home renovation" (once, any amount, half its target collected).
+     */
+    private function dues(): void
+    {
+        $dues = app(DuesService::class);
+        $treasurer = $this->users['treasurer'];
+        $today = CarbonImmutable::parse(LocalDate::today($this->companyId)->toDateString());
+        $first = $today->subMonths(5)->startOfMonth();
+        $monthly = $dues->create($this->co, ['name' => 'Monthly family subscription', 'kind' => 'recurring', 'period' => 'monthly', 'amount_mode' => 'fixed',
+            'amount_minor' => 20_000, 'starts_on' => $first->toDateString(), 'description' => 'Every adult gives each month towards burials, school fees help and the family gathering.'], $treasurer);
+        $people = DuesService::duePeople($this->companyId)->orderBy('id')->pluck('id')->all();
+        $methods = ['mobile_money', 'cash', 'mobile_money', 'bank'];
+        foreach (array_values($people) as $i => $id) {
+            // How many months each person has paid: all six, five, four and a part, two, none.
+            $months = [6, 5, 4, 2, 0, 6, 3][$i % 7];
+            for ($k = 0; $k < $months; $k++) {
+                $dues->pay($this->co, $monthly, ['member_id' => $id, 'amount_minor' => 20_000, 'method' => $methods[($i + $k) % 4],
+                    'paid_on' => min($first->addMonths($k)->addDays(4 + $i % 10)->toDateString(), $today->toDateString())], $treasurer);
+            }
+            if ($i % 7 === 2) {
+                $dues->pay($this->co, $monthly, ['member_id' => $id, 'amount_minor' => 10_000, 'method' => 'cash', 'paid_on' => $today->toDateString(), 'note' => 'Half now, the rest at the meeting'], $treasurer);
+            }
+        }
+        // A payment put against the wrong person, reversed: the history keeps both rows.
+        if (isset($people[4])) {
+            $wrong = $dues->pay($this->co, $monthly, ['member_id' => $people[4], 'amount_minor' => 20_000, 'method' => 'mobile_money', 'paid_on' => $first->toDateString()], $treasurer);
+            $dues->reverse($this->co, (int) $wrong->id, 'Recorded against the wrong person', $treasurer);
+        }
+
+        $home = $dues->create($this->co, ['name' => 'Ancestral home renovation', 'kind' => 'once', 'amount_mode' => 'any', 'target_minor' => 10_000_000,
+            'starts_on' => $today->subMonths(3)->toDateString(), 'description' => 'A new roof, plastered walls and a water tank for the old home.'], $treasurer);
+        $gifts = [1_000_000, 800_000, 700_000, 600_000, 500_000, 400_000, 400_000, 300_000, 200_000, 100_000]; // 5,000,000: half the target
+        foreach ($gifts as $k => $amount) {
+            $id = $people[(3 * $k + 1) % max(1, count($people))] ?? null;
+            if ($id !== null) {
+                $dues->pay($this->co, $home, ['member_id' => $id, 'amount_minor' => $amount, 'method' => $k % 2 ? 'bank' : 'mobile_money',
+                    'paid_on' => $today->subDays(80 - 7 * $k)->toDateString()], $treasurer);
+            }
+        }
+    }
+
+    /** The family purse: switched on by the head for the sign-ins and a few more adults; savings, shares and one running loan. */
+    private function purse(): void
+    {
+        if (! (bool) config('kin.purse_enabled', true)) {
+            return;
+        }
+        $year = (int) now()->year;
+        $adults = collect($this->people)->filter(fn ($p, $id) => $p['gen'] >= 3 && $p['born'] > 0 && $p['born'] <= $year - 21 && ! in_array($id, $this->me, true))->keys()->take(5)->all();
+        $savers = array_values(array_unique([...array_values($this->me), ...$adults]));
+        $head = $this->users['head'];
+        $this->co = app(KinPurse::class)->enable($this->co, $head, $savers);
+
+        $tx = app(SaccoTransactions::class);
+        foreach ($savers as $i => $id) {
+            $account = (int) SaccoSavingsAccount::withoutGlobalScopes()->where('company_id', $this->companyId)->where('member_id', $id)->where('status', '!=', 'closed')->value('id');
+            foreach ([200_000 + 50_000 * ($i % 4), 100_000] as $amount) {
+                $tx->record($this->co, ['kind' => 'deposit', 'savings_account_id' => $account, 'amount_minor' => $amount, 'channel' => 'cash', 'narration' => 'Family purse savings'], $head);
+            }
+            if ($i % 2 === 0) {
+                app(ShareService::class)->purchase($this->co, ['member_id' => $id, 'shares_count' => 2 + $i % 3, 'channel' => 'cash'], $head);
+            }
+        }
+
+        // One running loan: the member borrows, the treasurer guarantees, the head approves as chairperson and pays it out.
+        if (isset($this->me['member'], $this->me['treasurer'])) {
+            $flow = new LoanFlow();
+            $borrower = SaccoMember::withoutGlobalScopes()->find($this->me['member']);
+            $guarantor = SaccoMember::withoutGlobalScopes()->find($this->me['treasurer']);
+            $loan = $flow->request($this->co, $borrower, ['amount_minor' => 500_000, 'months' => 6, 'purpose' => 'School fees for the new term', 'guarantor_member_id' => (int) $guarantor->id]);
+            $flow->guarantorDecide($this->co, $guarantor, (int) $loan->id, 'approve', 'I know he will pay.');
+            $flow->chairDecide($this->co, $head, (int) $loan->id, 'approve', 'Approved at the family meeting.');
+            $flow->payOut($this->co, $head, (int) $loan->id, ['method' => 'cash', 'notes' => 'Paid in cash at the meeting']);
+        }
+    }
+
     /** @param array<string, mixed> $extra */
     private function person(string $first, string $last, string $gender, int $born, array $extra = []): int
     {
         $this->n++;
         $gen = (int) ($extra['gen'] ?? 0);
         unset($extra['gen']);
-        $m = new SaccoMember(['company_id' => $this->companyId, 'kind' => 'individual', 'first_name' => $first, 'last_name' => $last, 'gender' => $gender,
-            'date_of_birth' => $born > 0 ? sprintf('%04d-%02d-%02d', $born, 1 + $this->n % 12, 1 + (7 * $this->n) % 28) : null,
+        $m = new SaccoMember($extra + ['company_id' => $this->companyId, 'kind' => 'individual', 'first_name' => $first, 'last_name' => $last, 'gender' => $gender,
+            'date_of_birth' => $born > 0 ? sprintf('%04d-%02d-%02d', $born, 1 + $this->n % 12, 1 + (7 * $this->n + intdiv($this->n, 12)) % 28) : null,
             // No phone numbers: a made-up one could be a real person's.
-            'birth_date_precision' => $born > 0 ? 'exact' : null, 'country' => 'Uganda', 'dues_duty' => $born > 0 && $born <= (int) now()->year - 18 ? 'compulsory' : 'exempt'] + $extra);
+            'birth_date_precision' => $born > 0 ? 'exact' : null, 'status' => 'active', 'dues_duty' => $born > 0 && $born <= (int) now()->year - 18 ? 'compulsory' : 'exempt']
+            + $this->profile($born));
         $m->save();
         $this->people[(int) $m->id] = ['gen' => $gen, 'gender' => $gender, 'born' => $born, 'branch' => null, 'last' => $last];
 
@@ -290,6 +443,37 @@ final class KinDemoBuilder
         if ($branch !== null) {
             SaccoMember::withoutGlobalScopes()->whereKey($id)->update(['branch_id' => $branch]);
         }
+    }
+
+    private const DISTRICTS = ['Kampala', 'Wakiso', 'Mbarara', 'Kabale', 'Mukono', 'Jinja', 'Fort Portal', 'Masaka'];
+
+    private const WORK = ['Teacher', 'Farmer', 'Nurse', 'Trader', 'Engineer', 'Accountant', 'Driver', 'Tailor', 'Doctor', 'Mechanic', 'Carpenter', 'Shop keeper'];
+
+    private const SCHOOLING = ['secondary', 'certificate', 'diploma', 'degree', 'primary', 'masters', 'diploma', 'degree', 'secondary', 'phd'];
+
+    /** Schooling, work and home by age, picked in turn (a few live abroad). @return array<string, ?string> */
+    private function profile(int $born): array
+    {
+        if ($born <= 0) {
+            return ['country' => 'Uganda'];
+        }
+        $age = (int) now()->year - $born;
+        $abroad = $age >= 22 && $age <= 60 && $this->n % 9 === 0;
+        $education = match (true) {
+            $age < 6 => null,
+            $age <= 12 => 'primary',
+            $age <= 18 => 'secondary',
+            default => self::SCHOOLING[$this->n % count(self::SCHOOLING)],
+        };
+        $work = match (true) {
+            $age < 6 => null,
+            $age <= 22 => 'Student',
+            $age >= 66 => $this->n % 2 === 0 ? 'Retired' : 'Farmer',
+            default => self::WORK[$this->n % count(self::WORK)],
+        };
+
+        return ['country' => $abroad ? ($this->n % 2 === 0 ? 'Kenya' : 'United Kingdom') : 'Uganda', 'district' => $abroad ? null : self::DISTRICTS[$this->n % count(self::DISTRICTS)],
+            'education_level' => $education, 'occupation' => $work];
     }
 
     private function pick(string $gender): string
