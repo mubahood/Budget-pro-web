@@ -24,6 +24,9 @@ return [
     'subscription_statuses' => ['pending', 'paid', 'waived', 'cancelled'],
     'payment_methods' => ['cash', 'mobile_money', 'bank', 'cheque', 'other'],
 
+    // The public card check (`/v/{token}` on the UnityDesk site, served by the portal from App\Services\Unity\CardTokens).
+    'verify_base' => rtrim((string) env('UNITY_VERIFY_BASE', 'https://unitydesk.solaviatech.com'), '/'),
+
     // The demo association (App\Services\Unity\Demo\UnityDemo, `unity:demo`): invented members only, one sign-in per role
     // on the demo's own made-up domain, sharing one published demo password (public by design). SaaS only.
     'demo' => [

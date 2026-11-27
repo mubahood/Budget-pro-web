@@ -64,6 +64,9 @@ return [
         'unity_members' => 'Add and edit members',
         'unity_finance' => 'Membership categories and fees, and record subscriptions and payments',
         'unity_chapters' => 'Add and edit chapters',
+        'unity_meetings' => 'Plan meetings and events, take attendance and record minutes and resolutions',
+        'unity_welfare' => 'Keep the welfare fund: record money in and out, and decide and pay welfare requests',
+        'unity_voice' => 'Run elections and polls, post announcements and message members',
         'unity_settings' => 'Association settings',
     ],
 
@@ -75,7 +78,7 @@ return [
         'rentals' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses',
             'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close', 'rentals_reopen'],
         'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings'],
-        'unity' => ['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_settings'],
+        'unity' => ['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_meetings', 'unity_welfare', 'unity_voice', 'unity_settings'],
     ],
 
     // What an account built around an exclusive module keeps of the family's permissions (the account itself).
@@ -115,10 +118,10 @@ return [
         'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people']],
         'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view']],
         // UnityDesk roles: the chair is the account's owner. A member reads their own record only (no unity_view:
-        // the unity/ API answers them with themselves alone).
-        'unity_secretary' => ['label' => 'Secretary', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_chapters']],
-        'unity_treasurer' => ['label' => 'Treasurer', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_finance']],
-        'unity_chapter_lead' => ['label' => 'Chapter lead', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members']],
+        // the unity/ API answers them with themselves alone: me, my card and statement, the noticeboard, RSVP, vote, ask for welfare).
+        'unity_secretary' => ['label' => 'Secretary', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_chapters', 'unity_meetings', 'unity_voice']],
+        'unity_treasurer' => ['label' => 'Treasurer', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_finance', 'unity_welfare']],
+        'unity_chapter_lead' => ['label' => 'Chapter lead', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_meetings']],
         'unity_member' => ['label' => 'Member', 'module' => 'unity', 'permissions' => []],
     ],
 

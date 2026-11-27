@@ -166,6 +166,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
     // ── Public billing: pricing page (SaaS only) + Flutterwave webhook (signature-verified) ──
     Route::get('plans', [BillingController::class, 'plans'])->middleware('edition:saas');
+
+    // ── Public: what a scanned UnityDesk membership card proves (no sign-in; 30 a minute per address) ──
+    Route::get('public/unity/verify/{token}', [\App\Http\Controllers\Api\V1\Unity\PublicVerifyController::class, 'show'])
+        ->where('token', '[A-Za-z0-9_-]{8,200}')->middleware('throttle:30,1');
     // Off the per-IP api throttle: Flutterwave retries a burst of webhooks from a few IPs (POWER_PLAN §4.1).
     // Both editions: it also settles shops' mobile-money collections (MOMO- references); the subscription branch is SaaS only.
     Route::post('webhooks/flutterwave', [BillingController::class, 'webhook'])->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class.':api');
