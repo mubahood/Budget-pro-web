@@ -8,7 +8,10 @@ use App\Traits\Syncable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** UnityDesk: a chapter (branch) of the association, perhaps with the member who leads it. */
+/**
+ * UnityDesk: a chapter (branch) of the association, perhaps with the member who leads it, or a region (kind region) that
+ * holds chapters (a chapter's parent_id). A code (short, e.g. KLA-01) is unique in the group when set.
+ */
 class UnityChapter extends Model
 {
     use Syncable;
@@ -32,12 +35,31 @@ class UnityChapter extends Model
             if (trim((string) $c->name) === '') {
                 throw BusinessRuleException::make('name_required', 'Name the chapter.', ['name' => ['Name the chapter.']]);
             }
+            $c->kind = $c->kind ?: 'chapter';
+            if (! in_array($c->kind, ['region', 'chapter'], true)) {
+                throw BusinessRuleException::make('validation', 'A place is a region or a chapter.', ['kind' => ['Choose region or chapter.']]);
+            }
+            if ($c->kind === 'region' && $c->parent_id !== null) {
+                throw BusinessRuleException::make('validation', 'A region is not inside another region.', ['parent_id' => ['A region has no parent.']]);
+            }
+            if ($c->parent_id !== null && ! self::withoutGlobalScopes()->where('company_id', $c->company_id)->where('kind', 'region')->where('is_deleted', 0)->whereKey($c->parent_id)->exists()) {
+                throw BusinessRuleException::make('not_found', 'That region is not this association\'s.', ['parent_id' => ['Unknown region.']]);
+            }
+            $c->code = ($code = strtoupper(trim((string) $c->code))) === '' ? null : mb_substr($code, 0, 12);
+            if ($c->code !== null && self::withoutGlobalScopes()->where('company_id', $c->company_id)->where('code', $c->code)->where('is_deleted', 0)
+                ->when($c->exists, fn ($q) => $q->whereKeyNot($c->id))->exists()) {
+                throw BusinessRuleException::make('validation', 'Another chapter already has the code '.$c->code.'.', ['code' => ['That code is taken.']]);
+            }
             if ($c->lead_member_id !== null && ! SaccoMember::withoutGlobalScopes()->where('company_id', $c->company_id)->whereKey($c->lead_member_id)->exists()) {
                 throw BusinessRuleException::make('not_a_member', 'That person is not a member of this association.');
             }
         });
         static::deleting(function (self $c) {
             $n = SaccoMember::withoutGlobalScopes()->where('company_id', $c->company_id)->where('chapter_id', $c->id)->where('is_deleted', 0)->count();
+            $inside = self::withoutGlobalScopes()->where('company_id', $c->company_id)->where('parent_id', $c->id)->where('is_deleted', 0)->count();
+            if ($inside > 0) {
+                throw BusinessRuleException::make('chapter_in_use', "This region holds {$inside} ".($inside === 1 ? 'chapter' : 'chapters').'. Move them out first.', ['chapters' => $inside]);
+            }
             if ($n > 0) {
                 throw BusinessRuleException::make('chapter_in_use', "This chapter has {$n} ".($n === 1 ? 'member' : 'members').'. Move them to another chapter first.', ['members' => $n]);
             }
