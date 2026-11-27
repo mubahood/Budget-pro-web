@@ -95,15 +95,15 @@ class UnityRegistryTest extends ApiTestCase
         $id = (int) $company->id;
         $this->assertSame(['owner', 'viewer', 'unity_secretary', 'unity_treasurer', 'unity_chapter_lead', 'unity_member'], Permissions::rolesFor($id));
         $available = Permissions::availableFor($id);
-        foreach (['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_settings', 'manage_team'] as $p) {
+        foreach (['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_meetings', 'unity_welfare', 'unity_voice', 'unity_settings', 'manage_team'] as $p) {
             $this->assertContains($p, $available);
         }
         $this->assertNotContains('sell', $available);
         $this->assertNotContains('sacco_view', $available);
         $this->assertNotContains('kin_view', $available);
-        $this->assertSame(['unity_view', 'unity_members', 'unity_chapters'], Permissions::forRole($id, 'unity_secretary'));
-        $this->assertSame(['unity_view', 'unity_finance'], Permissions::forRole($id, 'unity_treasurer'));
-        $this->assertSame(['unity_view', 'unity_members'], Permissions::forRole($id, 'unity_chapter_lead'));
+        $this->assertSame(['unity_view', 'unity_members', 'unity_chapters', 'unity_meetings', 'unity_voice'], Permissions::forRole($id, 'unity_secretary'));
+        $this->assertSame(['unity_view', 'unity_finance', 'unity_welfare'], Permissions::forRole($id, 'unity_treasurer'));
+        $this->assertSame(['unity_view', 'unity_members', 'unity_meetings'], Permissions::forRole($id, 'unity_chapter_lead'));
         $this->assertSame([], Permissions::forRole($id, 'unity_member'), 'a member reads only their own record');
         $this->assertContains('unity_view', Permissions::forRole($id, 'viewer'));
         $this->assertSame('shop_viewer', config('permissions.admin_roles.unity_member'));

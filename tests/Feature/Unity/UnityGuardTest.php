@@ -45,7 +45,7 @@ class UnityGuardTest extends ApiTestCase
             $this->assertFalse(CompanyRules::exclusiveOk($mix), implode(',', $mix));
         }
         config(['kin.purse_enabled' => true]);
-        $this->assertFalse(CompanyRules::exclusiveOk(['unity', 'sacco']), 'the purse is a family\'s, never an association\'s');
+        $this->assertFalse(CompanyRules::exclusiveOk(['unity', 'sacco']), 'the purse never opens in an association');
         $this->assertTrue(CompanyRules::exclusiveOk(['kin', 'sacco']), 'kin purse unchanged');
         $this->assertSame(['unity'], CompanyRules::signUpModules(['unity', 'shop']));
         $this->assertSame('unity', CompanyRules::businessTypeFor(['unity'], 'retail'));

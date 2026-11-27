@@ -37,8 +37,9 @@ class UnityIndependenceTest extends ApiTestCase
         $this->assertIndependent(CompanyRules::exclusiveMessage(['unity', 'shop'], ['unity']));
         $this->assertIndependent((string) config('onboarding.modules.unity'));
         $this->assertIndependent(json_encode(config('onboarding.business_types.unity')));
-        $this->assertIndependent(json_encode(config('unity')));
-        foreach (['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_settings'] as $p) {
+        $this->assertIndependent(json_encode(\Illuminate\Support\Arr::except(config('unity'), ['verify_base'])));
+        $this->assertMatchesRegularExpression('#^https://unitydesk\.#', (string) config('unity.verify_base'), 'the card link is UnityDesk\'s own host');
+        foreach (['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_meetings', 'unity_welfare', 'unity_voice', 'unity_settings'] as $p) {
             $this->assertIndependent((string) config('permissions.permissions.'.$p));
         }
         foreach (['unity_secretary', 'unity_treasurer', 'unity_chapter_lead', 'unity_member'] as $r) {
