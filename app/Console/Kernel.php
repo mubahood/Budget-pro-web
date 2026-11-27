@@ -41,6 +41,8 @@ class Kernel extends ConsoleKernel
         // Akiba Ledger P3.1: members' mobile-money requests whose webhook never came (settled once, or expired after a day).
         $schedule->call($task('sacco:collections-poll'))->name('sacco:collections-poll')->everyMinute()->withoutOverlapping();
         $schedule->call($task('sacco:savings-terms'))->name('sacco:savings-terms')->dailyAt('00:20')->withoutOverlapping();
+        // Contributions: each person's line for a new period (idempotent), hourly at :20 (the :00 tick is unreliable).
+        $schedule->call($task('sacco:dues-prepare'))->name('sacco:dues-prepare')->hourlyAt(20)->withoutOverlapping(30);
         // Estate Ledger (docs/estate-ledger/04-architecture.md §13): each account's bills and late fees at night (a missed night is caught up), then its books proved.
         $schedule->call($task('rentals:daily'))->name('rentals:daily')->dailyAt('01:40')->withoutOverlapping();
         $schedule->call($task('rentals:check'))->name('rentals:check')->dailyAt('03:20')->withoutOverlapping();

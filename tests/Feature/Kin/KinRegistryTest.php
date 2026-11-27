@@ -43,7 +43,7 @@ class KinRegistryTest extends ApiTestCase
         $this->assertSame(['kin'], config('onboarding.business_types.kin.modules'));
         $this->assertSame([], config('onboarding.module_paths.kin'));
         $this->assertArrayNotHasKey('kin', CompanyRules::familyBusinessTypes(), 'only Family Roots signs a family up');
-        $this->assertFalse(config('kin.purse_enabled'), 'the purse is off until it is built');
+        $this->assertTrue(config('kin.purse_enabled'), 'the purse is built (POST kin/purse), so it is on unless KIN_PURSE_ENABLED=false');
         $this->assertSame('family-roots', PlatformOverview::appOf(['kin']));
         $this->assertSame('family-roots', PlatformOverview::appOf(['kin', 'sacco']));
         $this->assertSame('akiba', PlatformOverview::appOf(['sacco']));
