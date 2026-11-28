@@ -18,7 +18,7 @@ return [
     'finished_at' => 0.9,
 
     // Roles that count as "members" (everyone else signed in to the books is an officer).
-    'member_roles' => ['viewer', 'kin_member'],
+    'member_roles' => ['viewer', 'kin_member', 'unity_member'],
 
     'languages' => ['en' => 'English', 'sw' => 'Kiswahili', 'lg' => 'Luganda'],
 ];

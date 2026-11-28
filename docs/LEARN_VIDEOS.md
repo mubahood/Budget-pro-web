@@ -76,7 +76,7 @@ A lesson shows in an app only when all three of these are true:
    - `public`: anyone, signed in or not.
    - `everyone`: anyone signed in.
    - `officers`: anyone signed in whose role is not a member role.
-   - `members`: the member roles, `viewer` and `kin_member` (`learn.member_roles`).
+   - `members`: the member roles, `viewer`, `kin_member` and `unity_member` (`learn.member_roles`).
 
 The roles come from `App\Services\Team\Permissions::roleOf`. The owner counts as an officer.
 
@@ -263,7 +263,7 @@ On the web: read `GET /api/v1/learn?app=<slug>` and play `source.youtube_id` thr
 ## Adding a "How this works" link
 
 1. Choose an area key for the screen: short, lowercase, and named after what the screen does, e.g. `contributions`, `gatherings`, `till`, `loans`.
-2. On the phone, put `LearnHelpLink(area: 'contributions')` on the screen. It asks `GET /api/v1/learn?area=contributions`. It shows nothing when there is no lesson for that area, so you can add the link before the video exists.
+2. On the phone, put `LearnHelpLink(area: 'contributions')` on the screen. The phone reads this app's whole lesson list once (`GET /api/v1/learn`, shared by every link, the home card and the More badge) and picks the lessons whose `areas` hold the key. It shows nothing when there is no lesson for that area, so you can add the link before the video exists.
 3. In the admin, put the key in the lesson's "Screens it explains".
 
 Area keys in use:
@@ -271,6 +271,28 @@ Area keys in use:
 | Key | Screen |
 |---|---|
 | `contributions` | Family Roots: the Contributions tab (`KinDuesTab`). |
+| `gatherings` | Family Roots: gatherings. |
+| `family` | Family Roots: the people list. |
+| `members` | UnityDesk: members. Akiba Ledger: members. |
+| `dues` | UnityDesk: dues. |
+| `meetings` | UnityDesk: meetings. |
+| `welfare` | UnityDesk: welfare. |
+| `voice` | UnityDesk: ballots and noticeboard. |
+| `tree` | UnityDesk: the structure tree. |
+| `pledges` | Pledge & Budget: the pledge book. |
+| `payments` | Pledge & Budget: payments. |
+| `spending` | Pledge & Budget: spending. |
+| `loans` | Akiba Ledger: loans. |
+| `receipts` | Akiba Ledger: receive money. |
+| `tenants` | Estate Ledger: tenants. |
+| `bills` | Estate Ledger: arrears and bills. |
+| `properties` | Estate Ledger: properties. |
+| `daily-record` | Kuku Tally: the daily card. |
+| `sales` | Kuku Tally: sales. |
+| `products` | Shop apps: products. |
+| `expenses` | Shop apps: money records. |
+
+Lessons belong to apps, so one key (`members`) can mean a different screen in each app.
 
 Add a row here when you add a link.
 
