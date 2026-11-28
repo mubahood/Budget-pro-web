@@ -11,6 +11,9 @@ class StatsController extends KinController
 {
     public function show(Request $request): JsonResponse
     {
-        return $this->success((new FamilyStats($this->company($request)))->all(), 'The family in numbers.');
+        // The next gathering carries the sign-in's own answer (my_rsvp), for the RSVP buttons on the phone's home.
+        $me = \App\Services\Sacco\Dues\DuesService::personOf($request->user(), $this->cid($request));
+
+        return $this->success((new FamilyStats($this->company($request), $me ? (int) $me->id : null))->all(), 'The family in numbers.');
     }
 }

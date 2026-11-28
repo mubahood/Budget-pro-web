@@ -54,7 +54,8 @@ class KinPurseAnnouncePhotoTest extends ApiTestCase
         $this->assertSame(['kin', 'sacco'], $co->modules());
         // T1: the family app still opens this account, and the SACCO screens work for it.
         $this->assertTrue(AppFamily::opens($co->modules(), 'family-roots'));
-        $this->getJson('/api/v1/kin/tree', $this->head)->assertOk();
+        $people = collect($this->getJson('/api/v1/kin/tree', $this->head)->assertOk()->json('data.people'))->keyBy('id');
+        $this->assertTrue((bool) $people[$ann]['in_purse'], 'The tree says who is in the purse.');
         $this->getJson('/api/v1/sacco/members', $this->head)->assertOk();
         $this->getJson('/api/v1/sacco/savings-accounts', $this->head)->assertOk()->assertJsonPath('data.0.member_id', $ann);
         // Again: nothing doubles.

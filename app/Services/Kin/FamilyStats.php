@@ -28,7 +28,7 @@ class FamilyStats
 
     private CarbonImmutable $today;
 
-    public function __construct(private Company $company)
+    public function __construct(private Company $company, private ?int $meId = null)
     {
         $this->cid = (int) $company->id;
         $this->today = CarbonImmutable::parse(LocalDate::today($this->cid)->toDateString());
@@ -342,6 +342,7 @@ class FamilyStats
         }
 
         return ['id' => (int) $e->id, 'title' => $e->title, 'kind' => $e->kind, 'starts_at' => CarbonImmutable::parse($e->starts_at)->toIso8601String(), 'venue' => $e->venue,
-            'going' => (int) DB::table('kin_event_people')->where('event_id', $e->id)->where('rsvp', 'going')->count()];
+            'going' => (int) DB::table('kin_event_people')->where('event_id', $e->id)->where('rsvp', 'going')->count(),
+            'my_rsvp' => $this->meId === null ? null : DB::table('kin_event_people')->where('event_id', $e->id)->where('member_id', $this->meId)->value('rsvp')];
     }
 }

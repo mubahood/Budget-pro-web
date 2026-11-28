@@ -64,7 +64,8 @@ class KinEventsTest extends ApiTestCase
         $this->assertSame([[$id, 1, 'going']], array_map(fn ($e) => [$e['id'], $e['going'], $e['my_rsvp']], $list));
         $this->assertSame([], $this->getJson('/api/v1/kin/events?when=past', $member)->json('data.events'));
         $next = $this->getJson('/api/v1/kin/stats', $member)->assertOk()->json('data.next_event');
-        $this->assertSame([$id, 'Family meeting', 'meeting', 'The old home', 1], [$next['id'], $next['title'], $next['kind'], $next['venue'], $next['going']]);
+        $this->assertSame([$id, 'Family meeting', 'meeting', 'The old home', 1, 'going'], [$next['id'], $next['title'], $next['kind'], $next['venue'], $next['going'], $next['my_rsvp']]);
+        $this->assertNull($this->getJson('/api/v1/kin/stats', $this->head)->json('data.next_event.my_rsvp'), 'The head has no answer of their own.');
 
         // The register and the minutes: secretary only; the meeting is then held.
         $lines = ['lines' => [['member_id' => $ann, 'attendance' => 'present'], ['member_id' => $bob, 'attendance' => 'apology']]];
