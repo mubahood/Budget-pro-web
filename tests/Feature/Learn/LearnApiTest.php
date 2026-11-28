@@ -5,6 +5,7 @@ namespace Tests\Feature\Learn;
 use App\Models\Learn\LearnLesson;
 use App\Models\Learn\LearnSection;
 use Tests\Concerns\MakesKin;
+use Tests\Concerns\MakesUnity;
 use Tests\Feature\Api\ApiTestCase;
 
 /**
@@ -14,6 +15,7 @@ use Tests\Feature\Api\ApiTestCase;
 class LearnApiTest extends ApiTestCase
 {
     use MakesKin;
+    use MakesUnity;
 
     private function lesson(string $title, array $apps = [], array $attrs = []): LearnLesson
     {
@@ -99,6 +101,19 @@ class LearnApiTest extends ApiTestCase
         $this->assertNotContains('For officers', $m);
 
         $this->assertContains('Treasurer only', $this->titles($this->learn($treasurerToken)));
+    }
+
+    public function test_a_unitydesk_member_sees_members_lessons_and_not_officers(): void
+    {
+        [$company, , $chairToken] = $this->unityAccount();
+        $this->lesson('Pay your dues', ['unitydesk'], ['audience' => 'members']);
+        $this->lesson('Run a meeting', ['unitydesk'], ['audience' => 'officers']);
+        $memberToken = $this->unityStaff($company, 'unity_member')->createToken('t')->plainTextToken;
+
+        $m = $this->titles($this->learn($memberToken, 'unitydesk'));
+        $this->assertContains('Pay your dues', $m);
+        $this->assertNotContains('Run a meeting', $m);
+        $this->assertContains('Run a meeting', $this->titles($this->learn($chairToken, 'unitydesk')));
     }
 
     public function test_progress_resume_completion_area_help_and_new_marks(): void
