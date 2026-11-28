@@ -82,9 +82,50 @@ class KinPurse
         if (! SaccoSetupService::isSetUp($cid)) {
             app(SaccoSetupService::class)->setup($company, ['mode' => 'group', 'legal_name' => mb_substr((string) $company->name, 0, 190)], $by);
         }
+        // The head is in the purse from the start (doc 13.1), when they are a living person of the family.
+        $head = \App\Services\Sacco\Dues\DuesService::personOf($by, $cid);
+        if ($head !== null && in_array($head->status, SavingsAccounts::MEMBER_STATUSES, true) && $head->date_of_death === null && ! $people->contains('id', $head->id)) {
+            $people->push($head);
+        }
         $this->join($company, $people->all(), $by);
 
         return $company->fresh();
+    }
+
+    /**
+     * Put one person in the purse or take them out (POST kin/purse/members; kin_dues or the head). Taking out is refused
+     * while they still have money in it: a savings or share balance, or a loan not yet paid.
+     */
+    public function setMember(Company $company, int $memberId, bool $in, User $by): SaccoMember
+    {
+        $cid = (int) $company->id;
+        if (! self::enabled($company)) {
+            throw BusinessRuleException::make('purse_off', 'The family purse is not switched on.');
+        }
+        $p = SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id')->find($memberId)
+            ?? throw BusinessRuleException::make('not_found', 'That person is not in this family.');
+        if ($in) {
+            if (! in_array($p->status, SavingsAccounts::MEMBER_STATUSES, true) || $p->date_of_death !== null) {
+                throw BusinessRuleException::make('not_living', "{$p->full_name} cannot join the purse (they are {$p->status}).", ['member_id' => ["{$p->full_name} cannot join."]]);
+            }
+            $this->join($company, [$p], $by);
+
+            return $p->fresh();
+        }
+        if (! $p->in_purse) {
+            return $p;
+        }
+        $money = DB::table('sacco_savings_accounts')->where('company_id', $cid)->where('member_id', $p->id)->where('is_deleted', 0)->where('balance_minor', '!=', 0)->exists()
+            || DB::table('sacco_share_accounts')->where('company_id', $cid)->where('member_id', $p->id)->where('is_deleted', 0)->where('balance_minor', '!=', 0)->exists()
+            || DB::table('sacco_loans')->where('company_id', $cid)->where('member_id', $p->id)->where('is_deleted', 0)->whereNotNull('disbursement_entry_id')
+                ->whereNotIn('status', ['closed', 'written_off'])->exists();
+        if ($money) {
+            throw BusinessRuleException::make('purse_has_money', "{$p->full_name} still has savings, shares or a loan in the purse. Settle them first.", ['member_id' => ['Has money in the purse.']]);
+        }
+        $p->in_purse = false;
+        $p->save();
+
+        return $p->fresh();
     }
 
     /** Make people members of the purse, each with a group savings account (the group product, else the first one). @param list<SaccoMember> $people */

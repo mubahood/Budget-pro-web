@@ -170,6 +170,11 @@ class ApiPermissionMap
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/(people|links|siblings|spouses)(/\d+)?$#', 'kin_people'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/branches(/\d+)?$#', 'kin_branches'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/people/\d+/photo$#', 'kin_people'],
+        [['POST'], '#^kin/dues/\d+/(pledge|momo)$#', null], // the person themself (meta.me_id) or kin_dues: the controller judges
+        [['POST'], '#^kin/purse/members$#', 'kin_dues'], // the head holds every permission
+        [['POST'], '#^kin/events/\d+/rsvp$#', 'kin_view'], // each person answers for themself (the controller)
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/events(/.*)?$#', 'kin_events'], // head, secretary
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/memories(/.*)?$#', 'kin_memories'], // what each may add or change: the controller
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/dues(/.*)?$#', 'kin_dues'], // programmes, payments, reversals (head, treasurer)
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/announcements(/\d+)?$#', 'kin_announce'], // head, secretary
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin(/.*)?$#', 'kin_settings'], // any other write

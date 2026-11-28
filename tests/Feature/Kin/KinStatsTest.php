@@ -48,7 +48,7 @@ class KinStatsTest extends ApiTestCase
 
         $d = $this->getJson('/api/v1/kin/stats', $h)->assertOk()->json('data');
 
-        $this->assertSame(['total' => 7, 'living' => 5, 'late' => 1, 'male' => 2, 'female' => 3, 'unknown_gender' => 0], $d['population']);
+        $this->assertSame(['total' => 7, 'living' => 5, 'late' => 1, 'exited' => 1, 'male' => 2, 'female' => 3, 'unknown_gender' => 0], $d['population']);
         $this->assertSame(array_keys(FamilyStats::AGE_BANDS) + [8 => 'unknown'], array_column($d['age_bands'], 'key'), 'fixed band keys, in order');
         $bands = array_column($d['age_bands'], 'count', 'key');
         $this->assertSame(['0-12' => 1, '13-17' => 0, '18-25' => 0, '26-35' => 0, '36-50' => 1, '51-65' => 0, '66-80' => 1, '81+' => 1, 'unknown' => 1], $bands);

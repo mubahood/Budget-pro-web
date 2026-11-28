@@ -75,7 +75,8 @@ class SavingsController extends SaccoController
         }
         $p = SaccoSavingsAccount::withoutGlobalScopes()->where('company_id', $this->cid($request))
             ->when($request->query('member_id'), fn ($q, $v) => $q->where('member_id', (int) $v))->when($request->query('product_id'), fn ($q, $v) => $q->where('product_id', (int) $v))
-            ->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))->orderBy('account_no')->paginate($this->perPage($request));
+            ->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))
+            ->tap(fn ($q) => \App\Services\Sacco\Members\PurseOnly::byMember($q, $this->company($request)))->orderBy('account_no')->paginate($this->perPage($request));
 
         return $this->page($p, collect($p->items())->map(fn ($a) => Present::savings($a))->all());
     }
@@ -126,7 +127,7 @@ class SavingsController extends SaccoController
             return $this->refuseRead();
         }
         $p = SaccoShareAccount::withoutGlobalScopes()->where('company_id', $this->cid($request))->when($request->query('member_id'), fn ($q, $v) => $q->where('member_id', (int) $v))
-            ->orderBy('account_no')->paginate($this->perPage($request));
+            ->tap(fn ($q) => \App\Services\Sacco\Members\PurseOnly::byMember($q, $this->company($request)))->orderBy('account_no')->paginate($this->perPage($request));
 
         return $this->page($p, collect($p->items())->map(fn ($a) => Present::shares($a))->all());
     }

@@ -17,7 +17,7 @@ final class ShareRegister
             ->get()->keyBy('member_id');
         $members = SaccoMember::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)
             ->when($memberId !== null, fn ($q) => $q->whereKey($memberId), fn ($q) => $q->whereIn('status', ['applicant', 'active', 'dormant', 'suspended']))
-            ->orderBy('member_no')->get();
+            ->when($memberId === null, fn ($q) => \App\Services\Sacco\Members\PurseOnly::members($q, $companyId))->orderBy('member_no')->get();
         $rows = [];
         foreach ($members as $m) {
             $a = $accounts[$m->id] ?? null;

@@ -29,7 +29,7 @@ class KinPhoto
         if ($img === false) {
             throw BusinessRuleException::make('photo_unreadable', 'That picture could not be read. Send a JPG, PNG or WebP photo.', ['photo' => ['Not a readable picture.']]);
         }
-        $img = $this->upright($img, $raw);
+        $img = self::upright($img, $raw);
         $w = imagesx($img);
         $h = imagesy($img);
         $side = min($w, $h);
@@ -54,8 +54,33 @@ class KinPhoto
         return $person->fresh();
     }
 
+    /** A small JPEG of a picture (the longer side at most $max pixels, upright, never enlarged); null when GD cannot read it. */
+    public static function thumb(string $raw, int $max = 480): ?string
+    {
+        $img = $raw !== '' ? @imagecreatefromstring($raw) : false;
+        if ($img === false) {
+            return null;
+        }
+        $img = self::upright($img, $raw);
+        $w = imagesx($img);
+        $h = imagesy($img);
+        $scale = min(1, $max / max($w, $h));
+        $tw = max(1, (int) round($w * $scale));
+        $th = max(1, (int) round($h * $scale));
+        $out = imagecreatetruecolor($tw, $th);
+        imagefill($out, 0, 0, imagecolorallocate($out, 255, 255, 255));
+        imagecopyresampled($out, $img, 0, 0, 0, 0, $tw, $th, $w, $h);
+        ob_start();
+        imagejpeg($out, null, 80);
+        $jpeg = (string) ob_get_clean();
+        imagedestroy($img);
+        imagedestroy($out);
+
+        return $jpeg;
+    }
+
     /** A phone's JPEG says which way up it is (EXIF Orientation): turn it so. */
-    private function upright(\GdImage $img, string $raw): \GdImage
+    public static function upright(\GdImage $img, string $raw): \GdImage
     {
         if (! function_exists('exif_read_data') || ! str_starts_with($raw, "\xFF\xD8")) {
             return $img;

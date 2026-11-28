@@ -56,6 +56,7 @@ class FamilyStats
             'dues' => $this->dues(),
             'purse' => $this->purse(),
             'announcement' => $this->announcement(),
+            'next_event' => $this->nextEvent(),
         ];
     }
 
@@ -110,6 +111,7 @@ class FamilyStats
             'total' => $this->family()->count(),
             'living' => $this->living()->count(),
             'late' => $this->late()->count(),
+            'exited' => $this->family()->where('status', 'exited')->whereNull('date_of_death')->count(), // total = living + late + exited
             'male' => (int) ($gender['male'] ?? 0),
             'female' => (int) ($gender['female'] ?? 0),
             'unknown_gender' => (int) ($gender['unknown'] ?? 0),
@@ -328,5 +330,18 @@ class FamilyStats
 
         return ['id' => (int) $a->id, 'title' => $a->title, 'published_at' => CarbonImmutable::parse($a->published_at)->toIso8601String(), 'pinned' => (bool) $a->pinned,
             'author_name' => $author !== '' ? $author : null];
+    }
+
+    /** The next planned gathering (from now on), with how many said they are going. @return array<string, mixed>|null */
+    private function nextEvent(): ?array
+    {
+        $e = DB::table('kin_events')->where('company_id', $this->cid)->where('status', 'planned')->where('starts_at', '>=', now())
+            ->orderBy('starts_at')->orderBy('id')->first(['id', 'title', 'kind', 'starts_at', 'venue']);
+        if (! $e) {
+            return null;
+        }
+
+        return ['id' => (int) $e->id, 'title' => $e->title, 'kind' => $e->kind, 'starts_at' => CarbonImmutable::parse($e->starts_at)->toIso8601String(), 'venue' => $e->venue,
+            'going' => (int) DB::table('kin_event_people')->where('event_id', $e->id)->where('rsvp', 'going')->count()];
     }
 }

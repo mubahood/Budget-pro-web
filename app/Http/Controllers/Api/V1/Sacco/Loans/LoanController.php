@@ -70,6 +70,7 @@ class LoanController extends SaccoController
             ->when($request->query('classification'), fn ($q, $v) => $q->where('classification', $v))
             ->when($request->query('product_id'), fn ($q, $v) => $q->where('product_id', (int) $v))
             ->when($request->query('q'), fn ($q, $v) => $q->where('loan_no', 'like', '%'.$v.'%'))
+            ->tap(fn ($q) => \App\Services\Sacco\Members\PurseOnly::byMember($q, $this->company($request)))
             ->orderByDesc('id')->paginate($this->perPage($request));
 
         return $this->page($p, collect($p->items())->map(fn ($l) => LoanPresent::loan($l))->all());

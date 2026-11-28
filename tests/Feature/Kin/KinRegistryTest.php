@@ -95,7 +95,7 @@ class KinRegistryTest extends ApiTestCase
         }
         $this->assertNotContains('sell', $available);
         $this->assertNotContains('sacco_view', $available, 'no purse yet');
-        $this->assertSame(['kin_view'], Permissions::forRole((int) $company->id, 'kin_member'));
+        $this->assertSame(['kin_view', 'kin_memories'], Permissions::forRole((int) $company->id, 'kin_member'));
         $this->assertContains('kin_view', Permissions::forRole((int) $company->id, 'viewer'));
         $this->assertSame('shop_viewer', config('permissions.admin_roles.kin_member'));
     }

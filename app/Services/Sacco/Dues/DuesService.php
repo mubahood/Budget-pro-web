@@ -419,8 +419,13 @@ class DuesService
         return $expected - $paid;
     }
 
-    /** @param array<string, mixed> $d */
-    public function pay(Company $company, SaccoDuesProgramme $p, array $d, User $by): SaccoDuesPayment
+    /**
+     * Record money received. $received: the money is already in (a provider confirmed a mobile-money payment), so it is
+     * recorded even above the balance rather than refused.
+     *
+     * @param array<string, mixed> $d
+     */
+    public function pay(Company $company, SaccoDuesProgramme $p, array $d, User $by, bool $received = false): SaccoDuesPayment
     {
         $cid = (int) $company->id;
         $member = self::member($cid, (int) $d['member_id']);
@@ -438,10 +443,10 @@ class DuesService
             throw BusinessRuleException::make('period_invalid', "{$member->full_name} has no dues for ".(self::periodLabel($period) ?? $period).' in this contribution.', ['period' => ['Not one of their periods.']]);
         }
 
-        return DB::transaction(function () use ($company, $cid, $p, $member, $d, $paidOn, $by, $period) {
+        return DB::transaction(function () use ($company, $cid, $p, $member, $d, $paidOn, $by, $period, $received) {
             DB::table('companies')->where('id', $cid)->lockForUpdate()->first();
             $amount = (int) $d['amount_minor'];
-            if ($p->amount_mode !== 'any' && ! $p->allow_advance) {
+            if (! $received && $p->amount_mode !== 'any' && ! $p->allow_advance) {
                 $balance = self::balanceOf($p, (int) $member->id);
                 if ($amount > $balance) {
                     $fmt = fn (int $m) => self::fmt($company, $m);
@@ -486,6 +491,34 @@ class DuesService
         $n = (int) DB::table('sacco_dues_payments')->where('company_id', $companyId)->count() + 1;
 
         return 'DUE-'.str_pad((string) $n, 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * A pledge: what this person means to give to a one-time contribution (a gathering's), set as their expected amount (the
+     * 'once' line, made if missing). Pledging again replaces the amount; it may not go below what they have already paid.
+     */
+    public function pledge(SaccoDuesProgramme $p, int $memberId, int $amountMinor): int
+    {
+        $cid = (int) $p->company_id;
+        if ($p->kind !== 'once') {
+            throw BusinessRuleException::make('not_one_time', 'Pledges are for one-time contributions only.', ['programme' => ['Not one-time.']]);
+        }
+        if ($p->status !== 'active') {
+            throw BusinessRuleException::make('programme_closed', 'This contribution is closed.', ['programme' => ['Closed.']]);
+        }
+        $member = self::member($cid, $memberId);
+        if (in_array($member->status, ['deceased', 'exited'], true) || $member->date_of_death !== null) {
+            throw BusinessRuleException::make('not_living', "{$member->full_name} cannot pledge.", ['member_id' => ['Not a living member of the family.']]);
+        }
+        $paid = (int) DB::table('sacco_dues_payments')->where('programme_id', $p->id)->where('member_id', $memberId)->sum('amount_minor');
+        if ($amountMinor < $paid) {
+            throw BusinessRuleException::make('pledge_below_paid', "{$member->full_name} has already given more than that.", ['amount_minor' => ['Below what is already paid.'], 'paid_minor' => $paid]);
+        }
+        $period = self::periodOf($p, CarbonImmutable::parse($p->starts_on));
+        $now = now();
+        DB::table('sacco_dues_lines')->upsert([$this->row($p, $memberId, $period, $amountMinor, $now)], ['programme_id', 'member_id', 'period_key'], ['expected_minor', 'updated_at']);
+
+        return $amountMinor;
     }
 
     private static function member(int $companyId, int $id): SaccoMember

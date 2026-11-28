@@ -61,6 +61,8 @@ return [
         'kin_settings' => 'Family settings',
         'kin_dues' => 'Contributions: programmes and payments',
         'kin_announce' => 'Post family announcements',
+        'kin_events' => 'Plan gatherings: meetings, the register and minutes',
+        'kin_memories' => 'Add family memories: stories, photos, voice notes and documents',
     ],
 
     // Permissions that belong to one module: a company is offered (and its owner holds) only its own modules'
@@ -70,7 +72,7 @@ return [
             'sacco_disburse', 'sacco_accounts', 'sacco_reports', 'sacco_settings', 'sacco_officers', 'sacco_audit_view', 'sacco_meetings'],
         'rentals' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses',
             'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close', 'rentals_reopen'],
-        'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings', 'kin_dues', 'kin_announce'],
+        'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings', 'kin_dues', 'kin_announce', 'kin_events', 'kin_memories'],
     ],
 
     // What an account built around an exclusive module keeps of the family's permissions (the account itself).
@@ -105,10 +107,10 @@ return [
         'rentals_caretaker' => ['label' => 'Caretaker', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_collect', 'rentals_maintenance']],
         // Family Roots roles: `module` keeps them to family accounts. The head of the family is the account's owner;
         // a family's viewer also gets kin_view (Permissions::forRole). A member only reads.
-        'kin_secretary' => ['label' => 'Secretary', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_branches', 'kin_announce']],
-        'kin_treasurer' => ['label' => 'Treasurer', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_dues']],
-        'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people']],
-        'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view']],
+        'kin_secretary' => ['label' => 'Secretary', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_branches', 'kin_announce', 'kin_events', 'kin_memories']],
+        'kin_treasurer' => ['label' => 'Treasurer', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_dues', 'kin_memories']],
+        'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_memories']],
+        'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_memories']],
     ],
 
     // laravel-admin role slug each company role maps to (web menu + access).
