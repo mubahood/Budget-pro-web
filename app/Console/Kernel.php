@@ -47,6 +47,9 @@ class Kernel extends ConsoleKernel
         // Estate Ledger's search: writes reach it as they happen; this repairs anything a crash missed. Minutes the host's */20 scheduler reaches.
         $schedule->call($task('rentals:search-index'))->name('rentals:search-index')->dailyAt('03:40')->withoutOverlapping(120);
         $schedule->call($task('rentals:search-index', ['--full' => true]))->name('rentals:search-index --full')->weeklyOn(0, '04:20')->withoutOverlapping(120);
+        // UnityDesk (doc 12): ended memberships become lapsed at night, and members are reminded a week before theirs ends at 09:40 Kampala; each notice goes once.
+        $schedule->call($task('unity:lapse'))->name('unity:lapse')->dailyAt('01:20')->withoutOverlapping();
+        $schedule->call($task('unity:remind'))->name('unity:remind')->dailyAt('06:40')->withoutOverlapping();
         $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();
