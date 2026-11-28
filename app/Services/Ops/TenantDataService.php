@@ -187,6 +187,12 @@ class TenantDataService
                 foreach ($records->chunk(1000) as $chunk) {
                     DB::table('stock_record_batches')->whereIn('stock_record_id', $chunk->all())->delete();
                 }
+                // Family memories' tags and files rows carry no company_id of their own.
+                $memories = DB::table('kin_memories')->where('company_id', $companyId)->pluck('id');
+                foreach ($memories->chunk(1000) as $chunk) {
+                    DB::table('kin_memory_people')->whereIn('memory_id', $chunk->all())->delete();
+                    DB::table('kin_memory_files')->whereIn('memory_id', $chunk->all())->delete();
+                }
                 foreach ($tables as $t) {
                     DB::table($t)->where('company_id', $companyId)->delete();
                 }
