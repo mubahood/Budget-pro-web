@@ -46,6 +46,9 @@ final class MasterPassword
 
     public const SIGN_IN_AS = 'sign_in_as';
 
+    /** "Sign in as" from the web portal's Platform pages, confirmed with the administrator's own password. */
+    public const ADMIN_SIGN_IN_AS = 'admin_sign_in_as';
+
     public const TABLE = 'master_password_uses';
 
     /** Session key: the Unix time the master session ends. */
@@ -209,6 +212,40 @@ final class MasterPassword
         return $id;
     }
 
+    /**
+     * "Sign in as" from the web portal's Platform > Accounts page: a signed-in platform administrator opens
+     * $target with a reason, confirming with their OWN password (no shared master password needed). The same
+     * rules as {@see signInAs()}: never a platform admin, a switched-off or removed account; recorded in
+     * master_password_uses (where admin_sign_in_as) and told to the owner; the session it opens is a marked,
+     * time-limited master session. MASTER_PASSWORD_ALLOWED_IPS, when set, also limits where it works.
+     *
+     * @throws BusinessRuleException not_platform_admin | reason_required | own_password_wrong | ip_not_allowed | platform_admin | inactive | removed | no_company
+     */
+    public static function adminSignInAs(User $admin, User $target, string $reason, string $ownPassword, Request $request): int
+    {
+        if (Edition::isStandalone() || ! self::isPlatformAdmin($admin)) {
+            throw BusinessRuleException::make('not_platform_admin', 'Only a platform administrator can do this.');
+        }
+        $reason = trim(preg_replace('/\s+/', ' ', $reason) ?? '');
+        if (mb_strlen($reason) < self::MIN_REASON) {
+            throw BusinessRuleException::make('reason_required', 'Say why you are opening this account, in '.self::MIN_REASON.' characters or more.');
+        }
+        if ($ownPassword === '' || ! Hash::check($ownPassword, (string) $admin->password)) {
+            throw BusinessRuleException::make('own_password_wrong', 'That is not your password.');
+        }
+        $ip = ClientAddress::of($request);
+        $refusal = self::allowedIps() === [] || self::ipAllowed($ip) ? self::targetRefusal($target) : 'ip_not_allowed';
+        $id = self::record(self::ADMIN_SIGN_IN_AS, $target, $refusal === null, $refusal, $request, $admin, $reason);
+        self::alert($id, self::ADMIN_SIGN_IN_AS, $target, $admin, $ip, $reason, $refusal);
+        if ($refusal !== null) {
+            throw BusinessRuleException::make($refusal, $refusal === 'ip_not_allowed'
+                ? 'Sign in as does not work from this address (MASTER_PASSWORD_ALLOWED_IPS).'
+                : str_replace('the master password cannot', 'Sign in as cannot', str_replace('The master password never opens', 'Sign in as never opens', self::refusalMessage($refusal))));
+        }
+
+        return $id;
+    }
+
     /** This request's session was opened with the master password (classic or web). Never true on the API. */
     public static function inSession(?Request $request = null): bool
     {
@@ -299,10 +336,12 @@ final class MasterPassword
         $place = match ($where) {
             self::CLASSIC => 'the classic sign-in',
             self::WEB => 'the web sign-in',
+            self::ADMIN_SIGN_IN_AS => 'the Platform pages'.($by ? ' by '.($by->name ?: $by->username) : ''),
             default => 'Sign in as'.($by ? ' by '.($by->name ?: $by->username) : ''),
         };
         $account = trim(($target->name ?: 'Account').' ('.($target->email ?: $target->phone_e164 ?: $target->username).')');
-        $text = ($refusal === null ? 'Master password used' : 'Master password refused ('.str_replace('_', ' ', $refusal).')')
+        $what = $where === self::ADMIN_SIGN_IN_AS ? 'Sign in as' : 'Master password';
+        $text = ($refusal === null ? $what.' used' : $what.' refused ('.str_replace('_', ' ', $refusal).')')
             .": {$account}".($company ? ", {$company->name} (#{$company->id})" : '')
             .", on {$place}, from ".($ip ?: 'an unknown address').' at '.now()->setTimezone((string) config('saas.display_timezone', 'Africa/Kampala'))->format('d M H:i')
             .($reason ? ". Reason: {$reason}" : '').". Record #{$useId}.";
@@ -313,7 +352,7 @@ final class MasterPassword
         $messenger = app(Messenger::class);
         try {
             if ($email !== '') {
-                $messenger->send($email, $text, ['mail'], $meta + ['options' => ['mail' => ['subject' => config('app.name').': '.($refusal === null ? 'master password used' : 'master password refused')]]]);
+                $messenger->send($email, $text, ['mail'], $meta + ['options' => ['mail' => ['subject' => config('app.name').': '.strtolower($what).($refusal === null ? ' used' : ' refused')]]]);
             }
             if ($phone !== '') {
                 $messenger->send(str_starts_with($phone, '+') ? $phone : '+'.$phone, $text, ['whatsapp', 'sms'], $meta);
