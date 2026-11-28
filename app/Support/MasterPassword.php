@@ -214,24 +214,22 @@ final class MasterPassword
 
     /**
      * "Sign in as" from the web portal's Platform > Accounts page: a signed-in platform administrator opens
-     * $target with a reason, confirming with their OWN password (no shared master password needed). The same
-     * rules as {@see signInAs()}: never a platform admin, a switched-off or removed account; recorded in
-     * master_password_uses (where admin_sign_in_as) and told to the owner; the session it opens is a marked,
-     * time-limited master session. MASTER_PASSWORD_ALLOWED_IPS, when set, also limits where it works.
+     * $target in one step. Being signed in as a platform administrator is the check, so no password and no
+     * reason are asked (owner, 2026-11-28); the record says "Opened by a platform administrator" when none is
+     * given. The same rules as {@see signInAs()}: never a platform admin, a switched-off or removed account;
+     * recorded in master_password_uses (where admin_sign_in_as) and told to the owner; the session it opens is a
+     * marked, time-limited master session. MASTER_PASSWORD_ALLOWED_IPS, when set, also limits where it works.
      *
-     * @throws BusinessRuleException not_platform_admin | reason_required | own_password_wrong | ip_not_allowed | platform_admin | inactive | removed | no_company
+     * @throws BusinessRuleException not_platform_admin | ip_not_allowed | platform_admin | inactive | removed | no_company
      */
-    public static function adminSignInAs(User $admin, User $target, string $reason, string $ownPassword, Request $request): int
+    public static function adminSignInAs(User $admin, User $target, Request $request, ?string $reason = null): int
     {
         if (Edition::isStandalone() || ! self::isPlatformAdmin($admin)) {
             throw BusinessRuleException::make('not_platform_admin', 'Only a platform administrator can do this.');
         }
-        $reason = trim(preg_replace('/\s+/', ' ', $reason) ?? '');
-        if (mb_strlen($reason) < self::MIN_REASON) {
-            throw BusinessRuleException::make('reason_required', 'Say why you are opening this account, in '.self::MIN_REASON.' characters or more.');
-        }
-        if ($ownPassword === '' || ! Hash::check($ownPassword, (string) $admin->password)) {
-            throw BusinessRuleException::make('own_password_wrong', 'That is not your password.');
+        $reason = trim(preg_replace('/\s+/', ' ', (string) $reason) ?? '');
+        if ($reason === '') {
+            $reason = 'Opened by a platform administrator';
         }
         $ip = ClientAddress::of($request);
         $refusal = self::allowedIps() === [] || self::ipAllowed($ip) ? self::targetRefusal($target) : 'ip_not_allowed';
