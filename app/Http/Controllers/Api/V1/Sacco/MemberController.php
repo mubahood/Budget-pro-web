@@ -24,6 +24,7 @@ class MemberController extends SaccoController
         $cid = $this->cid($request);
         $q = SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id')
             ->when($request->query('status'), fn ($w, $s) => $w->where('status', $s));
+        \App\Services\Sacco\Members\PurseOnly::members($q, $this->company($request)); // a family's purse: its people only (doc 13.1)
         if (filled($term = trim((string) $request->query('q')))) {
             $hash = preg_match('/^[A-Za-z0-9]{8,20}$/', $term) === 1 ? Nin::hash($term) : null;
             $q->where(fn ($w) => $w->where('member_no', $term)->orWhere('first_name', 'like', $term.'%')->orWhere('last_name', 'like', $term.'%')

@@ -44,7 +44,13 @@ class PeopleController extends KinController
         return $this->attempt(function () use ($request, $id) {
             $person = KinPeople::find($this->cid($request), $id);
 
-            return $this->success(KinPeople::present($person, $this->officer($request)) + TreeService::relatives($this->cid($request), (int) $person->id));
+            $cid = $this->cid($request);
+            $memories = \App\Models\KinMemory::withoutGlobalScopes()->where('company_id', $cid)->whereNull('deleted_at')
+                ->whereIn('id', \Illuminate\Support\Facades\DB::table('kin_memory_people')->select('memory_id')->where('member_id', $person->id));
+
+            return $this->success(KinPeople::present($person, $this->officer($request)) + TreeService::relatives($cid, (int) $person->id)
+                + ['memories_count' => (clone $memories)->count(),
+                    'memories' => app(\App\Services\Kin\KinMemories::class)->present($memories->orderByDesc('created_at')->orderByDesc('id')->limit(3)->get())]);
         });
     }
 

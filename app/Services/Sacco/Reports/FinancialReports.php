@@ -155,7 +155,7 @@ final class FinancialReports
     public static function memberStats(int $cid, Carbon $from, Carbon $to): array
     {
         $left = ['exited', 'deceased', 'rejected'];
-        $members = SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id')
+        $members = \App\Services\Sacco\Members\PurseOnly::members(SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id'), $cid)
             ->get(['id', 'gender', 'date_of_birth', 'status', 'kind', 'joined_on', 'status_changed_on']);
         $on = $members->filter(fn ($m) => $m->status !== 'applicant' && $m->joined_on !== null && $m->joined_on->lte($to)
             && ! (in_array($m->status, $left, true) && ($m->status_changed_on === null || $m->status_changed_on->lte($to))));

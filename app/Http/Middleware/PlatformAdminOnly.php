@@ -43,6 +43,7 @@ class PlatformAdminOnly
         'system-health', 'system-health/*',
         'standalone-releases', 'standalone-releases/*',
         'promo-videos', 'promo-videos/*',
+        'learn-videos', 'learn-videos/*',
         'standalone-products', 'standalone-products/*',
         'standalone-licences', 'standalone-licences/*',
     ];

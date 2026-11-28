@@ -43,7 +43,7 @@ class KinRegistryTest extends ApiTestCase
         $this->assertSame(['kin'], config('onboarding.business_types.kin.modules'));
         $this->assertSame([], config('onboarding.module_paths.kin'));
         $this->assertArrayNotHasKey('kin', CompanyRules::familyBusinessTypes(), 'only Family Roots signs a family up');
-        $this->assertFalse(config('kin.purse_enabled'), 'the purse is off until it is built');
+        $this->assertTrue(config('kin.purse_enabled'), 'the purse is built (POST kin/purse), so it is on unless KIN_PURSE_ENABLED=false');
         $this->assertSame('family-roots', PlatformOverview::appOf(['kin']));
         $this->assertSame('family-roots', PlatformOverview::appOf(['kin', 'sacco']));
         $this->assertSame('akiba', PlatformOverview::appOf(['sacco']));
@@ -95,7 +95,7 @@ class KinRegistryTest extends ApiTestCase
         }
         $this->assertNotContains('sell', $available);
         $this->assertNotContains('sacco_view', $available, 'no purse yet');
-        $this->assertSame(['kin_view'], Permissions::forRole((int) $company->id, 'kin_member'));
+        $this->assertSame(['kin_view', 'kin_memories'], Permissions::forRole((int) $company->id, 'kin_member'));
         $this->assertContains('kin_view', Permissions::forRole((int) $company->id, 'viewer'));
         $this->assertSame('shop_viewer', config('permissions.admin_roles.kin_member'));
     }

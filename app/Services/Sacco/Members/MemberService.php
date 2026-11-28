@@ -276,7 +276,7 @@ final class MemberService
     public function duplicates(Company $company): array
     {
         $base = fn () => SaccoMember::withoutGlobalScopes()->where('company_id', $company->id)->where('is_deleted', 0)->whereNull('merged_into_id')
-            ->whereNotIn('status', ['exited', 'deceased', 'rejected']);
+            ->whereNotIn('status', ['exited', 'deceased', 'rejected'])->tap(fn ($q) => PurseOnly::members($q, $company));
         $out = [];
         foreach (['nin' => ['nin_hash'], 'phone' => ['phone_e164'], 'name_dob' => ['first_name', 'last_name', 'date_of_birth']] as $match => $cols) {
             $q = $base();

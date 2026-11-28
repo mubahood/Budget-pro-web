@@ -222,6 +222,14 @@ final class SaccoCollections
 
                     return DB::table('momo_requests')->find($req->id);
                 }
+                if ($req->purpose === \App\Services\Kin\KinDuesMomo::PURPOSE) {
+                    // A family's contribution: recorded once through the dues book (KinDuesMomo), never as a savings receipt.
+                    $pay = app(\App\Services\Kin\KinDuesMomo::class)->record($company, $req, (string) ($data['id'] ?? $req->provider_id ?? ''));
+                    DB::table('momo_requests')->where('id', $req->id)->update(['status' => 'successful', 'sacco_dues_payment_id' => $pay?->id, 'provider_id' => (string) ($data['id'] ?? $req->provider_id),
+                        'settled_at' => now(), 'error' => $pay === null ? 'Received, but it could not be recorded against this contribution: the treasurer records it by hand.' : null, 'updated_at' => now()]);
+
+                    return DB::table('momo_requests')->find($req->id);
+                }
                 $tx = $this->receipt($company, $req, (string) ($data['id'] ?? $req->provider_id ?? ''));
                 DB::table('momo_requests')->where('id', $req->id)->update(['status' => 'successful', 'sacco_transaction_id' => $tx->id, 'provider_id' => (string) ($data['id'] ?? $req->provider_id),
                     'settled_at' => now(), 'error' => $tx->status === 'held' ? 'Received, but its account could not take it: held for an officer to allocate.' : null, 'updated_at' => now()]);

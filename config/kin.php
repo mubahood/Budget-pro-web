@@ -8,8 +8,9 @@ return [
     'plans' => ['trial' => 'family-roots-trial', 'free' => 'family-roots-free'],
 
     // A family's purse (dues, welfare) runs on the SACCO books beside the tree: ['kin', 'sacco'] is allowed only while
-    // this is on (CompanyRules::exclusiveOk). Off until the purse is built (docs 05/11).
-    'purse_enabled' => (bool) env('KIN_PURSE_ENABLED', false),
+    // this is on (CompanyRules::exclusiveOk). On since the purse is built (POST kin/purse, doc 12 §12.4); KIN_PURSE_ENABLED=false
+    // takes it away again.
+    'purse_enabled' => (bool) env('KIN_PURSE_ENABLED', true),
 
     // The brand Family Roots speaks with in emails and as the sender name.
     'brand' => [

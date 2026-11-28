@@ -205,7 +205,7 @@ final class SaccoReports
         $shares = DB::table('sacco_share_accounts')->where('company_id', $cid)->pluck('shares_count', 'member_id');
         $nominees = DB::table('sacco_member_relations')->where('company_id', $cid)->where('role', 'nominee')->whereNull('ended_on')->get(['member_id', 'name', 'share_bp'])->groupBy('member_id');
         $rows = [];
-        foreach (SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id')->orderBy('member_no')->get() as $m) {
+        foreach (\App\Services\Sacco\Members\PurseOnly::members(SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id'), $cid)->orderBy('member_no')->get() as $m) {
             $ceased = in_array($m->status, ['exited', 'deceased', 'rejected'], true) ? $m->status_changed_on?->toDateString() : null;
             $rows[] = ['member_no' => $m->member_no, 'name' => $m->full_name, 'gender' => $m->gender, 'address' => implode(', ', array_filter([$m->address, $m->village, $m->parish, $m->subcounty, $m->district])),
                 'occupation' => $m->occupation, 'joined_on' => $m->joined_on->toDateString(), 'shares' => (int) ($shares[$m->id] ?? 0), 'status' => $m->status, 'ceased_on' => $ceased,
@@ -221,7 +221,7 @@ final class SaccoReports
     private function shareRegister(int $cid, array $p, SaccoSetting $s): array
     {
         $list = DB::table('sacco_share_accounts as s')->join('sacco_members as m', 'm.id', '=', 's.member_id')->where('s.company_id', $cid)->where('s.shares_count', '>', 0)
-            ->orderBy('m.member_no')->get(['s.account_no', 'm.member_no', 'm.first_name', 'm.other_names', 'm.last_name', 's.shares_count', 's.balance_minor']);
+            ->tap(fn ($q) => \App\Services\Sacco\Members\PurseOnly::members($q, $cid, 'm.in_purse'))->orderBy('m.member_no')->get(['s.account_no', 'm.member_no', 'm.first_name', 'm.other_names', 'm.last_name', 's.shares_count', 's.balance_minor']);
         $total = (int) $list->sum('shares_count');
         $cap = (int) $s->max_holding_bp;
         $rows = $list->map(function ($r) use ($total, $cap) {
