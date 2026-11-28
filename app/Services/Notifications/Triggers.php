@@ -240,6 +240,40 @@ final class Triggers
         });
     }
 
+    /** A new announcement, published now (one set for later says nothing): everyone in the family hears it (doc 13.5). */
+    public static function kinAnnounced(\App\Models\KinAnnouncement $a): void
+    {
+        if (self::fromConsole() || ($a->published_at !== null && $a->published_at->isFuture())) {
+            return;
+        }
+        $cid = (int) $a->company_id;
+        $id = (int) $a->id;
+        $title = (string) $a->title;
+        $body = trim((string) $a->body);
+        $actor = auth()->id() ? (int) auth()->id() : ($a->author_user_id ? (int) $a->author_user_id : null);
+        self::later('kin_announcement', function () use ($cid, $id, $title, $body, $actor) {
+            self::tell($cid, 'family-roots', 'kin_announcement', app(Notifier::class)->everyone($cid), $title,
+                $body !== '' ? \Illuminate\Support\Str::limit($body, 140) : 'A new family announcement.', "kin/announcement/{$id}", "kin-announcement:{$id}", $actor);
+        });
+    }
+
+    /** A gathering planned: everyone in the family hears what, when and where (doc 13.5). */
+    public static function kinEventPlanned(\App\Models\KinEvent $e): void
+    {
+        if (self::fromConsole()) {
+            return;
+        }
+        $cid = (int) $e->company_id;
+        $id = (int) $e->id;
+        $title = (string) $e->title;
+        $when = \Carbon\CarbonImmutable::parse($e->starts_at)->timezone(Notifier::TZ)->format('D j M, g:i a');
+        $body = $when.($e->venue ? ' at '.$e->venue : '').'. Tap to say if you are coming.';
+        $actor = auth()->id() ? (int) auth()->id() : ($e->created_by ? (int) $e->created_by : null);
+        self::later('kin_event', function () use ($cid, $id, $title, $body, $actor) {
+            self::tell($cid, 'family-roots', 'kin_event', app(Notifier::class)->everyone($cid), $title, $body, "kin/event/{$id}", "kin-event:{$id}", $actor);
+        });
+    }
+
     // ---- Membership ----
 
     /** Money received on a membership subscription (UnitySubscription saved with more paid than before). */

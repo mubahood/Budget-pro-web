@@ -118,6 +118,27 @@ class NotificationTriggersTest extends ApiTestCase
         }
     }
 
+    public function test_a_family_hears_new_announcements_and_gatherings(): void
+    {
+        [$family, $head, $token] = $this->kinAccount();
+        $member = $this->kinStaff($family, 'kin_member');
+        $auth = ['Authorization' => 'Bearer '.$token];
+        $a = (int) $this->postJson('/api/v1/kin/announcements', ['title' => 'Clan meeting moved', 'body' => 'We meet at the old home.'], $auth)->assertSuccessful()->json('data.id');
+        $e = (int) $this->postJson('/api/v1/kin/events', ['kind' => 'meeting', 'title' => 'Family meeting', 'starts_at' => '2026-12-05 10:00:00', 'venue' => 'The old home'], $auth)
+            ->assertSuccessful()->json('data.event.id');
+
+        $news = $this->inbox((int) $member->id, 'kin_announcement')->first();
+        $this->assertSame(['Clan meeting moved', "kin/announcement/{$a}", 'family-roots'], [$news?->title, $news?->link, $news?->app]);
+        $meet = $this->inbox((int) $member->id, 'kin_event')->first();
+        $this->assertSame(['Family meeting', "kin/event/{$e}"], [$meet?->title, $meet?->link]);
+        $this->assertStringContainsString('The old home', $meet->body);
+        $this->assertSame([], $this->inbox((int) $head->id)->whereIn('type', ['kin_announcement', 'kin_event'])->all(), 'never the one who posted it');
+
+        // One set for later says nothing now.
+        $this->postJson('/api/v1/kin/announcements', ['title' => 'Later news', 'published_at' => '2026-12-20 09:00:00'], $auth)->assertSuccessful();
+        $this->assertCount(1, $this->inbox((int) $member->id, 'kin_announcement'));
+    }
+
     public function test_scheduled_reminders_go_once_a_day(): void
     {
         // Rent due in three days.

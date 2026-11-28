@@ -42,6 +42,8 @@ class Notifier
         'maintenance' => ['Repair requests opened and closed', ['in_app', 'push'], true, ['estate-ledger'], 'activity'],
         'kin_dates' => ['Birthdays and remembrance days', ['in_app', 'push'], true, ['family-roots'], 'reminders'],
         'kin_people' => ['New people in your branch', ['in_app', 'push'], true, ['family-roots'], 'activity'],
+        'kin_announcement' => ['Family announcements', ['in_app', 'push'], true, ['family-roots'], 'activity'],
+        'kin_event' => ['Gatherings planned', ['in_app', 'push'], true, ['family-roots'], 'activity'],
         'unity_due' => ['Subscriptions due and overdue', ['in_app', 'push'], true, ['unitydesk'], 'reminders'],
         'unity_paid' => ['Payments received', ['in_app', 'push'], true, ['unitydesk'], 'activity'],
         'hide_details' => ['Hide amounts and names on the lock screen', [], false, null, 'account'],

@@ -21,5 +21,6 @@ class KinEvent extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new CompanyScope);
+        static::created(fn (self $m) => \App\Services\Notifications\Triggers::kinEventPlanned($m)); // the family hears it (doc 13.5)
     }
 }
