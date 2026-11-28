@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * UnityDesk (the unity module): members, categories, subscriptions and chapters. An association's members are sacco_members
- * rows (never deleted; a member who leaves is exited), like a SACCO's and a family's. Added here:
+ * rows (never deleted; a member who leaves is exited). Added here:
  *
  * - sacco_members: chapter_id, category_id, member_since, and two caches only the server writes (App\Services\Unity\Memberships,
  *   SyncRegistry::DERIVED_COLUMNS): membership_ends_on (the end of the last period in force; null with standing life) and

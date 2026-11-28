@@ -49,7 +49,7 @@ class AdminAccess
     /** Root menu titles and child uris visible to platform admins only. */
     public const PLATFORM_MENU_TITLES = ['Admin', 'Billing'];
 
-    public const PLATFORM_MENU_URIS = ['pingpin-plans', 'plans', 'subscriptions', 'product-templates', 'system-health', 'promo-videos', 'platform-overview', 'same-person-twice'];
+    public const PLATFORM_MENU_URIS = ['pingpin-plans', 'plans', 'subscriptions', 'product-templates', 'system-health', 'promo-videos', 'learn-videos', 'platform-overview', 'same-person-twice'];
 
     /** Create the roles, base permissions and platform menus if they are missing. Idempotent. */
     public static function ensureBaseline(): void

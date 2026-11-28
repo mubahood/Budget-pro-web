@@ -137,7 +137,7 @@ final class LoanFlow
     public function guarantorOptions(int $companyId, int $borrowerId): array
     {
         return SaccoMember::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->where('status', 'active')->where('id', '!=', $borrowerId)
-            ->orderBy('first_name')->orderBy('last_name')->get()->map(fn ($m) => ['member_id' => (int) $m->id, 'member_no' => $m->member_no, 'name' => $m->full_name])->all();
+            ->tap(fn ($q) => \App\Services\Sacco\Members\PurseOnly::members($q, $companyId))->orderBy('first_name')->orderBy('last_name')->get()->map(fn ($m) => ['member_id' => (int) $m->id, 'member_no' => $m->member_no, 'name' => $m->full_name])->all();
     }
 
     /**

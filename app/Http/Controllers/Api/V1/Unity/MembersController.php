@@ -4,45 +4,30 @@ namespace App\Http\Controllers\Api\V1\Unity;
 
 use App\Models\SaccoMember;
 use App\Models\UnitySubscription;
+use App\Services\Unity\MemberFilters;
 use App\Services\Unity\Memberships;
 use App\Services\Unity\UnityMembers;
-use App\Support\LocalDate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /** The association's members: list with filters, one with their subscriptions, add and change. Never deleted; a member sees only themselves (me). */
 class MembersController extends UnityController
 {
-    /** GET unity/members?standing=good|lapsed|life|none&category_id&chapter_id&status&expiring_days&q&per_page&page */
+    /**
+     * GET unity/members?status (current = active or dormant)&standing&paid_up&category_id&chapter_id&region_id&expiring_days&q
+     * &age&gender&education&occupation&district&subcounty&tenure&attention&birthday=week&anniversary=week&sort&per_page&page
+     * (MemberFilters; the Insights tiles link here with the same keys).
+     */
     public function index(Request $request): JsonResponse
     {
         $cid = $this->cid($request);
         Memberships::refreshStanding($cid); // the phones' copies follow the day (one update, only when a period has ended)
         $q = SaccoMember::withoutGlobalScopes()->where('company_id', $cid)->where('is_deleted', 0)->whereNull('merged_into_id');
-        if (in_array($standing = (string) $request->query('standing'), [Memberships::GOOD, Memberships::LAPSED, Memberships::LIFE, Memberships::NONE], true)) {
-            Memberships::whereStanding($q, $standing, LocalDate::today($cid));
-        }
-        if (in_array($status = $request->query('status'), config('unity.statuses'), true)) {
-            $q->where('status', $status);
-        }
-        foreach (['category_id', 'chapter_id'] as $key) {
-            if ($request->filled($key)) {
-                $q->where($key, (int) $request->query($key));
-            }
-        }
-        if ($request->filled('expiring_days')) {
-            $today = LocalDate::today($cid);
-            $q->whereIn('standing', [Memberships::GOOD, Memberships::LAPSED])
-                ->whereBetween('membership_ends_on', [$today->toDateString(), $today->copy()->addDays(max(0, min(366, (int) $request->query('expiring_days'))))->toDateString()]);
-        }
-        if (($term = trim((string) $request->query('q', ''))) !== '') {
-            $like = '%'.addcslashes($term, '%_\\').'%';
-            $q->where(fn ($w) => $w->where('first_name', 'like', $like)->orWhere('last_name', 'like', $like)->orWhere('other_names', 'like', $like)
-                ->orWhere('member_no', 'like', $like)->orWhere('phone_e164', 'like', $like)->orWhere('email', 'like', $like));
-        }
-        $p = $q->orderBy('last_name')->orderBy('first_name')->orderBy('id')->paginate($this->perPage($request), ['*'], 'page', $this->pageNo($request));
+        MemberFilters::apply($q, $cid, $request->query());
+        MemberFilters::sort($q, $request->query('sort'));
+        $p = $q->paginate($this->perPage($request), ['*'], 'page', $this->pageNo($request));
 
-        return $this->page($p, collect($p->items())->map(fn ($m) => UnityMembers::present($m))->all());
+        return $this->page($p, UnityMembers::presentMany(collect($p->items())));
     }
 
     /** GET unity/members/{id}: the member and their subscriptions, newest first. */

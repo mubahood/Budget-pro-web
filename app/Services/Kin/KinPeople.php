@@ -20,7 +20,7 @@ final class KinPeople
     /** The fields an officer writes. */
     public const WRITABLE = ['first_name', 'last_name', 'other_names', 'gender', 'date_of_birth', 'birth_date_precision', 'status', 'date_of_death', 'place_of_death',
         'phone', 'email', 'address', 'district', 'village', 'occupation', 'education_level', 'country', 'heritage', 'privacy', 'branch_id', 'in_purse',
-        'dues_duty', 'dues_personal_minor', 'dues_start_date'];
+        'dues_duty', 'dues_personal_minor', 'dues_start_date', 'user_id'];
 
     /** @return array<string, array<int, mixed>> */
     public static function rules(int $companyId, bool $creating): array
@@ -54,6 +54,8 @@ final class KinPeople
             'dues_duty' => ['sometimes', 'nullable', $in('dues_duties')],
             'dues_personal_minor' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:'.\App\Support\Rules\SaccoRules::MAX_MINOR],
             'dues_start_date' => ['sometimes', 'nullable', 'date'],
+            // The family's sign-in that is this person ("my dues", "jump to me"); one person per sign-in.
+            'user_id' => ['sometimes', 'nullable', 'integer', Rule::exists('admin_users', 'id')->where('company_id', $companyId)],
         ];
     }
 
@@ -103,6 +105,10 @@ final class KinPeople
             $m->phone_e164 = blank($raw) ? null
                 : (Phone::e164((string) $raw, (string) ($company->country ?: 'UG')) ?? throw BusinessRuleException::make('invalid_phone', "\"{$raw}\" is not a phone number.", ['phone' => ['Not a phone number.']]));
         }
+        if (! empty($data['user_id'])) { // a sign-in is one person: let go of anyone else it named
+            SaccoMember::withoutGlobalScopes()->where('company_id', $company->id)->where('user_id', (int) $data['user_id'])
+                ->when($m->exists, fn ($q) => $q->whereKeyNot($m->id))->get()->each(fn (SaccoMember $o) => $o->forceFill(['user_id' => null])->save());
+        }
         $m->fill($data);
     }
 
@@ -128,6 +134,8 @@ final class KinPeople
             'branch_id' => $m->branch_id ? (int) $m->branch_id : null, 'generation' => $m->generation !== null ? (int) $m->generation : null,
             'root_id' => $m->root_id ? (int) $m->root_id : null, 'in_purse' => (bool) $m->in_purse,
             'dues_duty' => $m->dues_duty, 'dues_personal_minor' => $m->dues_personal_minor !== null ? (int) $m->dues_personal_minor : null,
-            'dues_start_date' => $m->dues_start_date?->toDateString(), 'photo_file_id' => $m->photo_file_id, 'version' => (int) $m->version];
+            'dues_start_date' => $m->dues_start_date?->toDateString(), 'photo_file_id' => $m->photo_file_id,
+            'photo_url' => $m->photo_file_id ? (\App\Services\Sacco\Dues\DuesService::photoUrls((int) $m->company_id, [(int) $m->photo_file_id])[(int) $m->photo_file_id] ?? null) : null,
+            'user_id' => $m->user_id ? (int) $m->user_id : null, 'version' => (int) $m->version];
     }
 }

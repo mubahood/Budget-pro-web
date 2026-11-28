@@ -17,7 +17,11 @@ class TreeController extends KinController
             return response('', 304)->header('ETag', $tree['etag'])->header('Cache-Control', 'private, no-cache');
         }
 
-        // Who may change whom rides beside the tree (not inside it: the ETag is the family's, the same for everyone).
-        return $this->success($tree['data'], 'The family tree.', 200, ['access' => KinScope::describe($request->user(), $this->cid($request))])->header('ETag', $tree['etag'])->header('Cache-Control', 'private, no-cache');
+        // Who may change whom, and which person the sign-in is (for "Jump to me"), ride beside the tree (not inside it: the ETag
+        // is the family's, the same for everyone).
+        $me = \App\Services\Sacco\Dues\DuesService::personOf($request->user(), $this->cid($request));
+
+        return $this->success($tree['data'], 'The family tree.', 200, ['access' => KinScope::describe($request->user(), $this->cid($request)),
+            'me_id' => $me ? (int) $me->id : null])->header('ETag', $tree['etag'])->header('Cache-Control', 'private, no-cache');
     }
 }

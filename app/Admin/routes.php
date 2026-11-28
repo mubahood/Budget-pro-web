@@ -151,6 +151,19 @@ Route::group([
         foreach (['details', 'script', 'render', 'publish', 'unpublish', 'feature'] as $promoAction) {
             $router->post('promo-videos/{id}/'.$promoAction, 'PromoVideoController@'.$promoAction)->where('id', '[0-9]+');
         }
+        // Learn videos: training lessons for every app's Learn screen (docs/LEARN_VIDEOS.md).
+        $router->get('learn-videos', 'LearnVideoController@index');
+        $router->get('learn-videos/create', 'LearnVideoController@create');
+        $router->post('learn-videos', 'LearnVideoController@store');
+        $router->get('learn-videos/youtube', 'LearnVideoController@youtube');
+        $router->post('learn-videos/reorder', 'LearnVideoController@reorder');
+        $router->post('learn-videos/sections/{id}/move', 'LearnVideoController@moveSection')->where('id', '[0-9]+');
+        $router->get('learn-videos/{id}/edit', 'LearnVideoController@edit')->where('id', '[0-9]+');
+        $router->post('learn-videos/{id}', 'LearnVideoController@update')->where('id', '[0-9]+');
+        $router->post('learn-videos/{id}/upload/{kind}', 'LearnVideoController@upload')->where(['id' => '[0-9]+', 'kind' => 'video|thumbnail']);
+        foreach (['publish', 'move', 'destroy'] as $learnAction) {
+            $router->post('learn-videos/{id}/'.$learnAction, 'LearnVideoController@'.$learnAction)->where('id', '[0-9]+');
+        }
         $router->get('standalone-releases', 'StandaloneReleaseController@index');
         $router->post('standalone-releases', 'StandaloneReleaseController@stage');
         $router->post('standalone-releases/{id}/publish', 'StandaloneReleaseController@publish')->where('id', '[0-9]+');

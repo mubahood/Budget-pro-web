@@ -472,7 +472,7 @@ final class TreeService
         $people = DB::table('sacco_members')->where('company_id', $companyId)->where('is_deleted', 0)->whereNull('merged_into_id')
             ->orderBy('generation')->orderBy('date_of_birth')->orderBy('id')
             ->get(['id', 'uuid', 'first_name', 'last_name', 'other_names', 'gender', 'status', 'date_of_birth', 'birth_date_precision', 'date_of_death',
-                'branch_id', 'generation', 'root_id', 'photo_file_id', 'server_seq']);
+                'branch_id', 'generation', 'root_id', 'photo_file_id', 'in_purse', 'server_seq']);
         $links = DB::table('kin_links')->where('company_id', $companyId)->where('is_deleted', 0)->orderBy('id')
             ->get(['id', 'uuid', 'child_id', 'parent_id', 'role', 'kind', 'server_seq']);
         $spouses = DB::table('kin_spouses')->where('company_id', $companyId)->where('is_deleted', 0)->orderBy('sort_order')->orderBy('id')
@@ -489,7 +489,10 @@ final class TreeService
 
             return $a;
         })->values()->all();
-        $people = $people->map(function ($p) {
+        // A small square photo (PhotoService), or null.
+        $photos = \App\Services\Sacco\Dues\DuesService::photoUrls($companyId, $people->pluck('photo_file_id')->filter()->map(fn ($id) => (int) $id)->values()->all());
+        $people = $people->map(function ($p) use ($photos) {
+            $p->photo_url = $p->photo_file_id ? ($photos[(int) $p->photo_file_id] ?? null) : null;
             $p->name = trim(implode(' ', array_filter([$p->first_name, $p->other_names, $p->last_name])));
             $p->generation = $p->generation !== null ? (int) $p->generation : null;
 

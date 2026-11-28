@@ -130,6 +130,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
     Route::get('videos', [\App\Http\Controllers\Api\V1\PromoVideoController::class, 'index'])->middleware('throttle:60,1,promo-videos');
     Route::get('videos/{app}/{slug}/captions.vtt', [\App\Http\Controllers\Api\V1\PromoVideoController::class, 'captions'])
         ->where(['app' => '[a-z0-9-]{2,40}', 'slug' => '[a-z0-9-]{2,80}'])->middleware('throttle:60,1,promo-videos');
+    // Learn: training videos for the app in X-App (docs/LEARN_VIDEOS.md). Open reads: signed out gives the public
+    // lessons, a token adds the person's own lessons and progress. Progress and "seen" are in the core group below.
+    Route::get('learn', [\App\Http\Controllers\Api\V1\LearnController::class, 'index'])->middleware('throttle:60,1,learn');
+    Route::get('learn/{id}', [\App\Http\Controllers\Api\V1\LearnController::class, 'show'])->whereNumber('id')->middleware('throttle:60,1,learn');
 
     // ── Public auth endpoints (rate-limited to deter brute force): 10 a minute per address, and `login`
     //    (RouteServiceProvider) 6 a minute per account and address on sign-in, codes and reset ──
@@ -165,6 +169,10 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
 
     // ── Public billing: pricing page (SaaS only) + Flutterwave webhook (signature-verified) ──
     Route::get('plans', [BillingController::class, 'plans'])->middleware('edition:saas');
+
+    // ── Public: what a scanned UnityDesk membership card proves (no sign-in; 30 a minute per address) ──
+    Route::get('public/unity/verify/{token}', [\App\Http\Controllers\Api\V1\Unity\PublicVerifyController::class, 'show'])
+        ->where('token', '[A-Za-z0-9_-]{8,200}')->middleware('throttle:30,1');
     // Off the per-IP api throttle: Flutterwave retries a burst of webhooks from a few IPs (POWER_PLAN §4.1).
     // Both editions: it also settles shops' mobile-money collections (MOMO- references); the subscription branch is SaaS only.
     Route::post('webhooks/flutterwave', [BillingController::class, 'webhook'])->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class.':api');
@@ -184,6 +192,9 @@ Route::prefix('v1')->middleware('app.version')->group(function () {
         // The phone's meta (business, plan badge, person, enums, web pages…) and "Open on the web" (MOBILE_EXCELLENCE_PLAN D1, D7).
         // Outside api.subscription on purpose: a lapsed shop still reads its plan nudge and can open My plan on the web.
         Route::get('meta', [\App\Http\Controllers\Api\V1\MetaController::class, 'show']);
+        // Learn: the person's progress on a lesson, and "I opened Learn now" (what is new to them).
+        Route::post('learn/{id}/progress', [\App\Http\Controllers\Api\V1\LearnController::class, 'progress'])->whereNumber('id')->middleware('throttle:120,1');
+        Route::post('learn/seen', [\App\Http\Controllers\Api\V1\LearnController::class, 'seen'])->middleware('throttle:30,1');
         Route::post('web-link', [\App\Http\Controllers\Api\V1\WebLinkController::class, 'store'])->middleware('throttle:10,1');
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::post('auth/sibling', [AuthController::class, 'sibling'])->middleware(['edition:saas', 'throttle:5,1']);

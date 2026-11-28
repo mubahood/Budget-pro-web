@@ -199,4 +199,25 @@ class UnityMembershipsTest extends ApiTestCase
         UnityChapter::create(['company_id' => $this->co->id, 'name' => 'East']);
         $this->assertStringNotContainsString('chapters', (string) \App\Models\Plan::where('slug', 'unitydesk-group')->value('description'));
     }
+
+    public function test_the_daily_jobs_lapse_and_remind_each_member_once(): void
+    {
+        $ending = $this->member('Dora');
+        Memberships::renew($ending, $this->annual, ['paid_minor' => 50000]); // ends 2027-06-14
+        $ended = $this->member('Esi');
+        Memberships::renew($ended, $this->annual, ['paid_minor' => 50000]);
+        $notices = fn (SaccoMember $m) => \DB::table('sacco_member_notices')->where('member_id', $m->id)->count();
+
+        Carbon::setTestNow('2027-06-10 10:00:00'); // four days before both end
+        $this->artisan('unity:remind')->assertSuccessful();
+        $this->artisan('unity:remind')->assertSuccessful();
+        $this->assertSame(1, $notices($ending));
+
+        Carbon::setTestNow('2027-06-16 10:00:00'); // both have ended
+        $this->artisan('unity:lapse', ['--company' => $this->co->id])->assertSuccessful();
+        $this->artisan('unity:lapse')->assertSuccessful();
+        $this->assertSame(Memberships::LAPSED, $ended->fresh()->standing);
+        $this->assertSame(2, $notices($ended)); // one reminder, one "has ended"
+        $this->assertSame(0, \App\Services\Unity\StandingJobs::remind($this->co)['told']);
+    }
 }

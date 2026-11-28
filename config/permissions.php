@@ -59,11 +59,18 @@ return [
         'kin_people' => 'Add and edit people, parents and spouses',
         'kin_branches' => 'Add and edit branches',
         'kin_settings' => 'Family settings',
+        'kin_dues' => 'Contributions: programmes and payments',
+        'kin_announce' => 'Post family announcements',
+        'kin_events' => 'Plan gatherings: meetings, the register and minutes',
+        'kin_memories' => 'Add family memories: stories, photos, voice notes and documents',
         // UnityDesk (the unity module): offered only to association accounts (see `module_permissions`).
         'unity_view' => 'See the members, categories, chapters and subscriptions',
         'unity_members' => 'Add and edit members',
         'unity_finance' => 'Membership categories and fees, and record subscriptions and payments',
         'unity_chapters' => 'Add and edit chapters',
+        'unity_meetings' => 'Plan meetings and events, take attendance and record minutes and resolutions',
+        'unity_welfare' => 'Keep the welfare fund: record money in and out, and decide and pay welfare requests',
+        'unity_voice' => 'Run elections and polls, post announcements and message members',
         'unity_settings' => 'Association settings',
     ],
 
@@ -74,8 +81,8 @@ return [
             'sacco_disburse', 'sacco_accounts', 'sacco_reports', 'sacco_settings', 'sacco_officers', 'sacco_audit_view', 'sacco_meetings'],
         'rentals' => ['rentals_view', 'rentals_manage', 'rentals_collect', 'rentals_bill', 'rentals_reverse', 'rentals_landlords', 'rentals_expenses',
             'rentals_maintenance', 'rentals_reports', 'rentals_settings', 'rentals_close', 'rentals_reopen'],
-        'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings'],
-        'unity' => ['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_settings'],
+        'kin' => ['kin_view', 'kin_people', 'kin_branches', 'kin_settings', 'kin_dues', 'kin_announce', 'kin_events', 'kin_memories'],
+        'unity' => ['unity_view', 'unity_members', 'unity_finance', 'unity_chapters', 'unity_meetings', 'unity_welfare', 'unity_voice', 'unity_settings'],
     ],
 
     // What an account built around an exclusive module keeps of the family's permissions (the account itself).
@@ -110,15 +117,15 @@ return [
         'rentals_caretaker' => ['label' => 'Caretaker', 'module' => 'rentals', 'permissions' => ['rentals_view', 'rentals_collect', 'rentals_maintenance']],
         // Family Roots roles: `module` keeps them to family accounts. The head of the family is the account's owner;
         // a family's viewer also gets kin_view (Permissions::forRole). A member only reads.
-        'kin_secretary' => ['label' => 'Secretary', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_branches']],
-        'kin_treasurer' => ['label' => 'Treasurer', 'module' => 'kin', 'permissions' => ['kin_view']],
-        'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people']],
-        'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view']],
+        'kin_secretary' => ['label' => 'Secretary', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_branches', 'kin_announce', 'kin_events', 'kin_memories']],
+        'kin_treasurer' => ['label' => 'Treasurer', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_dues', 'kin_memories']],
+        'kin_branch_coordinator' => ['label' => 'Branch coordinator', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_people', 'kin_memories']],
+        'kin_member' => ['label' => 'Member', 'module' => 'kin', 'permissions' => ['kin_view', 'kin_memories']],
         // UnityDesk roles: the chair is the account's owner. A member reads their own record only (no unity_view:
-        // the unity/ API answers them with themselves alone).
-        'unity_secretary' => ['label' => 'Secretary', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_chapters']],
-        'unity_treasurer' => ['label' => 'Treasurer', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_finance']],
-        'unity_chapter_lead' => ['label' => 'Chapter lead', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members']],
+        // the unity/ API answers them with themselves alone: me, my card and statement, the noticeboard, RSVP, vote, ask for welfare).
+        'unity_secretary' => ['label' => 'Secretary', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_chapters', 'unity_meetings', 'unity_voice']],
+        'unity_treasurer' => ['label' => 'Treasurer', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_finance', 'unity_welfare']],
+        'unity_chapter_lead' => ['label' => 'Chapter lead', 'module' => 'unity', 'permissions' => ['unity_view', 'unity_members', 'unity_meetings']],
         'unity_member' => ['label' => 'Member', 'module' => 'unity', 'permissions' => []],
     ],
 

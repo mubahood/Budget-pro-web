@@ -44,12 +44,17 @@ class Kernel extends ConsoleKernel
         // Akiba Ledger P3.1: members' mobile-money requests whose webhook never came (settled once, or expired after a day).
         $schedule->call($task('sacco:collections-poll'))->name('sacco:collections-poll')->everyMinute()->withoutOverlapping();
         $schedule->call($task('sacco:savings-terms'))->name('sacco:savings-terms')->dailyAt('00:20')->withoutOverlapping();
+        // Contributions: each person's line for a new period (idempotent), hourly at :20 (the :00 tick is unreliable).
+        $schedule->call($task('sacco:dues-prepare'))->name('sacco:dues-prepare')->hourlyAt(20)->withoutOverlapping(30);
         // Estate Ledger (docs/estate-ledger/04-architecture.md §13): each account's bills and late fees at night (a missed night is caught up), then its books proved.
         $schedule->call($task('rentals:daily'))->name('rentals:daily')->dailyAt('01:40')->withoutOverlapping();
         $schedule->call($task('rentals:check'))->name('rentals:check')->dailyAt('03:20')->withoutOverlapping();
         // Estate Ledger's search: writes reach it as they happen; this repairs anything a crash missed. Minutes the host's */20 scheduler reaches.
         $schedule->call($task('rentals:search-index'))->name('rentals:search-index')->dailyAt('03:40')->withoutOverlapping(120);
         $schedule->call($task('rentals:search-index', ['--full' => true]))->name('rentals:search-index --full')->weeklyOn(0, '04:20')->withoutOverlapping(120);
+        // UnityDesk (doc 12): ended memberships become lapsed at night, and members are reminded a week before theirs ends at 09:40 Kampala; each notice goes once.
+        $schedule->call($task('unity:lapse'))->name('unity:lapse')->dailyAt('01:20')->withoutOverlapping();
+        $schedule->call($task('unity:remind'))->name('unity:remind')->dailyAt('06:40')->withoutOverlapping();
         $schedule->call($task('api:prune-keys'))->name('api:prune-keys')->dailyAt('03:20')->withoutOverlapping(); // Idempotency-Key answers and web links (D5, D7)
         if ($saas) {
             $schedule->call($task('billing:reconcile'))->name('billing:reconcile')->hourlyAt(20)->withoutOverlapping();

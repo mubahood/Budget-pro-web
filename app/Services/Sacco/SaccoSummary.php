@@ -39,7 +39,7 @@ final class SaccoSummary
             'currency' => $settings?->currency,
             'mode' => $settings?->mode,
             'name' => $settings?->short_name,
-            'members' => SaccoMember::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->whereNull('merged_into_id')
+            'members' => \App\Services\Sacco\Members\PurseOnly::members(SaccoMember::withoutGlobalScopes()->where('company_id', $companyId)->where('is_deleted', 0)->whereNull('merged_into_id'), $companyId)
                 ->groupBy('status')->selectRaw('status, COUNT(*) AS n')->pluck('n', 'status')->map(fn ($n) => (int) $n)->all(),
             'savings_minor' => $sumWhere(fn ($r) => $r->control_of === 'savings'),
             'share_capital_minor' => $sumWhere(fn ($r) => $r->control_of === 'shares'),

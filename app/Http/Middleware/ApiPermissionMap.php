@@ -169,14 +169,34 @@ class ApiPermissionMap
         // Family Roots (the kin module): officers write, everyone on the family's team reads (a member's role has kin_view only).
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/(people|links|siblings|spouses)(/\d+)?$#', 'kin_people'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/branches(/\d+)?$#', 'kin_branches'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/people/\d+/photo$#', 'kin_people'],
+        [['POST'], '#^kin/dues/\d+/(pledge|momo)$#', null], // the person themself (meta.me_id) or kin_dues: the controller judges
+        [['POST'], '#^kin/purse/members$#', 'kin_dues'], // the head holds every permission
+        [['POST'], '#^kin/events/\d+/rsvp$#', 'kin_view'], // each person answers for themself (the controller)
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/events(/.*)?$#', 'kin_events'], // head, secretary
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/memories(/.*)?$#', 'kin_memories'], // what each may add or change: the controller
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/dues(/.*)?$#', 'kin_dues'], // programmes, payments, reversals (head, treasurer)
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin/announcements(/\d+)?$#', 'kin_announce'], // head, secretary
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^kin(/.*)?$#', 'kin_settings'], // any other write
         [['GET'], '#^kin(/.*)?$#', 'kin_view'], // every read
-        // UnityDesk (the unity module): the chair (owner) does everything; a member's role has no unity_view and reads only
-        // their own record (unity/me, open to everyone on the association's team).
-        [['GET'], '#^unity/me$#', null],
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/members(/\d+)?$#', 'unity_members'],
-        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/(categories|subscriptions)(/\d+(/cancel)?)?$#', 'unity_finance'],
+        // UnityDesk (the unity module): the chair (owner) does everything; a member's role has no unity_view. The self-service
+        // paths below are open to everyone on the team, and their controllers act only as the signed-in person's own member
+        // record unless they hold the officer's permission (UnityAccess).
+        [['GET'], '#^unity/(access|me|me/card|me/statement)$#', null],
+        [['GET'], '#^unity/announcements$#', null],
+        [['GET'], '#^unity/(ballots|meetings)(/\d+)?$#', null],
+        [['POST'], '#^unity/meetings/\d+/rsvp$#', null],
+        [['POST'], '#^unity/ballots/\d+/vote$#', null],
+        [['POST'], '#^unity/welfare/requests$#', null],
+        [['GET'], '#^unity/welfare/requests$#', null], // a member sees only their own requests
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/members(/\d+(/(photo|approve|reject|transfer|exit|died|suspend|reinstate))?)?$#', 'unity_members'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/(categories|subscriptions)(/\d+(/cancel)?|/renew)?$#', 'unity_finance'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/drives(/.*)?$#', 'unity_finance'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/chapters(/\d+)?$#', 'unity_chapters'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/committees(/.*)?$#', 'unity_chapters'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/(meetings|resolutions)(/.*)?$#', 'unity_meetings'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/welfare(/.*)?$#', 'unity_welfare'],
+        [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity/(ballots|announcements|messages)(/.*)?$#', 'unity_voice'],
         [['POST', 'PUT', 'PATCH', 'DELETE'], '#^unity(/.*)?$#', 'unity_settings'], // any other write
         [['GET'], '#^unity(/.*)?$#', 'unity_view'], // every other read
         [['POST'], '#^sync/conflicts/\d+/resolve$#', 'resolve_conflicts'],
